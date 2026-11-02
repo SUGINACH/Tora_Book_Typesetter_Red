@@ -41,7 +41,8 @@ describe('REQ-PAR-01 metadata only in preamble', () => {
 
 describe('REQ-PAR-02 balanced bracket scanner', () => {
   it('nested brackets produce correct pair count and no unmatched', () => {
-    const segs = [{ text: 'א [ב [ג] ד] ה]', paraIndex: 0 }];
+    // 2 פותחים ו‑2 סוגרים בלבד: 'א [ב [ג] ד] ה' — קינון מלא, ללא יתרים
+    const segs = [{ text: 'א [ב [ג] ד] ה', paraIndex: 0 }];
     const r = scanBrackets(segs);
     assertEq(r.pairs.length, 2, 'two matched pairs');
     assertEq(r.unmatchedClosers.length, 0);
