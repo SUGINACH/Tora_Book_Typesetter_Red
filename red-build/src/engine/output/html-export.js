@@ -41,12 +41,25 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .head--sep-gray{border-bottom:1px solid #999}
 .head--sep-black{border-bottom:1.5px solid #000}
 .footnotes{position:absolute;bottom:8px;left:12px;right:12px;border-top:1px solid transparent;font-size:.8em}
+.footnotes--continuous{border-top:none}
 .fn-rule--regular{border-top:1px solid #000;height:0}
 .fn-rule--circles{border-top:3px dotted #000;height:0}
+.fn-rule--sparkle{border-top:2px dashed #6b6b6b;height:0}
+.fn-rule--star{border-top:3px double #4a4a4a;height:0}
+.fn-rule--diamond{border-top:2px solid #000;height:0;transform:scaleX(.6)}
+.fn--continuation{color:#555;font-style:italic}
 .folio{position:absolute;bottom:4px;width:100%;text-align:center}
 .folio--outer-left{left:8px;width:auto;text-align:left}
 .folio--outer-right{right:8px;width:auto;text-align:right}
-.side-note{position:absolute;font-size:.75em;width:18%;max-height:60%;overflow:hidden}
+.side-note{position:absolute;font-size:.75em;max-height:60%;overflow:hidden}
+.col-divider{position:absolute;width:0;border-left:1px solid #999}
+.col-divider--thin{border-left:1px solid #999}
+.col-divider--dashed{border-left:1px dashed #999}
+.col-divider--double{border-left:3px double #999}
+.w--paren{color:#333}
+.endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
+.endnote-list{font-size:.85em;padding:0 12px}
+.endnote-note{margin:2px 0}
 .toc-entry{display:flex;justify-content:space-between}
 .toc-entry .dots{flex:1;border-bottom:1px dotted #000;margin:0 6px 4px}
 `;

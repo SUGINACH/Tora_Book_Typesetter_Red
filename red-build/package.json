@@ -4,11 +4,17 @@
   "private": true,
   "description": "Tora Book Typesetter RED — the definitive rebuild (engine core, zero runtime dependencies)",
   "scripts": {
-    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/layout/s5-s6.test.js && node tests/e2e/pipeline.test.js",
+    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/layout/s5-s6.test.js && node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/canonical.test.js && node tests/audit/negative-controls.test.js",
     "test:unit": "node tests/unit/parser.test.js && node tests/unit/typography.test.js",
-    "test:gate:s4": "node tests/integration/registry.test.js",
-    "test:gate:s5s6": "node tests/layout/s5-s6.test.js"
+    "test:settings": "node tests/integration/registry.test.js",
+    "test:layout": "node tests/layout/s5-s6.test.js",
+    "test:e2e": "node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js",
+    "test:audit": "node tests/audit/negative-controls.test.js",
+    "test:canonical": "node tests/e2e/canonical.test.js",
+    "test:determinism": "node -e \"const{typeset}=require('./src/engine/core/pipeline');const{getDefaultSettings}=require('./src/engine/core/settings-registry');const fs=require('fs');const t=fs.readFileSync('tests/fixtures/canonical_corpus.txt','utf8');const a=typeset(t,getDefaultSettings());const b=typeset(t,getDefaultSettings());if(a.layoutHash!==b.layoutHash){console.error('NON-DETERMINISTIC');process.exit(1)}console.log('deterministic OK',a.layoutHash.slice(0,16),'pages:',a.pages.length)\""
   },
   "license": "UNLICENSED",
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

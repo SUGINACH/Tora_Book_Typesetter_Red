@@ -85,10 +85,30 @@ describe('REQ-PAR-03 block tokenizer', () => {
     assertEq(tokens[3].level, 1, 'חלק is H1');
   });
 
-  it('endnote prefix tokenized separately', () => {
+  it('endnote prefix (no number) tokenized as class directive (D-40, תיקון P1-5)', () => {
+    // בעבר פוענחה כהערת תוכן פיקטיבית והופיעה כשורה זרה בגוף. כעת: הוראה
+    // המגדירה את כותרת עמודי ההערות של החלק — לא תוכן (directives ≠ content).
     const tokens = tokenize(['הערת סיום - הערה מסדר סוף']);
+    assertEq(tokens[0].type, 'endnote-class');
+    assertEq(tokens[0].title, 'הערה מסדר סוף');
+    assertEq(tokens[0].text, undefined);
+  });
+
+  it('numbered endnote (D-40): num stripped from text, kept as anchor', () => {
+    const tokens = tokenize(['הערת סיום-1 - זאת הערת הסיום הראשונה עם טקסט ארוך יותר.']);
     assertEq(tokens[0].type, 'endnote');
-    assertEq(tokens[0].text, 'הערה מסדר סוף');
+    assertEq(tokens[0].num, 1);
+    assertEq(tokens[0].text, 'זאת הערת הסיום הראשונה עם טקסט ארוך יותר.');
+    const tokens2 = tokenize(['הערת סיום 2 - טקסט הערה']); // צורת רווח
+    assertEq(tokens2[0].num, 2);
+    assertEq(tokens2[0].text, 'טקסט הערה');
+  });
+
+  it('title starting with a digit is not a class directive (safe side: note, never lost)', () => {
+    const tokens = tokenize(['הערת סיום - 2026 סיכום שנה']);
+    // לא צורת ממוספרת (אין מקף אחרי המספר) ולא כותרת נקייה — נשמר כהערה (לא הוראה)
+    assertEq(tokens[0].type, 'endnote');
+    assertEq(tokens[0].text, '2026 סיכום שנה');
   });
 
   it('editorial ##…## removed entirely but recorded', () => {

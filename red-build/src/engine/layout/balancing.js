@@ -2,9 +2,11 @@
 'use strict';
 
 /**
- * AQ: stretchByWordSpacing / letterSpacing / headingSpacing עם caps מוצהרים;
+ * AQ: stretchBy{Word,Letter,Heading}Spacing עם caps מוצהרים;
  * Clamp overshoot 20px (REQ-BAL-07); balance-chapter-end {balance|stretch|natural} (REQ-BAL-03).
  */
+
+const { moveLineForward } = require('./ordering');
 
 function usedHeight(col) { return col.reduce((s, ln) => s + ln.heightPx, 0); }
 
@@ -15,7 +17,10 @@ function pageImbalance(page) {
 }
 
 /**
- * איזון מלא של עמוד: הזזת שורות עד Δ≤maxDelta; נסיגה אם נוצר חריגת תקציב (rollback integrity REQ-BAL-09).
+ * איזון מלא של עמוד: הזזת שורות עד Δ≤maxDelta; נסיגה אם נוצרה חריגת תקציב
+ * (rollback integrity REQ-BAL-09).
+ * **תיקון P0-3:** הזזות קדימה בסדר הקריאה בלבד (moveLineForward) — בעבר
+ * האיזון העביר שורה אחורה בסדר הקריאה (הצגת סוף פסקה לפני תחילתה).
  * @returns {{changed:boolean, before:number, after:number}}
  */
 function balancePage(page, maxDelta) {
@@ -25,9 +30,7 @@ function balancePage(page, maxDelta) {
   while (pageImbalance(page) > maxDelta && guard++ < 500) {
     const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
     const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!page.columns[hi].length) break;
-    const moved = page.columns[hi].pop();
-    page.columns[lo].unshift(moved);
+    if (!moveLineForward(page.columns, hi, lo)) break;
     // hard reject: אם נוצרה חריגת cap → rollback מלא
     const cap = page.template.contentBox.height;
     if (page.columns.some(c => usedHeight(c) > cap + 0.5)) {
@@ -58,40 +61,65 @@ function applyChapterEndMode(page, mode, settings, eventLog) {
  * AutoQuality (פורטר מ‑Gold; כל הגבולות מה‑registry):
  * שלבים stretchBy{Word,Letter,Heading}Spacing עם caps מוצהרים + shared-load + clamp overshoot.
  */
-const AQ_STAGES = [
-  { stage: 'word-spacing', minKey: 'aq-word-spacing-min', maxKey: 'aq-word-spacing-max' },
-  { stage: 'letter-spacing', minKey: 'aq-letter-spacing-min', maxKey: 'aq-letter-spacing-max' },
-  { stage: 'heading-spacing', minKey: 'aq-heading-spacing-min', maxKey: 'aq-heading-spacing-max' }
-];
+const AQ_STAGES = ['word-spacing', 'letter-spacing', 'heading-spacing'];
+
+/** \u05d2\u05d1\u05d5\u05dc\u05d5\u05ea \u05de\u05d5\u05db\u05e8\u05d6\u05ea \u05d0\u05d7\u05e8\u05ea \u05dc\u05db\u05dc \u05e9\u05dc\u05d1 — \u05d2\u05d9\u05e9\u05d4 \u05de\u05e4\u05d5\u05e8\u05e9\u05ea (settings['aq-*'])
+ * \u05db\u05da \u05e9\u05d4\u05e1\u05d5\u05e8\u05e7 \u05e8\u05d5\u05d0\u05d4 \u05e6\u05e8\u05d9\u05db\u05d4 \u05d0\u05de\u05d9\u05ea\u05d4 (\u05d1\u05e2\u05d1\u05e8 \u05d4\u05d9\u05d4 \u05d0\u05d9\u05e0\u05d3\u05d5\u05e7\u05d8\u05e8\u05d9\u05d9\u05d0\u05df \u05e9\u05d4\u05e1\u05d5\u05e8\u05e7 \u05dc\u05d0 \u05e8\u05d0\u05d4 — P0-5). */
+function stageBounds(settings, stage) {
+  switch (stage) {
+    case 'word-spacing': return [settings['aq-word-spacing-min'], settings['aq-word-spacing-max']];
+    case 'letter-spacing': return [settings['aq-letter-spacing-min'], settings['aq-letter-spacing-max']];
+    case 'heading-spacing': return [settings['aq-heading-spacing-min'], settings['aq-heading-spacing-max']];
+    default: return [0.95, 1.05];
+  }
+}
 
 function autoQualityPass(pages, settings, eventLog) {
   if (!settings['aq-enabled']) return { applied: 0 };
   const clamp = settings['aq-overshoot-clamp-px'];
+  // D-46 (תיקון P1-1 "מפתח מת"): שני המפתחים נצרכים כעת בפועל —
+  // aq-stretch-to-bottom=false ⇒ אין מתיחה כלל; aq-compress-first ⇒ כיווץ לפני מתיחה.
+  const mayStretch = settings['aq-stretch-to-bottom'] !== false;
+  const compressFirst = settings['aq-compress-first'] !== false;
   let applied = 0;
   for (const page of pages) {
     const cap = page.template.contentBox.height;
     for (let c = 0; c < page.columns.length; c++) {
       const lines = page.columns[c];
       const used = usedHeight(lines);
+      if (!lines.length) continue;
       const deficit = cap - used;
-      if (deficit <= 4 || !lines.length) continue;
-      // כיווץ־תחילה (aq-compress-first): אם חסר — מתיחה; אם עודף — כיווץ עד min
-      const perLine = deficit / lines.length;
-      const rawFactor = 1 + perLine / (lines[0].heightPx || 1);
-      for (const st of AQ_STAGES) {
-        const lo = settings[st.minKey], hi = settings[st.maxKey];
-        const factor = Math.min(hi, Math.max(lo, rawFactor));
-        if (Math.abs(factor - 1) < 1e-4) continue;
-        const newUsed = used * factor;
-        if (newUsed - cap > clamp) continue; // clamp 20px — class ch3p4/p17/ch72p9 הוכחד
-        if (settings['aq-shared-load']) {
-          // shared-load: העמסת המתיחה בחלקים שווים בין השלבים — כאן stage ראשון לוקח כולו, האחרים נרשמים כ‑0
-          if (st.stage !== 'word-spacing') continue;
-        } else if (factor >= hi && st.stage !== 'word-spacing') continue;
-        for (const ln of lines) ln.aqStretch = factor;
-        applied++;
-        eventLog.emit('justify', `aq-${st.stage}`, { page: page.index, col: c, factor: Number(factor.toFixed(4)) }, page.index);
-        break; // שלב אחד מספיק לעמוד הזה
+      if (deficit > 4 && mayStretch) {
+        const perLine = deficit / lines.length;
+        const rawFactor = 1 + perLine / (lines[0].heightPx || 1);
+        for (const stage of AQ_STAGES) {
+          const [lo, hi] = stageBounds(settings, stage);
+          const factor = Math.min(hi, Math.max(lo, rawFactor));
+          if (Math.abs(factor - 1) < 1e-4) continue;
+          const newUsed = used * factor;
+          if (newUsed - cap > clamp) continue; // clamp 20px — class ch3p4/p17/ch72p9 הוכחד
+          if (settings['aq-shared-load']) {
+            if (stage !== 'word-spacing') continue;
+          } else if (factor >= hi && stage !== 'word-spacing') continue;
+          for (const ln of lines) ln.aqStretch = factor;
+          applied++;
+          eventLog.emit('justify', `aq-${stage}`, { page: page.index, col: c, factor: Number(factor.toFixed(4)) }, page.index);
+          break;
+        }
+      } else if (deficit < -4 && compressFirst) {
+        // עודף מעל התקרה ⇒ כיווץ עד min (כיווץ לפני מתיחה — compress-first)
+        const overflow = -deficit;
+        const perLine = overflow / lines.length;
+        const rawFactor = Math.max(0.8, 1 - perLine / (lines[0].heightPx || 1));
+        for (const stage of AQ_STAGES) {
+          const [lo, hi] = stageBounds(settings, stage);
+          const factor = Math.max(lo, Math.min(hi, rawFactor));
+          if (Math.abs(factor - 1) < 1e-4) continue;
+          for (const ln of lines) ln.aqStretch = factor;
+          applied++;
+          eventLog.emit('justify', `aq-${stage}-compress`, { page: page.index, col: c, factor: Number(factor.toFixed(4)) }, page.index);
+          break;
+        }
       }
     }
   }

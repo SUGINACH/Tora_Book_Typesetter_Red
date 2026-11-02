@@ -2,7 +2,12 @@
 'use strict';
 
 const HEADING_RE = /^(כותרת\s*([0-7])|חלק\s+([א-ת]+)|הקדמה)\s*[-–—]\s*(.+)$/;
+// **D-40 (תיקון P1-5):** הבחנה בין הערה ממוספרת לבין הוראת כותרת־מחלקה.
+// ממוספרת:  `הערת סיום-1 - טקסט` / `הערת סיום 1 - טקסט`  (המספר = עוגן הסמן במקור)
+// מחלקה:    `הערת סיום - כותרת`                      (הגדרת כותרת עמודי ההערות של החלק)
 const ENDNOTE_PREFIX = /^הערת סיום\s*[-–—]/;
+const ENDNOTE_NUMBERED = /^הערת\s*סיום\s*[-–—]?\s*([0-9]{1,4})\s*[-–—]\s*(.+)$/;
+const ENDNOTE_CLASS = /^הערת\s*סיום\s*[-–—]\s*(.+)$/;
 const METADATA_KEYS = ['ספר', 'נושא', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'];
 
 /**
@@ -38,4 +43,4 @@ function lexDocument(rawText) {
   return { metadata, bodyLines: body };
 }
 
-module.exports = { lexDocument, HEADING_RE, ENDNOTE_PREFIX };
+module.exports = { lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS, METADATA_KEYS };

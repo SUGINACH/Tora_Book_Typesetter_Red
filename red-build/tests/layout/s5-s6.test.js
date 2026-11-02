@@ -6,7 +6,7 @@ const { describe, it, assert, assertEq, report } = require('../harness');
 const { generateCandidates } = require('../../src/engine/layout/candidate-generator');
 const { runProtections } = require('../../src/engine/layout/protections-matrix');
 const { runRetreatLoop } = require('../../src/engine/layout/retreat-loop');
-const { getFootnotesReservedHeight, noteHeight, applyLongNotePolicy } = require('../../src/engine/layout/footnote-budget');
+const { getFootnotesReservedHeight, noteHeight } = require('../../src/engine/layout/footnote-budget');
 const { autoQualityPass } = require('../../src/engine/layout/balancing');
 const { Ledger } = require('../../src/engine/core/ledger');
 const { EventLog } = require('../../src/engine/core/events');
@@ -86,12 +86,15 @@ describe('S5.1.5 unified retreat loop (K-3)', () => {
     assertEq(rec.kind, 'rollback-compromise');
     assertEq(rec.status, 'competing-repair-side-effect');
   });
-  it('diagnostics-enabled=false → loop runs but writes NO ledger records', () => {
+  it('D-43 (תיקון P1-4): diagnostics-enabled=false NEVER suppresses ledger records', () => {
+    // בעבר המפתח דיכא רישומי ממצאים — הפרה מפורשת של כללי העבודה
+    // ("לא להשבית אבחון; לא להסתיר ממצאים"). כעת: הממצאים נרשמים תמיד;
+    // המפתח שולט בפירוט הדוח בלבד (buildReport compact).
     const same = [{ kind: 'column-imbalance', target: 'z' }];
     const { ctx, ledger } = ctxWith([same, same, same], { 'diagnostics-enabled': false });
     const r = runRetreatLoop(ctx);
-    assertEq(r.compromise, null);
-    assertEq(ledger.issues.size, 0, 'no diagnostics → no ledger pollution');
+    assert(r.compromise, 'compromise must be recorded even with diagnostics off');
+    assert(ledger.issues.size > 0, 'findings are never suppressed');
   });
 });
 
@@ -114,20 +117,42 @@ describe('S6.1.1 footnote budget — probe == reserved identity (F-17)', () => {
   });
 });
 
-describe('S6.1.2 long-footnote policy (REQ-FN-02)', () => {
-  const big = [{ text: 'א'.repeat(400), heightPx: 300, lineH: 20, marker: 'א׳' }];
-  it('split preserves marker/order and yields continuation record', () => {
-    const out = applyLongNotePolicy(big, { ...S, 'long-footnote-policy': 'split' }, () => 100);
-    assertEq(out.length, 2);
-    assertEq(out[0].mode, 'split-first');
-    assertEq(out[1].mode, 'split-rest');
-    assertEq(out[1].marker, out[0].marker);
+describe('S6.1.2 long-footnote policy (REQ-FN-02) — real path via dp-planner', () => {
+  const { typeset } = require('../../src/engine/core/pipeline');
+  // הערה ארוכה מאוד + תקרת מרזב נמוכה ⇒ מדיניות split/move-whole/reject-to-body
+  const longNote = 'תוכן הערה ארוך מאוד '.repeat(60).trim();
+  const doc = 'כותרת 1 - חלק\nפסקת הגוף עם הערה [' + longNote + '] ועוד קצת טקסט למילוי.\n' + 'פסקה נוספת למילוי עמודים '.repeat(40);
+  function run(policy) {
+    const s = { ...getDefaultSettings(), 'long-footnote-policy': policy, 'fn-bar-max-height-px': 120, 'footnote-reset-policy': 'continuous' };
+    return typeset(doc, s);
+  }
+  it('split: first segment on this page, continuation marked on the next', () => {
+    const r = run('split');
+    assert(r.contentPreserved === true, 'split must never lose words');
+    const fns = r.pages.flatMap(p => p.footnotes);
+    const conts = fns.filter(n => n.isContinuation || n.mode === 'split-rest');
+    assert(conts.length >= 1, 'expected a continuation segment');
+    const joined = fns.map(n => n.text).join(' ');
+    assert(joined.replace(/\s+/g, ' ').includes(longNote.replace(/\s+/g, ' ').slice(0, 40)), 'full note text present across segments');
   });
-  it('move-whole defers entire note', () => {
-    const out = applyLongNotePolicy(big, { ...S, 'long-footnote-policy': 'move-whole' }, () => 100);
-    assertEq(out.length, 1);
-    assertEq(out[0].mode, 'moved-whole');
-    assertEq(out[0].deferredToNextPage, true);
+  it('move-whole defers entire note to the next page', () => {
+    const r = run('move-whole');
+    assert(r.contentPreserved === true, 'move-whole must never lose words');
+    const withNote = r.pages.filter(p => p.footnotes.length);
+    assert(withNote.length >= 1);
+    // הערה אחת שלמה במקום אחד — לא מפוצלת
+    const all = r.pages.flatMap(p => p.footnotes);
+    assert(all.every(n => !n.isContinuation), 'no continuation segments in move-whole');
+    assert(all.some(n => (n.text || '').length > 100), 'the whole long note lives somewhere');
+  });
+  it('reject-to-body: full text returns to the body as placeholder (BRZ-15)', () => {
+    const r = run('reject-to-body');
+    assert(r.contentPreserved === true, 'reject-to-body must never lose words');
+    // הטקסט חוזר לגוף כplaceholder — נמצא בשורות הגוף של הפלט
+    const bodyText = r.pages.flatMap(p => p.columns.flat()).map(l => (l.words || []).join(' ')).join(' ').replace(/\uE000/g, ' '); // placeholder separator scrubbed (D-30)
+    assert(bodyText.replace(/\s+/g, ' ').includes(longNote.slice(0, 30).replace(/\s+/g, ' ')), 'note text is in the body');
+    const rejected = r.pages.flatMap(p => p.footnotes).filter(n => n.mode === 'split-first' || n.isContinuation);
+    assertEq(rejected.length, 0, 'nothing left in the bar');
   });
 });
 

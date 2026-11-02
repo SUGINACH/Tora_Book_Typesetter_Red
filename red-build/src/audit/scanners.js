@@ -6,38 +6,42 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * תיקון S4.1.4: מציאת צרכנים גם בכתיב דינמי — template literal או concat:
- *   settings[\`toc-level-\${lvl}-show\`]  →  גוף התבנית 'toc-level-' … '-show'
- * נבנה רשימת תבניות מתוך כל ה־src, וכל key שנמצא בתוך קטע `settings[...]`
- * (כולל ביטויים מורכבים בתוך הסוגריים) נחשב נצרך.
+ * **תיקון P0-5:** בעבר הסורק חיפש את מחרוזת המפתח בכל קובצי המקור, כולל קובץ
+ * הרישום עצמו (settings-registry.js) — שמכיל את כל מזהי המפתחות כמחרוזות
+ * מפורשות K(id, ...). לכן כל מפתח נחשב "נצרך" מעצם הגדרתו והסריקה לא יכלה
+ * להיכשל לעולם — שער ירוק־שקרי מבני.
+ * כעת: (1) קובץ הרישום מוחרג מהיקף הסריקה; (2) צריכה = גישה אמיתית
+ * settings[...] (מילולית או דינמית) בקובץ אחר — אזכור בתגובה/מחרוזת בדיקה
+ * אינו נחשב.
  */
-function collectDynamicPatterns(allSrc) {
-  // תפוס כל settings[ ... ] כולל nested brackets ע"י ספירת סוגריים
+
+/** קבצים שאסור לספור אותם כ"צרכנים" — מגדירים את הרישום עצמו. */
+const REGISTRY_FILES = new Set(['settings-registry.js']);
+
+/** איסוף כל קטעי הגישה settings[ ... ] (כולל סוגריים מקוננים) מקובץ מקור. */
+function collectAccessSlices(src) {
   const slices = [];
-  for (const src of allSrc) {
-    let i = 0;
-    while ((i = src.indexOf('settings[', i)) !== -1) {
-      const start = i + 'settings['.length;
-      let depth = 1, j = start;
-      while (j < src.length && depth > 0) {
-        if (src[j] === '[') depth++;
-        else if (src[j] === ']') depth--;
-        j++;
-      }
-      slices.push(src.slice(start, j - 1));
-      i = start;
+  let i = 0;
+  while ((i = src.indexOf('settings[', i)) !== -1) {
+    const start = i + 'settings['.length;
+    let depth = 1, j = start;
+    while (j < src.length && depth > 0) {
+      if (src[j] === '[') depth++;
+      else if (src[j] === ']') depth--;
+      j++;
     }
+    slices.push(src.slice(start, j - 1));
+    i = start;
   }
   return slices;
 }
 
+/** תבניות דינמיות: `toc-level-${lvl}-show` ⇒ גזרות קבועות סביב ${...}. */
 function matchesDynamic(keyId, dynamicSlices) {
   for (const slice of dynamicSlices) {
-    if (!slice.includes('$')) continue; // רק תבניות דינמיות
-    // חלוקת הגוף לגזרות קבועות סביב ${...}: "toc-level-" + expr + "-show"
+    if (!slice.includes('$')) continue;
     const parts = slice.split(/\$\{[^}]*\}/g).map(s => s.replace(/[`'"]/g, '').trim()).filter(Boolean);
     if (!parts.length) continue;
-    // כל הגזרות הקבועות חייבות להופיע בזהות ובסדר בתוך שם ה‑key
     let at = 0, ok = true;
     for (const p of parts) {
       const idx = keyId.indexOf(p, at);
@@ -50,9 +54,9 @@ function matchesDynamic(keyId, dynamicSlices) {
 }
 
 /**
- * סורקים כ‑CI job קבוע. מודעות ל‑dynamic ids: צרכן שנכתב `prefix + '-w'` נחשב מודפס אם
- * ה‑prefix מופיע כ־template literal/concat ב‑src.
+ * סורקים כ‑CI job קבוע.
  * @param {string} srcRoot - נתיב שורש src
+ * @returns {{deadControls:Array, phantomKeys:Array, orphanMechanisms:Array, consumedBy:Map}}
  */
 function scanConsumers(srcRoot) {
   const files = [];
@@ -62,24 +66,36 @@ function scanConsumers(srcRoot) {
       if (e.isDirectory()) walk(p); else if (e.name.endsWith('.js')) files.push(p);
     }
   })(srcRoot);
-  const all = files.map(f => ({ f, src: fs.readFileSync(f, 'utf8') }));
-  const dynamicSlices = collectDynamicPatterns(all.map(a => a.src));
 
-  const results = { deadControls: [], phantomKeys: [], orphanMechanisms: [] };
-  const mechanismUse = new Map(); // consumer module id -> used?
+  // כל הקבצים למעט קובץ הרישום עצמו — רק אלה יכולים להיות "צרכנים" (P0-5)
+  const consumers = files.filter(f => !REGISTRY_FILES.has(path.basename(f)));
+  const all = consumers.map(f => ({ f, src: fs.readFileSync(f, 'utf8') }));
+
+  // פרוסות גישה מילוליות + דינמיות, לפי קובץ
+  const access = all.map(({ f, src }) => ({ f, slices: collectAccessSlices(src) }));
+  const dynamicSlices = access.flatMap(a => a.slices).filter(s => s.includes('$'));
+
+  const results = { deadControls: [], phantomKeys: [], orphanMechanisms: [], consumedBy: new Map() };
+  const mechanismUse = new Map();
 
   for (const r of registry) {
-    // A key is "consumed" if settings['id'] / settings["id"] appears literally,
-    // OR matches a dynamic template settings[`prefix${expr}suffix`] (S4.1.4 fix)
-    const quoted = [`'${r.id}'`, `"${r.id}"`, `\`${r.id}\``];
-    const consumedBy = all.filter(({ src }) => quoted.some(q => src.includes(q)));
-    const dynHit = !consumedBy.length && matchesDynamic(r.id, dynamicSlices);
-    if (!consumedBy.length && !dynHit) results.phantomKeys.push({ id: r.id, reason: 'no source reference to this key string (literal or dynamic)' });
+    // צריכה אמיתית: גישה settings['id'] מילולית בקובץ צרכן (הפרוסה עם המרכאות
+    // שווה למזהה בלי המרכאות), או התאמת תבנית דינמית
+    const litFiles = access
+      .filter(a => a.slices.some(s => s.replace(/['"`]/g, '') === r.id))
+      .map(a => a.f);
+    const dynHit = litFiles.length === 0 && matchesDynamic(r.id, dynamicSlices);
+    const consumed = litFiles.length > 0 || dynHit;
+    results.consumedBy.set(r.id, consumed ? (litFiles.length ? litFiles : ['<dynamic>']) : []);
+    if (!consumed) {
+      results.phantomKeys.push({ id: r.id, reason: 'no real settings[...] access outside the registry file (literal or dynamic)' });
+    }
     for (const c of r.consumers || []) {
       if (!mechanismUse.has(c)) mechanismUse.set(c, false);
-      // consumer module file exists?
       const modPath = path.join(srcRoot, 'engine', c + '.js');
-      if (!fs.existsSync(modPath)) results.orphanMechanisms.push({ id: r.id, consumer: c, reason: 'consumer module missing' });
+      if (!fs.existsSync(modPath) && !fs.existsSync(path.join(srcRoot, c + '.js'))) {
+        results.orphanMechanisms.push({ id: r.id, consumer: c, reason: 'consumer module missing on disk' });
+      }
     }
   }
 
@@ -96,4 +112,4 @@ function scanConsumers(srcRoot) {
   return results;
 }
 
-module.exports = { scanConsumers };
+module.exports = { scanConsumers, REGISTRY_FILES };

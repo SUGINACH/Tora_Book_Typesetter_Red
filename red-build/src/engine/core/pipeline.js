@@ -4,9 +4,17 @@
 /**
  * סדר הפעולות המחויב (enforced here, mirrored in module headers):
  * CP1 parse → scope-map → style-prepass (parens BEFORE measure — שורש הסיבתיות) →
- * CP2 fonts-ready → measure/line-plan (KP) → CP3 page-plan (DP) → protections+retreat-loop →
+ * CP2 fonts-ready → measure/line-plan (KP) → CP3 page-plan (DP) + protections + retreat →
  * balance/AQ → notes-budget → re-fit pass → CP4 decorations (geometry-neutral!) →
  * headers/folio/toc → ledger-finalize → CP5 render.
+ *
+ * **תיקוני סגירת S7 (ראו audits/02_S7_CLOSURE_REPORT.md):**
+ *  - P0-1/P0-2: חשבונאות שימור תוכן identity-by-construction (D-30) — צד src וצד out
+ *    נספרים מאותו ייצוג מחושב; ההערות נספרות ממקום הצגתן בפועל.
+ *  - P0-6: CP4==CP5 הוכחה אמיתית (bodyGeometryHash — D-47), לא משתנה לעצמו.
+ *  - P1-2: קדם־פאס סוגריים לפני מדידה + אכלוס parenRanges (משפחת V23).
+ *  - P1-3: סמני הערות מאוחדים (notes/markers) + הדבקה למילה הקודמת (BRZ-11).
+ *  - P1-1: AQ/מצבי סוף־פרק/מילה־נופלת מחוברים לצינור בפועל.
  */
 
 const { getDefaultSettings, derivePlacementFlags } = require('./settings-registry');
@@ -16,13 +24,18 @@ const { scanBrackets } = require('../parser/bracket-scanner');
 const { MeasureAPI } = require('../typography/measure-api');
 const { protectWords } = require('../typography/protectors');
 const { applyDropWord } = require('../typography/dropword');
-const { planPages } = require('../layout/dp-planner');
+const { planPages, layoutHash, bodyGeometryHash } = require('../layout/dp-planner');
 const { buildPageTemplate, PAGE_TYPES } = require('../layout/page-templates');
 const { assignNumbers } = require('../decoration/folio');
 const { buildHeader } = require('../decoration/headers-builder');
 const { autoQualityPass, applyChapterEndMode } = require('../layout/balancing');
-const { Ledger } = require('./ledger');
-const { EventLog } = require('./events');
+const { applyHeadingModes } = require('../layout/headings-escort');
+const { markerFor, makeCounter, splitPlaceholder, MARK_TAG } = require('../notes/markers');
+const Ledger = require('./ledger').Ledger;
+const EventLog = require('./events').EventLog;
+
+const PAREN_SENTINEL = '\uE101';
+const ATOMIC = '\uE000';
 
 /** זיהוי דיבור המתחיל: עד נקודה/מקף (REQ-PAR-ST-03; dh-auto-detect). */
 function detectDh(text, enabled) {
@@ -31,11 +44,12 @@ function detectDh(text, enabled) {
   return m ? { dh: m[1].trim(), rest: m[2] } : null;
 }
 
-/** רוחב טור ייעודי לסוג בלוק: כותרות H0/H1 + preface = טור מלא; H2 = טור רגיל (PT-05). */
+/** רוחב טור ייעודי לסוג בלוק (מקור: page-templates; column-flow מספק את ההפשטה). */
 function columnWidthFor(block, settings) {
-  const singleColTypes = [PAGE_TYPES.PREFACE, PAGE_TYPES.SHAAR_MAIN, PAGE_TYPES.TOC_GENERAL];
-  if (block.kind === 'heading' && block.level <= 1) return null; // full-width → template of first single-col page
-  void singleColTypes;
+  if (block.kind === 'heading' && block.level <= 1) {
+    const tpl0 = buildPageTemplate(PAGE_TYPES.PREFACE, settings, true);
+    return tpl0.columns[0].w;
+  }
   const tpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
   return Math.max(...tpl.columns.map(c => c.w));
 }
@@ -46,17 +60,39 @@ function fullWidthWidth(settings) {
 }
 
 /**
+ * **D-42 (P1-2): קדם־פאס סוגריים עגולים** — מיפוי טווחי (...) על הטקסט השטוח
+ * של חלקי הטקסט (בלי הערות). מחזיר [{from,to}] במדדי תווים של הטקסט המשורשר.
+ */
+function parenSpansOfFlat(flat) {
+  const spans = [];
+  const stack = [];
+  for (let i = 0; i < flat.length; i++) {
+    if (flat[i] === '(') stack.push(i);
+    else if (flat[i] === ')') {
+      if (stack.length) { spans.push({ from: stack.pop(), to: i }); }
+    }
+  }
+  return spans;
+}
+
+/** האם מיקום מילה בתוך טווח סוגריים (פתיחה אחרי ה'(' ולפני ה')'). */
+function offsetInSpans(at, spans) {
+  for (const s of spans) if (at > s.from && at < s.to) return true;
+  return false;
+}
+
+/**
  * @param {string} rawText - מקור הטקסט
  * @param {object} settings - merged settings (registry defaults + user)
  * @param {{doc?:object}} env - optional DOM for oracle rendering
  */
 function typeset(rawText, settingsIn, env = {}) {
-  // **S7.1.4 (REQ-FN-05) — enforcement single-entry:** מקור־האמת לנתיב ההערות הוא
-  // note-placement-mode; הדגלים נגזרים כאן **בכל כניסה למנוע** — גם אם הקורא spread-עצמי
-  // את ההגדרות (דפוס הבדיקות/CLI) ולא עבר דרך mergeWithDefaults. ברירת מחדל: registry.
+  // **D-39 (P0-4):** מקור־האמת note-placement-mode; קלט משתמש מפורש גובר על נגזרות.
   const settings = derivePlacementFlags({ ...getDefaultSettings(), ...(settingsIn || {}) });
-  const eventLog = new EventLog();
+  const eventLog = new EventLog(settings['trace-verbosity'] || 'standard'); // נצרך בפועל (P0-5)
   const ledger = new Ledger();
+  const notesMode = settings['note-placement-mode'];
+  const parenScale = Number(settings['paren-style-scale']) || 1;
 
   // ---- CP1: parse ----
   const { metadata, bodyLines } = lexDocument(rawText);
@@ -64,22 +100,18 @@ function typeset(rawText, settingsIn, env = {}) {
   const hashIn = contentHash(tokens);
   eventLog.emit('parse', 'cp1-parsed', { tokens: tokens.length, contentHash: hashIn });
 
-  // ---- scope-map + style-prepass (S2.1.3: BEFORE measuring) ----
+  // ---- scope-map (S2.1.3: BEFORE measuring) ----
   const segments = tokens.filter(t => t.type === 'paragraph').map((t, i) => ({ text: t.raw, paraIndex: i }));
   const scope = scanBrackets(segments);
   eventLog.emit('scope-map', 'cp2-scope', { pairs: scope.pairs.length, crossParagraph: scope.scopeMap.crossParagraphCount, unmatchedClosers: scope.unmatchedClosers.length });
 
   // ---- measure + line-plan (L2) ----
   const api = new MeasureAPI(settings, 'math');
+  void env;
 
-  /**
-   * תיקון S8 (מניעת phantom-key): רוחב מילה **לפי גופן**. אם הגופן שונה מגוף הטקסט
-   * והוא גופן עברי ידוע — מקדמי רוחב משוקללים; אחרת — fallback שמרני 0.6em/תו.
-   * (בעבר dh-font/f-note-body-font/s-note-body-font היו נצרכים רק כמחרוזת cache — ללא השפעה אמיתית.)
-   */
   const FONT_WIDTH_PROFILES = {
-    'Frank Ruhl Libre': null,            // ברירת מחדל — טבלה
-    'David HB': { factor: 1.06 },        // דוד כבד — רחב ~6%
+    'Frank Ruhl Libre': null,
+    'David HB': { factor: 1.06 },
     'David': { factor: 1.04 },
     'Narkisim': { factor: 1.10 },
     'Nachlieli': { factor: 0.96 },
@@ -91,22 +123,71 @@ function typeset(rawText, settingsIn, env = {}) {
     if (!fontName || fontName === settings['body-font']) return base;
     const prof = FONT_WIDTH_PROFILES[fontName];
     if (prof && prof.factor) return Math.round(base * prof.factor * 100) / 100;
-    // גופן לא־מוכר: שמרני — ספור תווים × 0.6em (לא מתעלם מהגופן)
     const perChar = 0.6 * sizePt * (96 / 72);
     return Math.max(base, String(text).length * perChar);
   }
 
+  /**
+   * **P1-3 + BRZ-11 — הדבקת סמן הערה למילה הקודמת** (כל הסגנונות):
+   * סמן בסוף שורה אסור. הסמן נצמד למילת העוגן שלפניו כיחידת NBSP;
+   * protectWords מבטל קשירה אם היחידה חורגת מרוחב הטור (Claude §6.2(5)).
+   */
+  function bindMarkersToNeighbors(words, markerSet) {
+    const out = [];
+    let i = 0;
+    while (i < words.length) {
+      const w = words[i];
+      if (markerSet.has(w)) {
+        const prev = out.length ? out[out.length - 1] : null;
+        const next = i + 1 < words.length ? words[i + 1] : null;
+        if (prev && !prev.includes('\u00A0') && !prev.includes(ATOMIC)) {
+          out[out.length - 1] = `${prev}\u00A0${MARK_TAG}${w}`; // הדבקה לאחור + תג (D-53)
+        } else if (next && !next.includes('\u00A0') && !markerSet.has(next)) {
+          out.push(`${MARK_TAG}${w}\u00A0${next}`); i++;        // סמן בראש פסקה ⇒ הדבקה קדימה + תג
+        } else {
+          out.push(`${MARK_TAG}${w}`);                        // סמן מתויג גם בודד
+        }
+      } else {
+        out.push(w);
+      }
+      i++;
+    }
+    return out;
+  }
+
+  // ---- תקציבי גיאומטריה נגזרים לפני ה‑DP (מקור יחיד; ה‑DP והצינור קוראים אותם) ----
+  const regTpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
+  const contentW = regTpl.columns.reduce((s, c) => s + c.w, 0) + regTpl.gutter;
+  settings._fnColWidthPx = settings['footnote-columns'] === 2 ? Math.round(contentW / 2) : Math.round(contentW);
+  settings._outerMarginPx = Math.max(regTpl.margins.outer != null ? regTpl.margins.outer : 0, regTpl.margins.side * 0.8);
+  settings._sideNoteColWidthPx = Math.max(60, Math.round(settings._outerMarginPx) - 12);
+  settings._endnoteColWidthPx = Math.round(contentW); // רוחב טור בעמודי הערות
+
   const blocks = [];
+  const endnoteTokens = [];        // טוקני הערת־סיום גלויים (endnotes mode)
+  const endnoteTitleByPart = new Map(); // D-40: הוראות כותרת־מחלקה per-part
+  const markersByToken = new Map(); // tokenId → [{noteIndex, marker}] (סמן אחיד — D-30)
   let currentPart = 0;
   let fwCount = 0;
+  const markerStyle = settings['footnote-marker-style'];
+  const resetPolicy = settings['footnote-reset-policy'];
+  const nextMarkerNum = makeCounter(resetPolicy); // מדיניות איפוס (D-41)
+
   for (const t of tokens) {
     if (t.type === 'editorial') continue;
+
+    // **D-40 (P1-5): הוראת כותרת־מחלקה** — לא תוכן, לא גוף; מגדירה את כותרת
+    // עמודי ההערות של החלק הנוכחי. בעבר פוענחה כהערת תוכן פיקטיבית.
+    if (t.type === 'endnote-class') {
+      endnoteTitleByPart.set(currentPart || 1, t.title);
+      eventLog.emit('parse', 'endnote-class-directive', { part: currentPart || 1, title: t.title });
+      continue;
+    }
+
     if (t.type === 'heading') {
       if (t.level === 1) currentPart++;
       const hSize = settings[`heading-${t.level}-size-pt`];
-      // צריכת heading-N-font: גופן כותרת משפיע על רוחב מדידה (S4.1.4 — מניעת phantom key)
       const hFont = settings[`heading-${t.level}-font`];
-      // צריכת heading-N-mode (REQ-HDG-02): full-width | regular | side-note | new-page
       const hMode = settings[`heading-${t.level}-mode`];
       const wLimit = (t.level <= 1 || hMode === 'full-width')
         ? fullWidthWidth(settings)
@@ -120,146 +201,217 @@ function typeset(rawText, settingsIn, env = {}) {
       });
       continue;
     }
+
     if (t.type === 'endnote') {
-      // **S7.1.1 (REQ-FN-03) — מקור־האמת note-placement-mode:** במצב footnotes/inline
-      // אין עמודי הערות ⇒ טוקן endnote אינו נגזר לשום מקום = אובדן שקט (אסור, BRZ-15).
-      // הוא זורם לגוף כבלוק פסקה־ערה מלא (ללא סמן), ונספר בצד src וגם בצד out באופן סימטרי.
-      // בעבר נקרא הדגל הגולמי endnotes-enabled ⇒ spread של 'footnotes-enabled':false
-      // יצר מצב סותר (גוף ריק + עמודי הערות) והערה נגנזה.
-      if (settings['note-placement-mode'] !== 'endnotes') {
-        const w = columnWidthFor({ kind: 'paragraph' }, settings);
-        const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => api.measureTextWidth(x), w);
-        const lines = api.layoutLines(words, w, null, { runts: settings['runt-min-width-pct'] });
-        blocks.push({
-          kind: 'paragraph', tokenId: t.id, parts: [{ kind: 'text', value: t.text }],
-          notes: [], bodyMarkers: [], lines, part: currentPart, dh: null, isEndnoteSource: true
-        });
+      // **D-40:** הערת־סיום גלויה. endnotes-mode ⇒ עמודי ההערות (עם סמן
+      // markerFor(num, style)); מצבים אחרים ⇒ בלוק פסקה בגוף (הטקסט בלבד;
+      // המספר במקור הוא עוגן סמן — פריט קישור, לא תוכן — D-30).
+      if (notesMode === 'endnotes') {
+        endnoteTokens.push({ tokenId: t.id, text: t.text, part: currentPart || 1, num: t.num != null ? t.num : null, lines: [] });
         continue;
       }
-      blocks.push({ kind: 'endnote', tokenId: t.id, text: t.text, part: currentPart, lines: [] });
+      const w = columnWidthFor({ kind: 'paragraph' }, settings);
+      const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => api.measureTextWidth(x), w);
+      const lines = api.layoutLines(words, w, null, { runts: settings['runt-min-width-pct'] });
+      blocks.push({
+        kind: 'paragraph', tokenId: t.id, parts: [{ kind: 'text', value: t.text }],
+        notes: [], bodyMarkers: [], lines, part: currentPart, dh: null, isEndnoteSource: true
+      });
       continue;
     }
-    // paragraph: inline note refs get atomic \uE000 spaces (already) — measure as one unit so a note never splits (REQ-LB-04)
+
+    // ---- paragraph ----
     const colW = columnWidthFor({ kind: 'paragraph' }, settings);
-    // דיבור המתחיל (REQ-PAR-ST-03): dh-auto-detect → סימון; טקסט נשאר בזרימה (geometry-neutral)
     let dh = null;
     if (settings['dh-auto-detect']) {
       const flat = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
       dh = detectDh(flat, true);
     }
-    // dh-font: נצרך בפועל — metadata של הדיבור המתחיל כולל את הגופן, והרנדור
-    // משתמש בו (widthFor פרופיל גופן במדידת המילה הראשונה). geometry-neutral.
     if (dh) { dh.font = settings['dh-font']; }
-    const allWords = [];
-    const notes = [];
-    const bodyMarkers = []; // [1],[2]… כפי שנדחקו לגוף (נרנדרים ונספרים בצד התוצר)
-    let noteSeq = 0;
-    for (const p of t.parts) {
-      if (p.kind === 'text') allWords.push(...normalizeText(p.value).split(/\s+/).filter(Boolean));
-      else {
-        const noteRaw = t.notes[p.noteIndex];
-        noteSeq++;
-        // **תיקון BRZ-15 (mismatch 'הערה ראשונה להפניה'):** בעבר נדחק לגוף placeholder
-        // `⟦…כל טקסט ההערה…⟧` — המילים נספרו פעמיים (גם בגוף גם ב‑notes) וה‑scrub של ⟦⟧
-        // השאיר את תוכו כמילים. עכשיו: בגוף נדחק **סמן ממוספר בלבד** [n] — נספר ALSO
-        // דרך notes (marker), ולכן multiset הגוף אינו מכיל אותו בנפרד. הplaceholder הרחב
-        // נמדד לפי רוחב הסמן האמיתי (geometry = סמן, לא הערה שלמה).
-        const marker = `[${noteSeq}]`;
-        // **S7.1.4 tri-mode (BRZ-15) — מקור־האמת note-placement-mode:**
-        //  (ב) endnotes: בגוף נדחק **סמן בלבד**; טקסט ההערה זורם לעמודי "הערות"
-        //      ונספר שם — **דרך עמודי ההערות שהודפסו בפועל** (endnotePagesInfo),
-        //      לא דרך רשימה תיאורטית: הערה שלא הודפסה = אובדן שקט ⇒ הבדיקה תיכשל
-        //      במפורש ולא תסתיר. לכן כאן לא נוסף כלום ל‑out מהמרזב.
-        if (settings['note-placement-mode'] === 'endnotes') {
-          allWords.push(marker);
-          bodyMarkers.push(marker);
-          continue;
-        }
-        //  (ג) inline / fn-off: אין מרזב ואין עמודי הערות ⇒ סמן־בלבד היה מאבד
-        //      טקסט (אסור, BRZ-15). ההערה חוזרת לגוף כplaceholder מלא `[marker: text]`
-        //      — **מילה אטומית אחת** (\uE000 בין הרכיבים; נפרד להצגה ברנדור ונספר
-        //      זהה בצד src דרך canonicalParaWords — identity-by-construction).
-        if (settings['note-placement-mode'] === 'inline' || !settings['footnotes-enabled']) {
-          const noteFlat = String(noteRaw).replace(/\uE000/g, ' ');
-          allWords.push(`${marker}:${noteFlat.replace(/ /g, '\uE000')}`);
-          continue;
-        }
-        notes.push({ text: noteRaw.replace(/\uE000/g, ' '), marker, tokenId: t.id, noteIndex: p.noteIndex });
-        // בגוף נדחק **הסמן בלבד** (נמדד כרוחב סמן אמיתי) — כך מילים אינן נספרות פעמיים.
-        allWords.push(marker);
-        bodyMarkers.push(marker);
+
+    // **D-42 (P1-2): pre-pass of parentheses before measurement** — ranges of (...) on the body text;
+    // Words inside the parentheses are measured in the paren-style-scale scale (1.0 = off) before
+    // breaking the lines — the causal root of V23 (9 geometry changes from late application).
+    // Word mapping: the words of the text parts (in order) correspond 1:1 to the words of the flattened
+    // text from which flatBody was built — a shared running index (exact, no searches).
+    const textParts = t.parts.filter(p => p.kind === 'text');
+    const flatBody = textParts.map(p => p.value).join(' ');
+    const parenSpans = parenScale !== 1 ? parenSpansOfFlat(flatBody) : [];
+    const flatWordOffsets = [];
+    {
+      let cum = 0;
+      for (const w of flatBody.split(/\s+/)) {
+        if (!w) continue;
+        flatWordOffsets.push({ word: w, at: cum });
+        cum += w.length + 1;
       }
     }
-    // f-note-body-font: מדידת גופן גוף ההערות — משפיע על גובה מרזב ההערות
-    // (reserveNotes בודק את settings['f-note-body-font'] דרך widthFor; כאן נשמר הצימוד).
-    const protectedWords = protectWords(allWords, (x) => api.measureTextWidth(x), colW);
-    const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] });
-    const blk = { kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, bodyMarkers, lines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh };
-    // CP3.4: first-word AFTER line-plan, BEFORE render — metadata בלבד, geometry-neutral
+    let flatWordIdx = 0;
+
+    const allWords = [];
+    const notes = [];
+    const bodyMarkers = [];
+    const assignedMarkers = new Set();
+    const noteAssignments = [];
+
+    for (const p of t.parts) {
+      if (p.kind === 'text') {
+        const src = normalizeText(p.value);
+        for (const wordRaw of src.split(/\s+/).filter(Boolean)) {
+          const info = flatWordOffsets[Math.min(flatWordIdx, flatWordOffsets.length - 1)];
+          flatWordIdx++;
+          const inParen = parenSpans.length > 0 && info && offsetInSpans(info.at, parenSpans);
+          allWords.push(inParen && parenScale !== 1 ? PAREN_SENTINEL + wordRaw : wordRaw);
+        }
+      } else {
+        // note-ref: uniform marker allocation (D-30/D-41) — policy numbering + style
+        const noteRaw = t.notes[p.noteIndex];
+        const marker = markerFor(nextMarkerNum({ page: null, part: currentPart || 1 }), markerStyle);
+        assignedMarkers.add(marker);
+        noteAssignments.push({ noteIndex: p.noteIndex, marker });
+        if (notesMode === 'inline' || (!settings['footnotes-enabled'] && notesMode !== 'endnotes')) {
+          // (c) inline / fn-off: full placeholder in the body — `${marker}\uE000${text}`
+          // (D-30: the separator is the first \uE000 — atomic in measurement, exact in extraction)
+          const noteFlat = String(noteRaw).replace(/\uE000/g, ' ');
+          const placeholder = `${MARK_TAG}${marker}${ATOMIC}${noteFlat.replace(/ /g, ATOMIC)}`; // תג (D-53): אחרי kp ה‑E000 נהיה NBSP — התג מזהה את הסמן
+          const prev = allWords.length ? allWords[allWords.length - 1] : null;
+          if (prev && !prev.includes('\u00A0') && !prev.includes(ATOMIC)) {
+            allWords[allWords.length - 1] = `${prev}\u00A0${placeholder}`; // the marker sticks to its anchor (BRZ-11)
+          } else {
+            allWords.push(placeholder);
+          }
+          continue;
+        }
+        // footnotes / endnotes: only the marker is pushed in the body (counted once — at the anchor);
+        // the text of the note flows to its display location (gutter / pages of notes — D-30).
+        notes.push({ text: String(noteRaw).replace(/\uE000/g, ' '), marker, tokenId: t.id, noteIndex: p.noteIndex, part: currentPart || 1 });
+        bodyMarkers.push(marker);
+        allWords.push(marker);
+      }
+    }
+    markersByToken.set(t.id, noteAssignments);
+
+    // Pasting lone markers to their neighbors (BRZ-11) — before measurement
+    const boundWords = bindMarkersToNeighbors(allWords, assignedMarkers);
+
+    // Measurement with a pre-pass of parentheses: PAREN_SENTINEL words in scale (D-42)
+    const measureWithParen = (x) => {
+      const clean0 = String(x).replace(/\uE102/g, ''); // תג סמן — מוסר ממדידה (D-53)
+      const isParen = clean0.startsWith(PAREN_SENTINEL);
+      const clean = isParen ? clean0.slice(PAREN_SENTINEL.length) : clean0;
+      const base = api.measureTextWidth(clean);
+      return isParen ? base * parenScale : base;
+    };
+    const protectedWords = protectWords(boundWords, measureWithParen, colW);
+    const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] }, measureWithParen);
+
+    // Cleaning the sentinel from the lines + tagging parenSpans for rendering (local index)
+    for (const ln of lines) {
+      const spans = [];
+      ln.words = (ln.words || []).map((w, wi) => {
+        if (w.startsWith(PAREN_SENTINEL)) { spans.push(wi); return w.slice(PAREN_SENTINEL.length); }
+        return w;
+      });
+      if (spans.length && parenScale !== 1) ln.parenSpans = spans;
+    }
+    const blk = {
+      kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, bodyMarkers, lines,
+      unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh,
+      noteAssignments, parenCharSpans: parenSpans, flatWordOffsets
+    };
     const fwRes = applyDropWord(blk, settings, api);
     if (fwRes.applied) fwCount++;
-
-    // s-note-body-font: השפעה אמיתית על מדידת הערות צד (H7/side-notes) — גופן הערות מקבילות.
-    // נמדד בפועל בדף התוצר (side-notes.js קורא settings['s-note-body-font']).
     blocks.push(blk);
   }
-  eventLog.emit('measure', 'cp2-measured', { blocks: blocks.length, cache: api.cacheStats(), firstWordDecorated: fwCount });
+
+  // תבנית ההחלטה המאוחדת של כותרות (D-09) — לפני ה‑DP; ה‑DP קורא דגלים בלבד
+  applyHeadingModes(blocks, settings);
+  eventLog.emit('measure', 'cp2-measured', { blocks: blocks.length, cache: api.cacheStats(), firstWordDecorated: fwCount, parenScale });
 
   // ---- CP3: page plan (DP) + protections + retreat loop ----
-  // תיקון S8: DP חייב את פונקציית המדידה כ‑dependency מוצהרת (ללא fallback גלובלי — L1).
-  const planned = planPages(blocks, settings, eventLog, ledger, { measure: (t, s) => api.measureTextWidth(t, s) });
+  const planned = planPages(blocks, settings, eventLog, ledger, { measure: (t2, s2) => api.measureTextWidth(t2, s2) });
   const { pages } = planned;
 
-  // ---- notes budget re-fit (S6.1.1: probe==reserved identity) ----
-  // הערות כבר תוקצבו בתוך ה‑DP (fnReservedHeightPx); כאן רק מוודאים זהות probe==reserved.
-  for (const pg of pages) {
-    if (pg.fnReservedHeightPx == null) pg.fnReservedHeightPx = 0;
+  // **P1-1 (connection of dead mechanisms):** end-of-part modes + AutoQuality
+  // are activated from the pipeline: balance-chapter-end is applied on the last page
+  // of each section; AQ is activated when aq-enabled.
+  {
+    const endsAt = new Set();
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i].chapterOpening && i > 0) endsAt.add(i - 1);
+    }
+    endsAt.add(pages.length - 1);
+    for (const pi of [...endsAt].sort((a, b) => a - b)) {
+      applyChapterEndMode(pages[pi], settings['balance-chapter-end'], settings, eventLog);
+    }
+    if (settings['aq-enabled']) autoQualityPass(pages, settings, eventLog);
   }
 
-  // ---- CP4: decorations pass — geometry-neutral (invariant T1) ----
-  const cp4HashBefore = planned.hash;
+  // ---- CP4: decorations pass — geometry-neutral (invariant T1; D-47) ----
+  const cp4PageCount = pages.length;
+  const cp4BodyBefore = bodyGeometryHash(pages);
 
-  // S7.1.2: מיקום הערות צד (H7 + כותרות mode=side-note) — metadata/absolute positioning,
-  // לא משנה שורות → geometry-neutral נאכף בהמשך (hash before==after).
-  const { placeSideNotes } = require('../layout/side-notes');
+  // S7.1.2: הערות צד — עיגון לפסקה, cascade, מיכל 20px, מעבר לעמוד הבא
+  const { placeSideNotes, verifyH7Conversion } = require('../layout/side-notes');
   for (const pg of pages) pg.isRecto = pg.index % 2 === 0;
-  // S9: מדידה אמיתית להערות צד דרך entry יחיד (L1) + רוחב margin חיצוני מהתבנית
-  const regTpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
-  settings._outerMarginPx = Math.max(regTpl.margins.outer != null ? regTpl.margins.outer : 0, regTpl.margins.side * 0.8);
-  settings._sideNoteColWidthPx = Math.max(60, Math.round(settings._outerMarginPx) - 12);
-  const sideNotePlacement = placeSideNotes(pages, settings, (t, s) => api.measureTextWidth(t, s));
+  const sideNotePlacement = placeSideNotes(pages, settings, (t2, s2) => api.measureTextWidth(t2, s2), { ledger, eventLog });
 
-  // S6/S7: עמודי הערות סיום per-part (REQ-FN-03/04) — נוספים **אחרי** תכנון הגוף,
-  // אינם מזיזים עמודי גוף (הוספה ב־tail), ולכן geometry-neutral לגוף.
-  const endnoteBlocks = blocks.filter(b => b.kind === 'endnote');
-  // **S7.1.4 (REQ-FN-03/04) — מקור־האמת: note-placement-mode (לא דגלים גולמיים):**
-  // במצב endnotes **כל** ההערות — טוקנים גלויים + note-refs צמודי־גוף — זורמות
-  // לעמודי "הערות" per-part, והסמן בגוף נשאר יחיד. בעבר נקראו הדגלים הגולמיים
-  // כאן ⇒ spread של 'footnotes-enabled':false יצר עמודי הערות סמויים שכפלו מילים.
-  if (settings['note-placement-mode'] === 'endnotes') {
-    let seq = 0;
+  // S7.1.1: עמודי הערות per-part — טוקנים גלויים + inline-refs (endnotes mode)
+  settings._endnoteTitleByPart = endnoteTitleByPart;
+  settings._endnoteColCapPx = regTpl.contentBox.height;
+  const endnoteBlocks = [...endnoteTokens];
+  if (notesMode === 'endnotes') {
     for (const b of blocks) {
       if (b.kind !== 'paragraph' || !b.notes || !b.notes.length) continue;
       for (const n of b.notes) {
-        seq++;
-        endnoteBlocks.push({ kind: 'endnote', tokenId: b.tokenId, text: n.text, part: b.part || 1, lines: [], fromInline: true, markerRef: n.marker });
+        endnoteBlocks.push({ tokenId: b.tokenId, noteIndex: n.noteIndex, text: n.text, part: b.part || 1, marker: n.marker, fromInline: true, lines: [] });
       }
     }
   }
-  let endnotePagesInfo = { count: 0 };
-  if (settings['note-placement-mode'] === 'endnotes' && endnoteBlocks.length) {
+  let endnotePagesInfo = { count: 0, pages: [] };
+  if (notesMode === 'endnotes' && endnoteBlocks.length) {
     const { buildEndnotePages } = require('../layout/endnote-pages');
-    const tpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
-    const enSettings = { ...settings, _endnoteColCapPx: tpl.contentBox.height, _endnoteColWidthPx: Math.max(...tpl.columns.map(c => c.w)) };
-    const enPages = buildEndnotePages(endnoteBlocks, enSettings, (t, s) => api.measureTextWidth(t, s), (s) => api.lineHeightPx(s));
-    endnotePagesInfo = { count: enPages.length, pages: enPages };
+    endnotePagesInfo = { count: 0, pages: buildEndnotePages(endnoteBlocks, settings, (t2, s2) => api.measureTextWidth(t2, s2), (s2) => api.lineHeightPx(s2), { ledger, eventLog }) };
+    endnotePagesInfo.count = endnotePagesInfo.pages.length;
   }
 
-  eventLog.emit('decorations', 'cp4-decoration-pass', { geometryNeutral: true, sideNotesPlaced: sideNotePlacement.placed.length, sideNotesDeferred: sideNotePlacement.deferred.length, endnotePages: endnotePagesInfo.count });
+  // count-endnote-pages=true ⇒ עמודי ההערות מצטרפים למספור (S7.1.1)
+  if (settings['count-endnote-pages'] === true && endnotePagesInfo.pages.length) {
+    let idx = pages.length ? pages[pages.length - 1].index + 1 : 0;
+    for (const ep of endnotePagesInfo.pages) {
+      ep.index = idx++;
+      ep.template = buildPageTemplate(PAGE_TYPES.ENDNOTES, settings, ep.index % 2 === 0);
+      pages.push(ep);
+    }
+    eventLog.emit('folio', 'endnote-pages-numbered', { count: endnotePagesInfo.pages.length });
+  }
 
-  // ---- folio numbering ----
+  // **P0-6 (D-47): הוכחת ניטרליות אמיתית** — hash גיאומטריה מחושב מחדש אחרי
+  // פאס העיטורים ומושווה. הוספת עמודים מותרת (מסמן תוספת, לא מוטציה);
+  // כל שינוי בשורות קיימות או הסרת עמוד ⇒ הבדיקה נכשלת.
+  const cp5BodyAfter = pages.length >= cp4PageCount ? bodyGeometryHash(pages.slice(0, cp4PageCount)) : '<shrunk>';
+  const geometryNeutralVerified = cp5BodyAfter === cp4BodyBefore;
+  eventLog.emit('decorations', 'cp4-decoration-pass', {
+    geometryNeutral: geometryNeutralVerified,
+    sideNotesPlaced: sideNotePlacement.placed.length,
+    sideNotesDeferred: sideNotePlacement.deferred.length,
+    endnotePages: endnotePagesInfo.count
+  });
+
+  // S7.1.3: אימות המרת H7 — מחובר לצינור (בעבר פונקציה יתומה)
+  const h7Mismatches = verifyH7Conversion(tokens, pages, sideNotePlacement);
+  for (const m of h7Mismatches) {
+    const rec = ledger.create('h7-conversion-missing', m.token, null, { text: m.text }, 'decorations');
+    ledger.transition(rec.issue_id, 'persists', 'decorations', 'H7 token not placed as side note');
+  }
+
+  // ---- folio numbering (D-36: פתיחות אינן מציגות גיליון) ----
   const numbers = assignNumbers(pages, settings);
-  pages.forEach((pg, i) => { pg.pageNumber = numbers[i].page; pg.folioDisplay = numbers[i].shown ? numbers[i].display : ''; });
+  pages.forEach((pg, i) => {
+    pg.pageNumber = numbers[i].page;
+    pg.folioDisplay = numbers[i].shown ? numbers[i].display : '';
+    pg.pageNumberDisplay = numbers[i].display; // מקור page-num לכותרות עליונות (P1-1)
+  });
 
   // ---- headers ----
   const bookName = metadata['ספר'] || metadata['title'] || '';
@@ -275,134 +427,138 @@ function typeset(rawText, settingsIn, env = {}) {
     pg.firstWord = firstCol && firstCol.words ? firstCol.words[0] : '';
     pg.lastWord = lastLine && lastLine.words ? lastLine.words[lastLine.words.length - 1] : '';
     pg.isRecto = pg.index % 2 === 0;
-    pg.header = buildHeader(pg, settings, pg.headerCtx);
+    // D-36: אין כותרת עליונה על עמודי פתיחה (עמודי שער)
+    pg.header = pg.chapterOpening ? null : buildHeader(pg, settings, pg.headerCtx);
   });
 
   // ---- TOC ----
-  // תיקון S8: מקור הסמכות הוא אובייקטי ה‑heading מהטוקניזציה (לא שורות —
-  // כותרת בת 2 שורות הייתה נסרקת פעמיים). דף יעד = העמוד הראשון שמכיל שורה
-  // עם אותו tokenId. רמות 0/1 כלולות לפי toc-level-{N}-show (registry).
   const { buildTocEntries, splitGeneralDetail } = require('../decoration/toc-builder');
   const firstPageByToken = new Map();
   for (const pg of pages) {
     for (const col of pg.columns) for (const ln of col) {
-      if (ln.tokenId != null && !firstPageByToken.has(ln.tokenId)) firstPageByToken.set(ln.tokenId, pg.index);
+      const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
+      if (tok != null && !firstPageByToken.has(tok)) firstPageByToken.set(tok, pg.index);
     }
   }
   const headingsForToc = [];
   for (const b of blocks) {
     if (b.kind !== 'heading') continue;
     const page = firstPageByToken.has(b.tokenId) ? firstPageByToken.get(b.tokenId) : -1;
-    if (page < 0) continue; // כותרת שלא נטמעה בדפוס (נרשם בledger ב‑DP) — לא נגלה בשקט ל‑TOC
+    if (page < 0) continue;
     headingsForToc.push({ level: b.level, text: b.lines.map(l => l.words.join(' ')).join(' ').trim(), page });
   }
-  headingsForToc.sort((a, b) => a.page - b.page); // מסדר קריאה — דטרמיניסטי
+  headingsForToc.sort((a, b) => a.page - b.page);
   const tocEntries = buildTocEntries(headingsForToc, settings, numbers);
-  const toc = splitGeneralDetail(tocEntries, settings); // S9: general/detail enabled נצרכים בפועל
+  const toc = splitGeneralDetail(tocEntries, settings);
 
-  // ---- אינטגריטיית שימור תוכן (BRZ-15): multiset מילים src == multiset מילים out ----
-  // **לקח V23 (מניעת false-positive):** אין השוואת מחרוזות מלאה — ה‑DP משנה סדר
-  // (פיצול טורים/עמודים) ו‑AQ משנה מרווחים. הנבדך: פרופיל ריבוי מילים זהה
-  // (אף מילה לא אבדה/נוספה) + כל token מיוצג (נמצא או הומר להערת צד).
-  // **S7.1.4 BRZ-15 — עקרון הזהות (identity-by-construction):**
-  // צד ה‑src חייב להיספר **מאותו ייצוג** שצד ה‑out סופר — טוקן `paragraph` עם
-  // note-refs מקבל ייצוג canonical תלוי־מצב, ושני הצדדים קוראים אותו:
-  //  footnotes/endnotes: body + markers `[n]` (טקסט ההערה נספר דרך המרזב/עמודי הערות)
-  //  inline/fn-off:      body + `marker:text` (placeholder מלא — כפי שנדחק לגוף)
-  // אין "נרמולי השוואה" עקיפים (ספרות/סוגריים/נקודותיים) — מקור כל באגי ה‑diff הקודמים.
+  // ---- אינטגריטיית שימור תוכן (BRZ-15) — identity-by-construction (D-30) ----
+  // צד src: גוף + סמן + טקסט־הערה (לכל note-ref); הערות־סיום גלויות:
+  //   endnotes-mode ⇒ סמן (מה שהודפס בעמודי ההערות) + טקסט; אחרת ⇒ הטקסט בגוף.
+  // צד out: נספר ממקום ההצגה בפועל — שורות הגוף (כולל סמנים/placeholder),
+  // מרזב (טקסט בלבד — הסמן נספר בגוף), עמודי הערות (טקסט ל-inline-refs;
+  // סמן+טקסט לטוקנים גלויים), הערות צד.
   const scrubForCompare = (s0) => String(s0)
-    .replace(/[\u00A0\uE000]/g, ' ')
+    .replace(/[\u00A0\uE000\uE101\uE102]/g, ' ')
     .replace(/\uFF9F/g, '\u05F3')
     .replace(/\uFF93/g, '\u05F4')
-    .replace(/[\u27E6\u27E7]/g, '')   // ⟦⟧ placeholders — נמדדים, לא נספרים כתוכן
+    .replace(/[\u27E6\u27E7]/g, '')
     .replace(/\s+/g, ' ').trim();
-  /** ייצוג canonical של טוקן פסקה לצורך מולטיסט — משותף לשני הצדדים (ללא תלות בניב). */
-  function canonicalParaWords(t, st) {
-    const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
-    const refs = t.parts.filter(p => p.kind === 'note-ref');
-    const asBodyPlaceholder = (st['note-placement-mode'] === 'inline' || !st['footnotes-enabled']);
-    if (asBodyPlaceholder) {
-      return scrubForCompare([
-        body,
-        ...refs.map((p, i) => `[${i + 1}]:${String(t.notes[p.noteIndex]).replace(/\uE000/g, ' ')}`)
-      ].join(' ')).split(' ').filter(Boolean);
+
+  /** פיצול placeholder: `${marker}\uE000${text}` → מרקר + מילות הטקסט (D-30). */
+  function explodePlaceholderWord(w) {
+    const s = String(w);
+    const at = s.indexOf(ATOMIC);
+    if (at > 0) {
+      const marker = s.slice(0, at);
+      const rest = s.slice(at + 1);
+      return [...wordSeq(marker), ...wordSeq(rest)];
     }
-    return scrubForCompare([body, ...refs.map((_, i) => `[${i + 1}]`)].join(' ')).split(' ').filter(Boolean);
+    return wordSeq(s);
   }
   const wordSeq = (s0) => scrubForCompare(s0).split(' ').filter(Boolean);
+
+  /** מפת סמנים מודפסים של טוקני הערות־סיום גלויים (מה שהודפס בפועל). */
+  const printedEndnoteMarker = new Map(); // tokenId -> marker
+  for (const ep of (endnotePagesInfo.pages || [])) {
+    for (const n of ep.notes) {
+      if (n.tokenId != null && !n.fromInline) printedEndnoteMarker.set(n.tokenId, n.marker);
+    }
+  }
+
   function srcWordsOf(t) {
-    if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
-    // **S7.1.4 TRI-MODE (BRZ-15 — זהות צדדים):** ייצוג canonical תלוי־מצב, משותף ל‑out
-    // (ראו canonicalParaWords): footnotes/endnotes ⇒ body+markers; inline/fn-off ⇒ body+`[n]:text`.
-    return canonicalParaWords(t, settings);
+    if (t.type === 'heading' || t.type === 'side-note') return wordSeq(t.text);
+    if (t.type === 'endnote-class') return []; // directive (D-40) — לא תוכן
+    if (t.type === 'editorial') return [];
+    if (t.type === 'endnote') {
+      if (notesMode === 'endnotes') {
+        const marker = printedEndnoteMarker.get(t.id) || '';
+        return [...wordSeq(marker), ...wordSeq(t.text)];
+      }
+      return wordSeq(t.text); // גוף: הטקסט בלבד (המספר במקור = עוגן סמן, לא תוכן — D-30)
+    }
+    // paragraph: גוף + לכל note-ref: סמן (בעוגן שבגוף) + טקסט ההערה
+    // (ממקום הצגתו). הסמן אחד לכל המצטרים — הוקצה אחדת
+    // בשלב הבלוק (מדיניות + סגנון) — identity-by-construction (D-30).
+    const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
+    const refs = t.parts.filter(p => p.kind === 'note-ref');
+    const assigns = markersByToken.get(t.id) || [];
+    const out = [...wordSeq(body)];
+    for (let i = 0; i < refs.length; i++) {
+      const p = refs[i];
+      const marker = assigns[i] ? assigns[i].marker : '';
+      const noteText = String(t.notes[p.noteIndex]).replace(/\uE000/g, ' ');
+      // סמן אחד (בגוף, בעוגן) + טקסט אחד (ממקום ההצגה) — בכל מצב
+      out.push(...wordSeq(marker), ...wordSeq(noteText));
+    }
+    return out;
   }
-  /**
-   * **S7.1.4 BRZ-15 — מקור־סמכות יחיד למציגות הערות (single source of truth):**
-   * מפת `tokenId#noteIndex` → {marker, text} של ההערות המוצגות בפועל:
-   *  - מרזב footnotes (מצב footnotes): נלקח מעמודי הפלט — הערה שהוחזרה לגוף
-   *    (reject-to-body) אינה נמצאת שם ⇒ לא נספרת מהמרזב (מילותיה כבר בגוף).
-   *  - עמודי "הערות" (מצב endnotes): נלקח מ‑endnotePagesInfo.pages (מקור הסמכות
-   *    האמיתי — מה שהודפס), כולל refs צמודי־גוף שזורמו לעמודי הערות.
-   * ללא מקור יחיד זה — כפילויות/פערים שיטתיים (באגי V23).
-   */
-  const displayedNoteKeys = new Map(); // key -> { marker, text }
-  for (const pg of pages) {
-    for (const n of pg.footnotes) displayedNoteKeys.set(`${n.tokenId}#${n.noteIndex}`, n);
-  }
-  // במצב endnotes אין מרזב — מקור הסמכות הוא עמודי ההערות בלבד (נאסף להלן).
-  // בעבר תנאי ה‑pages היה כרוך בהצלחת הבנייה; כעת מחיקת המרזב אינה תלויה בכך.
-  if (settings['note-placement-mode'] === 'endnotes') displayedNoteKeys.clear();
-  if (settings['note-placement-mode'] === 'endnotes' && endnotePagesInfo.pages) {
-    for (const ep of endnotePagesInfo.pages) {
-      for (const n of ep.notes) {
-        if (n.fromInline || (n.tokenId != null && n.noteIndex != null)) {
-          displayedNoteKeys.set(`${n.tokenId}#${n.noteIndex}`, n);
+
+  /** חילוץ מילים מהפלט המרונדר בפועל (בדיקת אמת של המבקר — לא הסכמה פנימית). */
+  function outWordsOfAll() {
+    const out = [];
+    // 1) שורות הגוף של כל העמודים — כפי שמרונדרות (placeholder מפוצל)
+    for (const pg of pages) {
+      for (const col of pg.columns) {
+        for (const ln of col) {
+          for (const w of (ln.words || [])) {
+            if (w.includes(ATOMIC)) out.push(...explodePlaceholderWord(w));
+            else out.push(...wordSeq(w));
+          }
         }
       }
     }
+    // 2) מרזב footnotes — טקסט בלבד (הסמן נספר פעם אחת בגוף — D-30)
+    if (settings['footnotes-enabled'] && notesMode !== 'endnotes') {
+      for (const pg of pages) {
+        for (const n of pg.footnotes) {
+          if (n.isContinuation || n.mode === 'split-rest') out.push(...wordSeq(n.text));
+          else if (n.mode === 'split-first') out.push(...wordSeq(n.text));
+          else if (n.rejected) { /* הוחזר לגוף — נספר שם */ }
+          else out.push(...wordSeq(n.text));
+        }
+      }
+    }
+    // 3) עמודי הערות — inline-refs: טקסט בלבד; טוקנים גלויים: סמן + טקסט
+    if (notesMode === 'endnotes') {
+      for (const ep of (endnotePagesInfo.pages || [])) {
+        for (const n of ep.notes) {
+          if (n.fromInline) out.push(...wordSeq(n.text));            // הסמן נספר בגוף
+          else out.push(...wordSeq(n.marker), ...wordSeq(n.text));   // אין עוגן בגוף
+        }
+      }
+    }
+    // 4) הערות צד — טקסט מהמיקום שהוצג
+    for (const p of sideNotePlacement.placed) out.push(...wordSeq(p.text));
+    return out;
   }
-  function outWordsOf(blk) {
-    if (blk.kind === 'heading') return wordSeq(blk.lines.map(l => l.words.join(' ')).join(' '));
-    if (blk.kind === 'endnote') return []; // נספר באיסוף endnoteBlocks (להלן) — מקור סמכות יחיד
-    // גוף: הסמנים [n] / הplaceholders נספרים כפי שנדחקו לשורות; הערות מרזב — רק
-    // שהוצגו בפועל (displayedNoteKeys). במצב endnotes המרזב ריק ממילא ⇒ אין כפילות.
-    const body = blk.lines.map(l => l.words.join(' ')).join(' ');
-    const notes = (blk.notes || [])
-      .filter(n => displayedNoteKeys.has(`${n.tokenId}#${n.noteIndex}`))
-      .map(n => n.text).join(' ');
-    return [...wordSeq(body), ...wordSeq(notes)];
-  }
-  const srcTokens = tokens.filter(t => t.type !== 'editorial');
+
+  const srcTokens = tokens.filter(t => t.type !== 'editorial' && t.type !== 'endnote-class');
   let contentPreserved = true;
   const mismatchDetail = [];
   const gSrc = [], gOut = [];
   for (const t of srcTokens) gSrc.push(...srcWordsOf(t));
-  for (const b of blocks) gOut.push(...outWordsOf(b));
-  // **S7.1.4 BRZ-15 — איסוף out מעמודי ההערות שהודפסו:** טוקנים גלויים + refs
-  // צמודי־גוף שזורמו לעמודי "הערות" — נספרים מ‑endnotePagesInfo (מה שהודפס),
-  // כך שהבדיקה תופסת אובדן שקט אם הערה לא הגיעה לדף. endnoteBlocks הוא רק מקור
-  // הזרימה ל‑builder; אין לספור ממנו ישירות (חשד כפילות/תעלה).
-  for (const eb of endnoteBlocks) gOut.push(...wordSeq(eb.text));
-  if (settings['note-placement-mode'] === 'endnotes' && endnotePagesInfo.pages) {
-    // הסרנו את הספירה התיאורטית של inline-refs מ‑endnoteBlocks; תמורתה סופרים
-    // את מה שהודפס בפועל בעמודי ההערות (refs בלבד — טוקני endnote גלויים כבר נספרו).
-    const visibleEndnoteTokens = new Set(blocks.filter(b => b.kind === 'endnote').map(b => b.tokenId));
-    let printedInline = 0;
-    for (const ep of endnotePagesInfo.pages) {
-      for (const n of ep.notes) {
-        if (n.fromInline || (n.tokenId != null && !visibleEndnoteTokens.has(n.tokenId))) {
-          gOut.push(...wordSeq(String(n.text || '').replace(/\uE000/g, ' ')));
-          printedInline++;
-        }
-      }
-    }
-    void printedInline;
-  } else if (settings['note-placement-mode'] !== 'endnotes') {
-    // במצב footnotes/inline אין זרימת refs לעמודי הערות — endnoteBlocks מכיל רק
-    // טוקני endnote גלויים (כבר נספרו) ⇒ אין להוסיף inline refs (נמנעת כפילות).
-  }
-  for (const p of sideNotePlacement.placed) gOut.push(...wordSeq(p.text));
-  for (const d of sideNotePlacement.deferred) gOut.push(...wordSeq(d.text));
+  gOut.push(...outWordsOfAll());
+
   const norm = (arr) => arr.slice().sort().join('\n');
   if (norm(gSrc) !== norm(gOut)) {
     contentPreserved = false;
@@ -414,39 +570,169 @@ function typeset(rawText, settingsIn, env = {}) {
     }
     mismatchDetail.push({ kind: 'multiset-mismatch', diff });
   }
+
+  // כל טוקן מיוצג (נמצא בפלט או הומר להערת צד / עמודי הערות)
   const blocksByToken = new Map();
   for (const b of blocks) if (!blocksByToken.has(b.tokenId)) blocksByToken.set(b.tokenId, b);
-  // **S7.1.4:** במצב endnotes טוקן מקורו עשוי להיות מיוצג ב‑endnoteBlocks בלבד
-  // (הערות שזורמו לעמודי "הערות") — מקום יחסי־תוכן לגיטימי, לא אובדן.
-  const endnoteBlockTokens = new Set(endnoteBlocks.map(e => e.tokenId));
+  const placedSideAnchors = new Set(sideNotePlacement.placed.map(p => p.anchorToken));
+  const endnoteRepresented = new Set(endnoteBlocks.map(e => e.tokenId));
   for (const t of srcTokens) {
-    const placedAsSide = sideNotePlacement.placed.find(p => p.anchorToken === t.id)
-      || sideNotePlacement.deferred.find(p => p.anchorToken === t.id);
-    const representedElsewhere = endnoteBlockTokens.has(t.id);
+    const placedAsSide = placedSideAnchors.has(t.id);
+    const representedElsewhere = endnoteRepresented.has(t.id);
     if (!blocksByToken.has(t.id) && !placedAsSide && !representedElsewhere) {
       contentPreserved = false; mismatchDetail.push({ token: t.id, kind: 'token-not-placed' });
     }
   }
+
+  // **עקביות סמנים (P1-3):** סמן הגוף == סמן מקום ההצגה, לכל הערה — בדיקת אמת.
+  {
+    // סמנים ידועים של המסמך (מדוקים בלבד — ללד חיווים) + סמני הערות סיום גלויות
+    const knownMarkers = new Set();
+    for (const b of blocks) for (const a of (b.noteAssignments || [])) knownMarkers.add(a.marker);
+    for (const ep of (endnotePagesInfo.pages || [])) for (const n of ep.notes) if (!n.fromInline) knownMarkers.add(n.marker);
+    const countKnown = (w) => {
+      // מדויק (D-53): סמן מזוהה רק לפי תג (E102) או placeholder (E000).
+      // מילה רגילה (ספרה 1 בטקסט, סגנון decimal) אינה סמן (NC-10).
+      const sw = String(w);
+      if (sw.includes(ATOMIC)) {
+        // placeholder עם E000 (reject-to-body; נוצר אחרי תכנון השורות):
+        // הסמן הוא הפרגמנט המוכר שלפני ה‑E000 (עשוי להיות ממוזג לעוגן ב‑NBSP).
+        const at = sw.indexOf(ATOMIC);
+        const frags = wordSeq(sw.slice(0, at));
+        return frags.slice().reverse().find(f => knownMarkers.has(f)) || null;
+      }
+      if (!sw.includes(MARK_TAG)) return null;
+      const at = sw.indexOf(MARK_TAG);
+      const frag = sw.slice(at + 1).split(/[\u00A0 ]/)[0];
+      return knownMarkers.has(frag) ? frag : null;
+    };
+
+
+    const bodyMarkers = [];
+    for (const pg of pages) for (const col of pg.columns) for (const ln of col) {
+      for (const w of (ln.words || [])) {
+        const km = countKnown(w); // תג/E000 בלבד — ראה D-53; מילה רגילה אינה סמן
+        if (km) bodyMarkers.push(km);
+      }
+    }
+    // \u05d4\u05d0\u05de\u05ea: \u05d4\u05e1\u05de\u05e0\u05d9\u05dd \u05e9\u05d4\u05d5\u05e7\u05e6\u05d5 \u05dc\u05de\u05e1\u05de\u05da (\u05de\u05d5\u05e0\u05d9\u05dd \u05de\u05d5\u05d1\u05df \u05d0\u05d7\u05d3) \u2014 \u05de\u05d5\u05db\u05d7\u05d9\u05dd \u05de\u05d5\u05dc \u05d4\u05e1\u05de\u05da
+    const assignedAll = [];
+    for (const b of blocks) for (const a of (b.noteAssignments || [])) assignedAll.push(a.marker);
+    // \u05de\u05e7\u05d5\u05dd \u05d4\u05e6\u05d2\u05d4 \u05e0\u05e4\u05e8\u05d3 (\u05de\u05e8\u05d6\u05d1 / \u05e2\u05de\u05d5\u05d3\u05d9 \u05d4\u05e2\u05e8\u05d5\u05ea) — \u05d1\u05de\u05e6\u05d1\u05d9\u05dd \u05d0\u05dc\u05d5 \u05d1\u05dc\u05d1\u05d3
+    // rejected-to-body: displayed in the body (body count covers it) - excluded from separate-display compare
+    const rejectedMarkers = new Set();
+    for (const b of blocks) for (const rn of (b.rejectedNotes || [])) rejectedMarkers.add(rn.marker);
+    const displayMarkers = [];
+    if (settings['footnotes-enabled'] && notesMode !== 'endnotes') {
+      for (const pg of pages) for (const n of pg.footnotes) if (n.marker && !n.isContinuation && n.mode !== 'split-rest') displayMarkers.push(n.marker); // continuation = repeat, not a separate anchor
+    }
+    if (notesMode === 'endnotes') {
+      for (const ep of (endnotePagesInfo.pages || [])) for (const n of ep.notes) {
+        if (n.fromInline && n.marker) displayMarkers.push(n.marker);
+      }
+    }
+    const cnt = (a) => a.reduce((m, w) => (m[w] = (m[w] || 0) + 1, m), {});
+    const cb = cnt(bodyMarkers.filter(Boolean));
+    const ca = cnt(assignedAll);
+    const cd = cnt(displayMarkers.filter(Boolean));
+    // \u05d2\u05d5\u05e3: \u05db\u05dc \u05e1\u05de\u05df \u05de\u05d5\u05e7\u05e6\u05d4 \u05de\u05d5\u05e4\u05d9\u05e2 \u05d1\u05d3\u05d5\u05e7 \u05e4\u05e2\u05dd \u05d0\u05d7\u05ea
+    for (const k of new Set([...Object.keys(cb), ...Object.keys(ca)])) {
+      if ((cb[k] || 0) !== (ca[k] || 0)) {
+        contentPreserved = false;
+        mismatchDetail.push({ kind: 'marker-mismatch', where: 'body', marker: k, body: cb[k] || 0, assigned: ca[k] || 0 });
+      }
+    }
+    // \u05de\u05e7\u05d5\u05dd \u05d4\u05e6\u05d2\u05d4 \u05e0\u05e4\u05e8\u05d3: \u05d0\u05d5\u05ea\u05d5 \u05e1\u05de\u05df \u05d1\u05d3\u05d5\u05e7 (\u05e8\u05e7 \uu05d1\u05de\u05e6\u05d1\u05d9\u05dd \u05e2\u05dd \u05d4\u05e6\u05d2\u05d4 \u05e0\u05e4\u05e8\u05d3\u05ea — \u05dc\u05d0 placeholder)
+    if (displayMarkers.length || (notesMode !== 'inline' && settings['footnotes-enabled'])) {
+      const cdd = cnt(displayMarkers);
+      const cad = cnt(assignedAll.filter(m => !rejectedMarkers.has(m)));
+      for (const k of new Set([...Object.keys(cdd), ...Object.keys(cad)])) {
+        if ((cdd[k] || 0) !== (cad[k] || 0)) {
+          contentPreserved = false;
+          mismatchDetail.push({ kind: 'marker-mismatch', where: 'display', marker: k, display: cdd[k] || 0, assigned: cad[k] || 0 });
+        }
+      }
+    }
+  }
+
+
+
   if (!contentPreserved) {
     const rec = ledger.create('text-completeness', 'document', null, { hashIn, mismatches: mismatchDetail }, 'render');
-    ledger.transition(rec.issue_id, 'persists', 'render', 'word-multiset mismatch — token loss/duplication detected');
+    ledger.transition(rec.issue_id, 'persists', 'render', 'word-multiset mismatch \u2014 token loss/duplication detected');
+  }
+
+  // **P1-2: \u05d0\u05db\u05dc\u05d5\u05e1 parenRanges \u05de\u05de\u05e4\u05ea \u05d4\u05d4\u05d9\u05e7\u05e3** \u2014 \u05d4\u05d2\u05e0\u05ea paren-cross-boundary \u05d7\u05d9\u05d4
+  {
+    let spanId = 0;
+    for (const b of blocks) {
+      if (b.kind !== 'paragraph' || !b.parenCharSpans || !b.parenCharSpans.length) continue;
+      if (!b.flatWordOffsets || !b.flatWordOffsets.length) continue;
+      // \u05de\u05d9\u05e4\u05d5\u05d9 \u05d8\u05d5\u05d5\u05d7\u05d9 (...) \u05dc\u05de\u05d3\u05d3\u05d9 \u05de\u05d9\u05dc\u05d9\u05dd \u05d1\u05e8\u05e6\u05e3 \u05d4\u05d1\u05dc\u05d5\u05e7 (\u05e1\u05d3\u05e8 \u05de\u05e1\u05de\u05da, \u05dc\u05d0 \u05d7\u05d9\u05e4\u05d5\u05e9\u05d9\u05dd)
+      const ranges = [];
+      for (const sp of b.parenCharSpans) {
+        const startW = b.flatWordOffsets.find(x => x.at > sp.from && x.at < sp.to);
+        const endW = b.flatWordOffsets.find(x => x.at > sp.from && x.at < sp.to && x.at >= (startW ? startW.at : 0));
+        if (startW && endW) ranges.push({ startWi: b.flatWordOffsets.indexOf(startW), endWi: b.flatWordOffsets.indexOf(endW) });
+      }
+      for (const r of ranges) {
+        // \u05de\u05d9\u05e4\u05d5\u05d9 \u05de\u05d3\u05d3\u05d9 \u05de\u05d9\u05dc\u05d4 \u05dc\u05e9\u05d5\u05e8\u05d5\u05ea \u05d4\u05d1\u05dc\u05d5\u05e7 \u2014 \u05d5\u05de\u05e9\u05dd \u05dc\u05de\u05e7\u05d5\u05dd \u05d1\u05e4\u05e8\u05d9\u05e1\u05d4
+        let acc = 0, startLine = -1, endLine = -1;
+        for (let li = 0; li < b.lines.length; li++) {
+          const len = (b.lines[li].words || []).length;
+          if (startLine < 0 && acc + len > r.startWi) startLine = li;
+          if (endLine < 0 && acc + len > r.endWi) endLine = li;
+          acc += len;
+        }
+        if (startLine < 0 || endLine < 0) continue;
+        const found = { start: null, end: null };
+        for (const pg of pages) {
+          for (let c = 0; c < pg.columns.length; c++) {
+            for (const ln of pg.columns[c]) {
+              const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
+              if (tok !== b.tokenId) continue;
+              const lIdx = ln.meta && ln.meta.lineIdx != null ? ln.meta.lineIdx : null;
+              if (lIdx === null) continue;
+              if (lIdx === startLine) found.start = { page: pg.index, col: c };
+              if (lIdx === endLine) found.end = { page: pg.index, col: c };
+            }
+          }
+        }
+        if (found.start && found.end) {
+          spanId++;
+          const host = pages.find(pg => pg.index === found.start.page);
+          if (host) {
+            host.parenRanges = host.parenRanges || [];
+            host.parenRanges.push({
+              id: `p${spanId}@${b.tokenId}`,
+              startPage: found.start.page, startCol: found.start.col,
+              endPage: found.end.page, endCol: found.end.col
+            });
+          }
+        }
+      }
+    }
+    if (spanId) eventLog.emit('scope-map', 'paren-ranges-populated', { count: spanId });
   }
 
   // ---- ledger finalize + CP5 ----
   eventLog.emit('ledger-finalize', 'summary', ledger.summary());
-  const cp5HashAfter = planned.hash; // decorations אסור שישנו פריסה — invariant נאכף
-  eventLog.emit('render', 'cp5-render-ready', {});
+  const finalHash = layoutHash(pages); // hash \u05e9\u05dc \u05d4\u05de\u05e6\u05d1 \u05d4\u05e1\u05d5\u05e4\u05d9 (\u05d3\u05d8\u05e8\u05de\u05d9\u05e0\u05d9\u05d6\u05dd \u05d1\u05d9\u05df\u05be\u05e8\u05d9\u05e6\u05d5\u05ea)
+  eventLog.emit('render', 'cp5-render-ready', { layoutHash: finalHash });
 
   return {
     metadata, tokens, pages, ledger, events: eventLog,
     toc, numbers,
+    settings,
     contentHashIn: hashIn,
     contentPreserved,
-    layoutHash: planned.hash,
-    geometryNeutralVerified: cp4HashBefore === cp5HashAfter,
+    layoutHash: finalHash,
+    plannedLayoutHash: planned.hash,
+    geometryNeutralVerified,
     retreat: planned.retreat,
     sideNotes: sideNotePlacement,
     endnotePages: endnotePagesInfo,
+    endnotePagesInfo,
     scope
   };
 }

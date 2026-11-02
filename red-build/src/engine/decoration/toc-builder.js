@@ -8,13 +8,17 @@
  */
 function buildTocEntries(headings, settings, numbersByIndex) {
   const entries = [];
+  // D-48 (P1-1): general-toc-count-numbering נצרג בפועל — מספור שורות תוכן־העניינים
+  let numbered = 0;
   for (const h of headings) {
     if (!settings[`toc-level-${h.level}-show`]) continue;
     const num = numbersByIndex[h.page];
+    numbered++;
     entries.push({
       level: h.level,
       text: h.text,
       pageLabel: num && num.display ? num.display : '',
+      rowNum: settings['general-toc-count-numbering'] ? numbered : null,
       inline: !!settings[`toc-level-${h.level}-inline`],
       targetPage: h.page, // ל‑PDF bookmark / קישור פנימי
       leaderDots: true,

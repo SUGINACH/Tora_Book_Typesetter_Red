@@ -39,11 +39,14 @@ const registry = [
   K('page-num-initial-value', 'number', 1, P.GRID, 'inp-page-num-initial', ['decoration/folio'], 'fx:folio-initial', { note: 'שוחזר מ‑V1 (REQ-HDR-03)' }),
   K('count-shaar-pages', 'bool', false, P.GRID, 'chk-count-shaar', ['decoration/folio'], 'fx:count-shaar'),
   K('count-toc-pages', 'bool', false, P.GRID, 'chk-count-toc', ['decoration/folio'], 'fx:count-toc'),
+  K('count-endnote-pages', 'bool', false, P.GRID, 'chk-count-endnotes', ['decoration/folio', 'core/pipeline'], 'fx:count-endnotes', { note: 'S7.1.1: אם true — עמודי הערות נספרים במספור ומקבלים גיליון' }),
 
   // ---- טיפוגרפיה (TYPO) ----
   K('body-font', 'font', 'Frank Ruhl Libre', P.TYPO, 'sel-body-font', ['typography/measure-api'], 'fx:body-font', { note: 'font-picker preserve-missing-value (IMUD port)' }),
   K('body-font-size-pt', 'number', 14, P.TYPO, 'rng-body-size', ['typography/measure-api'], 'fx:body-size', { min: 9, max: 24 }),
   K('body-line-height', 'number', 1.4, P.TYPO, 'rng-body-lh', ['typography/kp-linebreak'], 'fx:body-lh', { min: 1.2, max: 1.6, note: 'פלפול 1.25 / קריאה 1.45' }),
+  // D-42 (P1-2): קדם־פאס סוגריים לפני מדידה — REQ-PAR-ST-02. סקאלה 1.0 = כבוי (ברירת מחדל, לא משנה hash).
+  K('paren-style-scale', 'number', 1, P.TYPO, 'rng-paren-scale', ['core/pipeline', 'output/dom-renderer'], 'fx:paren-scale', { min: 0.8, max: 1, step: 0.01, note: 'מילים בתוך (...) נמדדות בסקאלה זו לפני שבירת שורות ומרונדרות במחלקת w--paren; 1.0 = כבוי' }),
   K('first-word-mode', 'enum', 'drop', P.TYPO, 'sel-first-word-mode', ['typography/dropword'], 'fx:fw-mode', { enum: ['drop', 'inline', 'bold', 'none'] }),
   K('first-word-length', 'number', 1, P.TYPO, 'sel-first-word-len', ['typography/dropword'], 'fx:fw-len', { enum: [1, 2] }),
   K('first-word-threshold-lines', 'number', 3, P.TYPO, 'rng-fw-threshold', ['typography/dropword'], 'fx:fw-threshold', { min: 2, max: 6 }),
@@ -58,7 +61,7 @@ const registry = [
     K(`heading-${h}-font`, 'font', 'David HB', P.HEADINGS, `sel-h${h}-font`, ['typography/measure-api'], `fx:h${h}-font`),
     K(`heading-${h}-size-pt`, 'number', [20, 18, 16, 15, 14, 14, 13, 12][h], P.HEADINGS, `rng-h${h}-size`, ['typography/measure-api'], `fx:h${h}-size`, { min: 8, max: 48 }),
   ]),
-  K('h2-orn-scope', 'enum', 'both', P.ORNAMENTS, 'sel-h2-orn-scope', ['decoration/ornament-fit'], 'fx:h2-orn-scope', { enum: ['sign-only', 'title-only', 'both'], note: 'Gold/Green/Orange ✓' }),
+  // D-45: h2-orn-scope הוסר עם שאר מפתחות העיטורים (S8).
   K('hdr-h1-title-mode', 'enum', 'main', P.HEADERS, 'sel-hdr-h1-mode', ['decoration/headers-builder'], 'fx:hdr-h1-mode', { enum: ['main', 'full'], note: 'K-8: main כברירת מחדל + toggle' }),
 
   // ---- כותרות עליונות (HEADERS) ----
@@ -77,20 +80,20 @@ const registry = [
   ])),
 
   // ---- הערות (NOTES) ----
-  // REQ-FN-05 (S7): מצב קיבץ — מקור־האמת היחיד לנתיב ההערות. footnotes=endnotes=false ⇒ inline.
   K('note-placement-mode', 'enum', 'footnotes', P.NOTES, 'sel-note-mode', ['core/pipeline', 'layout/dp-planner', 'layout/endnote-pages'], 'fx:note-mode', { enum: ['footnotes', 'endnotes', 'inline'] }),
-  K('footnotes-enabled', 'bool', true, P.NOTES, 'chk-fn-enabled', ['layout/footnote-budget'], 'fx:fn-on'),
-  K('footnote-marker-style', 'enum', 'hebrew-geresh', P.NOTES, 'sel-fn-marker', ['layout/footnote-budget'], 'fx:fn-marker', { enum: ['hebrew-geresh', 'parenthesis', 'asterisk', 'decimal'] }),
-  K('footnote-reset-policy', 'enum', 'page', P.NOTES, 'sel-fn-reset', ['layout/footnote-budget'], 'fx:fn-reset', { enum: ['continuous', 'page', 'section', 'part'] }),
+  K('footnotes-enabled', 'bool', true, P.NOTES, 'chk-fn-enabled', ['layout/footnote-budget', 'core/pipeline'], 'fx:fn-on', { note: 'D-39: קלט משתמש מפורש גובר על נגזרות; mode=footnotes + false ⇒ ההערות בגוף כplaceholder' }),
+  K('footnote-marker-style', 'enum', 'hebrew-geresh', P.NOTES, 'sel-fn-marker', ['notes/markers'], 'fx:fn-marker', { enum: ['hebrew-geresh', 'parenthesis', 'asterisk', 'decimal'] }),
+  K('footnote-reset-policy', 'enum', 'page', P.NOTES, 'sel-fn-reset', ['notes/markers'], 'fx:fn-reset', { enum: ['continuous', 'page', 'section', 'part'] }),
   K('footnote-columns', 'number', 1, P.NOTES, 'sel-fn-cols', ['layout/footnote-budget'], 'fx:fn-cols', { enum: [1, 2] }),
   K('footnote-separator-rule', 'enum', 'regular', P.NOTES, 'sel-fn-rule', ['output/dom-renderer'], 'fx:fn-rule', { enum: ['none', 'regular', 'circles', 'sparkle', 'star', 'diamond'] }),
-  K('fn-layout-mode', 'enum', 'block', P.NOTES, 'sel-fn-layout', ['layout/footnote-budget'], 'fx:fn-layout', { enum: ['block', 'continuous'], note: 'REQ-FN-07 השלמה מ‑V21' }),
-  K('endnotes-enabled', 'bool', false, P.NOTES, 'chk-endnotes', ['layout/endnote-pages'], 'fx:endnotes-on', { note: 'נגזר מ‑note-placement-mode=endnotes (derivePlacementFlags); נשמר לצרכנים ישירים' }),
+  K('fn-layout-mode', 'enum', 'block', P.NOTES, 'sel-fn-layout', ['layout/dp-planner', 'output/dom-renderer'], 'fx:fn-layout', { enum: ['block', 'continuous'], note: 'REQ-FN-07 (D-34): block=כל הערה בלוק משלה + תקרת fn-bar; continuous=זרימה רציפה בלי תקרה' }),
+  K('endnotes-enabled', 'bool', false, P.NOTES, 'chk-endnotes', ['layout/endnote-pages'], 'fx:endnotes-on', { note: 'נגזר מ‑note-placement-mode=endnotes (D-39); קלט ישן true ממופה ל‑mode=endnotes בהגירה (project-io)' }),
   K('endnote-title-text', 'string', 'הערות', P.NOTES, 'inp-endnote-title', ['layout/endnote-pages'], 'fx:endnote-title'),
-  K('f-note-body-font', 'font', 'Frank Ruhl Libre', P.NOTES, 'sel-fnote-body-font', ['typography/measure-api'], 'fx:fnote-body-font'),
-  K('s-note-body-font', 'font', 'Frank Ruhl Libre', P.NOTES, 'sel-snote-body-font', ['typography/measure-api'], 'fx:snote-body-font'),
-  K('fn-bar-max-height-px', 'number', 220, P.NOTES, 'rng-fn-bar-max', ['layout/dp-planner'], 'fx:fn-bar-max', { min: 40, max: 600, note: 'S7.1.3: תקרת מרזב — חריגה מפעילה אסדרה לפי long-footnote-policy' }),
-  K('long-footnote-policy', 'enum', 'split', P.NOTES, 'sel-long-fn', ['layout/footnote-budget', 'layout/dp-planner'], 'fx:long-fn', { enum: ['split', 'move-whole', 'reject-to-body'], note: "REQ-FN-02 (open question #3 → split כברירת מחדל); reject-to-body = מסלול BRZ-15 (השבה מלאה לגוף — לעולם אין גניזת מילים)" }),
+  K('endnote-columns', 'number', 1, P.NOTES, 'sel-en-cols', ['layout/endnote-pages'], 'fx:en-cols', { enum: [1, 2], note: 'S7.1.1: טור אחד או שניים בעמודי הערות' }),
+  K('f-note-body-font', 'font', 'Frank Ruhl Libre', P.NOTES, 'sel-fnote-body-font', ['layout/footnote-budget'], 'fx:fnote-body-font'),
+  K('s-note-body-font', 'font', 'Frank Ruhl Libre', P.NOTES, 'sel-snote-body-font', ['layout/side-notes'], 'fx:snote-body-font'),
+  K('fn-bar-max-height-px', 'number', 220, P.NOTES, 'rng-fn-bar-max', ['layout/dp-planner'], 'fx:fn-bar-max', { min: 40, max: 600, note: 'S7.1.3: תקרת מרזב — חריגה מפעילה אסדרה לפי long-footnote-policy (block mode בלבד, D-34)' }),
+  K('long-footnote-policy', 'enum', 'split', P.NOTES, 'sel-long-fn', ['layout/dp-planner'], 'fx:long-fn', { enum: ['split', 'move-whole', 'reject-to-body'], note: 'REQ-FN-02; split=המשך במרזב העמוד הבא עם סימון המשך; reject-to-body=השבה מלאה לגוף (BRZ-15)' }),
 
   // ---- איכות עימוד (QUALITY) ----
   K('prevent-widows-top', 'bool', true, P.QUALITY, 'chk-widow-top', ['layout/protections-matrix'], 'fx:widow-top', { note: 'טוגל נפרד לתחילת עמוד (Mapping #4)' }),
@@ -99,10 +102,10 @@ const registry = [
   K('prevent-orphans-bottom', 'bool', true, P.QUALITY, 'chk-orphan-bottom', ['layout/protections-matrix'], 'fx:orphan-bottom'),
   K('widow-strictness', 'enum', 'normal', P.QUALITY, 'sel-widow-strict', ['layout/protections-matrix'], 'fx:widow-strict', { enum: ['relaxed', 'normal', 'strict'] }),
   K('runt-min-width-pct', 'number', 50, P.QUALITY, 'rng-runt-min', ['typography/protectors'], 'fx:runt-min', { min: 20, max: 80 }),
-  K('balance-chapter-end', 'enum', 'balance', P.QUALITY, 'sel-balance-chapter', ['layout/balancing'], 'fx:balance-chapter', { enum: ['balance', 'stretch', 'natural'], note: 'REQUIRE: מנגנון מלא (שוחזר מ‑Green, REQ-BAL-03)' }),
+  K('balance-chapter-end', 'enum', 'balance', P.QUALITY, 'sel-balance-chapter', ['layout/balancing', 'core/pipeline'], 'fx:balance-chapter', { enum: ['balance', 'stretch', 'natural'], note: 'REQUIRE: מנגנון מלא (שוחזר מ‑Green, REQ-BAL-03); נצרך בפועל ב‑pipeline בסוף כל חלק' }),
   K('allow-terminal-residual-fallback', 'bool', true, P.QUALITY, 'chk-terminal-residual', ['layout/dp-planner'], 'fx:terminal-residual', { note: 'שוחזר מ‑Green (REQ-BAL-04)' }),
   K('imbalance-max-delta-px', 'number', 5, P.QUALITY, 'rng-imbalance-max', ['layout/balancing'], 'fx:imbalance-max'),
-  K('aq-enabled', 'bool', false, P.QUALITY, 'chk-aq', ['layout/balancing'], 'fx:aq-on', { note: 'AutoQuality מ‑Gold — שלוש שכבות יחד (REQ-BAL-06)' }),
+  K('aq-enabled', 'bool', false, P.QUALITY, 'chk-aq', ['layout/balancing', 'core/pipeline'], 'fx:aq-on', { note: 'AutoQuality מ‑Gold — שלוש שכבות יחד (REQ-BAL-06); נקרא בפועל מהpipeline (תיקון P1-1)' }),
   K('aq-word-spacing-min', 'number', 0.95, P.QUALITY, 'rng-aq-ws-min', ['layout/balancing'], 'fx:aq-ws-min', { min: 0.8, max: 1 }),
   K('aq-word-spacing-max', 'number', 1.05, P.QUALITY, 'rng-aq-ws-max', ['layout/balancing'], 'fx:aq-ws-max', { min: 1, max: 1.2 }),
   K('aq-letter-spacing-min', 'number', 0.97, P.QUALITY, 'rng-aq-ls-min', ['layout/balancing'], 'fx:aq-ls-min'),
@@ -114,18 +117,10 @@ const registry = [
   K('aq-overshoot-clamp-px', 'number', 20, P.QUALITY, 'rng-aq-clamp', ['layout/balancing'], 'fx:aq-clamp', { min: 0, max: 60 }),
   K('aq-compress-first', 'bool', true, P.QUALITY, 'chk-aq-compress', ['layout/balancing'], 'fx:aq-compress'),
 
-  // ---- עיטורים (ORNAMENTS) ----
-  K('h2-top-ornament', 'ornament', 'none', P.ORNAMENTS, 'sel-h2-top-orn', ['decoration/ornament-fit'], 'fx:h2-top-orn'),
-  K('h2-bottom-ornament', 'ornament', 'none', P.ORNAMENTS, 'sel-h2-bot-orn', ['decoration/ornament-fit'], 'fx:h2-bot-orn'),
-  K('h2-first-sign-ornament', 'ornament', 'none', P.ORNAMENTS, 'sel-h2-first-orn', ['decoration/ornament-fit'], 'fx:h2-first-orn', { note: 'עיטור נפרד ל"סימן א\'"' }),
-  K('h2-title-side-ornaments', 'ornament', 'none', P.ORNAMENTS, 'sel-h2-side-orn', ['decoration/ornament-fit'], 'fx:h2-side-orn'),
-  K('h3-side-ornament-right', 'ornament', 'none', P.ORNAMENTS, 'sel-h3-orn-r', ['decoration/ornament-fit'], 'fx:h3-orn-r'),
-  K('h3-side-ornament-left', 'ornament', 'none', P.ORNAMENTS, 'sel-h3-orn-l', ['decoration/ornament-fit'], 'fx:h3-orn-l'),
-  K('ornament-fit-to-text', 'bool', true, P.ORNAMENTS, 'chk-orn-fit', ['decoration/ornament-fit'], 'fx:orn-fit', { note: 'מדידת DOM/JS; CSS fit-content נכשל (REQ-ORN-01)' }),
-  K('chapter-end-ornament', 'enum', 'none', P.ORNAMENTS, 'sel-ch-end-orn', ['decoration/ornament-fit'], 'fx:ch-end-orn', { enum: ['none', 'pyramid-vilna', 'lance', 'shoshanta', 'scroll', 'image'] }),
-  K('heading-dividers-h3-h6', 'bool', true, P.ORNAMENTS, 'chk-hdr-dividers', ['decoration/dividers'], 'fx:hdr-div', { note: 'Orange fits() בכל אתרי ההוספה + rollback-aware' }),
-  K('shaar-main-divider', 'ornament', 'none', P.ORNAMENTS, 'sel-shaar-main-div', ['decoration/dividers'], 'fx:shaar-main-div'),
-  K('shaar-sub-divider', 'ornament', 'none', P.ORNAMENTS, 'sel-shaar-sub-div', ['decoration/dividers'], 'fx:shaar-sub-div'),
+  // ---- עיטורים (ORNAMENTS) ---- D-45: מפתחות שערים/עיטורים הוסרו — אין להם מנגנום חי
+  // עד S8 (תיקון P1-1 "חיבור או הסרה"). יוחזרו ב‑S8 בלבד עם מנגנום + בדיקת אפקט אמיתיים.
+  // column-divider-style נותר בסעיף הרשת (GRID) למעלה — חוט מפריד בין טורים
+  // (overlay גיאומטרי־ניטרלי המרונדר בפועל ע"י dom-renderer).
 
   // ---- TOC ----
   K('toc-general-enabled', 'bool', true, P.TOC, 'chk-toc-general', ['decoration/toc-builder'], 'fx:toc-gen'),
@@ -136,20 +131,19 @@ const registry = [
     K(`toc-level-${lvl}-inline`, 'bool', lvl >= 4, P.TOC, `chk-toc-l${lvl}-inline`, ['decoration/toc-builder'], `fx:toc-l${lvl}-inline`),
   ]),
 
-  // ---- שערים/נושאים (THEMES) ----
-  K('theme-set-id', 'string', 'default', P.THEMES, 'sel-theme-set', ['decoration/page-decorations'], 'fx:theme-set', { note: 'ערכות מאוחדות "1 ראשי/משנה/אחורי" (REQ-ORN-06)' }),
-  K('shaar-main-image', 'asset', 'data/shaarim/main.svg', P.THEMES, 'sel-shaar-main', ['decoration/page-decorations'], 'fx:shaar-main'),
-  K('shaar-back-enabled', 'bool', true, P.THEMES, 'chk-shaar-back', ['decoration/page-decorations'], 'fx:shaar-back', { note: '4 מקטעים עצמאיים מ‑shaar_back.json (PT-03)' }),
-  K('background-page-type', 'enum', 'regular', P.THEMES, 'sel-bg-type', ['decoration/page-decorations'], 'fx:bg-type', { enum: ['regular', 'preface-open', 'sign-open'] }),
+  // ---- שערים/נושאים (THEMES) ---- D-45: מפתחות ערכות/שערים הוסרו עד S8 (אין מנגנום חי).
+  // נשמרו רק רקע־צבע/אטימות — נצרכים בפועל ברנדרר.
   K('background-color', 'color', '#ffffff', P.THEMES, 'inp-bg-color', ['output/dom-renderer'], 'fx:bg-color'),
-  K('background-image', 'asset', '', P.THEMES, 'sel-bg-image', ['decoration/page-decorations'], 'fx:bg-image'),
-  K('background-opacity', 'number', 1, P.THEMES, 'rng-bg-opacity', ['output/dom-renderer'], 'fx:bg-opacity', { min: 0, max: 1, step: 0.05 }),
+  K('background-opacity', 'number', 1, P.THEMES, 'rng-bg-opacity', ['output/dom-renderer'], 'fx:bg-opacity', { min: 0, max: 1, step: 0.05, note: 'נצרך בפועל: rgba() על background-color (תיקון P0-5 — בעבר נכתב לתכונת CSS בלתי קיימת)' }),
 
   // ---- מתקדם/מנוע (ADVANCED) ----
-  K('trace-verbosity', 'enum', 'standard', P.ADVANCED, 'sel-trace-verb', ['core/events'], 'fx:trace-verb', { enum: ['off', 'minimal', 'standard', 'full'] }),
-  K('diagnostics-enabled', 'bool', true, P.ADVANCED, 'chk-diag', ['layout/retreat-loop'], 'fx:diag-on'),
+  K('trace-verbosity', 'enum', 'standard', P.ADVANCED, 'sel-trace-verb', ['core/events', 'core/pipeline'], 'fx:trace-verb', { enum: ['off', 'minimal', 'standard', 'full'] }),
+  // D-43 (P1-4): diagnostics-enabled אינו רשאי לדכא רישום ממצאים ("לא להשבית אבחון").
+  // הוא שולט ברמת הפירוט בדוח בלבד (buildReport compact) — לעולם לא ברישום עצמו.
+  K('diagnostics-enabled', 'bool', true, P.ADVANCED, 'chk-diag', ['audit/report-schema'], 'fx:diag-on'),
   K('offline-guard', 'bool', true, P.ADVANCED, 'chk-offline-guard', ['output/html-export'], 'fx:offline-guard', { note: 'exit 7 על בקשה חיצונית (Orange ✓)' }),
-  K('debounce-light-change-ms', 'number', 350, P.ADVANCED, 'rng-debounce', ['layout/retreat-loop'], 'fx:debounce', { min: 100, max: 1000 }),
+  // הערה (D-44): debounce-light-change-ms הוסר — הגדרת UI מ‑S10; אין UI ואין צרכן אמיתי.
+  // יוחזר ב‑S10 כשתיבנה שכבת ממשק שצורכת אותו בפועל. הסרה מתועדת ב‑DECISIONS.md/WORKLOG.md.
 ];
 
 // ---- אימות פנימי: אין כפילויות id/control ----
@@ -171,20 +165,24 @@ function getDefaultSettings() {
 function findKey(id) { return registry.find(r => r.id === id) || null; }
 
 /**
- * REQ-FN-05 (S7.1.4): מקור־האמת היחיד לנתיב ההערות הוא note-placement-mode.
- * הדגלים endnotes-enabled / footnotes-enabled נגזרים ממנו **בכל כניסה למנוע** —
- * כך ששינוי דגל בודד (מקרא JSON ישן, טופס חלקי) לעולם לא מייצר מצב סותר
- * שהיה גורם לאובדן הערות (BRZ-15 — לקח V23: src/out diverged per mode).
- * - 'footnotes' ⇒ מרזב תחתון פעיל, אין עמודי סיום.
- * - 'endnotes'  ⇒ אין מרזב; ההערות הצמודות לגוף זורמות לעמודי 'הערות'.
- * - 'inline'    ⇒ אין מרזב ואין עמודי סיום; ההערות נשארות בגוף כplaceholder מלא.
+ * D-39 (תיקון P0-4): מקור־האמת הוא note-placement-mode; **קלט משתמש מפורש גובר
+ * על נגזרות**. בעבר הענף הדיפולטי דרס בשקט footnotes-enabled=false — הפקד היה
+ * קיים, המפתח קיים, המנגנון קיים, והגזירה ביטלה את רצון המשתמש (מחלת S4).
+ * מצב סותר אמיתי (mode=endnotes + footnotes-enabled=true) נפתר לטובת המצב
+ * (המצב הוא שכבת האמת) ומדווח ע"י mergeWithDefaults — לא בשקט מוחלט.
+ * - 'footnotes' ⇒ מרזב לפי footnotes-enabled (true=מרזב; false=ההערות בגוף כplaceholder).
+ * - 'endnotes'  ⇒ אין מרזב; ההערות זורמות לעמודי 'הערות'; endnotes-enabled=true לצרכנים ישירים.
+ * - 'inline'    ⇒ ההערות בגוף כplaceholder מלא.
  */
 function derivePlacementFlags(s) {
   if (!s) return s;
-  switch (s['note-placement-mode']) {
-    case 'endnotes': s['endnotes-enabled'] = true; s['footnotes-enabled'] = false; break;
-    case 'inline':   s['endnotes-enabled'] = false; s['footnotes-enabled'] = false; break;
-    default:         s['endnotes-enabled'] = false; s['footnotes-enabled'] = true;
+  if (s['note-placement-mode'] === 'endnotes') {
+    s['endnotes-enabled'] = true;   // לצרכנים ישירים (endnote-pages builder)
+    s['footnotes-enabled'] = false; // אין מרזב במצב endnotes — המצב גובר (מדווח בגירה)
+  } else {
+    s['endnotes-enabled'] = false;
+    // footnotes-enabled: **ערך המשתמש עומד** — אין דריסה. mode=footnotes + false
+    // ⇒ ההערות מוצגות בגוף כplaceholder מלא (BRZ-15) — לא מצב סותר.
   }
   return s;
 }

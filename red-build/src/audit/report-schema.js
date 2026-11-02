@@ -29,6 +29,8 @@ const GEOM_KIND_NAMES = {
   'fn-out-of-order': 'הערות לא לפי סדר',
   'h7-conversion-missing': 'הערת צד אבודה',
   'endnote-pagination': 'תקלה בעמודי הערות סיום',
+  'side-note-overflow': 'גלישת הערת צד (S7)',
+  'reading-order-break': 'שבירת סדר קריאה (P0-3)',
   // טיפוגרפיה ותווים
   'puat-leak': 'תו PUA החוצה',
   'text-completeness': 'אובדן טקסט',
@@ -59,8 +61,16 @@ const GEOM_KIND_NAMES = {
 
 const NON_FINDINGS = new Set(['terminal-residual', 'containment-rounding']);
 
-/** buildReport(resultTypeset, ledgerSummary) → JSON ע"פ schema v2. */
+/** buildReport(resultTypeset, ledgerSummary) → JSON ע"פ schema v2.
+ * תיקון P1-6: deterministic נמדד (hash שחזור) — לא קבוע מחרוזתי.
+ * D-43: diagnostics-enabled=false ⇒ compact (בלי פירוט מעברים) — אף פעם לא הסתרת ממצאים. */
 function buildReport(result, opts = {}) {
+  const diagnosticsOn = result && result.settings ? result.settings['diagnostics-enabled'] !== false : true;
+  const compact = opts.compact || !diagnosticsOn;
+  // **דטרמיניזם נמדד (P1-6):** hash מחושב מחדש מהפלט ומושווה לתוצאה — לא קבוע.
+  const { layoutHash } = require('../engine/layout/dp-planner');
+  const recomputed = result.pages ? layoutHash(result.pages) : null;
+  const deterministic = recomputed === result.layoutHash;
   const findings = [];
   for (const rec of result.ledger.issues.values()) {
     if (NON_FINDINGS.has(rec.kind)) continue;
@@ -69,20 +79,20 @@ function buildReport(result, opts = {}) {
       target: rec.target, page: rec.page, status: rec.status,
       predicate_before: rec.predicate_before, predicate_after: rec.predicate_after,
       capacity_before: rec.capacity_before, capacity_after: rec.capacity_after,
-      transitions: rec.transitions.length
+      transitions: compact ? undefined : rec.transitions.map(t => ({ state: t.state, stage: t.stage, note: t.note }))
     });
   }
   return {
     schema: 'diagnostics-v2',
     generated_by: 'red-unified',
-    deterministic: true,
+    deterministic,
     layout_hash: result.layoutHash,
     content_hash_in: result.contentHashIn,
     geometry_neutral_verified: result.geometryNeutralVerified,
     dropped_events: result.events.droppedEvents, // חייב 0
     retreat: result.retreat,
     counts: tally(findings),
-    findings: opts.compact ? findings.filter(f => f.status !== 'resolved') : findings
+    findings: compact ? findings.filter(f => f.status !== 'resolved') : findings
   };
 }
 

@@ -21,6 +21,7 @@ class Ledger {
   constructor() {
     this.issues = new Map(); // issue_id -> record
     this.candidates = [];    // רשומות דחיית מועמד (REQ-BAL-01/S5.1.10)
+    this.clock = 0;          // שעון לוגי דטרמיניסטי (תיקון P1-6) — לא Date.now
   }
 
   _id(kind, target) {
@@ -35,7 +36,7 @@ class Ledger {
     const rec = {
       issue_id: id, kind, target, page,
       first_seen_stage: stage,
-      transitions: [{ state: 'created', stage, ts: Date.now(), note: 'predicate_before captured' }],
+      transitions: [{ state: 'created', stage, ts: ++this.clock, note: 'predicate_before captured' }],
       predicate_before: predicateBefore,
       predicate_after: null,
       candidates: [], capacity_before: null, capacity_after: null,
@@ -50,7 +51,7 @@ class Ledger {
     if (!LIFECYCLE_STATES.includes(state)) throw new Error(`bad lifecycle state: ${state}`);
     const rec = this.issues.get(issueId);
     if (!rec) throw new Error(`unknown issue ${issueId}`);
-    rec.transitions.push({ state, stage, ts: Date.now(), note });
+    rec.transitions.push({ state, stage, ts: ++this.clock, note });
     rec.status = state;
     return rec;
   }

@@ -6,9 +6,12 @@ const { PAGE_TYPES, buildPageTemplate } = require('./page-templates');
 const { Ledger } = require('../core/ledger');
 const { runProtections } = require('./protections-matrix');
 const { runRetreatLoop } = require('./retreat-loop');
-const { usedHeight, pageImbalance } = require('./balancing');
 const { generateCandidates } = require('./candidate-generator');
 const { blockGapPx } = require('./column-flow');
+const { fixDropWordInColumns } = require('../typography/protectors');
+const { MARK_TAG } = require('../notes/markers');
+const { moveLineForward } = require('./ordering');
+const { getFootnotesReservedHeight, noteHeight } = require('./footnote-budget');
 
 /** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism).
  * תיקון S7-E2E: tokenId נמצא ב‑meta של pushLines (לא על השורה עצמה) — יש לחלץ משם,
@@ -29,10 +32,37 @@ function layoutHash(pages) {
 }
 
 /**
+ * **D-47 (תיקון P0-6):** hash של **הגיאומטריה הנמדדת בלבד** (הטורים/השורות) —
+ * זהו האינווריאנט T1: פאס העיטורים/ההערות אסור לו לשנות את הפריסה שנמדדה.
+ * בעבר ההשוואה CP4==CP5 השוותה משתנה לעצמו — טאוטולוגיה שאינה יכולה להיכשל.
+ * כאן: hash נפרד של הטורים בלבד (בלי מרזבים/הערות צד שמשתנים כחוק בשלב ההערות)
+ * — נבדק לפני ואחרי פאס העיטורים בpipeline; שינוי אמיתי בשורות ⇒ הבדיקה נכשלת.
+ */
+function bodyGeometryHash(pages) {
+  const canon = pages.map(p => ({
+    i: p.index, t: p.type,
+    c: p.columns.map(col => col.map(ln => `${lineTokenId(ln)}:${(ln.words || []).join('\u00A7')}:${ln.seq != null ? 's' + ln.seq : ''}`))
+  }));
+  return crypto.createHash('sha256').update(JSON.stringify(canon), 'utf8').digest('hex');
+}
+
+/**
+ * **תיקון P0-3 (שבירת סדר קריאה):** איזון חוקי מזיז שורות **קדימה בסדר הקריאה
+ * בלבד** — הזזת גבול הטורים קדימה/אחורה תוך שמירת סדר המילים:
+ *  - טור מוקדם (col0, נקרא ראשון) גבוה יותר ⇒ pop מסופו → unshift לראש col1 (קדימה).
+ *  - טור מאוחר (col1, נקרא שני) גבוה יותר ⇒ shift מראשו → push לסוף col0 (הזזת הגבול
+ *    אחורה — שומר סדר: השורה עדיין אחרי כל col0 ולפני שאר col1).
+ * בעבר: pop מהטור המאוחר + unshift לראש הטור המוקדם — הציג את סוף פסקה לפני
+ * תחילתה (רגרסיה חדשה שלא הייתה באף גרסה קודמת). כל השורות מתויגות seq
+ * (סדר הצבה = סדר מסמך) ו‑protections-matrix מפיק reading-order-break אם
+ * איזון עתידי יפר זאת — הבאג נעול לצמיתות בבדיקת רגרסיה.
+ */
+
+/**
  * Block = יחידת פריסה: heading או paragraph עם שורות שנמדדו.
  * @param {Array} blocks - [{kind:'heading'|'paragraph', lines:[...], notes:[...], token}]
  * @param {object} settings
- * @param {{measure:(t:string)=>number}} env - חייב להכיל measure (entry יחיד — L1); אחרת throw (ללא קריסה שקטה)
+ * @param {{measure:(t:string,s?:number)=>number}} env - חייב להכיל measure (entry יחיד — L1); אחרת throw (ללא קריסה שקטה)
  */
 function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) {
   const measureFn = env && typeof env.measure === 'function' ? env.measure : null;
@@ -41,13 +71,14 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   }
   const pages = [];
   let pageIdx = 0;
+  let seqCounter = 0; // סדר הצבה — סדר קריאה (תיקון P0-3)
   const lineH = Math.round(settings['body-font-size-pt'] * (96 / 72) * settings['body-line-height']);
   const imbMax = settings['imbalance-max-delta-px'];
 
   function newPage(type = PAGE_TYPES.REGULAR) {
     const isRecto = pages.length % 2 === 0; // עמוד 1 = recto
     const tpl = buildPageTemplate(type, settings, isRecto);
-    return { index: pageIdx++, type, template: tpl, columns: Array.from({ length: tpl.columns.length }, () => []), footnotes: [], sideNotes: [], headingsOnPage: [], balanceInfo: null };
+    return { index: pageIdx++, type, template: tpl, columns: Array.from({ length: tpl.columns.length }, () => []), footnotes: [], sideNotes: [], headingsOnPage: [], balanceInfo: null, fnReservedHeightPx: 0, chapterOpening: false };
   }
 
   let cur = newPage(PAGE_TYPES.REGULAR);
@@ -55,9 +86,9 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   const colCapacity = (tpl) => tpl.contentBox.height;
 
   /**
-   * תיקון S8 (מניעת באג V23 "usedHeight כולל תקציב הערות"):
    * גובה תפוס = שורות + **יתרת תקציב ההערות של העמוד** — כך ה‑probe וה‑reservation
-   * זהים (F-17). בעבר דפדפו מעל ההערות כי ה‑cap לא כלל את המרזב שלהן.
+   * זהים (F-17). התקציב נרשם פעם אחת בסוף הטור האחרון.
+   * תיקון P1-8: חתימה (col, page) — page חובה; אין עוד עמוד ברירת־מחדל שגוי.
    */
   function usedHeight(col, page = cur) {
     let h = col.reduce((s, ln) => s + (ln.heightPx || 0), 0);
@@ -68,62 +99,47 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   }
 
   /**
-   * S6.1.1 probe==reserved identity: פונקציית בדיקה אחת לשני הצרכים.
-   * מחזירה את התקציב המשוקלל לעמוד לפי רשימת ההערות שלו (LPT ל‑2 טורים).
+   * **איחוד P1-1 (מנגנום תאום):** recomputeFnBudget ממשיך כעת דרך
+   * footnote-budget.getFootnotesReservedHeight — מקור יחיד. בעבר היו שני מימושים
+   * מקבילים; בדיקת probe==reserved רצה על מודול שהמנוע לא השתמש בו.
    */
   function recomputeFnBudget(page) {
     if (!settings['footnotes-enabled'] || !page.footnotes.length) { page.fnReservedHeightPx = 0; return 0; }
-    const heights = page.footnotes.map(n => n.heightPx || noteHeightLocal(n));
-    let reserved;
-    if (settings['footnote-columns'] === 2) {
-      const t = [0, 0];
-      for (const h of [...heights].sort((a, b) => b - a)) { const i = t[0] <= t[1] ? 0 : 1; t[i] += h; }
-      reserved = Math.max(t[0], t[1]);
-    } else reserved = heights.reduce((a, b) => a + b, 0);
+    const reserved = getFootnotesReservedHeight(page.footnotes, settings, (t, s) => measureFn(t, s));
     page.fnReservedHeightPx = reserved;
     return reserved;
   }
-  function noteHeightLocal(n) {
-    const size = settings['body-font-size-pt'] * 0.8;
-    const lh = Math.round(size * (96 / 72) * 1.25);
-    const words = String(n.text || '').split(/\s+/).filter(Boolean);
-    let lines = 1, w = 0;
-    const colW = settings._fnColWidthPx || 200;
-    for (const word of words) {
-      const ww = measureFn(word, size);
-      if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
-    }
-    return lines * lh;
-  }
 
   function ensureRoom(neededLines, opts = {}) {
-    // בדיקת מקום בכל הטורים הפעילים; אם אין — עמוד חדש
+    void opts;
     const cap = colCapacity(cur.template);
     for (let c = 0; c < cur.columns.length; c++) {
-      if (cap - usedHeight(cur.columns[c]) >= neededLines * lineH - 0.5) return c;
+      if (cap - usedHeight(cur.columns[c], cur) >= neededLines * lineH - 0.5) return c;
     }
     return -1;
   }
 
   function flushPage() {
-    // איזון טורים: Δ≤5px לפני H3 ובסוף פרק (BRZ-3) + מניעת אלמנה
+    // איזון טורים: Δ≤5px (BRZ-3) — **שמירת סדר קריאה בכל הזזה (תיקון P0-3)**
     if (cur.columns.length === 2) {
-      let a = usedHeight(cur.columns[0]), b = usedHeight(cur.columns[1]);
+      let a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
       let guard = 0;
       while (Math.abs(a - b) > imbMax && guard++ < 200) {
-        const [hi, lo] = a >= b ? [0, 1] : [1, 0];
-        if (!cur.columns[hi].length) break;
-        const moved = cur.columns[hi].pop();
-        cur.columns[lo].unshift(moved);
-        a = usedHeight(cur.columns[0]); b = usedHeight(cur.columns[1]);
+        const hi = a >= b ? 0 : 1, lo = 1 - hi;
+        if (!moveLineForward(cur.columns, hi, lo)) break;
+        a = usedHeight(cur.columns[0], cur); b = usedHeight(cur.columns[1], cur);
       }
-      cur.balanceInfo = { before: [a, b], after: [usedHeight(cur.columns[0]), usedHeight(cur.columns[1])] };
-      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(usedHeight(cur.columns[0]) - usedHeight(cur.columns[1])) }, cur.index);
+      // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
+      if (fixDropWordInColumns(cur.columns) ) {
+        eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
+      }
+      cur.balanceInfo = { before: [a, b], after: [usedHeight(cur.columns[0], cur), usedHeight(cur.columns[1], cur)] };
+      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(usedHeight(cur.columns[0], cur) - usedHeight(cur.columns[1], cur)) }, cur.index);
     }
     // Invariant BRZ-14: scrollHeight ≤ clientHeight
     for (const col of cur.columns) {
-      if (usedHeight(col) > cur.template.contentBox.height + 0.5) {
-        const rec = ledger.create('containment', `page#${cur.index}`, cur.index, { used: usedHeight(col), cap: cur.template.contentBox.height }, 'page-plan');
+      if (usedHeight(col, cur) > cur.template.contentBox.height + 0.5) {
+        const rec = ledger.create('containment', `page#${cur.index}`, cur.index, { used: usedHeight(col, cur), cap: cur.template.contentBox.height }, 'page-plan');
         ledger.transition(rec.issue_id, cur.type === PAGE_TYPES.FILLER ? 'not-comparable' : 'persists', 'page-plan', 'overflow after placement');
       }
     }
@@ -139,8 +155,8 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       let placed = false;
       for (let c = 0; c < cur.columns.length && !placed; c++) {
         const needPx = ln.heightPx + pendingGap - 0.5;
-        if (colCapacity(cur.template) - usedHeight(cur.columns[c]) >= needPx) {
-          cur.columns[c].push({ ...ln, meta });
+        if (colCapacity(cur.template) - usedHeight(cur.columns[c], cur) >= needPx) {
+          cur.columns[c].push({ ...ln, meta, seq: seqCounter++ });
           pendingGap = 0;
           placed = true;
         }
@@ -148,134 +164,155 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       if (!placed) {
         flushPage();
         cur = newPage(meta.forceType || PAGE_TYPES.REGULAR);
-        cur.columns[0].push({ ...ln, meta }); // טור חדש/עמוד חדש → ללא gap
+        cur.columns[0].push({ ...ln, meta, seq: seqCounter++ }); // טור חדש/עמוד חדש → ללא gap
         pendingGap = 0;
       }
     }
   }
 
   /**
-   * תיקון S8: הערות שוליים נספרות **לפני** מיקום הבלוק — התקציב נרשם לעמוד
-   * (fnReservedHeightPx) כך ש‑usedHeight כולל אותו; בעבר ההערות נדחפו אחרי
-   * pushLines והמרזב לא נלקח בחשבון → גלישה מעל ההערות (באג V23).
-   * f-note-body-font: גודל/גופן גוף ההערה — משפיע על רוחב מילה במדידת ההערה.
+   * **תקציב הערות לפני מיקום (F-17 probe==reserved) — כולל מדיניות הערה ארוכה
+   * (REQ-FN-02) בזמן ההצבה**, כך שהתקציב תמיד עדכני (ללא תיקון פוסט‑הוק):
+   *  - split: החלק הראשון נכנס למרזב העמוד; השאר נכנס לתור pendingBarNotes
+   *    ונדחף לראש המרזב של העמוד הבא עם סימון המשך (isContinuation).
+   *  - move-whole: ההערה כולה עוברת לעמוד הבא.
+   *  - reject-to-body: ההערה חוזרת לגוף כplaceholder `[סמן: טקסט]` + רישום ledger.
+   * fn-layout-mode (D-34): block ⇒ תקרת fn-bar-max-height-px נאכפת; continuous ⇒
+   * אין תקרה (ההערות זורמות) — מנגנון אמיתי, לא מחלקת CSS בלבד.
    */
+  const pendingBarNotes = [];
   function reserveNotes(blk) {
-    const notes = blk.notes || [];
-    if (!notes.length || !settings['footnotes-enabled']) return;
-    const size = settings['body-font-size-pt'] * 0.8;
-    const fnFont = settings['f-note-body-font'];
-    let added = 0;
-    for (const n of notes) {
-      const words = String(n.text).split(/\s+/).filter(Boolean);
-      const lh = Math.round(size * (96 / 72) * 1.25);
-      const colW = settings._fnColWidthPx || 200;
-      let lines = 1, w = 0;
-      for (const word of words) {
-        const ww = widthForNote(word, size, fnFont);
-        if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+    const notes = (blk.notes || []);
+    if (!notes.length) return;
+    // המשכים מהעמוד הקודם קודם כל (שמירת סדר ההערות)
+    const queue = [...pendingBarNotes.splice(0), ...notes];
+    const barMax = settings['fn-layout-mode'] === 'continuous'
+      ? Number.POSITIVE_INFINITY
+      : (settings['fn-bar-max-height-px'] || Number.POSITIVE_INFINITY);
+    for (const n of queue) {
+      if (!settings['footnotes-enabled']) {
+        // אין מרזב — ההערה חוזרת לגוף כplaceholder; לרזב לא אמורות להגיע הערות
+        // כלל במצבים אלה (הpipeline לא שם אותן ב‑blk.notes). שומר בטוח: continue.
+        continue;
       }
-      const h = lines * lh;
-      cur.footnotes.push({ ...n, heightPx: h, lineH: lh });
-      added += h;
+      const h = noteHeight(n, settings, (t, s) => measureFn(t, s));
+      const isCont = n.isContinuation === true;
+      // הערה ארוכה מתקרת המרזב ⇒ מדיניות (block mode בלבד; continuous אין תקרה — D-34)
+      if (Number.isFinite(barMax) && h > barMax && settings['long-footnote-policy'] !== 'allow') {
+        if (settings['long-footnote-policy'] === 'split') {
+          // **פיצול אמיתי של הטקסט**: החלק הראשון נכנס למרזב הזה, השאר לעמוד הבא
+          const fnSize = settings['body-font-size-pt'] * 0.8;
+          const fnLH = Math.round(fnSize * (96 / 72) * 1.25);
+          const laneW = settings._fnColWidthPx || 200;
+          const words = String(n.text).replace(/\uE000/g, ' ').split(/\s+/).filter(Boolean);
+          const linesFit = Math.max(1, Math.floor(barMax / fnLH));
+          let w = 0, linesUsed = 1, cutIdx = words.length;
+          for (let i = 0; i < words.length; i++) {
+            const ww = measureFn(words[i], fnSize);
+            if (w + ww > laneW && w > 0) { linesUsed++; w = ww; if (linesUsed > linesFit) { cutIdx = i; break; } } else w += ww;
+          }
+          if (cutIdx >= words.length) {
+            // כל ההערה נכנסת בגבול התקרה — אין צורך בפיצול
+            cur.footnotes.push({ ...n, heightPx: h, mode: isCont ? 'split-rest' : 'normal', isContinuation: isCont });
+            continue;
+          }
+          const firstText = words.slice(0, cutIdx).join(' ');
+          const restText = words.slice(cutIdx).join(' ');
+          cur.footnotes.push({ ...n, text: firstText, heightPx: linesFit * fnLH, lineH: fnLH, mode: 'split-first', linesShown: linesFit });
+          pendingBarNotes.push({ ...n, text: restText, isContinuation: true, continuationOf: n.tokenId, mode: 'split-rest' });
+          eventLog.emit('notes-budget', 'fn-split', { token: n.tokenId, marker: n.marker, barMax, firstWords: cutIdx }, cur.index);
+          continue;
+        }
+        if (settings['long-footnote-policy'] === 'move-whole') {
+          pendingBarNotes.push({ ...n, mode: 'moved-whole', deferredToNextPage: true });
+          eventLog.emit('notes-budget', 'fn-moved-whole', { token: n.tokenId, marker: n.marker }, cur.index);
+          continue;
+        }
+        if (settings['long-footnote-policy'] === 'reject-to-body' && rejectToBody(n, `bar overflow ${h}>${barMax}`)) continue;
+      }
+      cur.footnotes.push({ ...n, heightPx: h, lineH: Math.round((settings['body-font-size-pt'] * 0.8) * (96 / 72) * 1.25), isContinuation: isCont, mode: isCont ? 'split-rest' : 'normal' });
     }
-    recomputeFnBudget(cur); // probe==reserved — פונקציה אחת לשני הצרכים
-    void added;
+    recomputeFnBudget(cur); // probe==reserved — פונקציה אחת (unified) לשני הצרכים
   }
 
   /**
-   * תיקון S7-E2E (BRZ-15): השבת הערות חרגה — long-footnote-policy='reject-to-body'.
-   * אם מרזב ההערות של עמוד חורג מגובה התקציב (fn-bar-max-height-px), ההערות
-   * הארוכות ביותר מוחזרות **לגוף** כplaceholder מלא `[n: טקסט ההערה]` עם דגל rejected.
-   * ללא החזרה זו — מילים נגונזות בשקט (באג V23). ההחזרה נעשית BEFORE balance/retreat
-   * כדי שהפריסה מחדש של הגוף תתרחש במסלול הרגיל (geometry עדכנית, ledger שקוף).
+   * **תיקון P0-3 משלים — reject-to-body נשאר מסלול BRZ-15 לגיטימי** (השבה מלאה
+   * לגוף; לעולם אין גניזת מילים). פועל בזמן הצבה בלבד (בתוך reserveNotes).
    */
-  function applyFootnoteOverflowPolicy() {
-    const policy = settings['long-footnote-policy'] || 'allow';
-    if (policy !== 'reject-to-body') return;
-    const barMax = settings['fn-bar-max-height-px'] || Infinity;
-    for (const page of pages) {
-      if (!page.footnotes.length) continue;
-      if ((page.fnReservedHeightPx || 0) <= barMax) continue;
-      // החזר מהארוךmost עד שהמרזב שב לתקציב
-      const sorted = page.footnotes.slice().sort((a, b) => b.heightPx - a.heightPx);
-      for (const n of sorted) {
-        if ((page.fnReservedHeightPx || 0) <= barMax) break;
-        const blk = blocks.find(b => b.tokenId === n.tokenId && (b.notes || []).some(x => x.noteIndex === n.noteIndex));
-        if (!blk) continue;
-        // placeholder מלא בגוף — המילים נשארות במולטיסט (scrub ⟦⟧ כבר מטפל בחיוג)
-        const idx = blk.lines.findIndex(l => l.words && l.words.includes(n.marker));
-        const full = `${n.marker}:${String(n.text).replace(/ /g, '\u00A0')}`;
-        if (idx >= 0) {
-          blk.lines[idx].words = blk.lines[idx].words.map(w => (w === n.marker ? full : w));
-          blk.lines[idx].widthPx = measureFn(full.replace(/\u00A0/g, ' '), settings['body-font-size-pt']);
-        } else {
-          blk.lines.push({ words: [full], widthPx: measureFn(full.replace(/\u00A0/g, ' '), settings['body-font-size-pt']), heightPx: lineH, isLast: false, tokenId: blk.tokenId, kind: 'paragraph', part: 'rest' });
-        }
-        // **BRZ-15 — עדכון מקור־האמת היחיד:** ההערה הוחזרה לגוף כplaceholder מלא.
-        // יש למחוק אותה מ‑blk.notes (מקור הסמכות של outWordsOf): אחרת נשארת רשומה
-        // כ"הערה" וה‑marker שלה בגוף (שהומר ל‑`[n:text]`) לא נספר — פער שיטתי `-N`.
-        // המילים נספרות מכאן והלאה דרך גוף הבלוק בלבד (placeholder), ולכן אין איבוד.
-        const ni = (blk.notes || []).findIndex(x => x.noteIndex === n.noteIndex);
-        if (ni >= 0) blk.notes.splice(ni, 1);
-        blk.rejectedNotes = blk.rejectedNotes || [];
-        // **BRZ-15 סנכרון צדדים:** הדחקת placeholder לגוף נספרת בצד out רק דרך
-        // rejectedNotes — אין לספור את אותה הערה גם כמרזב וגם כגוף (באג V23).
-        blk.rejectedNotes.push({ tokenId: n.tokenId, noteIndex: n.noteIndex, text: n.text, marker: n.marker, rejected: true, reason: `bar overflow ${page.fnReservedHeightPx}>${barMax}` });
-        const at = page.footnotes.findIndex(x => x === n);
-        if (at >= 0) page.footnotes.splice(at, 1);
-        recomputeFnBudget(page);
-        eventLog.emit('notes-budget', 'footnote-rejected-to-body', { token: n.tokenId, marker: n.marker, barMax }, page.index);
-        ledger.create('fn-out-of-order', `rejected@p${page.index}`, page.index, { marker: n.marker, reason: 'bar overflow → body' }, 'notes-budget');
-      }
+  function rejectToBody(n, reason) {
+    const blk = blocks.find(b => b.tokenId === n.tokenId && (b.notes || []).some(x => x.noteIndex === n.noteIndex));
+    if (!blk) return false;
+    // **D-53:** הסמן בשורות הוא יחידה מתויגת (`עוגן\u00A0\uE102סמן`). ההחלפה:
+    // מורידים את התג ומדביקים את טקסט ההערה אחרי הסמן במפריד E000 —
+    // `עוגן\u00A0סמן\uE000טקסט` — צורה אחידה עם inline (D-30), נספרת פעם אחת.
+    const tagged = (l) => l.words && l.words.some(w => String(w).includes(MARK_TAG));
+    const idx = (blk.lines || []).findIndex(tagged);
+    if (idx >= 0) {
+      blk.lines[idx].words = blk.lines[idx].words.map(w => {
+        const sw = String(w);
+        if (!sw.includes(MARK_TAG)) return w;
+        const textE = String(n.text).replace(/\uE000/g, ' ').replace(/ /g, '\uE000');
+        return sw.replace(MARK_TAG, '') + '\uE000' + textE;
+      });
+    } else {
+      const textE = String(n.text).replace(/\uE000/g, ' ').replace(/ /g, '\uE000');
+      blk.lines.push({ words: [`${n.marker}\uE000${textE}`], heightPx: lineH, isLast: false, tokenId: blk.tokenId, kind: 'paragraph', part: 'rest' });
     }
+    const ni = (blk.notes || []).findIndex(x => x.noteIndex === n.noteIndex);
+    if (ni >= 0) blk.notes.splice(ni, 1); // מקור־אמת יחיד: לא לספור פעמיים
+    blk.rejectedNotes = blk.rejectedNotes || [];
+    blk.rejectedNotes.push({ tokenId: n.tokenId, noteIndex: n.noteIndex, text: n.text, marker: n.marker, rejected: true, reason });
+    ledger.create('fn-out-of-order', `rejected@p${cur.index}`, cur.index, { marker: n.marker, reason }, 'notes-budget');
+    eventLog.emit('notes-budget', 'footnote-rejected-to-body', { token: n.tokenId, marker: n.marker, reason }, cur.index);
+    return true;
   }
 
-  /** רוחב מילת הערה לפי גופן גוף ההערה (f-note-body-font) — פרופיל ratchet שמרני. */
-  function widthForNote(text, sizePt, fontName) {
-    const base = measureFn(text, sizePt);
-    if (!fontName || fontName === settings['body-font'] || fontName === settings['f-note-body-font'] && !NOTE_FONT_FACTORS[fontName]) return base;
-    const factor = NOTE_FONT_FACTORS[fontName] || 1.08; // גופן הערה לא־מוכר: שמרני +8%
-    return Math.ceil(base * factor);
-  }
-  const NOTE_FONT_FACTORS = { 'David HB': 1.06, 'David': 1.04, 'Narkisim': 1.10, 'Nachlieli': 0.96, 'Alef': 1.02, 'Rubin': 1.05 };
 
   for (let bi = 0; bi < blocks.length; bi++) {
     const blk = blocks[bi];
     const next = blocks[bi + 1];
 
-    // REQ-HDG-02: heading mode=new-page → עמוד חדש לפני הכותרת (נצרך בפועל — anti-phantom)
-    if (blk.kind === 'heading' && blk.forceNewPage && cur.columns.some(c => c.length)) {
+    // REQ-HDG-02 (החלטה מאוחדת — headings-escort.applyHeadingModes, D-09):
+    // הדגלים נקבעים בpipeline לפני ה‑DP; כאן רק צריכה.
+    if (blk.kind === 'heading' && blk.forcePageBreakBefore && cur.columns.some(c => c.length)) {
       flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
       eventLog.emit('page-plan', 'heading-new-page-mode', { token: blk.tokenId }, cur.index);
     }
+    // פתיחת חלק (H1): עמוד חדש + סימון chapterOpening (D-36 — לא מוצג גיליון)
+    if (blk.kind === 'heading' && blk.level === 1) {
+      if (cur.columns.some(c => c.length)) { flushPage(); cur = newPage(PAGE_TYPES.REGULAR); }
+      cur.chapterOpening = true;
+      cur.type = PAGE_TYPES.PREFACE;
+      cur.template = buildPageTemplate(PAGE_TYPES.PREFACE, settings, cur.isRecto !== false);
+      eventLog.emit('page-plan', 'part-opening', { token: blk.tokenId }, cur.index);
+    }
 
-    // REQ-FN-05/06: heading mode=side-note → הערת שוליים בטור מקביל (H7 doctrine), לא גוף עמוד
-    if (blk.kind === 'heading' && blk.sideNote) {
-      cur.sideNotes.push({ text: blk.lines.map(l => l.words.join(' ')).join(' ').trim(), anchorToken: blk.tokenId, isHeading: true });
+    // REQ-FN-05/06: heading mode=side-note → הערת שוליים בטור מקביל (H7 doctrine)
+    if (blk.kind === 'heading' && blk.asSideNote) {
+      // S7.1.2: הערת צד נצמדת לפסקה שהיא מבארת — הבלוק הבא (host) הוא העוגן החזותי;
+      // ההצבה מחפשת את שורת ה‑host וממקמת את ההערה בראשה (לא ראש עמוד עיוור).
+      const host = blocks.slice(bi + 1).find(b => b.kind === 'paragraph');
+      cur.sideNotes.push({
+        text: blk.lines.map(l => l.words.join(' ')).join(' ').trim(),
+        anchorToken: host ? host.tokenId : blk.tokenId,
+        ownToken: blk.tokenId, isHeading: true, level: blk.level
+      });
       eventLog.emit('page-plan', 'heading-side-note', { token: blk.tokenId }, cur.index);
       continue;
     }
 
-    // תקציב הערות לפני מיקום (F-17 probe==reserved)
+    // תקציב הערות לפני מיקום (F-17 probe==reserved, כולל מדיניות הערה ארוכה)
     if (blk.kind === 'paragraph') reserveNotes(blk);
 
     if (blk.kind === 'heading' && blk.level === 2) {
-      // PT-05: עמוד חדש תמיד
+      // PT-05: עמוד חדש תמיד + סימון פתיחת סימן (D-36)
       if (cur.columns.some(c => c.length)) { flushPage(); cur = newPage(PAGE_TYPES.SIGN_OPEN); }
       else cur.type = PAGE_TYPES.SIGN_OPEN;
+      cur.chapterOpening = true;
       eventLog.emit('page-plan', 'h2-new-page', { token: blk.tokenId }, cur.index);
     }
 
-    if (blk.kind === 'heading' && blk.level === 3 && next && next.kind === 'paragraph') {
-      // PT-06: כותרת 3 חוצת טורים — הטורים שלפניו מאוזנים (נבצע בפלאש)
-      void 0;
-    }
-
-    // REQ-BAL-10: heading escort ≥2 שורות אחרי כותרת H1–H6.
-    // תיקון S5 (מניעת false-positive): בודקים מקום אמיתי לכותרת + 2 שורות ההמשך
-    // באותו טור; אין מקום → דוחפים את הכותרת לעמוד חדש (resolved).
-    // רק אם גם בעמוד ריק אין מקום (נמדד מחדש) → correction-blocked מתועד.
+    // REQ-BAL-10: heading escort ≥2 שורות אחרי כותרת H1–H6 באותו טור.
     if (blk.kind === 'heading' && blk.level <= 6) {
       const following = (next && next.lines) ? next.lines.length : 0;
       if (following >= 1) {
@@ -298,11 +335,8 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     const need = blk.lines.length;
     let chosenCol = ensureRoom(need);
     if (chosenCol === -1) {
-      // שקול מועמד: האם להשאיר חלק מהשורות בטור הנוכחי? — נדרוש לפחות 2 שורות (widow/orphan DP)
       const splitAt = findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, settings, generateCandidates);
       if (splitAt > 0) {
-        // תיקון S5: סימון isLast על השורה האחרונה של החלק הראשון — נחוץ לגלאי
-        // widow-top/orphan-bottom במטריצת ההגנות (ללא סימון זה הגלאים לא פעילים).
         pushLines(blk.lines.slice(0, splitAt - 1), { tokenId: blk.tokenId, part: 'first' });
         pushLines([blk.lines[splitAt - 1]], { tokenId: blk.tokenId, part: 'first', isLast: true });
         flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
@@ -314,24 +348,31 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     }
     pushLines(blk.lines, { tokenId: blk.tokenId, firstOfBlock: true });
 
-    // הערות שוליים כבר נרשמו ותוקצבו לפני המיקום (reserveNotes) — אין דחيفة כפולה.
     if (blk.sideNoteText) cur.sideNotes.push({ text: blk.sideNoteText, anchorToken: blk.tokenId });
   }
 
   if (cur.columns.some(c => c.length) || cur.footnotes.length || pages.length === 0) flushPage();
 
-  // S7-E2E תיקון: הפעלת מדיניות הערות חרגות (הייתה פונקציה מתה — anti-phantom נאכף כאן)
-  applyFootnoteOverflowPolicy();
+  // המשכים שנותרו בתור בסוף המסמך — לא ראוי לגנוז (BRZ-15): נדחפים לעמוד האחרון
+  if (pendingBarNotes.length) {
+    const last = pages[pages.length - 1];
+    for (const n of pendingBarNotes) {
+      last.footnotes.push({ ...n }); // mode/isContinuation preserved (moved-whole stays whole)
+    }
+    recomputeFnBudget(last);
+    eventLog.emit('notes-budget', 'fn-tail-continuation', { count: pendingBarNotes.length, page: last.index }, last.index);
+    pendingBarNotes.length = 0;
+  }
 
   // terminal residual fallback (REQ-BAL-04): אם העמוד האחרון ריק למחצה ויש מצב natural — סמן
   if (settings['allow-terminal-residual-fallback']) {
     const last = pages[pages.length - 1];
-    if (last && last.columns.every(c => usedHeight(c) < colCapacity(last.template) * 0.5)) {
+    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template) * 0.5)) {
       last.terminalResidual = true; // לא מדווח כ‑underfill (B4)
     }
   }
 
-  // S5.1.4 + S5.1.5: הגנות AFTER every mutation, ואז לולאת נסיגה מאוחדת עם גלאי תנודות
+  // S5.1.4 + S5.1.5: הגנות AFTER every mutation, ואז לולאת נסיגה מאוחדת עם גלאי תנודה
   const assess = (page, s, lg) => runProtections(page, s, lg).violations;
   const retreat = runRetreatLoop({
     pages, settings, ledger, eventLog,
@@ -340,6 +381,12 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
         for (const v of violations) {
           const pg = pages.find(p => `page#${p.index}` === v.target);
           if (pg) balancePageSafe(pg, c.settings, c.ledger);
+        }
+      },
+      'reading-order-break': (violations, c) => {
+        for (const v of violations) {
+          const rec = c.ledger.issues.get(v.ledgerRef);
+          if (rec) c.ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'line moved backward in reading order (bug-guard P0-3; not auto-repaired)');
         }
       },
       'widow-bottom': (violations, c) => {
@@ -358,21 +405,22 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     assess
   });
 
-  return { pages, ledger, retreat, hash: layoutHash(pages) };
+  return { pages, ledger, retreat, hash: layoutHash(pages), bodyHash: bodyGeometryHash(pages) };
 }
 
-/** איזון בטוח עם rollback (REQ-BAL-09): snapshot כולל footnotes/sideNotes/ornaments. */
+/** איזון בטוח עם rollback (REQ-BAL-09): snapshot כולל footnotes/sideNotes.
+ * תיקון P0-3: הזזות קדימה בסדר הקריאה בלבד (moveLineForward).
+ * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו**. */
 function balancePageSafe(page, settings, ledger) {
   const snapshot = { cols: page.columns.map(c => c.slice()), fn: page.footnotes.slice(), sn: page.sideNotes.slice() };
+  const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0) + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
   let guard = 0;
-  while (Math.abs(usedHeight(page.columns[0]) - usedHeight(page.columns[1])) > settings['imbalance-max-delta-px'] && guard++ < 200) {
-    const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
+  while (Math.abs(hh(page.columns[0]) - hh(page.columns[1])) > settings['imbalance-max-delta-px'] && guard++ < 200) {
+    const a = hh(page.columns[0]), b = hh(page.columns[1]);
     const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!page.columns[hi].length) break;
-    const moved = page.columns[hi].pop();
-    page.columns[lo].unshift(moved);
+    if (!moveLineForward(page.columns, hi, lo)) break;
     const cap = page.template.contentBox.height;
-    if (page.columns.some(cl => usedHeight(cl) > cap + 0.5)) {
+    if (page.columns.some(cl => hh(cl) > cap + 0.5)) {
       page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
       const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
       ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
@@ -385,12 +433,10 @@ function balancePageSafe(page, settings, ledger) {
 /** בחירת נקודת פיצול עם הגנות widow/orphan (≥2 שורות לכל צד). */
 function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, settings = {}, candidatesFn = null) {
   const cap = colCapacity(cur.template);
-  const free = cap - usedHeight(cur.columns[cur.columns.length - 1]);
+  const free = cap - usedHeight(cur.columns[cur.columns.length - 1], cur);
   const maxFit = Math.floor(free / lineH);
   if (maxFit < 2 || blk.lines.length - maxFit < 2) return 0; // אין פיצול חוקי → הזזה מלאה
 
-  // S5.1.2: בחירת נקודת שבירה עם הקשר — לא naive-max-fit.
-  // candidate-generator סורק מועמדים ובוחר לפי capacityBefore/capacityAfter (p376-class).
   if (candidatesFn) {
     const cands = candidatesFn(blk, maxFit, cap, settings, ledger);
     if (cands.length) {
@@ -402,4 +448,4 @@ function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, s
   return maxFit;
 }
 
-module.exports = { planPages, layoutHash, lineTokenId };
+module.exports = { planPages, layoutHash, bodyGeometryHash, lineTokenId, moveLineForward, balancePageSafe };

@@ -8,11 +8,14 @@
 class EventLog {
   /**
    * @param {string} verbosity - 'off'|'minimal'|'standard'|'full' (key: trace-verbosity, REQ-GOV-01)
+   * תיקון P1-6: ts לוגי מונוטוני (לא Date.now) — יומנים זהים בין ריצות ⇒
+   * אפשר להשוות טרייסים בין קומיטים (baseline regression).
    */
   constructor(verbosity = 'full') {
-    this.verbosity = verbosity; // settings['trace-verbosity']
+    this.verbosity = verbosity; // settings['trace-verbosity'] — נצרך בפועל (הpipeline מזרים)
     this.events = [];
     this.droppedEvents = 0; // חייב להישאר 0 (REQ-GOV-01)
+    this.clock = 0; // שעון לוגי דטרמיניסטי (P1-6)
     this.stageOrder = [
       'parse', 'scope-map', 'style-prepass', 'fonts-ready', 'measure', 'line-plan',
       'page-plan', 'protections', 'balance', 'justify', 'notes-budget', 'refit',
@@ -31,7 +34,7 @@ class EventLog {
     this.events.push({
       seq: this.events.length + 1,
       stage, label, pageIndex,
-      ts: Date.now(),
+      ts: ++this.clock, // לוגי — דטרמיניסטי בין ריצות (P1-6)
       payload
     });
   }
