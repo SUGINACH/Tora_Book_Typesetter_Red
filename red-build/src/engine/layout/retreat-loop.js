@@ -19,6 +19,14 @@ function runRetreatLoop(ctx) {
   let iteration = 0;
   let lastSignature = null;
 
+  // key: diagnostics-enabled — לולאת הריטרייט היא הצרכן: סמכות האבחון קובעת
+  // האם ממצאים נרשמים ב‑ledger (אבחון פעיל) או שהלולאה רצה בשקט (REQ-GOV-01).
+  const diagEnabled = !settings || settings['diagnostics-enabled'] !== false;
+  // key: debounce-light-change-ms — ריכוך קריאות חוזרות ונשנות של אותו תיקון קל
+  // בתוך איטרציה אחת (מניעת עומס על measure/worker; ברירת מחדל 350ms).
+  const lightRepairDebounceMs = (settings && settings['debounce-light-change-ms']) || 350;
+  const lastLightRunAt = {}; // kind -> iteration timestamp budget marker
+
   while (iteration < MAX_ITERATIONS) {
     iteration++;
     const allViolations = [];
@@ -36,10 +44,13 @@ function runRetreatLoop(ctx) {
     const recent = history.slice(-OSCILLATION_WINDOW);
     if (recent.some(h => h === signature)) {
       // ping-pong → הקפאת הפשרה הטובה ביותר שנצפתה
-      const rec = ledger.create('rollback-compromise', `loop@iter${iteration}`, null, { signature }, 'protections');
-      ledger.transition(rec.issue_id, 'competing-repair-side-effect', 'protections', 'oscillation detected — freezing best legal compromise');
+      let rec = null;
+      if (diagEnabled) {
+        rec = ledger.create('rollback-compromise', `loop@iter${iteration}`, null, { signature }, 'protections');
+        ledger.transition(rec.issue_id, 'competing-repair-side-effect', 'protections', 'oscillation detected — freezing best legal compromise');
+      }
       eventLog.emit('protections', 'oscillation-detected', { iteration, signature });
-      return { converged: false, iterations: iteration, compromise: rec.issue_id, frozenSignatures: history };
+      return { converged: false, iterations: iteration, compromise: rec ? rec.issue_id : null, frozenSignatures: history };
     }
 
     history.push(signature);
@@ -48,18 +59,29 @@ function runRetreatLoop(ctx) {
     // הפעלת תיקונים לפי סדר עדיפות קבוע (דטרמיניסטי): parens → widows → headings → balance
     const kinds = new Set(allViolations.map(v => v.kind));
     const order = ['paren-cross-boundary', 'widow-bottom', 'orphan-top', 'heading-escort', 'column-imbalance'];
+    const LIGHT_REPAIRS = new Set(['widow-bottom', 'orphan-top']); // תיקוני שורה בלבד — ניתנים לריכוך
     for (const kind of order) {
-      if (kinds.has(kind) && repairFns[kind]) {
-        repairFns[kind](allViolations.filter(v => v.kind === kind), ctx);
+      if (!kinds.has(kind) || !repairFns[kind]) continue;
+      if (LIGHT_REPAIRS.has(kind)) {
+        // debounce: אם אותו סוג תיקון קל רץ באיטרציה העוקבת מיד, דחה מחזור אחד
+        const prev = lastLightRunAt[kind];
+        if (prev !== undefined && (iteration - prev) * lightRepairDebounceMs < lightRepairDebounceMs * 2 && prev === iteration - 1) {
+          continue; // ריכוך: לא להפעיל שני תיקונים קלים גב־אל־גב מאותו סוג
+        }
+        lastLightRunAt[kind] = iteration;
       }
+      repairFns[kind](allViolations.filter(v => v.kind === kind), ctx);
     }
     eventLog.emit('protections', 'retreat-iteration', { iteration, violationCount: allViolations.length });
   }
 
   // תקרה ללא התכנסות — פשרה אחרונה
-  const rec = ledger.create('rollback-compromise', 'loop-ceiling', null, { lastSignature }, 'protections');
-  ledger.transition(rec.issue_id, 'unresolved', 'protections', 'max iterations reached');
-  return { converged: false, iterations: iteration, compromise: rec.issue_id };
+  let rec = null;
+  if (diagEnabled) {
+    rec = ledger.create('rollback-compromise', 'loop-ceiling', null, { lastSignature }, 'protections');
+    ledger.transition(rec.issue_id, 'unresolved', 'protections', 'max iterations reached');
+  }
+  return { converged: false, iterations: iteration, compromise: rec ? rec.issue_id : null };
 }
 
 module.exports = { runRetreatLoop, MAX_ITERATIONS, OSCILLATION_WINDOW };

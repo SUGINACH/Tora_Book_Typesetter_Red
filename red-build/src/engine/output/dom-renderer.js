@@ -126,6 +126,12 @@ function renderPage(page, settings, doc, header) {
   root.style.height = `${page.template.height}px`;
   root.dir = 'rtl';
 
+  // key: background-color / background-opacity — צרכן ישיר: רקע מוגדר גובר על ברירת המחדל
+  const bg = settings['background-color'];
+  if (bg && bg !== '#ffffff') root.style.backgroundColor = bg;
+  const bgOp = settings['background-opacity'];
+  if (Number.isFinite(bgOp) && bgOp < 1) root.style.backgroundOpacity = String(bgOp);
+
   const h = renderHeader(header, doc);
   if (h) root.appendChild(h);
 

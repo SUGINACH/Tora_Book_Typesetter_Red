@@ -134,19 +134,19 @@ const registry = [
   ]),
 
   // ---- שערים/נושאים (THEMES) ----
-  K('theme-set-id', 'string', 'default', P.THEMES, 'sel-theme-set', ['decoration/shaar-boxes'], 'fx:theme-set', { note: 'ערכות מאוחדות "1 ראשי/משנה/אחורי" (REQ-ORN-06)' }),
-  K('shaar-main-image', 'asset', 'data/shaarim/main.svg', P.THEMES, 'sel-shaar-main', ['decoration/shaar-boxes'], 'fx:shaar-main'),
-  K('shaar-back-enabled', 'bool', true, P.THEMES, 'chk-shaar-back', ['decoration/shaar-boxes'], 'fx:shaar-back', { note: '4 מקטעים עצמאיים מ‑shaar_back.json (PT-03)' }),
-  K('background-page-type', 'enum', 'regular', P.THEMES, 'sel-bg-type', ['decoration/shaar-boxes'], 'fx:bg-type', { enum: ['regular', 'preface-open', 'sign-open'] }),
+  K('theme-set-id', 'string', 'default', P.THEMES, 'sel-theme-set', ['decoration/page-decorations'], 'fx:theme-set', { note: 'ערכות מאוחדות "1 ראשי/משנה/אחורי" (REQ-ORN-06)' }),
+  K('shaar-main-image', 'asset', 'data/shaarim/main.svg', P.THEMES, 'sel-shaar-main', ['decoration/page-decorations'], 'fx:shaar-main'),
+  K('shaar-back-enabled', 'bool', true, P.THEMES, 'chk-shaar-back', ['decoration/page-decorations'], 'fx:shaar-back', { note: '4 מקטעים עצמאיים מ‑shaar_back.json (PT-03)' }),
+  K('background-page-type', 'enum', 'regular', P.THEMES, 'sel-bg-type', ['decoration/page-decorations'], 'fx:bg-type', { enum: ['regular', 'preface-open', 'sign-open'] }),
   K('background-color', 'color', '#ffffff', P.THEMES, 'inp-bg-color', ['output/dom-renderer'], 'fx:bg-color'),
-  K('background-image', 'asset', '', P.THEMES, 'sel-bg-image', ['decoration/shaar-boxes'], 'fx:bg-image'),
+  K('background-image', 'asset', '', P.THEMES, 'sel-bg-image', ['decoration/page-decorations'], 'fx:bg-image'),
   K('background-opacity', 'number', 1, P.THEMES, 'rng-bg-opacity', ['output/dom-renderer'], 'fx:bg-opacity', { min: 0, max: 1, step: 0.05 }),
 
   // ---- מתקדם/מנוע (ADVANCED) ----
   K('trace-verbosity', 'enum', 'standard', P.ADVANCED, 'sel-trace-verb', ['core/events'], 'fx:trace-verb', { enum: ['off', 'minimal', 'standard', 'full'] }),
-  K('diagnostics-enabled', 'bool', true, P.ADVANCED, 'chk-diag', ['audit/report-schema'], 'fx:diag-on'),
+  K('diagnostics-enabled', 'bool', true, P.ADVANCED, 'chk-diag', ['layout/retreat-loop'], 'fx:diag-on'),
   K('offline-guard', 'bool', true, P.ADVANCED, 'chk-offline-guard', ['output/html-export'], 'fx:offline-guard', { note: 'exit 7 על בקשה חיצונית (Orange ✓)' }),
-  K('debounce-light-change-ms', 'number', 350, P.ADVANCED, 'rng-debounce', ['ui/worker-client'], 'fx:debounce', { min: 100, max: 1000 }),
+  K('debounce-light-change-ms', 'number', 350, P.ADVANCED, 'rng-debounce', ['layout/retreat-loop'], 'fx:debounce', { min: 100, max: 1000 }),
 ];
 
 // ---- אימות פנימי: אין כפילויות id/control ----

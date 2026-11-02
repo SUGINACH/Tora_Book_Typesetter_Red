@@ -7,6 +7,8 @@ const { Ledger } = require('../core/ledger');
 const { runProtections } = require('./protections-matrix');
 const { runRetreatLoop } = require('./retreat-loop');
 const { usedHeight, pageImbalance } = require('./balancing');
+const { generateCandidates } = require('./candidate-generator');
+const { blockGapPx } = require('./column-flow');
 
 /** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism). */
 function layoutHash(pages) {
@@ -121,18 +123,25 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   }
 
   function pushLines(lines, meta = {}) {
+    // grid-block-gap-pct: מרווח בין־בלוקי נצרך כאן — שורה ראשונה של בלוק חדש
+    // סופגת את ה‑gap (פרופורציונלי לגובה שורה), כך שתקציב הטור כולל אותו.
+    const gap = meta.firstOfBlock ? blockGapPx(settings, lineH) : 0;
+    let pendingGap = gap;
     for (const ln of lines) {
       let placed = false;
       for (let c = 0; c < cur.columns.length && !placed; c++) {
-        if (colCapacity(cur.template) - usedHeight(cur.columns[c]) >= ln.heightPx - 0.5) {
+        const needPx = ln.heightPx + pendingGap - 0.5;
+        if (colCapacity(cur.template) - usedHeight(cur.columns[c]) >= needPx) {
           cur.columns[c].push({ ...ln, meta });
+          pendingGap = 0;
           placed = true;
         }
       }
       if (!placed) {
         flushPage();
         cur = newPage(meta.forceType || PAGE_TYPES.REGULAR);
-        cur.columns[0].push({ ...ln, meta });
+        cur.columns[0].push({ ...ln, meta }); // טור חדש/עמוד חדש → ללא gap
+        pendingGap = 0;
       }
     }
   }
@@ -234,7 +243,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     let chosenCol = ensureRoom(need);
     if (chosenCol === -1) {
       // שקול מועמד: האם להשאיר חלק מהשורות בטור הנוכחי? — נדרוש לפחות 2 שורות (widow/orphan DP)
-      const splitAt = findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog);
+      const splitAt = findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, settings, generateCandidates);
       if (splitAt > 0) {
         // תיקון S5: סימון isLast על השורה האחרונה של החלק הראשון — נחוץ לגלאי
         // widow-top/orphan-bottom במטריצת ההגנות (ללא סימון זה הגלאים לא פעילים).
@@ -247,7 +256,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
       chosenCol = 0;
     }
-    pushLines(blk.lines, { tokenId: blk.tokenId });
+    pushLines(blk.lines, { tokenId: blk.tokenId, firstOfBlock: true });
 
     // הערות שוליים כבר נרשמו ותוקצבו לפני המיקום (reserveNotes) — אין דחيفة כפולה.
     if (blk.sideNoteText) cur.sideNotes.push({ text: blk.sideNoteText, anchorToken: blk.tokenId });
@@ -315,11 +324,21 @@ function balancePageSafe(page, settings, ledger) {
 }
 
 /** בחירת נקודת פיצול עם הגנות widow/orphan (≥2 שורות לכל צד). */
-function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog) {
+function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, settings = {}, candidatesFn = null) {
   const cap = colCapacity(cur.template);
   const free = cap - usedHeight(cur.columns[cur.columns.length - 1]);
   const maxFit = Math.floor(free / lineH);
   if (maxFit < 2 || blk.lines.length - maxFit < 2) return 0; // אין פיצול חוקי → הזזה מלאה
+
+  // S5.1.2: בחירת נקודת שבירה עם הקשר — לא naive-max-fit.
+  // candidate-generator סורק מועמדים ובוחר לפי capacityBefore/capacityAfter (p376-class).
+  if (candidatesFn) {
+    const cands = candidatesFn(blk, maxFit, cap, settings, ledger);
+    if (cands.length) {
+      eventLog.emit('protections', 'candidate-split', { token: blk.tokenId, at: cands[0].cut, score: cands[0].score });
+      return cands[0].cut;
+    }
+  }
   eventLog.emit('protections', 'legal-split', { token: blk.tokenId, at: maxFit });
   return maxFit;
 }
