@@ -1,7 +1,7 @@
 // src/engine/output/project-io.js — Project JSON export/import with settings_version + migrations (S4.1.2, S12)
 'use strict';
 
-const { getDefaultSettings, registry } = require('../core/settings-registry');
+const { getDefaultSettings, registry, derivePlacementFlags } = require('../core/settings-registry');
 
 /**
  * מיפויי נדידה v1→v2: כינויים ישנים מכל 5 הריפואים → מפתח canonical.
@@ -42,7 +42,9 @@ function migrate(raw) {
 /** איחוד עם defaults; אי‑התאמות מדווחות ולא משמיטות (audit deltas attributable). */
 function mergeWithDefaults(migrated) {
   const defs = getDefaultSettings();
-  const merged = { ...defs, ...migrated, settings_version: 2 };
+  // derivePlacementFlags **אחרי** האיחוד — mode הוא מקור־האמת; דגלים שהומרו מקובץ
+  // v1 ישן (ללא mode) נגזרים שוב כך שלעולם לא ייווצר מצב סותר מאובדן הערות (BRZ-15).
+  const merged = derivePlacementFlags({ ...defs, ...migrated, settings_version: 2 });
   const unknownKeys = Object.keys(migrated).filter(k => !(k in defs));
   const issues = [];
   for (const r of registry) {
