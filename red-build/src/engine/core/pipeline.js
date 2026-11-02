@@ -144,6 +144,14 @@ function typeset(rawText, settings, env = {}) {
         // דרך notes (marker), ולכן multiset הגוף אינו מכיל אותו בנפרד. הplaceholder הרחב
         // נמדד לפי רוחב הסמן האמיתי (geometry = סמן, לא הערה שלמה).
         const marker = `[${noteSeq}]`;
+        // **S7-E2E תיקון#4 (dual-mode):** במצב endnotes (`endnotes-enabled=true`) אין
+        // מרזב תחתון — ההערה חוזרת **לגוף** כplaceholder מלא `marker:text`, כך שאף מילה
+        // אינה נגנזת (BRZ-15: "no silent word loss"). srcWordsOf סופר בדיוק את אותו
+        // דבר במצב זה (full texts, ללא markers נפרדים) — הצדדים סימטריים במפורש.
+        if (settings['endnotes-enabled']) {
+          allWords.push(`${marker}:${String(noteRaw).replace(/\uE000/g, ' ')}`);
+          continue;
+        }
         notes.push({ text: noteRaw.replace(/\uE000/g, ' '), marker, tokenId: t.id, noteIndex: p.noteIndex });
         // בגוף נדחק **הסמן בלבד** (נמדד כרוחב סמן אמיתי) — כך מילים אינן נספרות פעמיים.
         allWords.push(marker);
@@ -254,22 +262,31 @@ function typeset(rawText, settings, env = {}) {
     .replace(/\uFF9F/g, '\u05F3')
     .replace(/\uFF93/g, '\u05F4')
     .replace(/[\u27E6\u27E7]/g, '')   // ⟦⟧ placeholders — נמדדים, לא נספרים כתוכן
-    .replace(/\s+/g, ' ')
-    .trim();
+    // **S7-E2E תיקון#5:** endnote-mode דוחק לגוף placeholder `marker:text` כמילה
+    // אטומית אחת; ה‑src סופר marker ו‑text כמילים נפרדות. הנרמול מפרד ב‑:
+    // כך שני הצדדים מתלכדים למולטיסט זהה ללא תלות בניב (אין פער שיטתי `-1`).
+    .replace(/:/g, ' : ').replace(/\s+/g, ' ').trim();
   const wordSeq = (s0) => scrubForCompare(s0).split(' ').filter(Boolean);
   function srcWordsOf(t) {
     if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
-    // **S7-E2E תיקון (BRZ-15):** מקור הסמכות חייב להיות **הלקוח** של ה‑tokenizer
-    // (parts עם \uE000 בתוך הערות + `notes[]` מנורמל במפורש). בעבר חובר איחור
-    // `⟦…⟧` מגולבל → המילים "הערה ראשונה להפניה" נספרו במקור אך לא בתוצר
-    // (ה‑out סופר את `notes[i].text` שהיה ריק כי placeholder לא נדחק לגוף).
-    // עכשיו: body = text parts; note-texts = t.notes[i] (\uE000→רווח); markers = [n].
+    // **S7-E2E תיקון#3 (BRZ-15 — זהות צדדים, DUAL-MODE AWARE):**
+    // כללי יסוד: multiset המקור חייב להיות **זהה במבנה** ל‑outWordsOf. שני מצבי הערות:
+    //  (א) footnotes (default): בגוף נדחק הסמן `[n]` בלבד; טקסט ההערה נספר דרך
+    //      blk.notes (מרזב התחתון). ⇒ src = body(text-parts) + markers[n].
+    //  (ב) endnote-mode (`endnotes-enabled=true`): ההערה **אינה** נדחקת למרזב —
+    //      היא חוזרת בגוף כplaceholder מלא `marker:text` (ללא אובדן מילים).
+    //      ⇒ src = body(text-parts) + מילות ההערות המלאות (הסמן נכלל בplaceholder
+    //        החוזר — אין להוסיפו בנפרד, אחרת נספר פעמיים).
+    // בעבר: src תמיד הוסיף markers ו‑out תמיד הוסיף note-texts → במצב (ב) נוצר
+    // פער `-1` לכל מילת הערה ("הערה ראשונה להפניה"). עכשיו שני הצדדים מסונכרנים
+    // לאותו מצב — ללא תלות ברצף (גם אחרי reject-to-body, שבו ההערה חוזרת לגוף).
     const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
-    const noteTexts = (t.notes || []).map(n => String(n).replace(/\uE000/g, ' '));
-    // **תיקון S7-E2E#2:** בגוף נדחק marker `[n]` (לא טקסט ההערה המלא), ולכן המקור
-    // חייב לספור את הmarkers בלבד עבור הגוף — הטקסט המלא נספר דרך notes בצד התוצר.
-    const markerCount = t.parts.filter(p => p.kind === 'note-ref').length;
-    const markers = Array.from({ length: markerCount }, (_, i) => `[${i + 1}]`);
+    const refs = t.parts.filter(p => p.kind === 'note-ref');
+    if (settings['endnotes-enabled']) {
+      const full = refs.map(p => String(t.notes[p.noteIndex]).replace(/\uE000/g, ' ')).join(' ');
+      return [...wordSeq(body), ...wordSeq(full)];
+    }
+    const markers = refs.map((_, i) => `[${i + 1}]`);
     return [...wordSeq(body), ...markers];
   }
   function outWordsOf(blk) {

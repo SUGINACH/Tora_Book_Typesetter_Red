@@ -45,8 +45,13 @@ function runRetreatLoop(ctx) {
       const dry = makeDryLedger();
       const vs = assess(page, settings, dry);
       for (const v of vs) {
-        // ממצא שיחודד באיטרציה הזו — אם יש לו repair, סמן resolved לפני המעבר
-        if (repairFns[v.kind]) ledger.transition(v.ledgerRef, 'resolved', 'protections', `will be repaired in iter#${iteration}`);
+        // ממצא שיחודד באיטרציה הזו — אם יש לו repair, סמן resolved לפני המעבר.
+        // הגנה: assess מלאכותי (טסטים) עשוי להחזיר violation ללא ledgerRef — אין לנסות
+        // transition על issue לא־קיים (throw "unknown issue"). רשומות אמיתיות תמיד נוצרות
+        // ע"י protections-matrix עם ledgerRef חוקי.
+        if (repairFns[v.kind] && v.ledgerRef && ledger.issues.has(v.ledgerRef)) {
+          ledger.transition(v.ledgerRef, 'resolved', 'protections', `will be repaired in iter#${iteration}`);
+        }
       }
       allViolations.push(...vs);
     }
