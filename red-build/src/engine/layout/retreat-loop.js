@@ -27,11 +27,28 @@ function runRetreatLoop(ctx) {
   const lightRepairDebounceMs = (settings && settings['debounce-light-change-ms']) || 350;
   const lastLightRunAt = {}; // kind -> iteration timestamp budget marker
 
+  /**
+   * S7-E2E תיקון (מניעת הצפת ledger): assess עם dryLedger — רשומות ממצאים נוצרות
+   * רק כשהתיקון **אינו אפשרי** או כשהלולאה קפואה. מעבר בין איטרציות יוצר ומיד
+   * מסמן 'resolved' (הפרה שהותרה), כך של‑ledger אין הצפה של עותקי "created".
+   */
+  function makeDryLedger() {
+    const dry = Object.create(ledger);
+    dry.create = (...a) => { const rec = ledger.create(...a); return rec; };
+    return dry;
+  }
+
   while (iteration < MAX_ITERATIONS) {
     iteration++;
     const allViolations = [];
     for (const page of pages) {
-      allViolations.push(...assess(page, settings, ledger));
+      const dry = makeDryLedger();
+      const vs = assess(page, settings, dry);
+      for (const v of vs) {
+        // ממצא שיחודד באיטרציה הזו — אם יש לו repair, סמן resolved לפני המעבר
+        if (repairFns[v.kind]) ledger.transition(v.ledgerRef, 'resolved', 'protections', `will be repaired in iter#${iteration}`);
+      }
+      allViolations.push(...vs);
     }
     if (!allViolations.length) {
       eventLog.emit('protections', 'retreat-converged', { iterations: iteration });

@@ -259,10 +259,15 @@ function typeset(rawText, settings, env = {}) {
   const wordSeq = (s0) => scrubForCompare(s0).split(' ').filter(Boolean);
   function srcWordsOf(t) {
     if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
+    // **S7-E2E תיקון (BRZ-15):** מקור הסמכות חייב להיות **הלקוח** של ה‑tokenizer
+    // (parts עם \uE000 בתוך הערות + `notes[]` מנורמל במפורש). בעבר חובר איחור
+    // `⟦…⟧` מגולבל → המילים "הערה ראשונה להפניה" נספרו במקור אך לא בתוצר
+    // (ה‑out סופר את `notes[i].text` שהיה ריק כי placeholder לא נדחק לגוף).
+    // עכשיו: body = text parts; note-texts = t.notes[i] (\uE000→רווח); markers = [n].
     const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
-    // **מקור הסמכות ל‑multiset:** גוף הטוקן + **סמנים** בלבד עבור ההערות — זהה
-    // למה שנדחק לפועל לגוף (marker `[n]`). טקסט ההערה עצמו נספר בצד התוצר
-    // דרך notes (מרזב/נדחה), ולכן כאן לא נספר כדי שלא ייווצר כפל.
+    const noteTexts = (t.notes || []).map(n => String(n).replace(/\uE000/g, ' '));
+    // **תיקון S7-E2E#2:** בגוף נדחק marker `[n]` (לא טקסט ההערה המלא), ולכן המקור
+    // חייב לספור את הmarkers בלבד עבור הגוף — הטקסט המלא נספר דרך notes בצד התוצר.
     const markerCount = t.parts.filter(p => p.kind === 'note-ref').length;
     const markers = Array.from({ length: markerCount }, (_, i) => `[${i + 1}]`);
     return [...wordSeq(body), ...markers];
