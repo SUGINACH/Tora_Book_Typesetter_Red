@@ -204,8 +204,16 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
         } else {
           blk.lines.push({ words: [full], widthPx: measureFn(full.replace(/\u00A0/g, ' '), settings['body-font-size-pt']), heightPx: lineH, isLast: false, tokenId: blk.tokenId, kind: 'paragraph', part: 'rest' });
         }
+        // **BRZ-15 — עדכון מקור־האמת היחיד:** ההערה הוחזרה לגוף כplaceholder מלא.
+        // יש למחוק אותה מ‑blk.notes (מקור הסמכות של outWordsOf): אחרת נשארת רשומה
+        // כ"הערה" וה‑marker שלה בגוף (שהומר ל‑`[n:text]`) לא נספר — פער שיטתי `-N`.
+        // המילים נספרות מכאן והלאה דרך גוף הבלוק בלבד (placeholder), ולכן אין איבוד.
+        const ni = (blk.notes || []).findIndex(x => x.noteIndex === n.noteIndex);
+        if (ni >= 0) blk.notes.splice(ni, 1);
         blk.rejectedNotes = blk.rejectedNotes || [];
-        blk.rejectedNotes.push({ ...n, rejected: true, reason: `bar overflow ${page.fnReservedHeightPx}>${barMax}` });
+        // **BRZ-15 סנכרון צדדים:** הדחקת placeholder לגוף נספרת בצד out רק דרך
+        // rejectedNotes — אין לספור את אותה הערה גם כמרזב וגם כגוף (באג V23).
+        blk.rejectedNotes.push({ tokenId: n.tokenId, noteIndex: n.noteIndex, text: n.text, marker: n.marker, rejected: true, reason: `bar overflow ${page.fnReservedHeightPx}>${barMax}` });
         const at = page.footnotes.findIndex(x => x === n);
         if (at >= 0) page.footnotes.splice(at, 1);
         recomputeFnBudget(page);
