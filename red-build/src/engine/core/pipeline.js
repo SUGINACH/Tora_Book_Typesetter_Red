@@ -132,12 +132,21 @@ function typeset(rawText, settings, env = {}) {
     if (dh) { dh.font = settings['dh-font']; }
     const allWords = [];
     const notes = [];
+    let noteSeq = 0;
     for (const p of t.parts) {
       if (p.kind === 'text') allWords.push(...normalizeText(p.value).split(/\s+/).filter(Boolean));
       else {
         const noteRaw = t.notes[p.noteIndex];
-        notes.push({ text: noteRaw.replace(/\uE000/g, ' '), marker: '' });
-        allWords.push(`⟦${noteRaw}⟧`); // placeholder box רחב־מדידה; יתוקן לרוחב סמן אמיתי
+        noteSeq++;
+        // **תיקון BRZ-15 (mismatch 'הערה ראשונה להפניה'):** בעבר נדחק לגוף placeholder
+        // `⟦…כל טקסט ההערה…⟧` — המילים נספרו פעמיים (גם בגוף גם ב‑notes) וה‑scrub של ⟦⟧
+        // השאיר את תוכו כמילים. עכשיו: בגוף נדחק **סמן ממוספר בלבד** [n] — נספר ALSO
+        // דרך notes (marker), ולכן multiset הגוף אינו מכיל אותו בנפרד. הplaceholder הרחב
+        // נמדד לפי רוחב הסמן האמיתי (geometry = סמן, לא הערה שלמה).
+        const marker = `[${noteSeq}]`;
+        notes.push({ text: noteRaw.replace(/\uE000/g, ' '), marker, tokenId: t.id, noteIndex: p.noteIndex });
+        // בגוף נדחק **הסמן בלבד** (נמדד כרוחב סמן אמיתי) — כך מילים אינן נספרות פעמיים.
+        allWords.push(marker);
       }
     }
     // f-note-body-font: מדידת גופן גוף ההערות — משפיע על גובה מרזב ההערות
@@ -251,17 +260,21 @@ function typeset(rawText, settings, env = {}) {
   function srcWordsOf(t) {
     if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
     const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
-    const notes = (t.notes || []).join(' ');
-    return [...wordSeq(body), ...wordSeq(notes)];
+    // **מקור הסמכות ל‑multiset:** גוף הטוקן + **סמנים** בלבד עבור ההערות — זהה
+    // למה שנדחק לפועל לגוף (marker `[n]`). טקסט ההערה עצמו נספר בצד התוצר
+    // דרך notes (מרזב/נדחה), ולכן כאן לא נספר כדי שלא ייווצר כפל.
+    const markerCount = t.parts.filter(p => p.kind === 'note-ref').length;
+    const markers = Array.from({ length: markerCount }, (_, i) => `[${i + 1}]`);
+    return [...wordSeq(body), ...markers];
   }
   function outWordsOf(blk) {
     if (blk.kind === 'heading') return wordSeq(blk.lines.map(l => l.words.join(' ')).join(' '));
     if (blk.kind === 'endnote') return wordSeq(blk.text);
-    // גוף: ⟦…⟧ כבר מגולח; הערות נספרות מ‑notes בלבד — ללא כפילות.
+    // גוף: הסמנים [n] נספרים כפי שנדחקו; הערות נספרות מ‑notes בלבד — ללא כפילות.
     // תיקון S9: אם ההערה **נדחתה** מהמרזב (long-footnote-policy), טקסט ההערה
     // נשאר בגוף כ placeholder — נספור אותו מהגוף כדי שה‑multiset לא יכיל חוסר.
     const body = blk.lines.map(l => l.words.join(' ')).join(' ');
-    const notes = (blk.notes || []).map(n => n.text).join(' ');
+    const notes = (blk.notes || []).filter(n => !n.rejected).map(n => n.text).join(' ');
     const rejected = (blk.notes || []).filter(n => n.rejected).map(n => n.text).join(' ');
     return [...wordSeq(body), ...wordSeq(notes), ...wordSeq(rejected)];
   }

@@ -14,15 +14,25 @@ const SHRINK_RATIO = 0.5;    // כיווץ רווח יחסית
 
 function buildItems(words, measure) {
   const items = [];
+  const sp = measure(' ');
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
-    items.push({ kind: 'box', text: w.replace(/\u00A0/g, ' '), width: Math.max(1, measure(w)), glued: w.includes('\u00A0') });
+    // יחידת NBSP פוצלת לתת־קופסאות עם **אי־שבירה אסורה** (INF penalty) ביניהן:
+    // כך DP רואה את הרוחב האמיתי (כולל רווחים פנימיים) אך לעולם לא קורע את הצמד.
+    // (לקח V23: רוחב חסר של unit צמוד → מדידת שורה שגויה → badness מוטה.)
+    // U+E000 (רווח אטומי בתוך הערה) אינו מקום שבירה כלל — נשמר בתוך תת־הקופסה
+    // ומוחלף ל‑NBSP רק בפליטה; כך unit שלם לעולם לא נקרע (REQ-LB-04).
+    const parts = w.split('\u00A0');
+    for (let k = 0; k < parts.length; k++) {
+      if (k > 0) items.push({ kind: 'penalty', forbidden: true, cost: INF });
+      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(1, measure(parts[k])) });
+      if (k < parts.length - 1) items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO, internal: true });
+    }
     if (i < words.length - 1) {
-      const sp = measure(' ');
       items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO });
     }
   }
-  items.push({ kind: 'penalty' }); // סיום פסקה — שבירה חובה
+  items.push({ kind: 'penalty', final: true }); // סיום פסקה — שבירה חובה
   return items;
 }
 
@@ -52,7 +62,8 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
 
   for (let i = 0; i < n; i++) {
     if (cost[i] === INF) continue;
-    if (items[i].kind === 'glue') { // דלג על glue בהתחלת שורה
+    if (items[i].kind === 'glue' && !items[i].internal) { // דלג על glue רגיל בהתחלת שורה;
+      // glue פנימי (בתוך יחידת NBSP) אסור לדלג — הרוחב שלו חלק בלתי נפרד מהצמד.
       if (cost[i + 1] > cost[i]) { cost[i + 1] = cost[i]; parent[i + 1] = i; }
       continue;
     }
@@ -62,7 +73,8 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
       if (it.kind === 'box') w += it.width;
       else if (it.kind === 'glue') { stretch += it.stretch; shrink += it.shrink; }
       else if (it.kind === 'penalty') {
-        // השורה האחרונה של הפסקה מסתיימת לפני ה‑penalty
+        if (it.forbidden) continue; // תוך-יחידה: אין כאן מקום שבירה (legalCut כבר מבטל); ההצברה נמשכת
+        // סיום שורה (penalty סופי של הפסקה) — good break
         const slack = maxWidthPx - w;
         const ratio = slack >= 0 ? (stretch > 0 ? slack / stretch : 0) : (shrink > 0 ? slack / shrink : -2);
         let b = badness(ratio);
@@ -76,12 +88,18 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
       if (w - shrink > maxWidthPx + 0.5) break; // חריגה שאינה ניתנת לתיקון
 
       if (it.kind === 'box') {
+        // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
+        // רק אם items[c-1] הוא glue לא־פנימי ו‑items[c] תיבה שפותחת יחידה חדשה.
+        // זה מבטל את באג V23: lock תלוי-נקודת-התחלה על צמתים משותפים ל‑DP.
+        // (תיקון S3: הבדיקה הייתה בתוך הלולאה עם אינדקס שגוי j+2 — כל השברים נחסמו.)
+        const cut = j + 1; // נקודת שבירה חוקית: אחרי תיבה, לפני ה‑glue העוקב
+        if (!(items[cut].kind === 'glue' && !items[cut].internal && items[cut + 1] && items[cut + 1].kind === 'box')) continue;
         const slack = maxWidthPx - w;
         const ratio = slack >= 0 ? (stretch > 0 ? slack / stretch : 0) : (shrink > 0 ? slack / shrink : -2);
         const b = badness(ratio);
         if (b >= INF) continue;
         const cand = cost[i] + b;
-        if (cand < cost[j + 1]) { cost[j + 1] = cand; parent[j + 1] = i; }
+        if (cand < cost[cut]) { cost[cut] = cand; parent[cut] = i; }
       }
     }
   }
@@ -96,9 +114,27 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
   const lines = [];
   for (let k = 0; k < cuts.length; k++) {
     const [a, b] = cuts[k];
-    const toks = items.slice(a, b).filter(x => x.kind === 'box').map(x => x.text);
+    // תת־קופסאות של אותה יחידת NBSP מאוחדות חזרה עם \u00A0 (הצמד שומר על זהותו)
+    const rawBoxes = items.slice(a, b).filter(x => x.kind === 'box');
+    const toks = [];
+    let cur = null, prevPenaltyForbidden = false;
+    for (let idx = a; idx < b; idx++) {
+      const it = items[idx];
+      if (it.kind === 'penalty' && it.forbidden) { prevPenaltyForbidden = true; continue; }
+      if (it.kind !== 'box') continue;
+      if (cur !== null && prevPenaltyForbidden) { cur += '\u00A0' + it.text; prevPenaltyForbidden = false; }
+      else { if (cur !== null) toks.push(cur); cur = it.text; prevPenaltyForbidden = false; }
+    }
+    if (cur !== null) toks.push(cur);
+    void rawBoxes;
     if (!toks.length) continue;
-    const widthPx = toks.reduce((s, t) => s + measure(t), 0) + Math.max(0, toks.length - 1) * measure(' ');
+    // רוחב אמיתי: סכום תת־הקופסאות + רווחי ה‑glue שביניהן (כולל internal)
+    let widthPx = 0;
+    for (let idx = a; idx < b; idx++) {
+      const it = items[idx];
+      if (it.kind === 'box') widthPx += it.width;
+      else if (it.kind === 'glue') widthPx += it.width;
+    }
     lines.push({ words: toks, widthPx, heightPx: lineHeightPx, isLast: k === cuts.length - 1 });
   }
   return lines;

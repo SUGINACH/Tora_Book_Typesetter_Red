@@ -5,11 +5,14 @@
  * הגנות מילים: צמדי NBSP. אם זוג קשור רחב מרוחב הטור — מבטלים את הקשירה (לא גלישה).
  */
 
-const NOTE_MARKER_RE = /(?:^|\s)([\u05D0-\u05EA]\u05F3?|\d+|[א-ת]{1,2})\s+/g; // סמן הערה + המילה שאחריו
+// סמן הערה = אות עברית **עם גרש** (א׳) או זוג־אותיות עם גרשיים (אב״) — נדרש סימן מפורש.
+// לקח false-positive: לולא דרישת הגרש כל מילה בת אות הייתה נצמדת לשכנתה (הרס טוקניזציה).
+const NOTE_MARKER_RE = /([\u05D0-\u05EA]\u05F3|[\u05D0-\u05EA]{1,2}\u05F4)[ \u00A0]+/g;
 
 function glueNoteMarkers(text) {
-  // סמן הערה אינו נשבר מסוף שורה (BRZ-11): סמן + המילה שאחריו → NBSP
-  return text.replace(/([\u05D0-\u05EA]\u05F3(?=[\u05D0-\u05EA]))\s+/g, '$1\u00A0');
+  // BRZ-11: סמן הערה אינו נשבר מסוף שורה — סמן + המילה שאחריו הופכים יחידת NBSP.
+  // דפדוף על NOTE_MARKER_RE (גרש חובה) + look-ahead למילת תוכן; גרשיים→גרש (one-way Z.ai fix).
+  return text.replace(NOTE_MARKER_RE, (m, marker) => marker.replace('\u05F4', '\u05F3') + '\u00A0');
 }
 
 function glueGershayim(text) {
