@@ -32,7 +32,7 @@ function tokenize(bodyLines) {
   tokenSeq = 0;
   const tokens = [];
   for (const raw of bodyLines) {
-    const line = normalizeText(raw.trim());
+    let line = normalizeText(raw.trim()); // editable: editorial ##…## מוסר מהשורה (Spec §7)
     if (!line) continue;
 
     let m = line.match(HEADING_RE);
@@ -45,11 +45,11 @@ function tokenize(bodyLines) {
       tokens.push(mkToken('endnote', { text: line.replace(ENDNOTE_PREFIX, '').trim(), raw: line }));
       continue;
     }
-    // editorial ##…## — הסרה מלאה (נרשם)
+    // editorial ##…## — הסרה מלאה (נרשם; לעולם לא נגלה בפלט — Spec §7)
     const editorial = line.match(/##(.+?)##/g);
     if (editorial) {
       for (const e of editorial) tokens.push(mkToken('editorial', { text: e.slice(2, -2), removed: true }));
-      line = line.replace(/##.+?##/g, '').trim();
+      line = line.replace(/##.+?##/g, ' ').replace(/\s+/g, ' ').trim();
       if (!line) continue;
     }
 
@@ -59,7 +59,7 @@ function tokenize(bodyLines) {
     const parts = [];
     const notes = [];
     // בנייה לפי pairs משמאל לימין (outermost first)
-    const outer = segs.pairs.filter(p => p.depth === 0).sort((a, b) => a.open - b.open);
+    const outer = segs.pairs.filter(p => p.depth === 1).sort((a, b) => a.open - b.open); // חיצוניים בלבד (depth 1)
     for (const p of outer) {
       const before = line.slice(cursor, p.open).trim();
       if (before) parts.push({ kind: 'text', value: before });
