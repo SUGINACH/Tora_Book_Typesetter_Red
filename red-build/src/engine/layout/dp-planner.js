@@ -10,11 +10,19 @@ const { usedHeight, pageImbalance } = require('./balancing');
 const { generateCandidates } = require('./candidate-generator');
 const { blockGapPx } = require('./column-flow');
 
-/** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism). */
+/** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism).
+ * תיקון S7-E2E: tokenId נמצא ב‑meta של pushLines (לא על השורה עצמה) — יש לחלץ משם,
+ * אחרת hash/TOC מאבדים את מזהה הטוקן (באג V23: headingsForToc ריק). */
+function lineTokenId(ln) {
+  if (ln.tokenId != null) return ln.tokenId;
+  if (ln.meta && ln.meta.tokenId != null) return ln.meta.tokenId;
+  return '';
+}
+
 function layoutHash(pages) {
   const canon = pages.map(p => ({
     i: p.index, t: p.type,
-    c: p.columns.map(col => col.map(ln => `${ln.tokenId || ''}:${(ln.words || []).join('\u00A7')}`)),
+    c: p.columns.map(col => col.map(ln => `${lineTokenId(ln)}:${(ln.words || []).join('\u00A7')}`)),
     fn: p.footnotes.length, sn: p.sideNotes.length
   }));
   return crypto.createHash('sha256').update(JSON.stringify(canon), 'utf8').digest('hex');
@@ -394,4 +402,4 @@ function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, s
   return maxFit;
 }
 
-module.exports = { planPages, layoutHash };
+module.exports = { planPages, layoutHash, lineTokenId };
