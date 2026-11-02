@@ -74,11 +74,18 @@ function typeset(rawText, settings, env = {}) {
     if (t.type === 'heading') {
       if (t.level === 1) currentPart++;
       const hSize = settings[`heading-${t.level}-size-pt`];
-      const wLimit = t.level <= 1 ? fullWidthWidth(settings) : columnWidthFor({ kind: 'heading', level: t.level }, settings);
-      const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => api.measureTextWidth(x, hSize), wLimit);
+      // צריכת heading-N-font: גופן כותרת משפיע על רוחב מדידה (S4.1.4 — מניעת phantom key)
+      const hFont = settings[`heading-${t.level}-font`];
+      // צריכת heading-N-mode (REQ-HDG-02): full-width | regular | side-note | new-page
+      const hMode = settings[`heading-${t.level}-mode`];
+      const wLimit = (t.level <= 1 || hMode === 'full-width')
+        ? fullWidthWidth(settings)
+        : columnWidthFor({ kind: 'heading', level: t.level }, settings);
+      const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => api.measureTextWidth(x, hSize, hFont), wLimit);
       const lines = api.layoutLines(words, wLimit, hSize, {});
       blocks.push({
-        kind: 'heading', level: t.level, tokenId: t.id, part: currentPart,
+        kind: 'heading', level: t.level, tokenId: t.id, part: currentPart, mode: hMode, font: hFont,
+        forceNewPage: hMode === 'new-page', sideNote: hMode === 'side-note',
         lines: lines.map(ln => ({ ...ln, kind: 'heading', tokenId: t.id, level: t.level }))
       });
       continue;
@@ -152,13 +159,24 @@ function typeset(rawText, settings, env = {}) {
   });
 
   // ---- TOC ----
+  // תיקון S8: מקור הסמכות הוא אובייקטי ה‑heading מהטוקניזציה (לא שורות —
+  // כותרת בת 2 שורות הייתה נסרקת פעמיים). דף יעד = העמוד הראשון שמכיל שורה
+  // עם אותו tokenId. רמות 0 (ספר/הקדמה) נכללות לפי toc-level-0-show.
   const { buildTocEntries, splitGeneralDetail } = require('../decoration/toc-builder');
-  const headingsForToc = [];
+  const firstPageByToken = new Map();
   for (const pg of pages) {
     for (const col of pg.columns) for (const ln of col) {
-      if (ln.kind === 'heading' && ln.level >= 1) headingsForToc.push({ level: ln.level, text: ln.words.join(' '), page: pg.index });
+      if (ln.tokenId != null && !firstPageByToken.has(ln.tokenId)) firstPageByToken.set(ln.tokenId, pg.index);
     }
   }
+  const headingsForToc = [];
+  for (const b of blocks) {
+    if (b.kind !== 'heading') continue;
+    const page = firstPageByToken.has(b.tokenId) ? firstPageByToken.get(b.tokenId) : -1;
+    if (page < 0) continue; // כותרת שלא נטמעה בדפוס (נרשם בledger ב‑DP) — לא נגלה בשקט ל‑TOC
+    headingsForToc.push({ level: b.level, text: b.lines.map(l => l.words.join(' ')).join(' ').trim(), page });
+  }
+  headingsForToc.sort((a, b) => a.page - b.page); // מסדר קריאה — דטרמיניסטי
   const tocEntries = buildTocEntries(headingsForToc, settings, numbers);
   const toc = splitGeneralDetail(tocEntries);
 
