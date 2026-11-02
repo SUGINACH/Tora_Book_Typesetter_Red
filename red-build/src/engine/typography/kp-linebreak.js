@@ -20,11 +20,12 @@ function buildItems(words, measure) {
     // יחידת NBSP פוצלת לתת־קופסאות עם **אי־שבירה אסורה** (INF penalty) ביניהן:
     // כך DP רואה את הרוחב האמיתי (כולל רווחים פנימיים) אך לעולם לא קורע את הצמד.
     // (לקח V23: רוחב חסר של unit צמוד → מדידת שורה שגויה → badness מוטה.)
-    // U+E000 (רווח אטומי בתוך הערה) אינו מקום שבירה כלל — ממורג כ‑NBSP לפני פיצול.
-    const parts = w.replace(/\uE000/g, '\u00A0').split('\u00A0');
+    // U+E000 (רווח אטומי בתוך הערה) אינו מקום שבירה כלל — נשמר בתוך תת־הקופסה
+    // ומוחלף ל‑NBSP רק בפליטה; כך unit שלם לעולם לא נקרע (REQ-LB-04).
+    const parts = w.split('\u00A0');
     for (let k = 0; k < parts.length; k++) {
       if (k > 0) items.push({ kind: 'penalty', forbidden: true, cost: INF });
-      items.push({ kind: 'box', text: parts[k], width: Math.max(1, measure(parts[k])) });
+      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(1, measure(parts[k])) });
       if (k < parts.length - 1) items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO, internal: true });
     }
     if (i < words.length - 1) {

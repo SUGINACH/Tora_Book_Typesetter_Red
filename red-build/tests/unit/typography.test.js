@@ -79,11 +79,21 @@ describe('REQ-LB-04 atomic footnote width', () => {
     assert(!/\u0020/.test(p.notes[0]), 'no plain spaces remain inside the atomic note');
   });
   it('U+E000 inside note keeps it a single measured box (no split)', () => {
-    // האשם המדויק של REQ-LB-04: יחידת הערה עם רווחים אטומיים חייבת לשרוד כקופסה אחת
+    // האשם המדויק של REQ-LB-04: יחידת הערה עם רווחים אטומיים חייבת לשרוד כקופסה אחת.
+    // ההבטחה המבנית: אין שבירה בתוך היחידה — גם מול טור צר שלא יכול להכיל אותה.
     const noteUnit = 'הערה\uE000ארוכה\uE000מאוד';
-    const lines = breakLines(['טקסט', `[${noteUnit}]`, 'סוף'], COLW, W, 20, {});
-    const allWords = lines.flatMap(l => l.words);
-    assert(allWords.includes(`[${noteUnit}]`), `atomic unit survived as one box; got: ${JSON.stringify(allWords)}`);
+    const target = `[${noteUnit}]`;
+    // (א) טור רגיל: היחידה נשארת קופסה אחת
+    const linesWide = breakLines(['טקסט', target, 'סוף'], COLW, W, 20, {});
+    const allWordsWide = linesWide.flatMap(l => l.words);
+    assert(allWordsWide.some(w => w.replace(/\u00A0/g, '\uE000') === target),
+      `atomic unit survived as one box; got: ${JSON.stringify(allWordsWide)}`);
+    // (ב) טור צר בכוונה — היחידה עדיין לא נקרעת (ללא מקף, ללא פיצול)
+    const narrow = Math.round(W(target)) - 40;
+    const linesNarrow = breakLines(['טקסט', target, 'סוף'], narrow, W, 20, {});
+    const allWordsNarrow = linesNarrow.flatMap(l => l.words);
+    assert(allWordsNarrow.some(w => w.replace(/\u00A0/g, '\uE000') === target),
+      `narrow column must NOT split the atomic unit; got: ${JSON.stringify(allWordsNarrow)}`);
   });
 });
 

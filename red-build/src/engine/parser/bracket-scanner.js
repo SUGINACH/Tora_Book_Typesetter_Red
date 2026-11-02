@@ -14,18 +14,25 @@ const CLOSER_FORMS = [
   { first: ']', len: 2, next: '\u05DD', name: 'hebrew-mem-sofit' },
 ];
 
-/** Return the closer form matching at text[i], or null. Longest form wins. */
+/**
+ * Return the closer form matching at text[i], or null.
+ * Deterministic longest-match: we scan the whole registry, keep every form
+ * whose characters actually match at position i, and return the one consuming
+ * the most characters. Registry order can never change the outcome.
+ */
 function matchCloser(text, i) {
-  // Two-char Hebrew form takes precedence over the one-char ASCII form.
+  let best = null;
   for (const f of CLOSER_FORMS) {
     if (text[i] !== f.first) continue;
+    // Verify all trailing characters declared by the form (if any).
+    let ok = true;
     if (f.next !== undefined) {
-      if (i + f.len - 1 < text.length && text[i + f.len - 1] === f.next) return f;
-    } else {
-      return f;
+      const lastIdx = i + f.len - 1;
+      ok = lastIdx < text.length && text[lastIdx] === f.next;
     }
+    if (ok && (!best || f.len > best.len)) best = f;
   }
-  return null;
+  return best;
 }
 
 /**
