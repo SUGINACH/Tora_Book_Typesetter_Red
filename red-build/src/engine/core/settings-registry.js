@@ -77,17 +77,20 @@ const registry = [
   ])),
 
   // ---- הערות (NOTES) ----
+  // REQ-FN-05 (S7): מצב קיבץ — מקור־האמת היחיד לנתיב ההערות. footnotes=endnotes=false ⇒ inline.
+  K('note-placement-mode', 'enum', 'footnotes', P.NOTES, 'sel-note-mode', ['core/pipeline', 'layout/dp-planner', 'layout/endnote-pages'], 'fx:note-mode', { enum: ['footnotes', 'endnotes', 'inline'] }),
   K('footnotes-enabled', 'bool', true, P.NOTES, 'chk-fn-enabled', ['layout/footnote-budget'], 'fx:fn-on'),
   K('footnote-marker-style', 'enum', 'hebrew-geresh', P.NOTES, 'sel-fn-marker', ['layout/footnote-budget'], 'fx:fn-marker', { enum: ['hebrew-geresh', 'parenthesis', 'asterisk', 'decimal'] }),
   K('footnote-reset-policy', 'enum', 'page', P.NOTES, 'sel-fn-reset', ['layout/footnote-budget'], 'fx:fn-reset', { enum: ['continuous', 'page', 'section', 'part'] }),
   K('footnote-columns', 'number', 1, P.NOTES, 'sel-fn-cols', ['layout/footnote-budget'], 'fx:fn-cols', { enum: [1, 2] }),
   K('footnote-separator-rule', 'enum', 'regular', P.NOTES, 'sel-fn-rule', ['output/dom-renderer'], 'fx:fn-rule', { enum: ['none', 'regular', 'circles', 'sparkle', 'star', 'diamond'] }),
   K('fn-layout-mode', 'enum', 'block', P.NOTES, 'sel-fn-layout', ['layout/footnote-budget'], 'fx:fn-layout', { enum: ['block', 'continuous'], note: 'REQ-FN-07 השלמה מ‑V21' }),
-  K('endnotes-enabled', 'bool', false, P.NOTES, 'chk-endnotes', ['layout/endnote-pages'], 'fx:endnotes-on'),
+  K('endnotes-enabled', 'bool', false, P.NOTES, 'chk-endnotes', ['layout/endnote-pages'], 'fx:endnotes-on', { note: 'נגזר מ‑note-placement-mode=endnotes (derivePlacementFlags); נשמר לצרכנים ישירים' }),
   K('endnote-title-text', 'string', 'הערות', P.NOTES, 'inp-endnote-title', ['layout/endnote-pages'], 'fx:endnote-title'),
   K('f-note-body-font', 'font', 'Frank Ruhl Libre', P.NOTES, 'sel-fnote-body-font', ['typography/measure-api'], 'fx:fnote-body-font'),
   K('s-note-body-font', 'font', 'Frank Ruhl Libre', P.NOTES, 'sel-snote-body-font', ['typography/measure-api'], 'fx:snote-body-font'),
-  K('long-footnote-policy', 'enum', 'split', P.NOTES, 'sel-long-fn', ['layout/footnote-budget'], 'fx:long-fn', { enum: ['split', 'move-whole'], note: 'REQ-FN-02 (open question #3 → split כברירת מחדל, ניתן לשינוי)' }),
+  K('fn-bar-max-height-px', 'number', 220, P.NOTES, 'rng-fn-bar-max', ['layout/dp-planner'], 'fx:fn-bar-max', { min: 40, max: 600, note: 'S7.1.3: תקרת מרזב — חריגה מפעילה אסדרה לפי long-footnote-policy' }),
+  K('long-footnote-policy', 'enum', 'split', P.NOTES, 'sel-long-fn', ['layout/footnote-budget', 'layout/dp-planner'], 'fx:long-fn', { enum: ['split', 'move-whole', 'reject-to-body'], note: "REQ-FN-02 (open question #3 → split כברירת מחדל); reject-to-body = מסלול BRZ-15 (השבה מלאה לגוף — לעולם אין גניזת מילים)" }),
 
   // ---- איכות עימוד (QUALITY) ----
   K('prevent-widows-top', 'bool', true, P.QUALITY, 'chk-widow-top', ['layout/protections-matrix'], 'fx:widow-top', { note: 'טוגל נפרד לתחילת עמוד (Mapping #4)' }),
@@ -163,8 +166,27 @@ function getSettingDefs() { return registry.slice(); }
 function getDefaultSettings() {
   const o = {};
   for (const r of registry) o[r.id] = r.default;
-  return { settings_version: 2, ...o };
+  return derivePlacementFlags({ settings_version: 2, ...o });
 }
 function findKey(id) { return registry.find(r => r.id === id) || null; }
 
-module.exports = { getSettingDefs, getDefaultSettings, findKey, PANELS: P, registry };
+/**
+ * REQ-FN-05 (S7.1.4): מקור־האמת היחיד לנתיב ההערות הוא note-placement-mode.
+ * הדגלים endnotes-enabled / footnotes-enabled נגזרים ממנו **בכל כניסה למנוע** —
+ * כך ששינוי דגל בודד (מקרא JSON ישן, טופס חלקי) לעולם לא מייצר מצב סותר
+ * שהיה גורם לאובדן הערות (BRZ-15 — לקח V23: src/out diverged per mode).
+ * - 'footnotes' ⇒ מרזב תחתון פעיל, אין עמודי סיום.
+ * - 'endnotes'  ⇒ אין מרזב; ההערות הצמודות לגוף זורמות לעמודי 'הערות'.
+ * - 'inline'    ⇒ אין מרזב ואין עמודי סיום; ההערות נשארות בגוף כplaceholder מלא.
+ */
+function derivePlacementFlags(s) {
+  if (!s) return s;
+  switch (s['note-placement-mode']) {
+    case 'endnotes': s['endnotes-enabled'] = true; s['footnotes-enabled'] = false; break;
+    case 'inline':   s['endnotes-enabled'] = false; s['footnotes-enabled'] = false; break;
+    default:         s['endnotes-enabled'] = false; s['footnotes-enabled'] = true;
+  }
+  return s;
+}
+
+module.exports = { getSettingDefs, getDefaultSettings, findKey, derivePlacementFlags, PANELS: P, registry };

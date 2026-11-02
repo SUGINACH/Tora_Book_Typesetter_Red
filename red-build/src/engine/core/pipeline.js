@@ -132,6 +132,7 @@ function typeset(rawText, settings, env = {}) {
     if (dh) { dh.font = settings['dh-font']; }
     const allWords = [];
     const notes = [];
+    const bodyMarkers = []; // [1],[2]… כפי שנדחקו לגוף (נרנדרים ונספרים בצד התוצר)
     let noteSeq = 0;
     for (const p of t.parts) {
       if (p.kind === 'text') allWords.push(...normalizeText(p.value).split(/\s+/).filter(Boolean));
@@ -152,16 +153,25 @@ function typeset(rawText, settings, env = {}) {
           allWords.push(`${marker}:${String(noteRaw).replace(/\uE000/g, ' ')}`);
           continue;
         }
+        // **S9-fix (fn-off semantics):** footnotes-disabled ⇒ אין מרזב ואין מקום
+        // להציג סמן־בלבד (היה מוביל לאובדן טקסט הערה — אסור על פי BRZ-15).
+        // ההערה חוזרת לגוף כplaceholder מלא `marker:text` (מסלול endnote-סימטרי),
+        // ו‑srcWordsOf סופר באותו מצב את מילות ההערות המלאות — זהות צדדים נשמרת.
+        if (!settings['footnotes-enabled']) {
+          allWords.push(`${marker}:${String(noteRaw).replace(/\uE000/g, ' ')}`);
+          continue;
+        }
         notes.push({ text: noteRaw.replace(/\uE000/g, ' '), marker, tokenId: t.id, noteIndex: p.noteIndex });
         // בגוף נדחק **הסמן בלבד** (נמדד כרוחב סמן אמיתי) — כך מילים אינן נספרות פעמיים.
         allWords.push(marker);
+        bodyMarkers.push(marker);
       }
     }
     // f-note-body-font: מדידת גופן גוף ההערות — משפיע על גובה מרזב ההערות
     // (reserveNotes בודק את settings['f-note-body-font'] דרך widthFor; כאן נשמר הצימוד).
     const protectedWords = protectWords(allWords, (x) => api.measureTextWidth(x), colW);
     const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] });
-    const blk = { kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, lines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh };
+    const blk = { kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, bodyMarkers, lines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh };
     // CP3.4: first-word AFTER line-plan, BEFORE render — metadata בלבד, geometry-neutral
     const fwRes = applyDropWord(blk, settings, api);
     if (fwRes.applied) fwCount++;
@@ -269,36 +279,48 @@ function typeset(rawText, settings, env = {}) {
   const wordSeq = (s0) => scrubForCompare(s0).split(' ').filter(Boolean);
   function srcWordsOf(t) {
     if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
-    // **S7-E2E תיקון#3 (BRZ-15 — זהות צדדים, DUAL-MODE AWARE):**
-    // כללי יסוד: multiset המקור חייב להיות **זהה במבנה** ל‑outWordsOf. שני מצבי הערות:
+    // **S7-E2E תיקון#3 + S9-fix (BRZ-15 — זהות צדדים, TRI-MODE AWARE):**
+    // כללי יסוד: multiset המקור חייב להיות **זהה במבנה** ל‑outWordsOf. שלושה מצבי הערות:
     //  (א) footnotes (default): בגוף נדחק הסמן `[n]` בלבד; טקסט ההערה נספר דרך
-    //      blk.notes (מרזב התחתון). ⇒ src = body(text-parts) + markers[n].
+    //      מרזב ההערות (acceptedNoteKeys). ⇒ src = body(text-parts) + markers[n].
     //  (ב) endnote-mode (`endnotes-enabled=true`): ההערה **אינה** נדחקת למרזב —
-    //      היא חוזרת בגוף כplaceholder מלא `marker:text` (ללא אובדן מילים).
-    //      ⇒ src = body(text-parts) + מילות ההערות המלאות (הסמן נכלל בplaceholder
-    //        החוזר — אין להוסיפו בנפרד, אחרת נספר פעמיים).
-    // בעבר: src תמיד הוסיף markers ו‑out תמיד הוסיף note-texts → במצב (ב) נוצר
-    // פער `-1` לכל מילת הערה ("הערה ראשונה להפניה"). עכשיו שני הצדדים מסונכרנים
+    //      היא חוזרת בגוף כplaceholder מלא `marker:text`. ⇒ src = body + note texts.
+    //  (ג) fn-off (`footnotes-enabled=false`): אין מרזב — גם כאן ההערה חוזרת לגוף
+    //      כplaceholder מלא (S9-fix). ⇒ src = body + note texts (כמו ב').
+    // בעבר: src תמיד הוסיף markers ו‑out תמיד הוסיף note-texts → במצבים (ב)/(ג) נוצר
+    // פער שיטתי לכל מילת הערה ("הערה ראשונה להפניה"). עכשיו שני הצדדים מסונכרנים
     // לאותו מצב — ללא תלות ברצף (גם אחרי reject-to-body, שבו ההערה חוזרת לגוף).
     const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
     const refs = t.parts.filter(p => p.kind === 'note-ref');
-    if (settings['endnotes-enabled']) {
+    if (settings['endnotes-enabled'] || !settings['footnotes-enabled']) {
       const full = refs.map(p => String(t.notes[p.noteIndex]).replace(/\uE000/g, ' ')).join(' ');
       return [...wordSeq(body), ...wordSeq(full)];
     }
     const markers = refs.map((_, i) => `[${i + 1}]`);
     return [...wordSeq(body), ...markers];
   }
+  /**
+   * מציאת ההערות שהתקבלו למרזב בפועל: ה‑DP מעתיק את רשימת ההערות לתוך
+   * page.footnotes (reserveNotes) — ולכן דגלי rejected שנקבעים אחר־כך על
+   * העתקים אינם נראים כאן. מקור הסמכות היחיד הוא עמודי הפלט: הערה whose
+   * (tokenId, noteIndex) נמצאת במרזב → נספרת; נדחתה (reject-to-body) →
+   * אינה נספרת (מילותיה כבר בגוף כplaceholder). זהות צדדים מובטחת
+   * ללא תלות בניב המדיניות (S6/S7 — BRZ-15 "no silent word loss").
+   */
+  const acceptedNoteKeys = new Set();
+  for (const pg of pages) {
+    for (const n of pg.footnotes) acceptedNoteKeys.add(`${n.tokenId}#${n.noteIndex}`);
+  }
   function outWordsOf(blk) {
     if (blk.kind === 'heading') return wordSeq(blk.lines.map(l => l.words.join(' ')).join(' '));
     if (blk.kind === 'endnote') return wordSeq(blk.text);
     // גוף: הסמנים [n] נספרים כפי שנדחקו; הערות נספרות מ‑notes בלבד — ללא כפילות.
-    // תיקון S9: אם ההערה **נדחתה** מהמרזב (long-footnote-policy), טקסט ההערה
-    // נשאר בגוף כ placeholder — נספור אותו מהגוף כדי שה‑multiset לא יכיל חוסר.
+    // סנכרון עם מקור הסמכות של לעיל: רק הערות שהתקבלו למרזב נספרות מכאן.
     const body = blk.lines.map(l => l.words.join(' ')).join(' ');
-    const notes = (blk.notes || []).filter(n => !n.rejected).map(n => n.text).join(' ');
-    const rejected = (blk.notes || []).filter(n => n.rejected).map(n => n.text).join(' ');
-    return [...wordSeq(body), ...wordSeq(notes), ...wordSeq(rejected)];
+    const notes = (blk.notes || [])
+      .filter(n => acceptedNoteKeys.has(`${n.tokenId}#${n.noteIndex}`))
+      .map(n => n.text).join(' ');
+    return [...wordSeq(body), ...wordSeq(notes)];
   }
   const srcTokens = tokens.filter(t => t.type !== 'editorial');
   let contentPreserved = true;
