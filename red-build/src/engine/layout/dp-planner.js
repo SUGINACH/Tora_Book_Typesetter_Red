@@ -175,6 +175,46 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     void added;
   }
 
+  /**
+   * תיקון S7-E2E (BRZ-15): השבת הערות חרגה — long-footnote-policy='reject-to-body'.
+   * אם מרזב ההערות של עמוד חורג מגובה התקציב (fn-bar-max-height-px), ההערות
+   * הארוכות ביותר מוחזרות **לגוף** כplaceholder מלא `[n: טקסט ההערה]` עם דגל rejected.
+   * ללא החזרה זו — מילים נגונזות בשקט (באג V23). ההחזרה נעשית BEFORE balance/retreat
+   * כדי שהפריסה מחדש של הגוף תתרחש במסלול הרגיל (geometry עדכנית, ledger שקוף).
+   */
+  function applyFootnoteOverflowPolicy() {
+    const policy = settings['long-footnote-policy'] || 'allow';
+    if (policy !== 'reject-to-body') return;
+    const barMax = settings['fn-bar-max-height-px'] || Infinity;
+    for (const page of pages) {
+      if (!page.footnotes.length) continue;
+      if ((page.fnReservedHeightPx || 0) <= barMax) continue;
+      // החזר מהארוךmost עד שהמרזב שב לתקציב
+      const sorted = page.footnotes.slice().sort((a, b) => b.heightPx - a.heightPx);
+      for (const n of sorted) {
+        if ((page.fnReservedHeightPx || 0) <= barMax) break;
+        const blk = blocks.find(b => b.tokenId === n.tokenId && (b.notes || []).some(x => x.noteIndex === n.noteIndex));
+        if (!blk) continue;
+        // placeholder מלא בגוף — המילים נשארות במולטיסט (scrub ⟦⟧ כבר מטפל בחיוג)
+        const idx = blk.lines.findIndex(l => l.words && l.words.includes(n.marker));
+        const full = `${n.marker}:${String(n.text).replace(/ /g, '\u00A0')}`;
+        if (idx >= 0) {
+          blk.lines[idx].words = blk.lines[idx].words.map(w => (w === n.marker ? full : w));
+          blk.lines[idx].widthPx = measureFn(full.replace(/\u00A0/g, ' '), settings['body-font-size-pt']);
+        } else {
+          blk.lines.push({ words: [full], widthPx: measureFn(full.replace(/\u00A0/g, ' '), settings['body-font-size-pt']), heightPx: lineH, isLast: false, tokenId: blk.tokenId, kind: 'paragraph', part: 'rest' });
+        }
+        blk.rejectedNotes = blk.rejectedNotes || [];
+        blk.rejectedNotes.push({ ...n, rejected: true, reason: `bar overflow ${page.fnReservedHeightPx}>${barMax}` });
+        const at = page.footnotes.findIndex(x => x === n);
+        if (at >= 0) page.footnotes.splice(at, 1);
+        recomputeFnBudget(page);
+        eventLog.emit('notes-budget', 'footnote-rejected-to-body', { token: n.tokenId, marker: n.marker, barMax }, page.index);
+        ledger.create('fn-out-of-order', `rejected@p${page.index}`, page.index, { marker: n.marker, reason: 'bar overflow → body' }, 'notes-budget');
+      }
+    }
+  }
+
   /** רוחב מילת הערה לפי גופן גוף ההערה (f-note-body-font) — פרופיל ratchet שמרני. */
   function widthForNote(text, sizePt, fontName) {
     const base = measureFn(text, sizePt);
