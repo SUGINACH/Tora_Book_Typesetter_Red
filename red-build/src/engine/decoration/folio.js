@@ -1,4 +1,4 @@
-// src/engine/decoration/folio.js — Page numbering: Hebrew letters, frames, positions, initial value (REQ-HDR-03/04)
+// src/engine/decoration/folio.js — Page numbering: Hebrew letters, frames, positions, initial value (REQ-HDR-03/04, S9)
 'use strict';
 
 const UNITS = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
@@ -60,42 +60,73 @@ function formatPageNumber(value, settings) {
   }
 }
 
+/** מסגרות CSS (badge) לעומת מסגרות טקסטואליות (D-61):
+ *  circle/square — טבעת/תיבה מצוירות ב‑CSS (class folio--frame-*), הטקסט עצמו לא משתנה;
+ *  parenthesis/squares/floral/diamond — תווית טקסטואלית סביב המספר. */
+function isCssFrame(frame) {
+  return frame === 'circle' || frame === 'square';
+}
+
 function frameNumber(text, frame) {
   switch (frame) {
-    case 'circle': case 'parenthesis': return `(${text})`;
-    case 'square': return `[${text}]`;
-    case 'floral': return `❦ ${text} ❦`;
-    case 'diamond': return `◇ ${text} ◇`;
-    default: return text;
+    case 'parenthesis': return `(${text})`;
+    case 'squares': return `[${text}]`;
+    case 'floral': return `\u2766 ${text} \u2766`;
+    case 'diamond': return `\u25C7 ${text} \u25C7`;
+    default: return text; // none / circle / square — circle ו־square מצוירים ב‑CSS
   }
+}
+
+/** תווית תצוגה ל‑TOC — תמיד לפי פורמט המספור, בלי מסגרת (המסגרת שייכת לגיליון בלבד). */
+function tocPageLabel(value, settings) {
+  return formatPageNumber(value, settings);
 }
 
 /**
  * הקצאת מספרים לפי כללי count/show per type (shaar/toc/endnotes checkboxes).
- * **D-36 (תיקון P1-8):** עמודי פתיחה (פרק/סימן, chapterOpening) — נספרים אך לא
- * מציגים גיליון (מוסכמת ספרים: עמודי שער אינם ממוספרים לעין).
- * עמודי הערות־סיום נספרים רק אם count-endnote-pages=true (ברירת מחדל: לא).
- * @param {Array} pages - [{type, template:{counts, numbered}, chapterOpening}]
+ * **D-36:** עמודי פתיחה (פרק/סימן, chapterOpening) — נספרים אך לא מציגים גיליון.
+ * **S9 (D-61) — שחזור נוסחת V1 (REQ-HDR-03):** לכל עמוד נספר נספר סוד (ordinal)
+ * עולה. הערך האפקטיבי = סוד − start‑idx + initial‑value; הגיליון מוצג רק כאשר
+ * סוד ≥ start‑idx (ב‑V1: `pNum >= startIdx`, formatPageNumberDisplay).
+ * **S9 (D-62):** עמודי toc-general/toc-detail מציגים גיליון רק אם נספרים
+ * (count-toc-pages) וגם show-numbering שלהם דלוק (Orange eb21383 wiring).
+ * @param {Array} pages - [{type, template:{counts}, chapterOpening}]
  */
 function assignNumbers(pages, settings) {
-  let v = settings['page-num-initial-value'] || 1;
+  const startIdx = Math.max(1, Math.round(settings['page-num-start-idx'] || 1));
+  const initialValue = Math.round(settings['page-num-initial-value'] || 1);
+  const posNone = settings['page-num-position'] === 'none';
+  let ordinal = 0;
   return pages.map(p => {
     const tpl = p.template;
     let counted = !!tpl.counts;
-    if (p.type.startsWith('shaar')) counted = counted && settings['count-shaar-pages'];
-    if (p.type.startsWith('toc')) counted = counted && settings['count-toc-pages'];
+    if (p.type === 'shaar-main' || p.type === 'shaar-sub' || p.type === 'shaar-back') counted = counted && settings['count-shaar-pages'];
+    if (p.type === 'toc-general') counted = counted && settings['count-toc-pages'];
+    if (p.type === 'toc-detail') counted = counted && settings['count-toc-pages'];
     if (p.type === 'endnotes') counted = counted && (settings['count-endnote-pages'] === true);
     if (p.type === 'custom' && p.counted === false) counted = false; // PT-09: "האם נספר" — לפי ההגדרה
-    if (!counted) return { page: null, display: '', shown: false };
-    const cur = v++;
+    if (!counted) return { page: null, ordinal: null, display: '', shown: false, counted: false };
+    ordinal++; // סוד העמוד הנספר (1 ואילך)
+    const effective = ordinal - startIdx + initialValue;
     // D-36: פתיחת פרק/סימן — נספר, לא מוצג; עמודי הערות לא מציגים כותרת עליונה ממילא
     const suppressDisplay = p.chapterOpening === true;
+    // D-62: show-numbering של עמודי תוכן־העניינים (מוחל רק כשנספרים)
+    let showFlag = true;
+    if (p.type === 'toc-general') showFlag = settings['general-toc-show-numbering'] !== false;
+    if (p.type === 'toc-detail') showFlag = settings['detailed-toc-show-numbering'] !== false;
+    const visible = ordinal >= startIdx; // V1: הצגה רק מ‑start‑idx ואילך
+    const display = visible ? frameNumber(formatPageNumber(effective, settings), settings['page-num-frame']) : '';
     return {
-      page: cur,
-      display: frameNumber(formatPageNumber(cur, settings), settings['page-num-frame']),
-      shown: settings['page-num-position'] !== 'none' && !suppressDisplay
+      page: effective,
+      ordinal,
+      display,
+      shown: !posNone && visible && !suppressDisplay && showFlag,
+      counted: true,
     };
   });
 }
 
-module.exports = { toHebrewNumber, formatPageNumber, frameNumber, assignNumbers };
+module.exports = {
+  toHebrewNumber, formatPageNumber, frameNumber, tocPageLabel,
+  isCssFrame, assignNumbers,
+};

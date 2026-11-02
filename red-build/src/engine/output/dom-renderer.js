@@ -61,6 +61,7 @@ const { planDecorations } = require('../decoration/page-decorations');
 const { resolveShaarBox } = require('../decoration/shaar-boxes');
 const { columnDividerHeightPx } = require('../decoration/ornament-fit');
 const { MM_TO_PX } = require('../layout/page-templates');
+const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -129,19 +130,99 @@ function renderFootnoteArea(page, settings, doc) {
   return area;
 }
 
+/** **S9 (D-61):** גיליון עמוד — מקור יחיד לכל סוגי העמודים (בעבר 4 העתקים).
+ * מסגרות CSS (circle/square) מרונדרות כ‑badge עם מחלקה; הטקסטואליות כבר בתוך התצוגה. */
+function renderFolio(page, settings, doc) {
+  if (!page.folioDisplay || settings['page-num-position'] === 'none') return null;
+  const folio = doc.createElement('footer');
+  folio.className = `folio folio--${settings['page-num-position']} folio--frame-${settings['page-num-frame']}`;
+  if (isCssFrame(settings['page-num-frame'])) {
+    const badge = doc.createElement('span');
+    badge.className = `page-num-badge page-num-frame-${settings['page-num-frame'] === 'circle' ? 'circle' : 'box'}`;
+    badge.textContent = page.folioDisplay;
+    folio.appendChild(badge);
+  } else {
+    folio.textContent = page.folioDisplay;
+  }
+  return folio;
+}
+
 function renderHeader(header, doc) {
   if (!header) return null;
   const el = doc.createElement('div');
   el.className = `running-head head--sep-${header.separator}`;
   el.dir = 'rtl';
+  // **S9 (D-61):** צורה חדשה {slots} עם עצמאות מלאה לכל סלוט (מקור/יישור/גופן/גודל/רוחב);
+  // תאימות לאחור לצורה הישנה ({right,center,left}) לבדיקות ≤S8.
+  const slots = header.slots || { right: header.right, center: header.center, left: header.left };
   for (const pos of ['right', 'center', 'left']) {
+    const s = slots[pos];
+    if (!s) continue;
     const slot = doc.createElement('span');
-    slot.className = `head-slot head-slot--${pos} align-${header[pos].align}`;
-    slot.style.width = `${header[pos].widthPct}%`;
-    slot.textContent = scrubPUAText(header[pos].text || '');
+    slot.className = `head-slot head-slot--${pos} align-${s.align}`;
+    slot.style.width = `${s.widthPct}%`;
+    if (s.font) slot.style.fontFamily = s.font;
+    if (s.sizePt) slot.style.fontSize = `${Math.round(s.sizePt * (96 / 72) * 100) / 100}px`;
+    slot.textContent = scrubPUAText(s.text || '');
     el.appendChild(slot);
   }
   return el;
+}
+
+/** **S9 (REQ-HDR-05):** תוכן עמוד תוכן־עניינים — שורות עם נקודות מובילות, תווית
+ * גיליון בפורמט המספור, וקישורי עוגן לחיצים (#page‑N; יעדי PDF ייבנו ב‑S12). */
+function renderTocPageContent(page, doc) {
+  const els = [];
+  const t = page.toc || {};
+  if (t.title) {
+    const el = doc.createElement('h2');
+    el.className = 'toc-page-title';
+    el.dir = 'rtl';
+    el.textContent = scrubPUAText(t.title);
+    els.push(el);
+  }
+  const wrap = doc.createElement('div');
+  wrap.className = 'toc-rows';
+  wrap.dir = 'rtl';
+  for (const r of (t.rows || [])) {
+    if (r.kind === 'group') {
+      // קבוצה (inline רצוף): "כותרת – עמוד | כותרת – עמוד" בשורה אחת (IMUD grp-item/grp-sep)
+      const g = doc.createElement('div');
+      g.className = `toc-row toc-row--group toc-lvl-${r.items[0] ? r.items[0].level : 1}`;
+      for (const it of r.items) {
+        const a = doc.createElement('a');
+        a.className = `toc-item toc-lvl-${it.level}`;
+        if (it.targetPage != null) a.setAttribute('href', `#page-${it.targetPage}`);
+        a.setAttribute('data-anchor', it.anchorId || '');
+        const txt = doc.createElement('span'); txt.className = 'grp-title';
+        txt.textContent = scrubPUAText(it.text);
+        const lab = doc.createElement('span'); lab.className = 'grp-page';
+        lab.textContent = it.label || '';
+        a.appendChild(txt); a.appendChild(lab);
+        g.appendChild(a);
+      }
+      wrap.appendChild(g);
+    } else {
+      const a = doc.createElement('a');
+      a.className = `toc-row toc-lvl-${r.level}` + (r.inline ? ' toc-row--inline' : '');
+      if (r.targetPage != null) a.setAttribute('href', `#page-${r.targetPage}`);
+      a.setAttribute('data-anchor', r.anchorId || '');
+      if (r.rowNum != null) {
+        const n = doc.createElement('span'); n.className = 'toc-num'; n.textContent = String(r.rowNum);
+        a.appendChild(n);
+      }
+      const title = doc.createElement('span');
+      title.className = 'toc-title';
+      title.textContent = scrubPUAText(r.wrapped && r.wrapped.length ? r.wrapped.join(' ') : r.text);
+      const dots = doc.createElement('span'); dots.className = 'toc-dots';
+      const label = doc.createElement('span'); label.className = 'toc-label';
+      label.textContent = r.label || '';
+      a.appendChild(title); a.appendChild(dots); a.appendChild(label);
+      wrap.appendChild(a);
+    }
+  }
+  els.push(wrap);
+  return els;
 }
 
 /** חוט מפריד בין טורים (overlay; גובה Math.min −8px — כלל V4; geometry-neutral).
@@ -283,6 +364,8 @@ function renderPage(page, settings, doc, header) {
   const root = doc.createElement('article');
   root.className = PT_CLASS[page.type] || 'page';
   root.dataset.pageIndex = String(page.index);
+  // **S9 (REQ-HDR-05):** עוגן עמוד — יעד לקישורי תוכן־העניינים הלחיצים (#page-N)
+  root.setAttribute('id', `page-${page.index}`);
   if (page.template.width != null) root.style.width = `${page.template.width}px`;
   if (page.template.height != null) root.style.height = `${page.template.height}px`;
   root.dir = 'rtl';
@@ -312,27 +395,27 @@ function renderPage(page, settings, doc, header) {
       list.appendChild(el);
     }
     root.appendChild(list);
-    if (page.folioDisplay && settings['page-num-position'] !== 'none') {
-      const folio = doc.createElement('footer');
-      folio.className = `folio folio--${settings['page-num-position']} folio--frame-${settings['page-num-frame']}`;
-      folio.textContent = page.folioDisplay;
-      root.appendChild(folio);
-    }
+    const folioEn = renderFolio(page, settings, doc);
+    if (folioEn) root.appendChild(folioEn);
     return root;
   }
 
   // **S8 (REQ-ORN-05/08):** רקעים/ערכות/תיבות שער — שכבות תשתית לפני התוכן
   for (const el of renderPageBackgroundAndShaar(page, settings, doc, page._metadata)) root.appendChild(el);
 
+  // **S9 (REQ-HDR-05):** עמודי תוכן־עניינים — שורות + נקודות + עוגנים; אין טורי גוף
+  if (page.type === 'toc-general' || page.type === 'toc-detail') {
+    for (const el of renderTocPageContent(page, doc)) root.appendChild(el);
+    const folioToc = renderFolio(page, settings, doc);
+    if (folioToc) root.appendChild(folioToc);
+    return root;
+  }
+
   // **S8 (PT-09):** עמוד מותאם — תוכן קבוע; אין טורים/כותרת עליונה
   if (page.type === 'custom') {
     for (const el of renderCustomPageContent(page, doc)) root.appendChild(el);
-    if (page.folioDisplay && settings['page-num-position'] !== 'none') {
-      const folio = doc.createElement('footer');
-      folio.className = `folio folio--${settings['page-num-position']} folio--frame-${settings['page-num-frame']}`;
-      folio.textContent = page.folioDisplay;
-      root.appendChild(folio);
-    }
+    const folioC = renderFolio(page, settings, doc);
+    if (folioC) root.appendChild(folioC);
     return root;
   }
 
@@ -365,12 +448,8 @@ function renderPage(page, settings, doc, header) {
   const fn = renderFootnoteArea(page, settings, doc);
   if (fn) root.appendChild(fn);
 
-  if (page.folioDisplay && settings['page-num-position'] !== 'none') {
-    const folio = doc.createElement('footer');
-    folio.className = `folio folio--${settings['page-num-position']} folio--frame-${settings['page-num-frame']}`;
-    folio.textContent = page.folioDisplay;
-    root.appendChild(folio);
-  }
+  const folioMain = renderFolio(page, settings, doc);
+  if (folioMain) root.appendChild(folioMain);
 
   // **S8 (REQ-ORN-01..04):** עיטורים — ציור מה־rectים בלבד (F-09 מקור יחיד)
   for (const el of renderDecorations(page, doc)) root.appendChild(el);

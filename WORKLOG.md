@@ -97,3 +97,47 @@ D-54..D-60 — ראו `DECISIONS.md`.
 
 ### ידוע ותועד (לא חוסם S8)
 FWD-3 (אורקל מדידה — S12), FWD-4 (קורפוס היסטורי — מתמשך). גרסת PDF של ממצאי עיטורים (צילומי עמוד) — עם ה־UI של S10 (הרנדר כאן הוא מודל גיאומטרי + אורקל DOM לבדיקות).
+
+---
+
+## S9 — כותרות עליונות, מספור עמודים, תוכן־עניינים (03.11.2026) — הושלם
+
+### שינויים
+- `decoration/headers-builder.js` — שכתוב מלא: עצמאות 3×2 (מקור/יישור/גופן/גודל/רוחב%/טקסט־מותאם לכל סלוט); מקורות `book-name-rest` + `first-last-words` (פורט fillHeaderFirstLastWords עם ניקוי פיסוק); `header-opening-dedicated` לפותחות H2/H3 (עוקף D-36 רק כשמופעל); resolveSameAs עם seen-set; בדיקת chapterOpening עברה לתוך buildHeader (מקור יחיד).
+- `decoration/folio.js` — נוסחת V1 הושלמה: `page-num-start-idx` (תצוגה מהסוד הזה ואילך; effective = סוד − start‑idx + initial); מסגרות נבדלות (circle/square = CSS badge; parenthesis/squares/floral/diamond = טקסטואליות); show-numbering לעמודי toc-general/toc-detail (D-62); `tocPageLabel` לתוויות TOC בפורמט המספור.
+- `decoration/toc-builder.js` — שכתוב מלא: buildTocModel (show/inline + קיבוץ inline רצוף), buildTocPages (זרימה במדידה מראש, עטיפה ≤2 שורות, קטיעה + ממצא, תקציב 20k שורות/500 עמודים), insertTocPages (הכנסה מבנית + בניית תבניות לזוגיות סופית — D-63 + ממצא binding-parity-shift כשדרוש), resolveTocTargets (עוגנים + תוויות דרך pageRef).
+- `decoration/numbering-audit.js` — חדש: pn-sequence (סודים רציפים, נוסחה, מונוטוניות תצוגה; "חסרים מוצהרים" מותרים) + pn-overflow (גיליון בתקציב 30% מרוחב תיבת תוכן) → ledger.
+- `core/pipeline.js` — הכנסת עמודי TOC לפני hash CP4; פענוח עוגנים/תוויות אחרי assignNumbers; pn-audit מחובר; opensWithHeadingLevel + firstWord/lastWord מגוף העמוד (בלי כותרות, פיסוק מנוקה); תוצר: tocPages/tocInsert/numberingAudit.
+- `core/settings-registry.js` — 26 מפתחות חדשים (18 פר‑סלוט, 4 פתיחה, start‑idx, 3 מיומנות TOC) + enum מקורות מורחב + frame `squares`. סה"כ 179 מפתחות — כולם נצרכים בפועל.
+- `output/dom-renderer.js` — renderHeader בצורה החדשה (גופן/גודל px פר‑סלוט); renderTocPageContent (שורות/קבוצות/נקודות/עוגנים `#page-N`); renderFolio מקור יחיד (במקום 4 העתקים) + badge למסגרות CSS; עוגן `id="page-N"` לכל עמוד.
+- `output/html-export.js` — CSS: folio top/in‑header, page-num-badge (circle/box — פורט V1), סגנונות TOC מלאים (רמות 1–7, קבוצות, נקודות, מספור שורות).
+
+### בדיקות
+```
+parser:            17/17
+typography:        14/14
+registry-integration: 8/8   (179 מפתחות — כולם נצרכים בפועל)
+layout-s5-s6:      17/17
+e2e-pipeline:      14/14
+s7-gate:           15/15
+s8-decoration:     39/39
+s9-headers:        25/25    (חדש — כל שערי S9.2 + REQ-HDR-01..06)
+canonical:          6/6
+negative-controls: 16/16
+————— סה"כ: 171 בדיקות ירוקות (לשעבר 146)
+test:determinism   OK (75b8c605ca3f3dd7)
+```
+
+### שערי S9 (S9.2) — מצב
+- [x] מטריצת כותרות: כל מקור×יישור×רוחב × recto/verso (10×3×3×2=180 צירופים) + golden DOM + bc7892f נעול.
+- [x] כרך־ב': initial-value=22 ⇒ כ״ב; start-idx (נוסחת V1); count/show pairs (shaar/toc/endnotes) — כולל פתיחות (D-36).
+- [x] TOC stress: 300 כותרות ארוכות ללא גלישה/תליה (דטרמיניסטי); תקציב איטרציה נבדק בביקורת שלילה; כותרת בלתי־ניתנת־לעטיפה ⇒ קטיעה + ממצא, אפס תליה.
+- [x] first/last-word מתעדכנות אחרי עימוד מחדש (שאלת סשן Z.ai — נענתה בבדיקה); תואמות את גוף העמוד בלי פיסוק.
+- [x] pn-overflow/pn-sequence = 0 על canonical ב־5 קונפיגורציות; ביקורת שלילה מוכיחה שהבודק תופס הפרות.
+- [x] ניטרליות גיאומטריה נשמרת עם TOC פעיל; גוף העמודים זהה מילה־במילה אחרי ההכנסה.
+
+### החלטות שנרשמו
+D-61..D-63 — ראו `DECISIONS.md`.
+
+### ידוע ותועד (לא חוסם S9)
+יעדי PDF (bookmarks) נישאים בשורות ה־TOC (`targetPage`/`anchorId`) וייבנו ב־S12; צילומי עמודים ויזואליים — עם ה־UI של S10.

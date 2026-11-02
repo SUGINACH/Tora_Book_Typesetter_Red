@@ -51,6 +51,11 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .folio{position:absolute;bottom:4px;width:100%;text-align:center}
 .folio--outer-left{left:8px;width:auto;text-align:left}
 .folio--outer-right{right:8px;width:auto;text-align:right}
+.folio--top{bottom:auto;top:4px}
+.folio--in-header{bottom:auto;top:6px}
+.page-num-badge{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;line-height:1}
+.page-num-frame-circle{border:1.2px solid #333;border-radius:50%;min-width:22px;height:22px;padding:1px}
+.page-num-frame-box{border:1.2px solid #333;border-radius:3px;min-width:22px;height:20px;padding:1px 4px}
 .side-note{position:absolute;font-size:.75em;max-height:60%;overflow:hidden}
 .col-divider{position:absolute;width:0;border-left:1px solid #999}
 .col-divider--thin{border-left:1px solid #999}
@@ -60,8 +65,23 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
 .endnote-list{font-size:.85em;padding:0 12px}
 .endnote-note{margin:2px 0}
-.toc-entry{display:flex;justify-content:space-between}
-.toc-entry .dots{flex:1;border-bottom:1px dotted #000;margin:0 6px 4px}
+.toc-page-title{font-size:16pt;font-weight:700;margin:12px 18px 18px;text-align:center}
+.toc-rows{position:absolute;top:70px;left:18px;right:18px;bottom:30px}
+.toc-row{display:flex;align-items:baseline;text-decoration:none;color:inherit;gap:6px;margin:2px 0}
+.toc-row .toc-dots{flex:1;border-bottom:1px dotted #000;min-width:24px;margin:0 6px 4px}
+.toc-row .toc-label{min-width:30px;text-align:left}
+.toc-row .toc-num{min-width:20px;color:#444}
+.toc-lvl-1{font-size:12pt;font-weight:700}
+.toc-lvl-2{font-size:11pt}
+.toc-lvl-3{font-size:10.5pt;margin-right:16px}
+.toc-lvl-4{font-size:10.5pt;margin-right:32px}
+.toc-lvl-5{font-size:10.5pt;margin-right:48px}
+.toc-lvl-6{font-size:10.5pt;margin-right:64px}
+.toc-lvl-7{font-size:8.8pt;margin-right:80px;font-style:italic}
+.toc-row--group{flex-wrap:wrap}
+.toc-row--group .toc-item{display:inline-flex;gap:4px;text-decoration:none;color:inherit}
+.toc-row--group .toc-item .grp-page{color:#333}
+.toc-row--group .toc-item + .toc-item::before{content:'|';margin:0 6px;color:#777}
 `;
 
 /** בניית מסמך HTML עצמאי מעמודי ה‑DOM שכבר רוכמו (string-level; עובד גם Node-side). */

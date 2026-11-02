@@ -406,6 +406,60 @@ function typeset(rawText, settingsIn, env = {}) {
     if (settings['aq-enabled']) autoQualityPass(pages, settings, eventLog);
   }
 
+  // **S9 — עמודי תוכן־העניינים (REQ-HDR-05):** הכנסה מבנית לפני צילום ה‑hash של CP4
+  // (כמו שערי S8) — העמודים חלק מהבסיס שנמדד; תקציב איטרציה מונע תליה (F: TOC hanging).
+  let tocPagesAll = [];
+  let tocInsertInfo = { inserted: 0, at: 0 };
+  {
+    const {
+      buildTocModel, numberRows, buildTocPages, insertTocPages
+    } = require('../decoration/toc-builder');
+    const pageLinesEarly = (pg) => [
+      ...(pg.spanning ? pg.spanning.lines : []),
+      ...pg.columns.flatMap(c => c)
+    ];
+    const firstPageByToken = new Map(); // tokenId -> עצם העמוד (עוגן למיפוי סופי)
+    for (const pg of pages) {
+      for (const ln of pageLinesEarly(pg)) {
+        const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
+        if (tok != null && !firstPageByToken.has(tok)) firstPageByToken.set(tok, pg);
+      }
+    }
+    const headingsAll = [];
+    for (const b of blocks) {
+      if (b.kind !== 'heading') continue;
+      const pageRef = firstPageByToken.has(b.tokenId) ? firstPageByToken.get(b.tokenId) : null;
+      if (!pageRef) continue;
+      headingsAll.push({
+        level: b.level,
+        text: b.lines.map(l => l.words.join(' ')).join(' ').trim(),
+        tokenId: b.tokenId, pageRef,
+      });
+    }
+    headingsAll.sort((a, b) => (a.pageRef.index - b.pageRef.index) || String(a.tokenId).localeCompare(String(b.tokenId)));
+
+    const measureToc = (t, sz) => api.measureTextWidth(t, sz);
+    const lineHToc = (sz) => api.lineHeightPx(sz);
+    if (settings['toc-general-enabled'] !== false) {
+      const model = buildTocModel(headingsAll.filter(h => h.level <= 2), settings);
+      numberRows(model.rows, settings['general-toc-count-numbering'] !== false);
+      const built = buildTocPages(model, 'toc-general', 'תוכן העניינים', settings, measureToc, lineHToc, { ledger, eventLog });
+      tocPagesAll = tocPagesAll.concat(built.pages);
+    }
+    if (settings['toc-detail-enabled'] === true) {
+      const model = buildTocModel(headingsAll, settings);
+      numberRows(model.rows, settings['detailed-toc-count-numbering'] !== false);
+      const built = buildTocPages(model, 'toc-detail', 'תוכן העניינים המפורט', settings, measureToc, lineHToc, { ledger, eventLog });
+      tocPagesAll = tocPagesAll.concat(built.pages);
+    }
+    if (tocPagesAll.length) {
+      const res = insertTocPages(pages, tocPagesAll, settings, { ledger, eventLog });
+      pages = res.pages;
+      tocInsertInfo = { inserted: res.inserted, at: res.at };
+      eventLog.emit('toc', 'toc-pages-inserted', { ...tocInsertInfo, total: tocPagesAll.length });
+    }
+  }
+
   // ---- CP4: decorations pass — geometry-neutral (invariant T1; D-47) ----
   const cp4PageCount = pages.length;
   const cp4BodyBefore = bodyGeometryHash(pages);
@@ -470,7 +524,7 @@ function typeset(rawText, settingsIn, env = {}) {
     ledger.transition(rec.issue_id, 'persists', 'decorations', 'H7 token not placed as side note');
   }
 
-  // ---- folio numbering (D-36: פתיחות אינן מציגות גיליון) ----
+  // ---- folio numbering (D-36: פתיחות אינן מציגות גיליון; S9: נוסחת V1 start-idx+initial) ----
   const numbers = assignNumbers(pages, settings);
   pages.forEach((pg, i) => {
     pg.pageNumber = numbers[i].page;
@@ -478,8 +532,21 @@ function typeset(rawText, settingsIn, env = {}) {
     pg.pageNumberDisplay = numbers[i].display; // מקור page-num לכותרות עליונות (P1-1)
   });
 
+  // **S9.1.6 — בודק אינווריאנטים מספור (pn-sequence / pn-overflow → ledger):**
+  // סדרה מונוטונית, בלי כפילות/דילוגים פרט ל"חסרים מוצהרים"; גיליון בתקציב רוחב.
+  const { auditNumbering } = require('../decoration/numbering-audit');
+  const numberingAudit = auditNumbering(pages, numbers, settings, (t) => api.measureTextWidth(t), { ledger, eventLog });
+
+  // **S9 (D-62): פענוח עוגנים + תוויות גיליון בשורות ה‑TOC — לפי המספור הסופי.**
+  if (tocPagesAll.length) {
+    const { resolveTocTargets } = require('../decoration/toc-builder');
+    const { tocPageLabel } = require('../decoration/folio');
+    resolveTocTargets(pages, tocPagesAll, numbers, settings, { formatLabel: (v) => tocPageLabel(v, settings) });
+  }
+
   // ---- headers ----
   const bookName = metadata['ספר'] || metadata['title'] || '';
+  const { trimEdgePunctuation } = require('../decoration/headers-builder');
   // **FWD-1:** הפס חוצה־טורים נסרק גם הוא — כותרת H2 חיה שם עכשיו (S8)
   const pageLines = (pg) => [
     ...(pg.spanning ? pg.spanning.lines : []),
@@ -495,14 +562,23 @@ function typeset(rawText, settingsIn, env = {}) {
     const lastCol = pg.columns[pg.columns.length - 1];
     const lastLine = lastCol && lastCol[lastCol.length - 1];
     pg.headerCtx = { bookName, h1, h2 };
-    pg.firstWord = firstCol && firstCol.words ? firstCol.words[0] : '';
-    pg.lastWord = lastLine && lastLine.words ? lastLine.words[lastLine.words.length - 1] : '';
+    // **S9 (פורט IMUD fillHeaderFirstLastWords):** מילה ראשונה/אחרונה — בלי פיסוק קצה
+    // (הכותרת עצמה לא נחשבת כתוכן העמוד לעניין זה; מילים מנוקות מסימני פיסוק בקצוות).
+    const bodyLines = pageLines(pg).filter(ln => ln.kind !== 'heading');
+    const firstBody = bodyLines[0];
+    const lastBody = bodyLines[bodyLines.length - 1];
+    pg.firstWord = firstBody && firstBody.words ? trimEdgePunctuation(firstBody.words[0]) : '';
+    pg.lastWord = lastBody && lastBody.words ? trimEdgePunctuation(lastBody.words[lastBody.words.length - 1]) : '';
     pg.isRecto = pg.index % 2 === 0;
-    // D-36: אין כותרת עליונה על עמודי פתיחה (עמודי שער)
-    pg.header = pg.chapterOpening ? null : buildHeader(pg, settings, pg.headerCtx);
+    // **S9 (REQ-HDR-02):** האם העמוד נפתח בכותרת H2/H3 (שורת התוכן הראשונה בסדר קריאה)
+    const firstLine = pageLines(pg)[0];
+    pg.opensWithHeadingLevel = firstLine && firstLine.kind === 'heading' ? firstLine.level : null;
+    // D-36 + REQ-HDR-02: עמודי פתיחה ללא כותרת עליונה — אלא אם הופעלה הכותרת הייעודית
+    // לפותחות H2/H3 (הבדיקה בתוך buildHeader — מקור יחיד)
+    pg.header = buildHeader(pg, settings, pg.headerCtx);
   });
 
-  // ---- TOC ----
+  // ---- TOC (מודל לגרסאות ≤S8 — תאימות לאחור; עמודי ה‑TOC האמיתיים נבנו לעיל) ----
   const { buildTocEntries, splitGeneralDetail } = require('../decoration/toc-builder');
   const firstPageByToken = new Map();
   for (const pg of pages) {
@@ -516,7 +592,7 @@ function typeset(rawText, settingsIn, env = {}) {
     if (b.kind !== 'heading') continue;
     const page = firstPageByToken.has(b.tokenId) ? firstPageByToken.get(b.tokenId) : -1;
     if (page < 0) continue;
-    headingsForToc.push({ level: b.level, text: b.lines.map(l => l.words.join(' ')).join(' ').trim(), page });
+    headingsForToc.push({ level: b.level, text: b.lines.map(l => l.words.join(' ')).join(' ').trim(), page, tokenId: b.tokenId });
   }
   headingsForToc.sort((a, b) => a.page - b.page);
   const tocEntries = buildTocEntries(headingsForToc, settings, numbers);
@@ -793,6 +869,9 @@ function typeset(rawText, settingsIn, env = {}) {
   return {
     metadata, tokens, pages, ledger, events: eventLog,
     toc, numbers,
+    tocPages: tocPagesAll,          // **S9:** עמודי תוכן־העניינים האמיתיים (אובייקטים בתוך pages)
+    tocInsert: tocInsertInfo,       // **S9:** היכן הוכנסו וכמה
+    numberingAudit,                 // **S9:** ממצאי pn-sequence/pn-overflow
     settings,
     contentHashIn: hashIn,
     contentPreserved,

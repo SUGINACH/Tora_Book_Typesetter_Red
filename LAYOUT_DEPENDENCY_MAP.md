@@ -1,5 +1,5 @@
 # LAYOUT_DEPENDENCY_MAP.md — מפת תלויות חיה · Tora Book Typesetter Red
-> נבנית אוטומטית מה־require-ים בפועל (סקריפט: `node tools/deps.js` או לפי הטבלה). מצב: 03.11.2026 (אחרי S8 — 60 קשתות).
+> נבנית אוטומטית מה־require-ים בפועל (סקריפט: `node tools/deps.js` או לפי הטבלה). מצב: 03.11.2026 (אחרי S9 — 66 קשתות).
 
 ## שכבות (מלמטה למעלה)
 ```
@@ -19,8 +19,10 @@ decoration/    : ornament-fit (מקור יחיד למידות והזמנות —
                  assets-import ← svg-sanitize + theme-sets
                  shaar-pages ← theme-sets + custom-pages + page-templates
                  custom-pages ← page-templates; page-decorations ← page-templates
-                 folio, headers-builder, toc-builder
-output/        : dom-renderer ← notes/markers + page-decorations + shaar-boxes + ornament-fit + page-templates
+                 folio; headers-builder (עצמאות פר‑סלוט — D-61)
+                 toc-builder ← page-templates (עמודי TOC אמיתיים — D-62)
+                 numbering-audit (pn-sequence/pn-overflow — S9.1.6)
+output/        : dom-renderer ← notes/markers + page-decorations + shaar-boxes + ornament-fit + page-templates + folio (isCssFrame)
                  html-export; project-io ← settings-registry
 audit/         : report-schema ← dp-planner(layoutHash); scanners ← settings-registry
 core/          : pipeline ← כל השכבות (כולל shaar-pages/ornament-plan/custom-pages — S8); events/ledger (שעון לוגי)

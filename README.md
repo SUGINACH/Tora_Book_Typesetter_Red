@@ -1,7 +1,7 @@
 # Tora Book Typesetter — RED
 **מנוע עימוד תורני (RTL, עברית) — בנייה מאפס, אפס תלויות ריצה.**
 
-> מצב אמת, עדכני ל־03.11.2026 (סגירת S8 — עיטורים, שערים, מפרידים, גרפיקה). מסמכי האם: `spec/01_MASTER_SPECIFICATION.md`, `spec/02_MASTER_WORK_PLAN.md`.
+> מצב אמת, עדכני ל־03.11.2026 (סגירת S9 — כותרות עליונות, מספור עמודים, תוכן־עניינים). מסמכי האם: `spec/01_MASTER_SPECIFICATION.md`, `spec/02_MASTER_WORK_PLAN.md`.
 
 ## מה עובד כרגע (ומה לא) — ללא הצהרות פנויות
 | יכולת | מצב | הוכחה |
@@ -16,6 +16,9 @@
 | **עיטורים (S8): הזמנת גובה בזמן פריסה (F-08), fit-to-text במדידת JS, סימטריית מרווחים (F-21), הרמה −0.08em, עיטור סיום־פרק בתקציב, מפרידי H3–H6 עם fits() בכל אתר הצבה** | עובד | s8-decoration (39) |
 | **שערים (S8): PT-01/02/03 מבנית, ערכות נושא — הפעלת שלושת השערים (F-10 נעול), תיבות עם עיגול־שלם, בורר ויזואלי, "הצג שער משנה"** | עובד | s8 gate 2/3 |
 | **גרפיקה (S8): JPG/PNG/SVG, ייבוא תיקייה עם אימות נתיבים, חיטוי SVG, רקעים 3 מחלקות + insets מ״מ, עמודים מותאמים PT-09** | עובד | s8 gate 6/7 + PT-09 |
+| **כותרות עליונות (S9): עצמאות מלאה 3×2 (מקור/יישור/גופן/גודל/רוחב%/טקסט לכל סלוט), same_as + גידוע מעגליות, פותחות H2/H3 ייעודיות, first/last-word מאוחד, bc7892f נעול** | עובד | s9 מטריצה 10×3×3×2 |
+| **מספור (S9): נוסחת V1 השלמה (start-idx + initial-value), מסגרות נבדלות (circle/square CSS + parens/squares טקסט), מיקומים כולל top/in-header, count/show לפי סוג עמוד, pn-sequence/pn-overflow אודיט** | עובד | s9 gates 2+5 |
+| **תוכן־עניינים (S9): עמודי toc-general/toc-detail אמיתיים, כללי+מפורט, קיבוץ inline, נקודות מובילות, עוגנים לחיצים #page-N, תוויות בפורמט הגיליון, תקציב איטרציה נגד תליה** | עובד | s9 gate 3 (כולל stress) |
 | **אודיט עיטורים: ornament-overflow/overlap/asymmetry במייצרים אמיתיים + ניטרליות CP4==CP5 מוכחת** | עובד | s8 gate 1/5 |
 | דטרמיניזם (layoutHash בין ריצות; שעון לוגי ביומנים) | עובד | e2e, canonical |
 | חוזה הגדרות שלוש־שכבות + סורקים **אמיתיים** (phantom/dead/orphan) | עובד | registry 8/8 |
@@ -26,12 +29,13 @@
 ## הרצה
 ```bash
 cd red-build
-npm test            # כל 9 הסוויטות (146 בדיקות)
+npm test            # כל 10 הסוויטות (171 בדיקות)
 npm run test:unit   # parser + typography
 npm run test:settings   # חוזה הרישום + סורקים
 npm run test:layout     # s5-s6
 npm run test:e2e        # pipeline + s7 + s8
 npm run test:ornaments  # שער S8 (39)
+npm run test:headers    # שער S9 (25)
 npm run test:audit      # negative-controls (16)
 npm run test:canonical  # קורפוס קנוני (תנאי מיזוג)
 npm run test:determinism
@@ -43,7 +47,7 @@ node tests/fixtures/generate_canonical_corpus.js   # יצירת הקורפוס �
 red-build/src/engine/{parser,typography,layout,notes,decoration,output,audit,core}
 red-build/tests/{unit,integration,layout,e2e,audit,negative-controls,fixtures}
 spec/          — מפרט אם + תכנית עבודה (S0..S13)
-audits/        — 01 ביקורת עצמאית, 02 דוח סגירת S7, 03 דוח סגירת S8
+audits/        — 01 ביקורת עצמאית, 02 דוח סגירת S7, 03 דוח סגירת S8, 04 דוח סגירת S9
 DECISIONS.md / WORKLOG.md / ISSUE_REGISTRY.md / OPEN_QUESTIONS.md / PROVENANCE.md / LAYOUT_DEPENDENCY_MAP.md
 archive/debug/ — קבצי דיבוג היסטוריים (read-only)
 ```

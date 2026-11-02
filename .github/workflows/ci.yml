@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Run full test suite (146 tests, zero deps)
+      - name: Run full test suite (171 tests, zero deps)
         run: cd red-build && npm test
       - name: Determinism check
         run: cd red-build && npm run test:determinism
