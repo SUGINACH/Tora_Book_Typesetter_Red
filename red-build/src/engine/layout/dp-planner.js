@@ -304,6 +304,9 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 
   if (cur.columns.some(c => c.length) || cur.footnotes.length || pages.length === 0) flushPage();
 
+  // S7-E2E תיקון: הפעלת מדיניות הערות חרגות (הייתה פונקציה מתה — anti-phantom נאכף כאן)
+  applyFootnoteOverflowPolicy();
+
   // terminal residual fallback (REQ-BAL-04): אם העמוד האחרון ריק למחצה ויש מצב natural — סמן
   if (settings['allow-terminal-residual-fallback']) {
     const last = pages[pages.length - 1];
