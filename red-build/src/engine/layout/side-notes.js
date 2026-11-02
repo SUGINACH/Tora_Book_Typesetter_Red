@@ -10,6 +10,26 @@
 const CONTAINMENT_PX = 20; // חריגה מזערית מעבר למיכל — לא נחשב overlap אמיתי (ספרד קטלוג D3)
 
 /**
+ * s-note-body-font: רוחב הערת צד לפי גופן — משפיע על גובה החיזוי (cascade).
+ * פרופיל שמרני: גופן לא־מוכר = +8% רוחב.
+ */
+const SIDE_NOTE_FONT_FACTORS = { 'David HB': 1.06, 'David': 1.04, 'Narkisim': 1.10, 'Nachlieli': 0.96, 'Alef': 1.02, 'Rubin': 1.05 };
+function estimateSideNoteHeight(text, settings, measureFn) {
+  const size = settings['body-font-size-pt'] * 0.75; // הערות צד קטנות
+  const lh = Math.round(size * (96 / 72) * 1.15);
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const colW = settings._sideNoteColWidthPx || 120; // margin חיצוני ~18%
+  const fontName = settings['s-note-body-font'];
+  const factor = SIDE_NOTE_FONT_FACTORS[fontName] || (fontName && fontName !== settings['body-font'] ? 1.08 : 1);
+  let lines = 1, w = 0;
+  for (const word of words) {
+    const ww = (measureFn ? measureFn(word, size) : word.length * size * 0.6) * factor;
+    if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+  }
+  return lines * lh;
+}
+
+/**
  * @param {Array} pages - עמודי התוצר (עם columns + sideNotes)
  * @param {object} settings
  * @returns {{placed:Array, deferred:Array}}

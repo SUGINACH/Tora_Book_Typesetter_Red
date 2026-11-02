@@ -58,11 +58,13 @@ class MeasureAPI {
 
   /**
    * מיקום שורות אופטימלי (KP) → מערך שורות עם רוחבים.
+   * @param {Function} [measureOverride] - הזרקת פונקציית מדידה (למשל פרופיל רוחב־גופן מהpipeline) — L1: entry יחיד דרך ההזרקה.
    * @returns {Array<{words:string[], widthPx:number, badness:number}>}
    */
-  layoutLines(words, maxWidthPx, sizePt = null) {
+  layoutLines(words, maxWidthPx, sizePt = null, opts = {}, measureOverride = null) {
     const knuth = require('./kp-linebreak');
-    return knuth.breakLines(words, maxWidthPx, (t) => this.measureTextWidth(t, sizePt), this.lineHeightPx(sizePt));
+    const measure = measureOverride || ((t) => this.measureTextWidth(t, sizePt));
+    return knuth.breakLines(words, maxWidthPx, measure, this.lineHeightPx(sizePt), opts);
   }
 
   cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
