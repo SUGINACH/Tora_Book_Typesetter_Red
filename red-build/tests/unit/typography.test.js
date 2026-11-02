@@ -71,11 +71,19 @@ describe('REQ-LB-03 protectors (NBSP gluing)', () => {
 });
 
 describe('REQ-LB-04 atomic footnote width', () => {
+  it('tokenizer emits U+E000 (atomic space) inside notes — pipeline contract', () => {
+    const tokens = require('../../src/engine/parser/block-tokenizer').tokenize(['פתח [הערה ארוכה עם רווחים] סגור']);
+    const p = tokens[0];
+    assert(p.notes.length === 1, 'one note extracted');
+    assert(p.notes[0].includes('\uE000'), 'note spaces are atomic U+E000');
+    assert(!/\u0020/.test(p.notes[0]), 'no plain spaces remain inside the atomic note');
+  });
   it('U+E000 inside note keeps it a single measured box (no split)', () => {
-    const noteUnit = '[הערה\u00A0ארוכה]' ; // NBSP unit simulates atomic note
-    const lines = breakLines(['טקסט', noteUnit, 'סוף'], COLW, W, 20, {});
-    const found = lines.some(l => l.words.includes(noteUnit));
-    assert(found, 'atomic unit survived as one box');
+    // האשם המדויק של REQ-LB-04: יחידת הערה עם רווחים אטומיים חייבת לשרוד כקופסה אחת
+    const noteUnit = 'הערה\uE000ארוכה\uE000מאוד';
+    const lines = breakLines(['טקסט', `[${noteUnit}]`, 'סוף'], COLW, W, 20, {});
+    const allWords = lines.flatMap(l => l.words);
+    assert(allWords.includes(`[${noteUnit}]`), `atomic unit survived as one box; got: ${JSON.stringify(allWords)}`);
   });
 });
 
