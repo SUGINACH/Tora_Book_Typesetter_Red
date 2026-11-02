@@ -22,9 +22,13 @@ function layoutHash(pages) {
  * Block = יחידת פריסה: heading או paragraph עם שורות שנמדדו.
  * @param {Array} blocks - [{kind:'heading'|'paragraph', lines:[...], notes:[...], token}]
  * @param {object} settings
- * @param {{measure:(t:string)=>number}} api
+ * @param {{measure:(t:string)=>number}} env - חייב להכיל measure (entry יחיד — L1); אחרת throw (ללא קריסה שקטה)
  */
-function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
+function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) {
+  const measureFn = env && typeof env.measure === 'function' ? env.measure : null;
+  if (!measureFn) {
+    throw new Error('dp-planner: env.measure is required (single measurement entry — REQ-LB-01). Silent fallback to global is forbidden.');
+  }
   const pages = [];
   let pageIdx = 0;
   const lineH = Math.round(settings['body-font-size-pt'] * (96 / 72) * settings['body-line-height']);
@@ -39,7 +43,48 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
   let cur = newPage(PAGE_TYPES.REGULAR);
 
   const colCapacity = (tpl) => tpl.contentBox.height;
-  const usedHeight = (col) => col.reduce((s, ln) => s + ln.heightPx, 0);
+
+  /**
+   * תיקון S8 (מניעת באג V23 "usedHeight כולל תקציב הערות"):
+   * גובה תפוס = שורות + **יתרת תקציב ההערות של העמוד** — כך ה‑probe וה‑reservation
+   * זהים (F-17). בעבר דפדפו מעל ההערות כי ה‑cap לא כלל את המרזב שלהן.
+   */
+  function usedHeight(col, page = cur) {
+    let h = col.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+    if (page && page.fnReservedHeightPx > 0 && page.columns[page.columns.length - 1] === col) {
+      h += page.fnReservedHeightPx; // נשמר פעם אחת — בסוף הטור האחרון
+    }
+    return h;
+  }
+
+  /**
+   * S6.1.1 probe==reserved identity: פונקציית בדיקה אחת לשני הצרכים.
+   * מחזירה את התקציב המשוקלל לעמוד לפי רשימת ההערות שלו (LPT ל‑2 טורים).
+   */
+  function recomputeFnBudget(page) {
+    if (!settings['footnotes-enabled'] || !page.footnotes.length) { page.fnReservedHeightPx = 0; return 0; }
+    const heights = page.footnotes.map(n => n.heightPx || noteHeightLocal(n));
+    let reserved;
+    if (settings['footnote-columns'] === 2) {
+      const t = [0, 0];
+      for (const h of [...heights].sort((a, b) => b - a)) { const i = t[0] <= t[1] ? 0 : 1; t[i] += h; }
+      reserved = Math.max(t[0], t[1]);
+    } else reserved = heights.reduce((a, b) => a + b, 0);
+    page.fnReservedHeightPx = reserved;
+    return reserved;
+  }
+  function noteHeightLocal(n) {
+    const size = settings['body-font-size-pt'] * 0.8;
+    const lh = Math.round(size * (96 / 72) * 1.25);
+    const words = String(n.text || '').split(/\s+/).filter(Boolean);
+    let lines = 1, w = 0;
+    const colW = settings._fnColWidthPx || 200;
+    for (const word of words) {
+      const ww = measureFn(word, size);
+      if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+    }
+    return lines * lh;
+  }
 
   function ensureRoom(neededLines, opts = {}) {
     // בדיקת מקום בכל הטורים הפעילים; אם אין — עמוד חדש
@@ -92,9 +137,63 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
     }
   }
 
+  /**
+   * תיקון S8: הערות שוליים נספרות **לפני** מיקום הבלוק — התקציב נרשם לעמוד
+   * (fnReservedHeightPx) כך ש‑usedHeight כולל אותו; בעבר ההערות נדחפו אחרי
+   * pushLines והמרזב לא נלקח בחשבון → גלישה מעל ההערות (באג V23).
+   * f-note-body-font: גודל/גופן גוף ההערה — משפיע על רוחב מילה במדידת ההערה.
+   */
+  function reserveNotes(blk) {
+    const notes = blk.notes || [];
+    if (!notes.length || !settings['footnotes-enabled']) return;
+    const size = settings['body-font-size-pt'] * 0.8;
+    const fnFont = settings['f-note-body-font'];
+    let added = 0;
+    for (const n of notes) {
+      const words = String(n.text).split(/\s+/).filter(Boolean);
+      const lh = Math.round(size * (96 / 72) * 1.25);
+      const colW = settings._fnColWidthPx || 200;
+      let lines = 1, w = 0;
+      for (const word of words) {
+        const ww = widthForNote(word, size, fnFont);
+        if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+      }
+      const h = lines * lh;
+      cur.footnotes.push({ ...n, heightPx: h, lineH: lh });
+      added += h;
+    }
+    recomputeFnBudget(cur); // probe==reserved — פונקציה אחת לשני הצרכים
+    void added;
+  }
+
+  /** רוחב מילת הערה לפי גופן גוף ההערה (f-note-body-font) — פרופיל ratchet שמרני. */
+  function widthForNote(text, sizePt, fontName) {
+    const base = measureFn(text, sizePt);
+    if (!fontName || fontName === settings['body-font'] || fontName === settings['f-note-body-font'] && !NOTE_FONT_FACTORS[fontName]) return base;
+    const factor = NOTE_FONT_FACTORS[fontName] || 1.08; // גופן הערה לא־מוכר: שמרני +8%
+    return Math.ceil(base * factor);
+  }
+  const NOTE_FONT_FACTORS = { 'David HB': 1.06, 'David': 1.04, 'Narkisim': 1.10, 'Nachlieli': 0.96, 'Alef': 1.02, 'Rubin': 1.05 };
+
   for (let bi = 0; bi < blocks.length; bi++) {
     const blk = blocks[bi];
     const next = blocks[bi + 1];
+
+    // REQ-HDG-02: heading mode=new-page → עמוד חדש לפני הכותרת (נצרך בפועל — anti-phantom)
+    if (blk.kind === 'heading' && blk.forceNewPage && cur.columns.some(c => c.length)) {
+      flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
+      eventLog.emit('page-plan', 'heading-new-page-mode', { token: blk.tokenId }, cur.index);
+    }
+
+    // REQ-FN-05/06: heading mode=side-note → הערת שוליים בטור מקביל (H7 doctrine), לא גוף עמוד
+    if (blk.kind === 'heading' && blk.sideNote) {
+      cur.sideNotes.push({ text: blk.lines.map(l => l.words.join(' ')).join(' ').trim(), anchorToken: blk.tokenId, isHeading: true });
+      eventLog.emit('page-plan', 'heading-side-note', { token: blk.tokenId }, cur.index);
+      continue;
+    }
+
+    // תקציב הערות לפני מיקום (F-17 probe==reserved)
+    if (blk.kind === 'paragraph') reserveNotes(blk);
 
     if (blk.kind === 'heading' && blk.level === 2) {
       // PT-05: עמוד חדש תמיד
@@ -150,14 +249,11 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
     }
     pushLines(blk.lines, { tokenId: blk.tokenId });
 
-    // הערות שוליים של הפסקה — תקציב העמוד (REQ-FN-01: probe==reserved)
-    for (const note of (blk.notes || [])) {
-      cur.footnotes.push(note);
-    }
+    // הערות שוליים כבר נרשמו ותוקצבו לפני המיקום (reserveNotes) — אין דחيفة כפולה.
     if (blk.sideNoteText) cur.sideNotes.push({ text: blk.sideNoteText, anchorToken: blk.tokenId });
   }
 
-  if (cur.columns.some(c => c.length) || pages.length === 0) flushPage();
+  if (cur.columns.some(c => c.length) || cur.footnotes.length || pages.length === 0) flushPage();
 
   // terminal residual fallback (REQ-BAL-04): אם העמוד האחרון ריק למחצה ויש מצב natural — סמן
   if (settings['allow-terminal-residual-fallback']) {
