@@ -1,7 +1,7 @@
 # Tora Book Typesetter — RED
 **מנוע עימוד תורני (RTL, עברית) — בנייה מאפס, אפס תלויות ריצה.**
 
-> מצב אמת, עדכני ל־03.11.2026 (סגירת S9 — כותרות עליונות, מספור עמודים, תוכן־עניינים). מסמכי האם: `spec/01_MASTER_SPECIFICATION.md`, `spec/02_MASTER_WORK_PLAN.md`.
+> מצב אמת, עדכני ל־03.11.2026 (סגירת S10 — ממשק משתמש מלא: לשוניות, 12 פאנלים, מנוע ב־Worker, תצוגה, בדיקה, דיבאג פר־עמוד). מסמכי האם: `spec/01_MASTER_SPECIFICATION.md`, `spec/02_MASTER_WORK_PLAN.md`.
 
 ## מה עובד כרגע (ומה לא) — ללא הצהרות פנויות
 | יכולת | מצב | הוכחה |
@@ -24,28 +24,41 @@
 | חוזה הגדרות שלוש־שכבות + סורקים **אמיתיים** (phantom/dead/orphan) | עובד | registry 8/8 |
 | רנדור DOM + ייצוא HTML עצמאי + offline-guard (exit 7) | עובד | e2e, NC-16 |
 | דוח אבחון v2 (עברית, מחזור חיים, דטרמיניזם **נמדד**) | עובד | e2e, canonical |
-| **עדיין לא קיים:** ממשק משתמש (S10), ייבוא DOCX (S11), ייצוא PDF/ZIP (S12), אורקל מדידה (S12) | לא נבנה | לא נטען |
+| **ממשק משתמש מלא (S10): 4 לשוניות (עורך/הגדרות/בדיקה/תצוגה), 12 פאנלים מהרישום עם חיפוש עברי + איפוס + תבניות, מנוע ב־Worker עם התקדמות "עמוד X מתוך Y", מדיניות קל/כבד (D-64) + ⚡, זום/קפיצה במספר עברי/סנכרון סמן↔עמוד/TOC, טבלת ממצאים + trace + לוח כיסוי, highlightIssue, דיבאג פר־עמוד (V21), חבילות דפדפן מופרדות + offline** | עובד | s10-ui (37); F-06 scan 0 הפרות |
+| **עדיין לא קיים:** ייבוא DOCX והרחבות JSON (S11), ייצוא PDF/ZIP + אורקל מדידה (S12), QA מערכתי (S13) | לא נבנה | לא נטען |
 
 ## הרצה
 ```bash
+# האפליקציה החיה (דפדפן, מקומי לחלוטין — אין שום בקשת רשת):
+#   פתחו את red-build/ui/index.html (המנוע נטען ב־Worker עם התקדמות "עמוד X מתוך Y")
+
 cd red-build
-npm test            # כל 10 הסוויטות (171 בדיקות)
+npm test            # כל 11 הסוויטות (208 בדיקות)
 npm run test:unit   # parser + typography
-npm run test:settings   # חוזה הרישום + סורקים
+npm run test:settings   # חוזה הרישום + סורקים (dead-control = 0 מ־S10)
 npm run test:layout     # s5-s6
-npm run test:e2e        # pipeline + s7 + s8
+npm run test:e2e        # pipeline + s7 + s8 + s9
 npm run test:ornaments  # שער S8 (39)
 npm run test:headers    # שער S9 (25)
+npm run test:ui         # שער S10 (37) — לשוניות/Worker/מדיניות/סנכרונים/דיבאג
 npm run test:audit      # negative-controls (16)
 npm run test:canonical  # קורפוס קנוני (תנאי מיזוג)
 npm run test:determinism
 node tests/fixtures/generate_canonical_corpus.js   # יצירת הקורפוס מחדש
+
+# מהשורש (לא מ־red-build):
+node tools/gen-ui-bindings.js       # חידוש מניפסט הכיתובים מהרישום (179)
+node tools/build-worker-bundle.js   # בניית חבילות הדפדפן (worker + app)
+node tools/scan-control-triggers.js # סריקת F-06 → tests/artifacts/s10-callgraph.json
 ```
 
 ## מבנה
 ```
 red-build/src/engine/{parser,typography,layout,notes,decoration,output,audit,core}
-red-build/tests/{unit,integration,layout,e2e,audit,negative-controls,fixtures}
+red-build/src/ui/{app-shell,settings-panel,editor-tab,preview-tab,testing-tab,status-strip,retypeset-policy,worker-protocol,worker-client,engine-worker-main,inline-transport,caret-map,callgraph-scan,bindings.generated,browser-entry}
+red-build/ui/{index.html,styles.css,engine-worker.bundle.js,app.bundle.js}   # האפליקציה החיה
+red-build/tests/{unit,integration,layout,e2e,audit,negative-controls,fixtures,artifacts}
+tools/{gen-ui-bindings,build-worker-bundle,scan-control-triggers}.js
 spec/          — מפרט אם + תכנית עבודה (S0..S13)
 audits/        — 01 ביקורת עצמאית, 02 דוח סגירת S7, 03 דוח סגירת S8, 04 דוח סגירת S9
 DECISIONS.md / WORKLOG.md / ISSUE_REGISTRY.md / OPEN_QUESTIONS.md / PROVENANCE.md / LAYOUT_DEPENDENCY_MAP.md

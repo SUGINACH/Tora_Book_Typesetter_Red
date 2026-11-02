@@ -188,8 +188,9 @@ const registry = [
   // הוא שולט ברמת הפירוט בדוח בלבד (buildReport compact) — לעולם לא ברישום עצמו.
   K('diagnostics-enabled', 'bool', true, P.ADVANCED, 'chk-diag', ['audit/report-schema'], 'fx:diag-on'),
   K('offline-guard', 'bool', true, P.ADVANCED, 'chk-offline-guard', ['output/html-export'], 'fx:offline-guard', { note: 'exit 7 על בקשה חיצונית (Orange ✓)' }),
-  // הערה (D-44): debounce-light-change-ms הוסר — הגדרת UI מ‑S10; אין UI ואין צרכן אמיתי.
-  // יוחזר ב‑S10 כשתיבנה שכבת ממשק שצורכת אותו בפועל. הסרה מתועדת ב‑DECISIONS.md/WORKLOG.md.
+  // **S10 — סגירת הבטחת D-44:** debounce-light-change-ms חוזר עם צרכן אמיתי —
+  // ui/retypeset-policy קורא אותו בפועל (רענון קל מרוכז; בדיקת אפקט fx:debounce ב־s10).
+  K('debounce-light-change-ms', 'number', 350, P.ADVANCED, 'rng-debounce-ms', ['ui/retypeset-policy'], 'fx:debounce', { min: 50, max: 2000, step: 50, note: 'REQ-UI-02: ריכוז שינויים קלים (רקע/נושא/שער) לפני רינדור מחדש — 350–400ms לפי Spec §5.3' }),
 ];
 
 // ---- אימות פנימי: אין כפילויות id/control ----

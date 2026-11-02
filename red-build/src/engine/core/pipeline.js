@@ -84,9 +84,16 @@ function offsetInSpans(at, spans) {
 /**
  * @param {string} rawText - מקור הטקסט
  * @param {object} settings - merged settings (registry defaults + user)
- * @param {{doc?:object}} env - optional DOM for oracle rendering
+ * @param {{doc?:object, onProgress?:(info:object)=>void}} env - optional DOM for oracle rendering;
+ *   onProgress — **S10:** מזליף התקדמות שלבית ל‑Worker ("עמוד X מתוך Y"). מכשור בלבד:
+ *   אסור לו לגעת בפריסה — no-op proof נאכף בבדיקה (hash זהה עם ובלי המזליף).
  */
 function typeset(rawText, settingsIn, env = {}) {
+  // **S10 (REQ-UI-03):** מזליף התקדמות — null כשלא סופק (אפס תקורה במסלול הרגיל).
+  const onProgress = typeof env.onProgress === 'function' ? env.onProgress : null;
+  const prog = (stage, pct, label, extra) => {
+    if (onProgress) onProgress(Object.assign({ stage, pct, label }, extra || {}));
+  };
   // **D-39 (P0-4):** מקור־האמת note-placement-mode; קלט משתמש מפורש גובר על נגזרות.
   const settings = derivePlacementFlags({ ...getDefaultSettings(), ...(settingsIn || {}) });
   const eventLog = new EventLog(settings['trace-verbosity'] || 'standard'); // נצרך בפועל (P0-5)
@@ -99,11 +106,13 @@ function typeset(rawText, settingsIn, env = {}) {
   const tokens = tokenize(bodyLines);
   const hashIn = contentHash(tokens);
   eventLog.emit('parse', 'cp1-parsed', { tokens: tokens.length, contentHash: hashIn });
+  prog('parse', 5, 'פענוח המסמך', { tokens: tokens.length });
 
   // ---- scope-map (S2.1.3: BEFORE measuring) ----
   const segments = tokens.filter(t => t.type === 'paragraph').map((t, i) => ({ text: t.raw, paraIndex: i }));
   const scope = scanBrackets(segments);
   eventLog.emit('scope-map', 'cp2-scope', { pairs: scope.pairs.length, crossParagraph: scope.scopeMap.crossParagraphCount, unmatchedClosers: scope.unmatchedClosers.length });
+  prog('scope-map', 10, 'מיפוי סוגריים והערות', { pairs: scope.pairs.length });
 
   // ---- measure + line-plan (L2) ----
   const api = new MeasureAPI(settings, 'math');
@@ -357,10 +366,12 @@ function typeset(rawText, settingsIn, env = {}) {
   // תבנית ההחלטה המאוחדת של כותרות (D-09) — לפני ה‑DP; ה‑DP קורא דגלים בלבד
   applyHeadingModes(blocks, settings);
   eventLog.emit('measure', 'cp2-measured', { blocks: blocks.length, cache: api.cacheStats(), firstWordDecorated: fwCount, parenScale });
+  prog('measure', 25, 'מדידה ושבירת שורות', { blocks: blocks.length });
 
   // ---- CP3: page plan (DP) + protections + retreat loop ----
-  const planned = planPages(blocks, settings, eventLog, ledger, { measure: (t2, s2) => api.measureTextWidth(t2, s2) });
+  const planned = planPages(blocks, settings, eventLog, ledger, { measure: (t2, s2) => api.measureTextWidth(t2, s2), onProgress });
   let { pages } = planned;
+  prog('page-plan', 70, 'הפריסה הושלמה', { totalPages: pages.length, pageIndex: pages.length });
 
   // **S8 — עמודי שער + עמודים מותאמים (PT-01/02/03/09):** הכנסה מבנית
   // מיד אחרי ה‑DP ולפני צילום ה‑hash של CP4 — השערים חלק מהבסיס שנמדד
@@ -458,6 +469,7 @@ function typeset(rawText, settingsIn, env = {}) {
       tocInsertInfo = { inserted: res.inserted, at: res.at };
       eventLog.emit('toc', 'toc-pages-inserted', { ...tocInsertInfo, total: tocPagesAll.length });
     }
+    prog('toc', 78, 'תוכן העניינים', { totalPages: pages.length, tocPages: tocPagesAll.length });
   }
 
   // ---- CP4: decorations pass — geometry-neutral (invariant T1; D-47) ----
@@ -526,6 +538,7 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- folio numbering (D-36: פתיחות אינן מציגות גיליון; S9: נוסחת V1 start-idx+initial) ----
   const numbers = assignNumbers(pages, settings);
+  prog('folio', 82, 'מספור עמודים', { totalPages: pages.length });
   pages.forEach((pg, i) => {
     pg.pageNumber = numbers[i].page;
     pg.folioDisplay = numbers[i].shown ? numbers[i].display : '';
@@ -552,7 +565,7 @@ function typeset(rawText, settingsIn, env = {}) {
     ...(pg.spanning ? pg.spanning.lines : []),
     ...pg.columns.flatMap(c => c)
   ];
-  pages.forEach((pg) => {
+  pages.forEach((pg, i) => {
     let h1 = '', h2 = '';
     pg._metadata = metadata; // S8: תיבות שער ראשי קוראות שם ספר/נושא (REQ-ORN-05)
     for (const ln of pageLines(pg)) {
@@ -576,6 +589,10 @@ function typeset(rawText, settingsIn, env = {}) {
     // D-36 + REQ-HDR-02: עמודי פתיחה ללא כותרת עליונה — אלא אם הופעלה הכותרת הייעודית
     // לפותחות H2/H3 (הבדיקה בתוך buildHeader — מקור יחיד)
     pg.header = buildHeader(pg, settings, pg.headerCtx);
+    // **S10 (REQ-UI-03):** התקדמות מדויקת לפי עמוד — "עמוד X מתוך Y" כאן Y סופי.
+    prog('headers', 82 + Math.round(10 * ((i + 1) / pages.length)),
+      `כותרות עליונות — עמוד ${i + 1} מתוך ${pages.length}`,
+      { pageIndex: i + 1, totalPages: pages.length });
   });
 
   // ---- TOC (מודל לגרסאות ≤S8 — תאימות לאחור; עמודי ה‑TOC האמיתיים נבנו לעיל) ----
@@ -865,6 +882,7 @@ function typeset(rawText, settingsIn, env = {}) {
   eventLog.emit('ledger-finalize', 'summary', ledger.summary());
   const finalHash = layoutHash(pages); // hash \u05e9\u05dc \u05d4\u05de\u05e6\u05d1 \u05d4\u05e1\u05d5\u05e4\u05d9 (\u05d3\u05d8\u05e8\u05de\u05d9\u05e0\u05d9\u05d6\u05dd \u05d1\u05d9\u05df\u05be\u05e8\u05d9\u05e6\u05d5\u05ea)
   eventLog.emit('render', 'cp5-render-ready', { layoutHash: finalHash });
+  prog('render', 100, 'מוכן לתצוגה', { totalPages: pages.length, layoutHash: finalHash });
 
   return {
     metadata, tokens, pages, ledger, events: eventLog,

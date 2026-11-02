@@ -52,11 +52,11 @@ describe('S4.1.4 anti-patcha scanners (must be zero-mismatch)', () => {
     assertEq(res.orphanMechanisms.map(m => `${m.id}->${m.consumer}`), [], 'consumer modules missing');
   });
 
-  it('dead-control scanner reports but does not crash before UI phase (S10 renders from registry)', () => {
-    // Until S10 builds the panels, ALL controls are expected "dead" — this asserts the
-    // scanner itself works symmetrically: count(dead) === count(registry). After S10 the
-    // gate flips to zero. This prevents a silently-broken scanner from faking a pass.
-    assertEq(res.deadControls.length, registry.length, 'dead-control scanner not detecting pre-UI state');
+  it('dead-control scanner: S10 built the UI — every registry control must be bound (gate flipped to zero)', () => {
+    // עד S10 כל הפקדים היו צפויים "מתים" (ה־UI טרם נבנה) — השער הפוך כעת:
+    // bindings.generated.js מרנדר את כל הפאנלים מהרישום, ולכן כל פקד חייב להימצא.
+    // זה מונע סורק שבור שמדווח שקר־ירוק (המשך תיקון P0-5).
+    assertEq(res.deadControls.length, 0, 'dead controls found — UI bindings incomplete: ' + res.deadControls.map(d => d.control).join(', '));
   });
 });
 

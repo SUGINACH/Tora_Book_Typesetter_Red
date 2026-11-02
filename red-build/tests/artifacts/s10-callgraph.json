@@ -1,0 +1,60 @@
+{
+  "schema": "s10-callgraph-v1",
+  "generated_by": "tools/scan-control-triggers.js",
+  "rule": "F-06: אין עימוד אוטומטי מכל בקרה — requestTypeset/typeset מותרים רק בנתיבים המפורשים",
+  "files": [
+    "app-shell.js",
+    "bindings.generated.js",
+    "browser-entry.js",
+    "callgraph-scan.js",
+    "caret-map.js",
+    "editor-tab.js",
+    "engine-worker-main.js",
+    "inline-transport.js",
+    "preview-tab.js",
+    "retypeset-policy.js",
+    "settings-panel.js",
+    "status-strip.js",
+    "testing-tab.js",
+    "worker-client.js",
+    "worker-protocol.js"
+  ],
+  "edges": [
+    {
+      "file": "app-shell.js",
+      "fn": "onExplicitRetypeset",
+      "callee": "requestTypeset",
+      "line": 142
+    },
+    {
+      "file": "engine-worker-main.js",
+      "fn": "onMessage",
+      "callee": "typeset",
+      "line": 14
+    },
+    {
+      "file": "worker-client.js",
+      "fn": "<module>",
+      "callee": "requestTypeset",
+      "line": null
+    }
+  ],
+  "allowed": [
+    {
+      "file": "app-shell.js",
+      "fn": "onExplicitRetypeset",
+      "callee": "requestTypeset"
+    },
+    {
+      "file": "engine-worker-main.js",
+      "fn": "onMessage",
+      "callee": "typeset"
+    },
+    {
+      "file": "worker-client.js",
+      "fn": "<module>",
+      "callee": "requestTypeset"
+    }
+  ],
+  "violations": []
+}

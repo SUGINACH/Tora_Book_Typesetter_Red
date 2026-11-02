@@ -88,6 +88,16 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   if (!measureFn) {
     throw new Error('dp-planner: env.measure is required (single measurement entry — REQ-LB-01). Silent fallback to global is forbidden.');
   }
+  // **S10 (REQ-UI-03):** מזליף התקדמות מה‑DP — מכשור בלבד (no-op proof בבדיקה).
+  // הערכת מספר העמודים: סכום גבהים נמדדים / קיבולת עמוד רגיל — מעודכנת בזמן אמת.
+  const onProgress = env && typeof env.onProgress === 'function' ? env.onProgress : null;
+  const estCapacity = (() => {
+    const tpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
+    return Math.max(1, tpl.contentBox.height * Math.max(1, tpl.columns.length));
+  })();
+  const blockHeight = (b) => (b.lines || []).reduce((s, l) => s + (l.heightPx || 0), 0);
+  const totalHeight = blocks.reduce((s, b) => s + blockHeight(b), 0);
+  const estimatedPages = Math.max(1, Math.ceil(totalHeight / estCapacity));
   const pages = [];
   let pageIdx = 0;
   let seqCounter = 0; // סדר הצבה — סדר קריאה (תיקון P0-3)
@@ -294,6 +304,19 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   for (let bi = 0; bi < blocks.length; bi++) {
     const blk = blocks[bi];
     const next = blocks[bi + 1];
+
+    // **S10 (REQ-UI-03):** התקדמות שלב הפריסה — "עומד עמוד X מתוך כ־Y" (Y מוערך;
+    // מעודכן לספירה הסופית בסיום ה‑DP). בדידות 32 בלוקים — אפס השפעה על הפריסה.
+    if (onProgress && (bi & 31) === 0) {
+      const est = Math.max(estimatedPages, cur.index + 1);
+      onProgress({
+        stage: 'page-plan',
+        pct: 25 + Math.round(45 * (bi / Math.max(1, blocks.length))),
+        label: `עומד עמוד ${cur.index + 1} מתוך כ־${est}`,
+        pageIndex: cur.index + 1,
+        estimatedTotal: est
+      });
+    }
 
     // REQ-HDG-02 (החלטה מאוחדת — headings-escort.applyHeadingModes, D-09):
     // הדגלים נקבעים בpipeline לפני ה‑DP; כאן רק צריכה.
