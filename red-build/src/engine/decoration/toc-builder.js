@@ -23,11 +23,19 @@ function buildTocEntries(headings, settings, numbersByIndex) {
   return entries;
 }
 
-/** כללי + מפורט: general = רמות 1–2; detail = כל הרמות. */
-function splitGeneralDetail(entries) {
+/**
+ * כללי + מפורט: general = רמות 1–2; detail = כל הרמות.
+ * תיקון S9 (מניעת phantom-key): toc-general-enabled / toc-detail-enabled
+ * **נצרכים בפועל** — מקטע שלא מופעל לא נגלה בתוצר (ולא מדוּם בשקט).
+ */
+function splitGeneralDetail(entries, settings = {}) {
+  const genOn = settings['toc-general-enabled'] !== false;
+  const detOn = settings['toc-detail-enabled'] === true;
   return {
-    general: entries.filter(e => e.level <= 2),
-    detail: entries,
+    generalEnabled: genOn,
+    detailEnabled: detOn,
+    general: genOn ? entries.filter(e => e.level <= 2) : [],
+    detail: detOn ? entries : [],
   };
 }
 

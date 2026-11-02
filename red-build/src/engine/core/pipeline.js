@@ -173,7 +173,11 @@ function typeset(rawText, settings, env = {}) {
   // לא משנה שורות → geometry-neutral נאכף בהמשך (hash before==after).
   const { placeSideNotes } = require('../layout/side-notes');
   for (const pg of pages) pg.isRecto = pg.index % 2 === 0;
-  const sideNotePlacement = placeSideNotes(pages, settings);
+  // S9: מדידה אמיתית להערות צד דרך entry יחיד (L1) + רוחב margin חיצוני מהתבנית
+  const regTpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
+  settings._outerMarginPx = Math.max(regTpl.margins.outer != null ? regTpl.margins.outer : 0, regTpl.margins.side * 0.8);
+  settings._sideNoteColWidthPx = Math.max(60, Math.round(settings._outerMarginPx) - 12);
+  const sideNotePlacement = placeSideNotes(pages, settings, (t, s) => api.measureTextWidth(t, s));
 
   // S6/S7: עמודי הערות סיום per-part (REQ-FN-03/04) — נוספים **אחרי** תכנון הגוף,
   // אינם מזיזים עמודי גוף (הוספה ב־tail), ולכן geometry-neutral לגוף.
@@ -230,37 +234,68 @@ function typeset(rawText, settings, env = {}) {
   }
   headingsForToc.sort((a, b) => a.page - b.page); // מסדר קריאה — דטרמיניסטי
   const tocEntries = buildTocEntries(headingsForToc, settings, numbers);
-  const toc = splitGeneralDetail(tocEntries);
+  const toc = splitGeneralDetail(tocEntries, settings); // S9: general/detail enabled נצרכים בפועל
 
-  // ---- אינטגריטיית שימור תוכן (BRZ-15): contentHashOut חייב = contentHashIn ----
-  // נבנה מחדש מהבלוקים הממוקמים. **חשוב (מניעת false-positive של V23):** מילים
-  // עברו normalize + NBSP-gluing, ולכן ההשוואה מבוצעת על טקסט מגולח:
-  // NBSP/\\uE000 → רווח, ריבוי רווחים → רווח אחד, \\uFF9F→\\uFF93. אין השוואת מחרוזות גולמיות.
-  function flattenWords(blk) {
-    if (blk.kind === 'heading') return blk.lines.map(l => l.words.join(' ')).join(' ');
-    if (blk.kind === 'endnote') return blk.text;
-    const body = blk.lines.map(l => l.words.join(' ')).join(' ');
-    const notes = (blk.notes || []).map(n => n.text).join(' ');
-    return `${body} ${notes}`;
-  }
-  const scrubForCompare = (s) => String(s)
+  // ---- אינטגריטיית שימור תוכן (BRZ-15): multiset מילים src == multiset מילים out ----
+  // **לקח V23 (מניעת false-positive):** אין השוואת מחרוזות מלאה — ה‑DP משנה סדר
+  // (פיצול טורים/עמודים) ו‑AQ משנה מרווחים. הנבדך: פרופיל ריבוי מילים זהה
+  // (אף מילה לא אבדה/נוספה) + כל token מיוצג (נמצא או הומר להערת צד).
+  const scrubForCompare = (s0) => String(s0)
     .replace(/[\u00A0\uE000]/g, ' ')
     .replace(/\uFF9F/g, '\u05F3')
     .replace(/\uFF93/g, '\u05F4')
+    .replace(/[\u27E6\u27E7]/g, '')   // ⟦⟧ placeholders — נמדדים, לא נספרים כתוכן
     .replace(/\s+/g, ' ')
     .trim();
-  const srcFlat = tokens.filter(t => t.type !== 'editorial').map(t => {
-    if (t.type === 'heading') return scrubForCompare(t.text);
-    if (t.type === 'endnote') return scrubForCompare(t.text);
+  const wordSeq = (s0) => scrubForCompare(s0).split(' ').filter(Boolean);
+  function srcWordsOf(t) {
+    if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
     const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
     const notes = (t.notes || []).join(' ');
-    return scrubForCompare(`${body} ${notes}`);
-  }).join('\n');
-  const outFlat = blocks.map(flattenWords).map(scrubForCompare).join('\n');
-  const contentPreserved = srcFlat === outFlat;
+    return [...wordSeq(body), ...wordSeq(notes)];
+  }
+  function outWordsOf(blk) {
+    if (blk.kind === 'heading') return wordSeq(blk.lines.map(l => l.words.join(' ')).join(' '));
+    if (blk.kind === 'endnote') return wordSeq(blk.text);
+    // גוף: ⟦…⟧ כבר מגולח; הערות נספרות מ‑notes בלבד — ללא כפילות.
+    // תיקון S9: אם ההערה **נדחתה** מהמרזב (long-footnote-policy), טקסט ההערה
+    // נשאר בגוף כ placeholder — נספור אותו מהגוף כדי שה‑multiset לא יכיל חוסר.
+    const body = blk.lines.map(l => l.words.join(' ')).join(' ');
+    const notes = (blk.notes || []).map(n => n.text).join(' ');
+    const rejected = (blk.notes || []).filter(n => n.rejected).map(n => n.text).join(' ');
+    return [...wordSeq(body), ...wordSeq(notes), ...wordSeq(rejected)];
+  }
+  const srcTokens = tokens.filter(t => t.type !== 'editorial');
+  let contentPreserved = true;
+  const mismatchDetail = [];
+  const gSrc = [], gOut = [];
+  for (const t of srcTokens) gSrc.push(...srcWordsOf(t));
+  for (const b of blocks) gOut.push(...outWordsOf(b));
+  for (const p of sideNotePlacement.placed) gOut.push(...wordSeq(p.text));
+  for (const d of sideNotePlacement.deferred) gOut.push(...wordSeq(d.text));
+  const norm = (arr) => arr.slice().sort().join('\n');
+  if (norm(gSrc) !== norm(gOut)) {
+    contentPreserved = false;
+    const cnt = (a) => a.reduce((m, w) => (m[w] = (m[w] || 0) + 1, m), {});
+    const cs = cnt(gSrc), co = cnt(gOut), diff = {};
+    for (const w of new Set([...Object.keys(cs), ...Object.keys(co)])) {
+      const dd = (cs[w] || 0) - (co[w] || 0);
+      if (dd !== 0) diff[w] = dd;
+    }
+    mismatchDetail.push({ kind: 'multiset-mismatch', diff });
+  }
+  const blocksByToken = new Map();
+  for (const b of blocks) if (!blocksByToken.has(b.tokenId)) blocksByToken.set(b.tokenId, b);
+  for (const t of srcTokens) {
+    const placedAsSide = sideNotePlacement.placed.find(p => p.anchorToken === t.id)
+      || sideNotePlacement.deferred.find(p => p.anchorToken === t.id);
+    if (!blocksByToken.has(t.id) && !placedAsSide) {
+      contentPreserved = false; mismatchDetail.push({ token: t.id, kind: 'token-not-placed' });
+    }
+  }
   if (!contentPreserved) {
-    const rec = ledger.create('text-completeness', 'document', null, { hashIn, lenSrc: srcFlat.length, lenOut: outFlat.length }, 'render');
-    ledger.transition(rec.issue_id, 'persists', 'render', 'scrubbed text mismatch — token loss detected');
+    const rec = ledger.create('text-completeness', 'document', null, { hashIn, mismatches: mismatchDetail }, 'render');
+    ledger.transition(rec.issue_id, 'persists', 'render', 'word-multiset mismatch — token loss/duplication detected');
   }
 
   // ---- ledger finalize + CP5 ----
