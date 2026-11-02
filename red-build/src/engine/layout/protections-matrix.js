@@ -25,8 +25,11 @@ const CHECKS = {
         }
       }
       if (last.meta && last.meta.part === 'first') {
-        // first part ends column → widow check
-        if (settings['prevent-widows-bottom']) {
+        // first part ends column → widow check. מניעת כפילות רישום עם orphan-bottom:
+        // אותו גבול טור בדיוק (יחידת פסקה אחת בתחתית) נרשם רק כ‑orphan-bottom.
+        const sameTokenInCol = col.filter(x => x.meta && x.meta.tokenId === last.meta.tokenId).length;
+        const alsoOrphanBottom = settings['prevent-orphans-bottom'] && sameTokenInCol === 1;
+        if (settings['prevent-widows-bottom'] && !alsoOrphanBottom) {
           violations.push({ kind: 'widow-bottom', target: `page#${page.index}c${c}`, evidence: { colLen: col.length }, ledgerRef: ledger.create('widow-bottom', `p${page.index}c${c}`, page.index, { colLen: col.length }, 'protections').issue_id });
         }
       }
@@ -66,10 +69,15 @@ const CHECKS = {
 
   runtLines(page, settings, ledger) {
     const violations = [];
+    // מניעת רישום-יתר (באג V18: ledger הוצף runts זהים): שורה אחת = לכל היותר רunt אחד.
+    const seenRunt = new Set();
     const minPx = (page.template.columns[0].w * settings['runt-min-width-pct']) / 100;
     for (const col of page.columns) {
       for (const ln of col) {
         if (ln.isLast && ln.widthPx < minPx) {
+          const key = `${ln.tokenId || ''}|${(ln.words || []).join(' ')}`;
+          if (seenRunt.has(key)) continue;
+          seenRunt.add(key);
           violations.push({ kind: 'runt-line', target: `line@${ln.tokenId || ''}`, evidence: { widthPx: Math.round(ln.widthPx), minPx: Math.round(minPx) }, ledgerRef: ledger.create('runt-line', ln.tokenId || 'unknown', page.index, { widthPx: ln.widthPx }, 'protections').issue_id });
         }
       }

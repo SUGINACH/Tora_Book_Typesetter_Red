@@ -68,6 +68,7 @@ function typeset(rawText, settings, env = {}) {
   const api = new MeasureAPI(settings, 'math');
   const blocks = [];
   let currentPart = 0;
+  let fwCount = 0;
   for (const t of tokens) {
     if (t.type === 'editorial') continue;
     if (t.type === 'heading') {
@@ -88,6 +89,12 @@ function typeset(rawText, settings, env = {}) {
     }
     // paragraph: inline note refs get atomic \uE000 spaces (already) — measure as one unit so a note never splits (REQ-LB-04)
     const colW = columnWidthFor({ kind: 'paragraph' }, settings);
+    // דיבור המתחיל (REQ-PAR-ST-03): dh-auto-detect → סימון; טקסט נשאר בזרימה (geometry-neutral)
+    let dh = null;
+    if (settings['dh-auto-detect']) {
+      const flat = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
+      dh = detectDh(flat, true);
+    }
     const allWords = [];
     const notes = [];
     for (const p of t.parts) {
@@ -100,9 +107,13 @@ function typeset(rawText, settings, env = {}) {
     }
     const protectedWords = protectWords(allWords, (x) => api.measureTextWidth(x), colW);
     const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] });
-    blocks.push({ kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, lines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart });
+    const blk = { kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, lines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh };
+    // CP3.4: first-word AFTER line-plan, BEFORE render — metadata בלבד, geometry-neutral
+    const fwRes = applyDropWord(blk, settings, api);
+    if (fwRes.applied) fwCount++;
+    blocks.push(blk);
   }
-  eventLog.emit('measure', 'cp2-measured', { blocks: blocks.length, cache: api.cacheStats() });
+  eventLog.emit('measure', 'cp2-measured', { blocks: blocks.length, cache: api.cacheStats(), firstWordDecorated: fwCount });
 
   // ---- CP3: page plan (DP) + protections + retreat loop ----
   const planned = planPages(blocks, settings, eventLog, ledger);

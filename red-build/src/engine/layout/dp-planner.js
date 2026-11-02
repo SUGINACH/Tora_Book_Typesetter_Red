@@ -6,6 +6,7 @@ const { PAGE_TYPES, buildPageTemplate } = require('./page-templates');
 const { Ledger } = require('../core/ledger');
 const { runProtections } = require('./protections-matrix');
 const { runRetreatLoop } = require('./retreat-loop');
+const { usedHeight, pageImbalance } = require('./balancing');
 
 /** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism). */
 function layoutHash(pages) {
