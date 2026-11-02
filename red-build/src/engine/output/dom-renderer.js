@@ -30,10 +30,44 @@ function scrubPUAText(s) {
   return String(s).split(ATOMIC_SPACE).join(' ');
 }
 
-/** שורה → HTML. מילים צמודות NBSP מוצגות כ‑&#xA0; (נשמר); \uE000 הומר ברווח רגיל. */
-function renderLine(ln, doc) {
+/**
+ * רנדור עמוד שלם. @param {object} page - תוצר dp-planner + header + numbersByIndex
+ */
+
+/**
+ * S9 — צריכת footnote-marker-style (enum): סגנון סמן בפועל, לא מחרוזת בלבד.
+ * hebrew-geresh: א׳/ב׳… ; parenthesis: (1) ; asterisk: *,**,*** ; decimal: 1.
+ */
+const HEB_LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת'];
+function markerFor(index1Based, style) {
+  switch (style) {
+    case 'decimal': return String(index1Based);
+    case 'parenthesis': return `(${index1Based})`;
+    case 'asterisk': {
+      const n = ((index1Based - 1) % 3) + 1; // 3 כוכבים ואז חוזר — policy מקובלת
+      return '*'.repeat(n) + (index1Based > 3 ? String(Math.ceil(index1Based / 3)) : '');
+    }
+    case 'hebrew-geresh':
+    default: {
+      let i = index1Based - 1, s = '';
+      do { s = HEB_LETTERS[i % 22] + s; i = Math.floor(i / 22) - 1; } while (i >= 0);
+      return `${s}\u05F3`; // גרש
+    }
+  }
+}
+
+/** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
+function lastLineClass(ln, settings) {
+  if (!ln.isLast) return '';
+  const mode = settings['body-last-line-align'] || 'center';
+  if (mode === 'right') return ' line--last-right';   // ברירת המחדל העברית המקורית
+  if (mode === 'stretch') return ' line--last-stretch'; // מתיחה מלאה (פסיקה קלאסית)
+  return ' line--last-center';                          // center (default registry)
+}
+
+function renderLine(ln, doc, settings = {}) {
   const el = doc.createElement('div');
-  el.className = 'line' + (ln.isLast ? ' line--last' : '');
+  el.className = 'line' + (ln.isLast ? ' line--last' + lastLineClass(ln, settings) : '');
   el.setAttribute('dir', 'rtl');
   if (ln.aqStretch && ln.aqStretch !== 1) {
     el.style.wordSpacing = `${(ln.aqStretch - 1) * 4}px`; // AQ word-spacing bounded (REQ-BAL-06)
@@ -53,11 +87,14 @@ function renderFootnoteArea(page, settings, doc) {
     rule.className = `fn-rule fn-rule--${settings['footnote-separator-rule']}`;
     area.appendChild(rule);
   }
+  // S9: מניין כללי per-document לפי id ההערה (לא per-page) — עקבי עם footnote-budget
   for (const n of page.footnotes) {
+    const idx = Number.isInteger(n.docIndex) ? n.docIndex : (n.markerNum || 1);
+    const marker = n.marker || markerFor(idx, settings['footnote-marker-style']);
     const el = doc.createElement('div');
     el.className = 'footnote';
     el.dir = 'rtl';
-    el.textContent = `${n.marker || ''}\u200F ${scrubPUAText(n.text || n)}`;
+    el.textContent = `${marker}\u200F ${scrubPUAText(n.text || n)}`;
     area.appendChild(el);
   }
   return area;
@@ -99,7 +136,7 @@ function renderPage(page, settings, doc, header) {
     colEl.className = 'column';
     colEl.style.left = `${page.template.columns[ci] ? page.template.columns[ci].x : 0}px`;
     colEl.style.width = `${page.template.columns[ci] ? page.template.columns[ci].w : 'auto'}px`;
-    for (const ln of colLines) colEl.appendChild(renderLine(ln, doc));
+    for (const ln of colLines) colEl.appendChild(renderLine(ln, doc, settings));
     colsWrap.appendChild(colEl);
   });
   root.appendChild(colsWrap);

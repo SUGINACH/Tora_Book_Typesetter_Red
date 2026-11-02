@@ -18,7 +18,8 @@ function estimateSideNoteHeight(text, settings, measureFn) {
   const size = settings['body-font-size-pt'] * 0.75; // הערות צד קטנות
   const lh = Math.round(size * (96 / 72) * 1.15);
   const words = String(text || '').split(/\s+/).filter(Boolean);
-  const colW = settings._sideNoteColWidthPx || 120; // margin חיצוני ~18%
+  // S9: רוחב עמודת הערות צד **נמדד מהתבנית** (margin חיצוני), לא קבוע־קוד.
+  const colW = settings._sideNoteColWidthPx || Math.max(60, Math.round(settings._outerMarginPx || 120) - 12);
   const fontName = settings['s-note-body-font'];
   const factor = SIDE_NOTE_FONT_FACTORS[fontName] || (fontName && fontName !== settings['body-font'] ? 1.08 : 1);
   let lines = 1, w = 0;
@@ -32,9 +33,10 @@ function estimateSideNoteHeight(text, settings, measureFn) {
 /**
  * @param {Array} pages - עמודי התוצר (עם columns + sideNotes)
  * @param {object} settings
+ * @param {(text:string,sizePt:number)=>number} [measureFn] — מדידה אמיתית (S9: geometry via single entry L1)
  * @returns {{placed:Array, deferred:Array}}
  */
-function placeSideNotes(pages, settings) {
+function placeSideNotes(pages, settings, measureFn) {
   const placed = [];
   const deferred = [];
   for (const page of pages) {
@@ -44,7 +46,8 @@ function placeSideNotes(pages, settings) {
     let stackY = 0;
     for (let i = 0; i < page.sideNotes.length; i++) {
       const sn = page.sideNotes[i];
-      const h = sn.heightPx || Math.round(cap * 0.12);
+      // S9: גובה מחושב בפועל (s-note-body-font + רוחב margin) — לא קבוע 12%.
+      const h = sn.heightPx || estimateSideNoteHeight(sn.text, settings, measureFn);
       // batch consecutive H7s: נועלים יחד עם הבלוק המארח
       if (stackY + h > cap + CONTAINMENT_PX) {
         deferred.push({ ...sn, reason: 'no-room', page: page.index });
