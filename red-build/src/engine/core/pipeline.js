@@ -9,6 +9,7 @@
  * headers/folio/toc → ledger-finalize → CP5 render.
  */
 
+const { getDefaultSettings, derivePlacementFlags } = require('./settings-registry');
 const { lexDocument } = require('../parser/dfa-lexer');
 const { tokenize, contentHash, normalizeText } = require('../parser/block-tokenizer');
 const { scanBrackets } = require('../parser/bracket-scanner');
@@ -49,7 +50,11 @@ function fullWidthWidth(settings) {
  * @param {object} settings - merged settings (registry defaults + user)
  * @param {{doc?:object}} env - optional DOM for oracle rendering
  */
-function typeset(rawText, settings, env = {}) {
+function typeset(rawText, settingsIn, env = {}) {
+  // **S7.1.4 (REQ-FN-05) — enforcement single-entry:** מקור־האמת לנתיב ההערות הוא
+  // note-placement-mode; הדגלים נגזרים כאן **בכל כניסה למנוע** — גם אם הקורא spread-עצמי
+  // את ההגדרות (דפוס הבדיקות/CLI) ולא עבר דרך mergeWithDefaults. ברירת מחדל: registry.
+  const settings = derivePlacementFlags({ ...getDefaultSettings(), ...(settingsIn || {}) });
   const eventLog = new EventLog();
   const ledger = new Ledger();
 
@@ -116,6 +121,19 @@ function typeset(rawText, settings, env = {}) {
       continue;
     }
     if (t.type === 'endnote') {
+      // **S7.1.1 (REQ-FN-03):** במצב footnotes רגיל אין עמודי הערות — טוקן endnote
+      // אינו נגזר לשום מקום ⇒ אובדן שקט (אסור, BRZ-15). הוא זורם לגוף כבלוק
+      // פסקה־ערה מלא (ללא סמן), ונספר בצד src וגם בצד out באופן סימטרי.
+      if (!settings['endnotes-enabled']) {
+        const w = columnWidthFor({ kind: 'paragraph' }, settings);
+        const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => api.measureTextWidth(x), w);
+        const lines = api.layoutLines(words, w, null, { runts: settings['runt-min-width-pct'] });
+        blocks.push({
+          kind: 'paragraph', tokenId: t.id, parts: [{ kind: 'text', value: t.text }],
+          notes: [], bodyMarkers: [], lines, part: currentPart, dh: null, isEndnoteSource: true
+        });
+        continue;
+      }
       blocks.push({ kind: 'endnote', tokenId: t.id, text: t.text, part: currentPart, lines: [] });
       continue;
     }
@@ -145,19 +163,19 @@ function typeset(rawText, settings, env = {}) {
         // דרך notes (marker), ולכן multiset הגוף אינו מכיל אותו בנפרד. הplaceholder הרחב
         // נמדד לפי רוחב הסמן האמיתי (geometry = סמן, לא הערה שלמה).
         const marker = `[${noteSeq}]`;
-        // **S7-E2E תיקון#4 (dual-mode):** במצב endnotes (`endnotes-enabled=true`) אין
-        // מרזב תחתון — ההערה חוזרת **לגוף** כplaceholder מלא `marker:text`, כך שאף מילה
-        // אינה נגנזת (BRZ-15: "no silent word loss"). srcWordsOf סופר בדיוק את אותו
-        // דבר במצב זה (full texts, ללא markers נפרדים) — הצדדים סימטריים במפורש.
-        if (settings['endnotes-enabled']) {
-          allWords.push(`${marker}:${String(noteRaw).replace(/\uE000/g, ' ')}`);
+        // **S7.1.4 tri-mode (BRZ-15) — מקור־האמת note-placement-mode:**
+        //  (ב) endnotes: בגוף נדחק **סמן בלבד**; טקסט ההערה זורם לעמודי "הערות"
+        //      (endnoteBlocks — נוספו שם למעלה) ונספר משם בצד out. ללא כפילות.
+        if (settings['note-placement-mode'] === 'endnotes') {
+          notes.push({ text: noteRaw.replace(/\uE000/g, ' '), marker, tokenId: t.id, noteIndex: p.noteIndex });
+          allWords.push(marker);
+          bodyMarkers.push(marker);
           continue;
         }
-        // **S9-fix (fn-off semantics):** footnotes-disabled ⇒ אין מרזב ואין מקום
-        // להציג סמן־בלבד (היה מוביל לאובדן טקסט הערה — אסור על פי BRZ-15).
-        // ההערה חוזרת לגוף כplaceholder מלא `marker:text` (מסלול endnote-סימטרי),
-        // ו‑srcWordsOf סופר באותו מצב את מילות ההערות המלאות — זהות צדדים נשמרת.
-        if (!settings['footnotes-enabled']) {
+        //  (ג) inline / fn-off: אין מרזב ואין עמודי הערות ⇒ סמן־בלבד היה מאבד
+        //      טקסט (אסור, BRZ-15). ההערה חוזרת לגוף כplaceholder מלא `marker:text`
+        //      (מילה אטומית אחת; ה‑src סופר marker+text — הנרמול מפרד ב‑: לחיוב שני הצדדים).
+        if (settings['note-placement-mode'] === 'inline' || !settings['footnotes-enabled']) {
           allWords.push(`${marker}:${String(noteRaw).replace(/\uE000/g, ' ')}`);
           continue;
         }
@@ -209,6 +227,20 @@ function typeset(rawText, settings, env = {}) {
   // S6/S7: עמודי הערות סיום per-part (REQ-FN-03/04) — נוספים **אחרי** תכנון הגוף,
   // אינם מזיזים עמודי גוף (הוספה ב־tail), ולכן geometry-neutral לגוף.
   const endnoteBlocks = blocks.filter(b => b.kind === 'endnote');
+  // **S7.1.1 (REQ-FN-03/04) — TRI-MODE AWARE:** בעבר עמודי הערות נבנו רק מטוקני
+  // `הערת סיום -` גלויים, ולכן במצב endnotes ההערות האינליין [n] לא הגיעו לעמודי
+  // "הערות" כלל (count=0). עכשיו: במצב endnotes **כל** ההערות — טוקנים גלויים +
+  // note-refs צמודי־גוף — זורמות לעמודי הערות per-part, והסמן בגוף נשאר יחיד.
+  if (settings['endnotes-enabled']) {
+    let seq = 0;
+    for (const b of blocks) {
+      if (b.kind !== 'paragraph' || !b.notes || !b.notes.length) continue;
+      for (const n of b.notes) {
+        seq++;
+        endnoteBlocks.push({ kind: 'endnote', tokenId: b.tokenId, text: n.text, part: b.part || 1, lines: [], fromInline: true, markerRef: n.marker });
+      }
+    }
+  }
   let endnotePagesInfo = { count: 0 };
   if (settings['endnotes-enabled'] && endnoteBlocks.length) {
     const { buildEndnotePages } = require('../layout/endnote-pages');
@@ -279,20 +311,17 @@ function typeset(rawText, settings, env = {}) {
   const wordSeq = (s0) => scrubForCompare(s0).split(' ').filter(Boolean);
   function srcWordsOf(t) {
     if (t.type === 'heading' || t.type === 'endnote' || t.type === 'side-note') return wordSeq(t.text);
-    // **S7-E2E תיקון#3 + S9-fix (BRZ-15 — זהות צדדים, TRI-MODE AWARE):**
-    // כללי יסוד: multiset המקור חייב להיות **זהה במבנה** ל‑outWordsOf. שלושה מצבי הערות:
-    //  (א) footnotes (default): בגוף נדחק הסמן `[n]` בלבד; טקסט ההערה נספר דרך
-    //      מרזב ההערות (acceptedNoteKeys). ⇒ src = body(text-parts) + markers[n].
-    //  (ב) endnote-mode (`endnotes-enabled=true`): ההערה **אינה** נדחקת למרזב —
-    //      היא חוזרת בגוף כplaceholder מלא `marker:text`. ⇒ src = body + note texts.
-    //  (ג) fn-off (`footnotes-enabled=false`): אין מרזב — גם כאן ההערה חוזרת לגוף
-    //      כplaceholder מלא (S9-fix). ⇒ src = body + note texts (כמו ב').
-    // בעבר: src תמיד הוסיף markers ו‑out תמיד הוסיף note-texts → במצבים (ב)/(ג) נוצר
-    // פער שיטתי לכל מילת הערה ("הערה ראשונה להפניה"). עכשיו שני הצדדים מסונכרנים
-    // לאותו מצב — ללא תלות ברצף (גם אחרי reject-to-body, שבו ההערה חוזרת לגוף).
+    // **S7.1.4 TRI-MODE (BRZ-15 — זהות צדדים):** שלושה מצבי note-placement-mode:
+    //  (א) footnotes (default): בגוף סמן `[n]`; הטקסט במרזב ⇒ src = body + markers
+    //      (ו‑out = גוף + הערות שהתקבלו למרזב דרך acceptedNoteKeys).
+    //  (ב) endnotes: בגוף סמן `[n]` בלבד; הטקסט זורם לעמודי "הערות" ונספר שם
+    //      באיסוף endnoteBlocks (להלן) ⇒ src = body + markers — סימטרי ל‑out,
+    //      והערה אינה נספרת דרך המרזב (reserveNotes לא רץ: footnotes-enabled=false).
+    //  (ג) inline/fn-off: אין מרזב/עמודי הערות ⇒ ההערה חוזרת לגוף כplaceholder
+    //      מלא `marker:text` ⇒ src = body + note texts (ללא markers נפרדים).
     const body = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
     const refs = t.parts.filter(p => p.kind === 'note-ref');
-    if (settings['endnotes-enabled'] || !settings['footnotes-enabled']) {
+    if (settings['note-placement-mode'] === 'inline' || !settings['footnotes-enabled']) {
       const full = refs.map(p => String(t.notes[p.noteIndex]).replace(/\uE000/g, ' ')).join(' ');
       return [...wordSeq(body), ...wordSeq(full)];
     }
@@ -313,9 +342,9 @@ function typeset(rawText, settings, env = {}) {
   }
   function outWordsOf(blk) {
     if (blk.kind === 'heading') return wordSeq(blk.lines.map(l => l.words.join(' ')).join(' '));
-    if (blk.kind === 'endnote') return wordSeq(blk.text);
-    // גוף: הסמנים [n] נספרים כפי שנדחקו; הערות נספרות מ‑notes בלבד — ללא כפילות.
-    // סנכרון עם מקור הסמכות של לעיל: רק הערות שהתקבלו למרזב נספרות מכאן.
+    if (blk.kind === 'endnote') return []; // נספר באיסוף endnoteBlocks (להלן) — מקור סמכות יחיד
+    // גוף: הסמנים [n] נספרים כפי שנדחקו; הערות מרזב — רק שהתקבלו (acceptedNoteKeys).
+    // במצב endnotes המרזב ריק ממילא (reserveNotes לא רץ) ⇒ אין כפילות עם עמודי ההערות.
     const body = blk.lines.map(l => l.words.join(' ')).join(' ');
     const notes = (blk.notes || [])
       .filter(n => acceptedNoteKeys.has(`${n.tokenId}#${n.noteIndex}`))
@@ -328,6 +357,9 @@ function typeset(rawText, settings, env = {}) {
   const gSrc = [], gOut = [];
   for (const t of srcTokens) gSrc.push(...srcWordsOf(t));
   for (const b of blocks) gOut.push(...outWordsOf(b));
+  // **S7.1.4:** טקסטים בעמודי "הערות" (טוקנים גלויים + refs צמודי־גוף שזורמו לשם)
+  // נספרים בצד out מהמבנה שנדחה אליו בפועל — BRZ-15 נאכף על המסלול, לא על הגוף.
+  for (const eb of endnoteBlocks) gOut.push(...wordSeq(eb.text));
   for (const p of sideNotePlacement.placed) gOut.push(...wordSeq(p.text));
   for (const d of sideNotePlacement.deferred) gOut.push(...wordSeq(d.text));
   const norm = (arr) => arr.slice().sort().join('\n');
@@ -343,10 +375,14 @@ function typeset(rawText, settings, env = {}) {
   }
   const blocksByToken = new Map();
   for (const b of blocks) if (!blocksByToken.has(b.tokenId)) blocksByToken.set(b.tokenId, b);
+  // **S7.1.4:** במצב endnotes טוקן מקורו עשוי להיות מיוצג ב‑endnoteBlocks בלבד
+  // (הערות שזורמו לעמודי "הערות") — מקום יחסי־תוכן לגיטימי, לא אובדן.
+  const endnoteBlockTokens = new Set(endnoteBlocks.map(e => e.tokenId));
   for (const t of srcTokens) {
     const placedAsSide = sideNotePlacement.placed.find(p => p.anchorToken === t.id)
       || sideNotePlacement.deferred.find(p => p.anchorToken === t.id);
-    if (!blocksByToken.has(t.id) && !placedAsSide) {
+    const representedElsewhere = endnoteBlockTokens.has(t.id);
+    if (!blocksByToken.has(t.id) && !placedAsSide && !representedElsewhere) {
       contentPreserved = false; mismatchDetail.push({ token: t.id, kind: 'token-not-placed' });
     }
   }
