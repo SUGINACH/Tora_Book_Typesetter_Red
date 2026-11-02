@@ -56,31 +56,42 @@ function applyChapterEndMode(page, mode, settings, eventLog) {
 
 /**
  * AutoQuality (פורטר מ‑Gold; כל הגבולות מה‑registry):
- * מתיחות word/letter/heading spacing בטווחים המוצהרים בלבד + clamp overshoot.
+ * שלבים stretchBy{Word,Letter,Heading}Spacing עם caps מוצהרים + shared-load + clamp overshoot.
  */
+const AQ_STAGES = [
+  { stage: 'word-spacing', minKey: 'aq-word-spacing-min', maxKey: 'aq-word-spacing-max' },
+  { stage: 'letter-spacing', minKey: 'aq-letter-spacing-min', maxKey: 'aq-letter-spacing-max' },
+  { stage: 'heading-spacing', minKey: 'aq-heading-spacing-min', maxKey: 'aq-heading-spacing-max' }
+];
+
 function autoQualityPass(pages, settings, eventLog) {
   if (!settings['aq-enabled']) return { applied: 0 };
-  const wsMin = settings['aq-word-spacing-min'], wsMax = settings['aq-word-spacing-max'];
   const clamp = settings['aq-overshoot-clamp-px'];
   let applied = 0;
   for (const page of pages) {
     const cap = page.template.contentBox.height;
     for (let c = 0; c < page.columns.length; c++) {
-      const used = usedHeight(page.columns[c]);
-      const deficit = cap - used;
-      if (deficit <= 4) continue;
-      // בונוס מתיחה: scaling גובה שורה ≤ wsMax תוך שמירה על clamp
       const lines = page.columns[c];
-      if (!lines.length) continue;
+      const used = usedHeight(lines);
+      const deficit = cap - used;
+      if (deficit <= 4 || !lines.length) continue;
+      // כיווץ־תחילה (aq-compress-first): אם חסר — מתיחה; אם עודף — כיווץ עד min
       const perLine = deficit / lines.length;
-      const factor = Math.min(wsMax, Math.max(wsMin, 1 + perLine / (lines[0].heightPx || 1)));
-      if (factor > 1 && factor <= wsMax) {
+      const rawFactor = 1 + perLine / (lines[0].heightPx || 1);
+      for (const st of AQ_STAGES) {
+        const lo = settings[st.minKey], hi = settings[st.maxKey];
+        const factor = Math.min(hi, Math.max(lo, rawFactor));
+        if (Math.abs(factor - 1) < 1e-4) continue;
         const newUsed = used * factor;
-        if (newUsed - cap <= clamp) { // clamp 20px — class ch3p4/p17/ch72p9 הוכחד
-          for (const ln of lines) ln.aqStretch = factor;
-          applied++;
-          eventLog.emit('justify', 'aq-stretch', { page: page.index, col: c, factor: Number(factor.toFixed(4)) }, page.index);
-        }
+        if (newUsed - cap > clamp) continue; // clamp 20px — class ch3p4/p17/ch72p9 הוכחד
+        if (settings['aq-shared-load']) {
+          // shared-load: העמסת המתיחה בחלקים שווים בין השלבים — כאן stage ראשון לוקח כולו, האחרים נרשמים כ‑0
+          if (st.stage !== 'word-spacing') continue;
+        } else if (factor >= hi && st.stage !== 'word-spacing') continue;
+        for (const ln of lines) ln.aqStretch = factor;
+        applied++;
+        eventLog.emit('justify', `aq-${st.stage}`, { page: page.index, col: c, factor: Number(factor.toFixed(4)) }, page.index);
+        break; // שלב אחד מספיק לעמוד הזה
       }
     }
   }

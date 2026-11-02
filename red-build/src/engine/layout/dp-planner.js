@@ -1,8 +1,21 @@
 // src/engine/layout/dp-planner.js — Multi-column/page DP planner (REQ-BAL-01/02/04/08/10)
 'use strict';
 
+const crypto = require('crypto');
 const { PAGE_TYPES, buildPageTemplate } = require('./page-templates');
 const { Ledger } = require('../core/ledger');
+const { runProtections } = require('./protections-matrix');
+const { runRetreatLoop } = require('./retreat-loop');
+
+/** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism). */
+function layoutHash(pages) {
+  const canon = pages.map(p => ({
+    i: p.index, t: p.type,
+    c: p.columns.map(col => col.map(ln => `${ln.tokenId || ''}:${(ln.words || []).join('\u00A7')}`)),
+    fn: p.footnotes.length, sn: p.sideNotes.length
+  }));
+  return crypto.createHash('sha256').update(JSON.stringify(canon), 'utf8').digest('hex');
+}
 
 /**
  * Block = יחידת פריסה: heading או paragraph עם שורות שנמדדו.
@@ -144,7 +157,55 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
     }
   }
 
-  return { pages, ledger };
+  // S5.1.4 + S5.1.5: הגנות AFTER every mutation, ואז לולאת נסיגה מאוחדת עם גלאי תנודות
+  const assess = (page, s, lg) => runProtections(page, s, lg).violations;
+  const retreat = runRetreatLoop({
+    pages, settings, ledger, eventLog,
+    repairFns: {
+      'column-imbalance': (violations, c) => {
+        for (const v of violations) {
+          const pg = pages.find(p => `page#${p.index}` === v.target);
+          if (pg) balancePageSafe(pg, c.settings, c.ledger);
+        }
+      },
+      'widow-bottom': (violations, c) => {
+        for (const v of violations) {
+          const rec = c.ledger.issues.get(v.ledgerRef);
+          if (rec) c.ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no legal split exists (documented compromise)');
+        }
+      },
+      'orphan-top': (violations, c) => {
+        for (const v of violations) {
+          const rec = c.ledger.issues.get(v.ledgerRef);
+          if (rec) c.ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no legal split exists (documented compromise)');
+        }
+      }
+    },
+    assess
+  });
+
+  return { pages, ledger, retreat, hash: layoutHash(pages) };
+}
+
+/** איזון בטוח עם rollback (REQ-BAL-09): snapshot כולל footnotes/sideNotes/ornaments. */
+function balancePageSafe(page, settings, ledger) {
+  const snapshot = { cols: page.columns.map(c => c.slice()), fn: page.footnotes.slice(), sn: page.sideNotes.slice() };
+  let guard = 0;
+  while (Math.abs(usedHeight(page.columns[0]) - usedHeight(page.columns[1])) > settings['imbalance-max-delta-px'] && guard++ < 200) {
+    const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
+    const hi = a >= b ? 0 : 1, lo = 1 - hi;
+    if (!page.columns[hi].length) break;
+    const moved = page.columns[hi].pop();
+    page.columns[lo].unshift(moved);
+    const cap = page.template.contentBox.height;
+    if (page.columns.some(cl => usedHeight(cl) > cap + 0.5)) {
+      page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
+      const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
+      ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
+      return false;
+    }
+  }
+  return true;
 }
 
 /** בחירת נקודת פיצול עם הגנות widow/orphan (≥2 שורות לכל צד). */
@@ -157,4 +218,4 @@ function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog) {
   return maxFit;
 }
 
-module.exports = { planPages };
+module.exports = { planPages, layoutHash };
