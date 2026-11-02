@@ -199,6 +199,36 @@ function typeset(rawText, settingsIn, env = {}) {
         forceNewPage: hMode === 'new-page', sideNote: hMode === 'side-note',
         lines: lines.map(ln => ({ ...ln, kind: 'heading', tokenId: t.id, level: t.level }))
       });
+      // **S8 (F-08 — שיעור הלב):** עיטורי H2 שצורכים גובה מוזמנים כאן — בגודלם
+      // הסופי, לפני הפריסה. H2 במודל regular (בטור): השורות מתנפחות בהזמנה;
+      // H2 full-width: ההזמנה נכנסת לפס החוצה־טורים ב‑dp-planner. המידע נוסע על
+      // השורה (h2Orn) — מקור יחיד למידות (F-09).
+      if (t.level === 2) {
+        const { h2OrnamentReservedHeight } = require('../decoration/ornament-fit');
+        const h2FontPx = Math.round(hSize * 96 / 72 * 100) / 100;
+        const titleW = Math.max(1, ...lines.map(ln => widthFor((ln.words || []).join(' '), hSize, hFont)));
+        const reserved = h2OrnamentReservedHeight(titleW, settings, h2FontPx);
+        if (reserved.scope.any) {
+          const blk = blocks[blocks.length - 1];
+          if (hMode !== 'full-width') {
+            // בטור: תיבת השורה כוללת את ההזמנה — הטקסט יורד ב‑padding (רנדרר)
+            if (reserved.topPx) {
+              blk.lines[0].heightPx += reserved.topPx;
+              blk.lines[0].h2OrnPadTop = reserved.topPx;
+            }
+            if (reserved.bottomPx) {
+              const last = blk.lines[blk.lines.length - 1];
+              last.heightPx += reserved.bottomPx;
+              last.h2OrnPadBottom = reserved.bottomPx;
+            }
+          }
+          blk.lines[0].h2Orn = {
+            ...reserved,
+            kindTop: settings['h2-orn-top'], kindBottom: settings['h2-orn-bottom'], kindSide: settings['h2-orn-side'],
+            fitToText: settings['h2-orn-fit-to-text'] !== false
+          };
+        }
+      }
       continue;
     }
 
@@ -330,17 +360,46 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- CP3: page plan (DP) + protections + retreat loop ----
   const planned = planPages(blocks, settings, eventLog, ledger, { measure: (t2, s2) => api.measureTextWidth(t2, s2) });
-  const { pages } = planned;
+  let { pages } = planned;
+
+  // **S8 — עמודי שער + עמודים מותאמים (PT-01/02/03/09):** הכנסה מבנית
+  // מיד אחרי ה‑DP ולפני צילום ה‑hash של CP4 — השערים חלק מהבסיס שנמדד
+  // (לא ״תוספת מאוחרת״ שמזיזה אינדקסים מתחת להוכחת הניטרליות).
+  {
+    const { insertShaarPages } = require('../decoration/shaar-pages');
+    const { parseCustomPageTypes } = require('../decoration/custom-pages');
+    let customDefs = [];
+    if (settings._customPages) {
+      const parsed = parseCustomPageTypes(settings._customPages);
+      customDefs = parsed.pages;
+      for (const err of parsed.errors) {
+        const rec = ledger.create('settings-verification', 'custom-pages', null, { error: err }, 'decorations');
+        ledger.transition(rec.issue_id, 'persists', 'decorations', `custom page def rejected: ${err}`);
+      }
+    }
+    const shaarResult = insertShaarPages(pages, blocks, settings, customDefs);
+    pages = shaarResult.pages;
+    eventLog.emit('page-plan', 'shaar-pages-inserted', {
+      inserted: shaarResult.inserted.map(x => x.why),
+      custom: shaarResult.customPlaced.length
+    });
+  }
 
   // **P1-1 (connection of dead mechanisms):** end-of-part modes + AutoQuality
   // are activated from the pipeline: balance-chapter-end is applied on the last page
   // of each section; AQ is activated when aq-enabled.
+  // **S8:** עמודי שער/מותאמים הם chapterOpening אך אינם ״סוף פרק״ — הם מפנים
+  // אל העמוד שלפניהם (עמוד התוכן האחרון של החלק), והם עצמם לא מטופלים.
   {
+    const isStructural = (p) => Boolean(p.isShaar) || p.type === 'custom';
     const endsAt = new Set();
     for (let i = 0; i < pages.length; i++) {
-      if (pages[i].chapterOpening && i > 0) endsAt.add(i - 1);
+      if (pages[i].chapterOpening && i > 0) {
+        // גבול פרק מצביע אחורה על העמוד האחרון שאינו מבני (מדלג על שערים/מותאמים)
+        for (let j = i - 1; j >= 0; j--) { if (!isStructural(pages[j])) { endsAt.add(j); break; } }
+      }
     }
-    endsAt.add(pages.length - 1);
+    for (let j = pages.length - 1; j >= 0; j--) { if (!isStructural(pages[j])) { endsAt.add(j); break; } }
     for (const pi of [...endsAt].sort((a, b) => a - b)) {
       applyChapterEndMode(pages[pi], settings['balance-chapter-end'], settings, eventLog);
     }
@@ -355,6 +414,12 @@ function typeset(rawText, settingsIn, env = {}) {
   const { placeSideNotes, verifyH7Conversion } = require('../layout/side-notes');
   for (const pg of pages) pg.isRecto = pg.index % 2 === 0;
   const sideNotePlacement = placeSideNotes(pages, settings, (t2, s2) => api.measureTextWidth(t2, s2), { ledger, eventLog });
+
+  // **S8 — פאס העיטורים (L5):** כל העיטורים overlay-rects על העמודים;
+  // אסור לגעת בשורות (invariant T1 — מוכח מיד לאחר מכן ב‑bodyGeometryHash).
+  // סוגר: REQ-ORN-01..04 + אודיט ornament-* במייצרים אמיתיים.
+  const { planPageOrnaments } = require('../decoration/ornament-plan');
+  const ornamentPass = planPageOrnaments(pages, settings, (t2, s2) => api.measureTextWidth(t2, s2), { ledger, eventLog });
 
   // S7.1.1: עמודי הערות per-part — טוקנים גלויים + inline-refs (endnotes mode)
   settings._endnoteTitleByPart = endnoteTitleByPart;
@@ -415,9 +480,15 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- headers ----
   const bookName = metadata['ספר'] || metadata['title'] || '';
+  // **FWD-1:** הפס חוצה־טורים נסרק גם הוא — כותרת H2 חיה שם עכשיו (S8)
+  const pageLines = (pg) => [
+    ...(pg.spanning ? pg.spanning.lines : []),
+    ...pg.columns.flatMap(c => c)
+  ];
   pages.forEach((pg) => {
     let h1 = '', h2 = '';
-    for (const col of pg.columns) for (const ln of col) {
+    pg._metadata = metadata; // S8: תיבות שער ראשי קוראות שם ספר/נושא (REQ-ORN-05)
+    for (const ln of pageLines(pg)) {
       if (ln.kind === 'heading') { if (ln.level <= 1) h1 = ln.words.join(' '); else if (ln.level === 2) h2 = ln.words.join(' '); }
     }
     const firstCol = pg.columns[0] && pg.columns[0][0];
@@ -435,7 +506,7 @@ function typeset(rawText, settingsIn, env = {}) {
   const { buildTocEntries, splitGeneralDetail } = require('../decoration/toc-builder');
   const firstPageByToken = new Map();
   for (const pg of pages) {
-    for (const col of pg.columns) for (const ln of col) {
+    for (const ln of pageLines(pg)) { // **FWD-1:** כולל שורות הפס החוצה־טורים
       const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
       if (tok != null && !firstPageByToken.has(tok)) firstPageByToken.set(tok, pg.index);
     }
@@ -516,14 +587,13 @@ function typeset(rawText, settingsIn, env = {}) {
   /** חילוץ מילים מהפלט המרונדר בפועל (בדיקת אמת של המבקר — לא הסכמה פנימית). */
   function outWordsOfAll() {
     const out = [];
-    // 1) שורות הגוף של כל העמודים — כפי שמרונדרות (placeholder מפוצל)
+    // 1) שורות הגוף של כל העמודים — כפי שמרונדרות (placeholder מפוצל).
+    //    **FWD-1 (S8):** כולל שורות הפס החוצה־טורים — כותרות H2 חיות שם.
     for (const pg of pages) {
-      for (const col of pg.columns) {
-        for (const ln of col) {
-          for (const w of (ln.words || [])) {
-            if (w.includes(ATOMIC)) out.push(...explodePlaceholderWord(w));
-            else out.push(...wordSeq(w));
-          }
+      for (const ln of pageLines(pg)) {
+        for (const w of (ln.words || [])) {
+          if (w.includes(ATOMIC)) out.push(...explodePlaceholderWord(w));
+          else out.push(...wordSeq(w));
         }
       }
     }
@@ -609,7 +679,7 @@ function typeset(rawText, settingsIn, env = {}) {
 
 
     const bodyMarkers = [];
-    for (const pg of pages) for (const col of pg.columns) for (const ln of col) {
+    for (const pg of pages) for (const ln of pageLines(pg)) { // FWD-1: כולל פס חוצה־טורים
       for (const w of (ln.words || [])) {
         const km = countKnown(w); // תג/E000 בלבד — ראה D-53; מילה רגילה אינה סמן
         if (km) bodyMarkers.push(km);
@@ -729,6 +799,7 @@ function typeset(rawText, settingsIn, env = {}) {
     layoutHash: finalHash,
     plannedLayoutHash: planned.hash,
     geometryNeutralVerified,
+    ornaments: ornamentPass,
     retreat: planned.retreat,
     sideNotes: sideNotePlacement,
     endnotePages: endnotePagesInfo,

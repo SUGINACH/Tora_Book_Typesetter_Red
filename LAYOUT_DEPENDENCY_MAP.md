@@ -1,5 +1,5 @@
 # LAYOUT_DEPENDENCY_MAP.md — מפת תלויות חיה · Tora Book Typesetter Red
-> נבנית אוטומטית מה־require-ים בפועל (סקריפט: `node tools/deps.js` או לפי הטבלה). מצב: 02.11.2026.
+> נבנית אוטומטית מה־require-ים בפועל (סקריפט: `node tools/deps.js` או לפי הטבלה). מצב: 03.11.2026 (אחרי S8 — 60 קשתות).
 
 ## שכבות (מלמטה למעלה)
 ```
@@ -13,10 +13,17 @@ layout/        : page-templates ← column-flow
                  dp-planner ← retreat-loop, candidate-generator, headings-escort
                  dp-planner ← side-notes, endnote-pages (מזומנים מהצינור)
                  balancing ← ordering; balancing ← dp-planner? לא — דרך ordering בלבד (מניעת מעגל)
-decoration/    : folio, headers-builder, toc-builder, dividers, ornament-fit, page-decorations
-output/        : dom-renderer ← notes/markers; html-export; project-io ← settings-registry
+decoration/    : ornament-fit (מקור יחיד למידות והזמנות — F-08/F-09)
+                 dividers ← ornament-fit; ornament-plan ← ornament-fit + dividers
+                 theme-sets, shaar-boxes, svg-sanitize (אין תלויות פנימיות)
+                 assets-import ← svg-sanitize + theme-sets
+                 shaar-pages ← theme-sets + custom-pages + page-templates
+                 custom-pages ← page-templates; page-decorations ← page-templates
+                 folio, headers-builder, toc-builder
+output/        : dom-renderer ← notes/markers + page-decorations + shaar-boxes + ornament-fit + page-templates
+                 html-export; project-io ← settings-registry
 audit/         : report-schema ← dp-planner(layoutHash); scanners ← settings-registry
-core/          : pipeline ← כל השכבות; events/ledger (שעון לוגי — P1-6)
+core/          : pipeline ← כל השכבות (כולל shaar-pages/ornament-plan/custom-pages — S8); events/ledger (שעון לוגי)
 ```
 
 ## קשרים קריטיים (אסור לשבור)
@@ -25,6 +32,12 @@ core/          : pipeline ← כל השכבות; events/ledger (שעון לוג�
 - `layout/ordering.moveLineForward` — הזזות טורים חוקיות בלבד (P0-3).
 - `core/pipeline` — הצרכן היחיד של planPages/placeSideNotes/buildEndnotePages (סדר CP1..CP5).
 - `bodyGeometryHash` — האינווריאנט T1 (D-47); אסור שפאס העיטורים יזיז שורות.
+- **S8:** `ornament-fit` — מקור יחיד למידות עיטורים ולהזמנות גובה (F-08/F-09); הרנדרר והפלנר
+  צורכים אותו — אין עותקים מקומיים.
+- **S8:** `theme-sets.activateThemeSet` — הפעלת ערכה מפעילה את שלושת השערים (F-10 נעול);
+  `uniqueShaarId` מבטיח ייחודיות מזהים (שיעור packerandconfigurator).
+- **S8:** `shaar-pages.insertShaarPages` — מוזמן מהצינור לפני צילום ה־hash של CP4 (השערים
+  חלק מהבסיס הנמדד; תוספת מוצהרת — לא מוטציה).
 
 ## תלויות זמן־ריצה
 - אפס תלויות חיצוניות (zero runtime dependencies; engines: node>=18).

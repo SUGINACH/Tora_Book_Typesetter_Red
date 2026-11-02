@@ -104,10 +104,15 @@ function runRetreatLoop(ctx) {
     // הפרות ללא פונקציית־תיקון (דוקטרינת "מדווח, לא מתוקן") — ייבדקו שוב באיטרציה
     // הבאה; אם הן נשארות עד הקפאה/תקרה — יירשמו אז (recordRemaining).
     if (!repairedAny && !kinds.has('column-imbalance')) {
-      // אין שום תיקון אפשרי לאף הפרה — הקפאה מיידית (מניעת לולאה ריקה)
+      // אין שום תיקון אפשרי לאף הפרה — הקפאה מיידית (מניעת לולאה ריקה).
+      // **S8:** אי־התכנסות היא פשרה לכל דבר — נרשמת כ‑rollback-compromise
+      // ("לא להסתיר ממצאים"; בעבר הוחזר compromise:null והקפאה עברה בשקט).
       const persisted = recordRemaining(ledger, allViolations, 'protections', `no repair available @iter${iteration}`, seen);
-      eventLog.emit('protections', 'retreat-frozen', { iteration, violationCount: allViolations.length });
-      return { converged: false, iterations: iteration, compromise: null, persisted };
+      const signatureNow = allViolations.map(v => `${v.kind}@${v.target}`).sort().join('|');
+      const rec = ledger.create('rollback-compromise', `loop@iter${iteration}`, null, { signature: signatureNow, reason: 'no repair available' }, 'protections');
+      ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no repair function for remaining violations — frozen (documented compromise)');
+      eventLog.emit('protections', 'retreat-frozen', { iteration, violationCount: allViolations.length, compromise: rec.issue_id });
+      return { converged: false, iterations: iteration, compromise: rec.issue_id, persisted };
     }
     eventLog.emit('protections', 'retreat-iteration', { iteration, violationCount: allViolations.length });
   }

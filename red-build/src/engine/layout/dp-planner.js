@@ -22,6 +22,25 @@ function lineTokenId(ln) {
   return '';
 }
 
+/**
+ * **תיקון S8 (טור פנטום):** יישור מערך הטורים לאורך התבנית אחרי המרת סוג עמוד.
+ * שומר על תוכן קיים בעמודות שנותרו; תורם עודפים (בלי תבנית) מוחזרים —
+ * לא אמור לקרות (ההמרה מתבצעת בעמוד ריק/חדש), ואם קרה — נסיגה בטוחה.
+ */
+function reAlignColumns(page) {
+  const n = page.template.columns.length;
+  const old = page.columns || [];
+  const next = Array.from({ length: n }, (_, i) => (old[i] ? old[i].slice() : []));
+  let orphaned = 0;
+  for (let i = n; i < old.length; i++) orphaned += old[i].length;
+  if (orphaned > 0 && old[n - 1]) {
+    // שורות בטור פנטום — מוחזרות לטור האחרון החוקי (BRZ-15: אין גניזה)
+    next[n - 1].push(...old.slice(n).flat());
+  }
+  page.columns = next;
+  return orphaned;
+}
+
 function layoutHash(pages) {
   const canon = pages.map(p => ({
     i: p.index, t: p.type,
@@ -83,7 +102,11 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 
   let cur = newPage(PAGE_TYPES.REGULAR);
 
-  const colCapacity = (tpl) => tpl.contentBox.height;
+  // **FWD-1 (S8):** פס כותרת חוצה־טורים (spanning band) — כותרת שנמדדה ברוחב
+  // מלא מוצבת בפס עליון חוצה־טורים במקום בטור חצי־רוחב (בעבר: נמדדה ברוחב מלא
+  // והוצבה בטור רגיל ⇒ גלישה אופקית שקטה). הטורים מתחילים מתחת לפס.
+  const spanH = (page) => (page && page.spanning ? page.spanning.heightPx : 0);
+  const colCapacity = (tpl, page) => tpl.contentBox.height - spanH(page);
 
   /**
    * גובה תפוס = שורות + **יתרת תקציב ההערות של העמוד** — כך ה‑probe וה‑reservation
@@ -112,7 +135,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 
   function ensureRoom(neededLines, opts = {}) {
     void opts;
-    const cap = colCapacity(cur.template);
+    const cap = colCapacity(cur.template, cur);
     for (let c = 0; c < cur.columns.length; c++) {
       if (cap - usedHeight(cur.columns[c], cur) >= neededLines * lineH - 0.5) return c;
     }
@@ -136,10 +159,10 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       cur.balanceInfo = { before: [a, b], after: [usedHeight(cur.columns[0], cur), usedHeight(cur.columns[1], cur)] };
       eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(usedHeight(cur.columns[0], cur) - usedHeight(cur.columns[1], cur)) }, cur.index);
     }
-    // Invariant BRZ-14: scrollHeight ≤ clientHeight
+    // Invariant BRZ-14: scrollHeight ≤ clientHeight (בכפוף לפס החוצה־טורים — FWD-1)
     for (const col of cur.columns) {
-      if (usedHeight(col, cur) > cur.template.contentBox.height + 0.5) {
-        const rec = ledger.create('containment', `page#${cur.index}`, cur.index, { used: usedHeight(col, cur), cap: cur.template.contentBox.height }, 'page-plan');
+      if (usedHeight(col, cur) > colCapacity(cur.template, cur) + 0.5) {
+        const rec = ledger.create('containment', `page#${cur.index}`, cur.index, { used: usedHeight(col, cur), cap: colCapacity(cur.template, cur) }, 'page-plan');
         ledger.transition(rec.issue_id, cur.type === PAGE_TYPES.FILLER ? 'not-comparable' : 'persists', 'page-plan', 'overflow after placement');
       }
     }
@@ -155,7 +178,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       let placed = false;
       for (let c = 0; c < cur.columns.length && !placed; c++) {
         const needPx = ln.heightPx + pendingGap - 0.5;
-        if (colCapacity(cur.template) - usedHeight(cur.columns[c], cur) >= needPx) {
+        if (colCapacity(cur.template, cur) - usedHeight(cur.columns[c], cur) >= needPx) {
           cur.columns[c].push({ ...ln, meta, seq: seqCounter++ });
           pendingGap = 0;
           placed = true;
@@ -278,13 +301,16 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
       eventLog.emit('page-plan', 'heading-new-page-mode', { token: blk.tokenId }, cur.index);
     }
-    // פתיחת חלק (H1): עמוד חדש + סימון chapterOpening (D-36 — לא מוצג גיליון)
-    if (blk.kind === 'heading' && blk.level === 1) {
+    // פתיחת חלק (H1) / פתיחת ספר (H0 — PT-04 טור רחיד): עמוד חדש + סימון chapterOpening (D-36)
+    // **תיקון S8 (באג חבוי):** המרת סוג עמוד חייבת ליישר גם את מערך הטורים לתבנית
+    // החדשה — בעבר נשאר מערך שני־טורי מעל תבנית חד־טורית ⇒ טור פנטום בלי תבנית.
+    if (blk.kind === 'heading' && (blk.level === 1 || blk.level === 0)) {
       if (cur.columns.some(c => c.length)) { flushPage(); cur = newPage(PAGE_TYPES.REGULAR); }
       cur.chapterOpening = true;
       cur.type = PAGE_TYPES.PREFACE;
       cur.template = buildPageTemplate(PAGE_TYPES.PREFACE, settings, cur.isRecto !== false);
-      eventLog.emit('page-plan', 'part-opening', { token: blk.tokenId }, cur.index);
+      reAlignColumns(cur);
+      eventLog.emit('page-plan', 'part-opening', { token: blk.tokenId, level: blk.level }, cur.index);
     }
 
     // REQ-FN-05/06: heading mode=side-note → הערת שוליים בטור מקביל (H7 doctrine)
@@ -305,11 +331,34 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     if (blk.kind === 'paragraph') reserveNotes(blk);
 
     if (blk.kind === 'heading' && blk.level === 2) {
-      // PT-05: עמוד חדש תמיד + סימון פתיחת סימן (D-36)
+      // PT-05: עמוד חדש תמיד + סימון פתיחת סימן (D-36) + בניית תבנית מלאה
+      // (בעבר בענף ה־else הוחלף סוג העמוד בלי בניית תבנית SIGN_OPEN —
+      // נשארה תבנית REGULAR ללא h2-top-offset; תוקן ב‑S8 עם FWD-1)
       if (cur.columns.some(c => c.length)) { flushPage(); cur = newPage(PAGE_TYPES.SIGN_OPEN); }
-      else cur.type = PAGE_TYPES.SIGN_OPEN;
+      else if (cur.type !== PAGE_TYPES.SIGN_OPEN) {
+        cur.type = PAGE_TYPES.SIGN_OPEN;
+        cur.template = buildPageTemplate(PAGE_TYPES.SIGN_OPEN, settings, cur.isRecto !== false);
+        reAlignColumns(cur); // יישור טורים לתבנית (תיקון S8 — טור פנטום)
+      }
       cur.chapterOpening = true;
       eventLog.emit('page-plan', 'h2-new-page', { token: blk.tokenId }, cur.index);
+      // **FWD-1:** H2 שנמדדה ברוחב מלא (mode=full-width, ברירת המחדל) ⇒ פס
+      // חוצה־טורים — לא טור חצי־רוחב. הטורים נמדדים מתחת לפס (colCapacity מותאם).
+      if (blk.fullWidth && cur.template.columns.length >= 2) {
+        const bandH = blk.lines.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+        // **S8 (F-08):** הזמנת עיטורי H2 בגודל סופי — בתוך גובה הפס, לפני כל מדידה
+        const orn = blk.lines[0] && blk.lines[0].h2Orn;
+        const topPad = orn && orn.scope && orn.scope.signTop ? orn.topPx : 0;
+        const bottomPad = orn && orn.scope && orn.scope.signBottom ? orn.bottomPx : 0;
+        cur.spanning = {
+          lines: blk.lines.map((ln, i) => ({ ...ln, meta: { tokenId: blk.tokenId, firstOfBlock: i === 0, docPart: blk.part }, seq: seqCounter++ })),
+          heightPx: topPad + bandH + bottomPad,
+          titleTopPadPx: topPad,
+          orn: orn || null
+        };
+        eventLog.emit('page-plan', 'h2-spanning', { token: blk.tokenId, heightPx: cur.spanning.heightPx, ornTop: topPad, ornBottom: bottomPad }, cur.index);
+        continue; // הכותרת הוצבה בפס; הבלוקים הבאים ימלאו את הטורים מתחתיו
+      }
     }
 
     // REQ-BAL-10: heading escort ≥2 שורות אחרי כותרת H1–H6 באותו טור.
@@ -346,7 +395,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
       chosenCol = 0;
     }
-    pushLines(blk.lines, { tokenId: blk.tokenId, firstOfBlock: true });
+    pushLines(blk.lines, { tokenId: blk.tokenId, firstOfBlock: true, docPart: blk.part });
 
     if (blk.sideNoteText) cur.sideNotes.push({ text: blk.sideNoteText, anchorToken: blk.tokenId });
   }
@@ -432,7 +481,7 @@ function balancePageSafe(page, settings, ledger) {
 
 /** בחירת נקודת פיצול עם הגנות widow/orphan (≥2 שורות לכל צד). */
 function findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog, settings = {}, candidatesFn = null) {
-  const cap = colCapacity(cur.template);
+  const cap = colCapacity(cur.template, cur);
   const free = cap - usedHeight(cur.columns[cur.columns.length - 1], cur);
   const maxFit = Math.floor(free / lineH);
   if (maxFit < 2 || blk.lines.length - maxFit < 2) return 0; // אין פיצול חוקי → הזזה מלאה

@@ -57,6 +57,10 @@ function bgRgba(color, opacity) {
  * (בעבר היה כאן ממיר מקומי שני — אי־עקביות מספור, P1-3.)
  */
 const { markerFor } = require('../notes/markers');
+const { planDecorations } = require('../decoration/page-decorations');
+const { resolveShaarBox } = require('../decoration/shaar-boxes');
+const { columnDividerHeightPx } = require('../decoration/ornament-fit');
+const { MM_TO_PX } = require('../layout/page-templates');
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -74,6 +78,10 @@ function renderLine(ln, doc, settings = {}) {
   if (ln.aqStretch && ln.aqStretch !== 1) {
     el.style.wordSpacing = `${(ln.aqStretch - 1) * 4}px`;
   }
+  // **S8 (F-08):** הזמנת עיטורי H2 בתוך תיבת השורה — הטקסט יורד/עולה ב־padding;
+  // הגובה כבר תוקצב בפריסה, הרנדור רק מצייר בתוך התיבה (מקור יחיד — F-09).
+  if (ln.h2OrnPadTop) el.style.paddingTop = `${ln.h2OrnPadTop}px`;
+  if (ln.h2OrnPadBottom) el.style.paddingBottom = `${ln.h2OrnPadBottom}px`;
   // **D-42:** מילים בתוך סוגריים — span.w--paren עם font-size בסקאלה (geometry-neutral).
   // מילים רגילות — span.w אחיד (מיצג גם ב‑DOM אמיתי וגם ב‑shim של הבדיקות).
   const parenScale = Number(settings['paren-style-scale']) || 1;
@@ -136,12 +144,13 @@ function renderHeader(header, doc) {
   return el;
 }
 
-/** חוט מפריד בין טורים (overlay; גובה Math.min −8px — V4 rule; geometry-neutral). */
+/** חוט מפריד בין טורים (overlay; גובה Math.min −8px — כלל V4; geometry-neutral).
+ * גובה החישוב מקור יחיד: ornament-fit.columnDividerHeightPx (F-09 — לא עותק מקומי). */
 function renderColumnDivider(page, settings, doc) {
   const style = settings['column-divider-style'];
   if (!style || style === 'none' || page.columns.length < 2) return null;
   const used = page.columns.map(col => col.reduce((s, ln) => s + (ln.heightPx || 0), 0));
-  const h = Math.max(0, Math.min(...used) - 8);
+  const h = columnDividerHeightPx(used);
   if (h <= 0) return null;
   const el = doc.createElement('div');
   el.className = `col-divider col-divider--${style}`;
@@ -150,6 +159,117 @@ function renderColumnDivider(page, settings, doc) {
   el.style.top = `${page.template.contentBox.top}px`;
   el.style.height = `${h}px`;
   return el;
+}
+
+/**
+ * **S8 (FWD-1):** פס כותרת חוצה־טורים — שורות הכותרת שנמדדו ברוחב מלא,
+ * מרונדרות בפס עליון חוצה־טורים מעל שני הטורים.
+ */
+function renderSpanningBand(page, settings, doc) {
+  if (!page.spanning || !page.spanning.lines.length) return null;
+  const band = doc.createElement('div');
+  band.className = 'spanning-band';
+  band.dir = 'rtl';
+  const spanTop = page.template.contentBox.top;
+  band.style.top = `${spanTop}px`;
+  band.style.height = `${page.spanning.heightPx}px`;
+  const left = Math.min(...page.template.columns.map(c => c.x));
+  const right = Math.max(...page.template.columns.map(c => c.x + c.w));
+  band.style.left = `${Math.round(left)}px`;
+  band.style.width = `${Math.round(right - left)}px`;
+  for (const ln of page.spanning.lines) band.appendChild(renderLine(ln, doc, settings));
+  return band;
+}
+
+/**
+ * **S8 (REQ-ORN-01..04):** כל העיטורים נציירים מה־rect שחושב בפאס העיטורים
+ * (ornament-plan) — הרנדרר לא קובע ממדים משלו (F-09: מקור שליטה יחיד).
+ */
+function renderDecorations(page, doc) {
+  const els = [];
+  for (const d of (page.decorations || [])) {
+    const el = doc.createElement('div');
+    el.className = d.cssClass || 'orn';
+    el.dataset.slot = d.slot || '';
+    el.dataset.kindStyle = d.kindStyle || '';
+    el.style.left = `${Math.round(d.x)}px`;
+    el.style.top = `${Math.round(d.y)}px`;
+    el.style.width = `${Math.round(d.w)}px`;
+    el.style.height = `${Math.round(d.h)}px`;
+    els.push(el);
+  }
+  return els;
+}
+
+/**
+ * **S8 (REQ-ORN-05/08):** רקע עמוד + תיבות שער לפי התוכנית שחושבה (page-decorations)
+ * — רקע לפי מחלקת העמוד עם inset במ״מ; תיבת טקסט של שער ראשי לפי box פתור.
+ */
+function renderPageBackgroundAndShaar(page, settings, doc, metadata) {
+  const els = [];
+  const plan = planDecorations(page, settings);
+  const inset = plan.background ? plan.background.insetPx : 0;
+  if (plan.background && plan.background.image) {
+    const el = doc.createElement('div');
+    el.className = 'deco deco--page-background';
+    el.style.backgroundImage = `url("${plan.background.image}")`;
+    el.style.inset = `${inset}px`;
+    els.push(el);
+  }
+  if (plan.background && plan.background.texture) {
+    const el = doc.createElement('div');
+    el.className = 'deco deco--page-texture';
+    el.style.backgroundImage = `url("${plan.background.texture}")`;
+    els.push(el);
+  }
+  // שער ראשי: תמונת הערכה כרקע + תיבת טקסט (שם הספר) לפי box פתור (REQ-ORN-05)
+  const mainSlot = plan.slots.find(s => s.slot === 'shaar-main' && s.asset);
+  if (mainSlot) {
+    const bg = doc.createElement('div');
+    bg.className = 'deco deco--shaar-main';
+    bg.style.backgroundImage = `url("${mainSlot.asset}")`;
+    bg.style.inset = '0';
+    els.push(bg);
+    const { box } = resolveShaarBox('main', settings['theme-set-id'] || 'default', { box: settings['shaar-main-box'] }, null, { top: 40, bottom: 40, right: 30, left: 30 });
+    const tb = doc.createElement('div');
+    tb.className = 'shaar-main-box';
+    tb.dir = 'rtl';
+    tb.style.top = `${Math.round(box.top * MM_TO_PX)}px`;
+    tb.style.bottom = `${Math.round(box.bottom * MM_TO_PX)}px`;
+    tb.style.left = `${Math.round(box.left * MM_TO_PX)}px`;
+    tb.style.right = `${Math.round(box.right * MM_TO_PX)}px`;
+    const bookName = (metadata && (metadata['ספר'] || metadata['title'])) || '';
+    const topic = (metadata && metadata['נושא']) || '';
+    tb.textContent = [bookName, topic].filter(Boolean).join(' · ');
+    els.push(tb);
+  }
+  return els;
+}
+
+/**
+ * **S8 (PT-09):** עמוד מותאם — תוכן קבוע/תיבות/תמונות במיקומים שהוגדרו (מ״מ→פיקסלים).
+ */
+function renderCustomPageContent(page, doc) {
+  const els = [];
+  if (!page.custom) return els;
+  for (const b of (page.custom.boxes || [])) {
+    const el = doc.createElement('div');
+    el.className = 'custom-box';
+    el.dir = 'rtl';
+    el.style.left = `${b.x}px`; el.style.top = `${b.y}px`;
+    el.style.width = `${b.w}px`; el.style.height = `${b.h}px`;
+    el.textContent = scrubPUAText(b.text || '');
+    els.push(el);
+  }
+  for (const im of (page.custom.images || [])) {
+    const el = doc.createElement('div');
+    el.className = 'custom-image';
+    el.style.left = `${im.x}px`; el.style.top = `${im.y}px`;
+    el.style.width = `${im.w}px`; el.style.height = `${im.h}px`;
+    el.style.backgroundImage = `url("${im.src}")`;
+    els.push(el);
+  }
+  return els;
 }
 
 /**
@@ -201,16 +321,38 @@ function renderPage(page, settings, doc, header) {
     return root;
   }
 
+  // **S8 (REQ-ORN-05/08):** רקעים/ערכות/תיבות שער — שכבות תשתית לפני התוכן
+  for (const el of renderPageBackgroundAndShaar(page, settings, doc, page._metadata)) root.appendChild(el);
+
+  // **S8 (PT-09):** עמוד מותאם — תוכן קבוע; אין טורים/כותרת עליונה
+  if (page.type === 'custom') {
+    for (const el of renderCustomPageContent(page, doc)) root.appendChild(el);
+    if (page.folioDisplay && settings['page-num-position'] !== 'none') {
+      const folio = doc.createElement('footer');
+      folio.className = `folio folio--${settings['page-num-position']} folio--frame-${settings['page-num-frame']}`;
+      folio.textContent = page.folioDisplay;
+      root.appendChild(folio);
+    }
+    return root;
+  }
+
   const h = renderHeader(header, doc);
   if (h) root.appendChild(h);
 
+  // **S8 (FWD-1):** פס כותרת חוצה־טורים מעל הטורים (H2 full-width)
+  const band = renderSpanningBand(page, settings, doc);
+  if (band) root.appendChild(band);
+
   const colsWrap = doc.createElement('div');
   colsWrap.className = 'columns';
+  const spanOffset = page.spanning ? page.spanning.heightPx : 0; // הטורים מתחילים מתחת לפס
   page.columns.forEach((colLines, ci) => {
     const colEl = doc.createElement('section');
     colEl.className = 'column';
     colEl.style.left = `${page.template.columns[ci] ? page.template.columns[ci].x : 0}px`;
     colEl.style.width = `${page.template.columns[ci] ? page.template.columns[ci].w : 'auto'}px`;
+    colEl.style.top = `${page.template.contentBox.top + spanOffset}px`;
+    colEl.style.height = `${Math.max(0, page.template.contentBox.height - spanOffset)}px`;
     for (const ln of colLines) colEl.appendChild(renderLine(ln, doc, settings));
     colsWrap.appendChild(colEl);
   });
@@ -230,6 +372,9 @@ function renderPage(page, settings, doc, header) {
     root.appendChild(folio);
   }
 
+  // **S8 (REQ-ORN-01..04):** עיטורים — ציור מה־rectים בלבד (F-09 מקור יחיד)
+  for (const el of renderDecorations(page, doc)) root.appendChild(el);
+
   // הערות צד: מיקום מוחלט לפי ה‑placement (S7.1.2) — anchor לפסקה המארחת
   for (const sn of page.sideNotes || []) {
     const el = doc.createElement('aside');
@@ -248,4 +393,4 @@ function renderPage(page, settings, doc, header) {
   return root;
 }
 
-module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS };
+module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent };

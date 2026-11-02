@@ -85,6 +85,7 @@ function assignNumbers(pages, settings) {
     if (p.type.startsWith('shaar')) counted = counted && settings['count-shaar-pages'];
     if (p.type.startsWith('toc')) counted = counted && settings['count-toc-pages'];
     if (p.type === 'endnotes') counted = counted && (settings['count-endnote-pages'] === true);
+    if (p.type === 'custom' && p.counted === false) counted = false; // PT-09: "האם נספר" — לפי ההגדרה
     if (!counted) return { page: null, display: '', shown: false };
     const cur = v++;
     // D-36: פתיחת פרק/סימן — נספר, לא מוצג; עמודי הערות לא מציגים כותרת עליונה ממילא

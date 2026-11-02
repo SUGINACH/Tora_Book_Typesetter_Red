@@ -1,4 +1,4 @@
-// src/engine/decoration/page-decorations.js — Theme/shaar/background box placement (S6, REQ-ORN-06, PT-03)
+// src/engine/decoration/page-decorations.js — Theme/shaar/background box placement (S6, REQ-ORN-06/08, PT-03)
 'use strict';
 
 /**
@@ -9,16 +9,47 @@
  * - D-11: אין הצטברות עיטורים; כל תבנית מקבלת מקום אחד בלבד לכל מלוי.
  * - F-09: אין !important; השליטה רק דרך מחלקות + inline שנכתב מכאן.
  * - PT-03: ארבעת מקטעי shaar_back הם עצמאיים — כל אחד נכבה בנפרד.
+ *
+ * **S8 (REQ-ORN-08):** פאנל רקעים מוזג לתוך פאנל נושאים — 3 סוגי עמודים
+ * (רגיל / פתיחת הקדמה / פתיחת סימן); color/texture/image + opacity; insets במ"מ.
  */
 
 /** 4 המקטעים העצמאיים של שער אחורי (PT-03). */
 const SHAAR_BACK_SEGMENTS = ['frame', 'title-box', 'body-box', 'footer-ornament'];
 
+/** 3 סוגי העמודים לרקעים (REQ-ORN-08). */
+const BACKGROUND_PAGE_CLASSES = ['regular', 'preface-open', 'sign-open'];
+
+const { MM_TO_PX } = require('../layout/page-templates');
+
+/** תנאי התאמת סוג־עמוד למחלקת רקע. */
+function backgroundClassForPage(page) {
+  if (page.type === 'preface' && page.chapterOpening) return 'preface-open';
+  if (page.type === 'sign-open') return 'sign-open';
+  return 'regular';
+}
+
+/**
+ * החלטת רקע לפי מחלקת העמוד (REQ-ORN-08): הרקע שהוגדר למחלקה שאליה
+ * העמוד שייך בלבד. inset במ"מ מומר לפיקסלים כאן — מקור יחיד.
+ * @returns {{image:string|null, texture:string|null, insetPx:number}|null}
+ */
+function planBackground(page, settings) {
+  const cls = backgroundClassForPage(page);
+  const target = settings['background-page-type'] || 'regular';
+  if (cls !== target) return null; // הרקע שייך למחלקה אחרת
+  const image = settings['background-image'] || null;
+  const texture = settings['background-texture'] || null;
+  if (!image && !texture) return null;
+  const insetMm = Math.max(0, Number(settings['background-inset-mm']) || 0);
+  return { image, texture, insetPx: Math.round(insetMm * MM_TO_PX) };
+}
+
 /**
  * החלטת מלוי לעימוד דף — פונקציה טהורה (ללא DOM), דטרמיניסטית.
  * @param {object} page - { type: 'regular'|'shaar-main'|'shaar-sub'|'shaar-back'|... , index }
  * @param {object} settings - registry defaults+user
- * @returns {{ slots: Array<{slot:string, asset:string|null, cssClass:string}>, themeSetId:string }}
+ * @returns {{ slots: Array<{slot:string, asset:string|null, cssClass:string}>, themeSetId:string, background:object|null }}
  */
 function planDecorations(page, settings) {
   const themeSetId = settings['theme-set-id'] || 'default';
@@ -41,7 +72,7 @@ function planDecorations(page, settings) {
       break;
     }
     case 'shaar-sub': {
-      push('shaar-sub', null, 'deco--themed');
+      push('shaar-sub', settings['shaar-sub-image'] || null, 'deco--themed');
       break;
     }
     case 'shaar-back': {
@@ -52,20 +83,15 @@ function planDecorations(page, settings) {
       break;
     }
     default: {
-      // regular / preface / sign-open …: רקע לפי background-page-type
-      const bgType = settings['background-page-type'] || 'regular';
-      const wantsBg =
-        (bgType === 'preface-open' && page.type === 'preface') ||
-        (bgType === 'sign-open' && page.type === 'sign-open') ||
-        (bgType === 'regular');
-      if (wantsBg && settings['background-image']) {
-        push('page-background', settings['background-image'], 'deco--background');
-      }
+      // regular / preface / sign-open …: רקע לפי מחלקת העמוד (REQ-ORN-08)
+      const bg = planBackground(page, settings);
+      if (bg && bg.image) push('page-background', bg.image, 'deco--background');
+      if (bg && bg.texture) push('page-texture', bg.texture, 'deco--texture');
       break;
     }
   }
 
-  return { slots, themeSetId };
+  return { slots, themeSetId, background: planBackground(page, settings) };
 }
 
 /**
@@ -87,4 +113,7 @@ function applyDecorationSlots(rootEl, doc, slots) {
   }
 }
 
-module.exports = { planDecorations, applyDecorationSlots, SHAAR_BACK_SEGMENTS };
+module.exports = {
+  planDecorations, applyDecorationSlots, planBackground, backgroundClassForPage,
+  SHAAR_BACK_SEGMENTS, BACKGROUND_PAGE_CLASSES
+};
