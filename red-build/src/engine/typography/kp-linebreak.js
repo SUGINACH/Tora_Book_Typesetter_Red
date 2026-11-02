@@ -66,13 +66,6 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
       if (cost[i + 1] > cost[i]) { cost[i + 1] = cost[i]; parent[i + 1] = i; }
       continue;
     }
-    // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
-    // רק אם items[c-1] הוא glue לא־פנימי ו‑items[c] תיבה שפותחת יחידה חדשה.
-    // זה מבטל את באג V23: lock תלוי-נקודת-התחלה על צמתים משותפים ל‑DP.
-    const legalCut = new Array(n + 2).fill(false);
-    for (let c = 1; c < n; c++) {
-      if (items[c - 1].kind === 'glue' && !items[c - 1].internal && items[c].kind === 'box') legalCut[c] = true;
-    }
     let w = 0, stretch = 0, shrink = 0;
     for (let j = i; j < n; j++) {
       const it = items[j];
@@ -94,13 +87,18 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
       if (w - shrink > maxWidthPx + 0.5) break; // חריגה שאינה ניתנת לתיקון
 
       if (it.kind === 'box') {
-        if (!legalCut[j + 2]) continue; // מקום שבירה לא חוקי מבנית (תוך-יחידה/אחרי internal glue)
+        // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
+        // רק אם items[c-1] הוא glue לא־פנימי ו‑items[c] תיבה שפותחת יחידה חדשה.
+        // זה מבטל את באג V23: lock תלוי-נקודת-התחלה על צמתים משותפים ל‑DP.
+        // (תיקון S3: הבדיקה הייתה בתוך הלולאה עם אינדקס שגוי j+2 — כל השברים נחסמו.)
+        const cut = j + 1; // נקודת שבירה חוקית: אחרי תיבה, לפני ה‑glue העוקב
+        if (!(items[cut].kind === 'glue' && !items[cut].internal && items[cut + 1] && items[cut + 1].kind === 'box')) continue;
         const slack = maxWidthPx - w;
         const ratio = slack >= 0 ? (stretch > 0 ? slack / stretch : 0) : (shrink > 0 ? slack / shrink : -2);
         const b = badness(ratio);
         if (b >= INF) continue;
         const cand = cost[i] + b;
-        if (cand < cost[j + 2]) { cost[j + 2] = cand; parent[j + 2] = i; }
+        if (cand < cost[cut]) { cost[cut] = cand; parent[cut] = i; }
       }
     }
   }
