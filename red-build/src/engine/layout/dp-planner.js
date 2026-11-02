@@ -108,18 +108,24 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
       void 0;
     }
 
-    // REQ-BAL-10: heading escort ≥2 שורות אחרי כותרת H1–H6
+    // REQ-BAL-10: heading escort ≥2 שורות אחרי כותרת H1–H6.
+    // תיקון S5 (מניעת false-positive): בודקים מקום אמיתי לכותרת + 2 שורות ההמשך
+    // באותו טור; אין מקום → דוחפים את הכותרת לעמוד חדש (resolved).
+    // רק אם גם בעמוד ריק אין מקום (נמדד מחדש) → correction-blocked מתועד.
     if (blk.kind === 'heading' && blk.level <= 6) {
       const following = (next && next.lines) ? next.lines.length : 0;
-      if (following < 2 && next && next.kind === 'paragraph') {
-        const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesAfter: following }, 'protections');
-        // דחיפה: הוספת שורה אחת לפחות לעמוד הזה אם אפשרית; אחרת — העתקת הכותרת לעמוד הבא
-        const room = ensureRoom(1 + Math.min(2, following));
+      if (following >= 1) {
+        const needLines = 1 + Math.min(2, following); // כותרת + 2 שורות ליווי (או כמה שיש)
+        let room = ensureRoom(needLines);
         if (room === -1) {
           flushPage(); cur = newPage(blk.level === 2 ? PAGE_TYPES.SIGN_OPEN : PAGE_TYPES.REGULAR);
-          ledger.transition(rec.issue_id, 'resolved', 'protections', 'heading pushed to fresh page');
-        } else {
-          ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'insufficient room for escort');
+          room = ensureRoom(needLines);
+          if (room !== -1) {
+            eventLog.emit('page-plan', 'heading-escort-push', { token: blk.tokenId, page: cur.index }, cur.index);
+          } else {
+            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template), lineHPx: lineH }, 'protections');
+            ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no column fits heading+escort even on fresh page (oversized block)');
+          }
         }
       }
     }
@@ -131,7 +137,10 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger()) {
       // שקול מועמד: האם להשאיר חלק מהשורות בטור הנוכחי? — נדרוש לפחות 2 שורות (widow/orphan DP)
       const splitAt = findSplit(blk, cur, colCapacity, usedHeight, lineH, ledger, eventLog);
       if (splitAt > 0) {
-        pushLines(blk.lines.slice(0, splitAt), { tokenId: blk.tokenId, part: 'first' });
+        // תיקון S5: סימון isLast על השורה האחרונה של החלק הראשון — נחוץ לגלאי
+        // widow-top/orphan-bottom במטריצת ההגנות (ללא סימון זה הגלאים לא פעילים).
+        pushLines(blk.lines.slice(0, splitAt - 1), { tokenId: blk.tokenId, part: 'first' });
+        pushLines([blk.lines[splitAt - 1]], { tokenId: blk.tokenId, part: 'first', isLast: true });
         flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
         pushLines(blk.lines.slice(splitAt), { tokenId: blk.tokenId, part: 'rest' });
         continue;
