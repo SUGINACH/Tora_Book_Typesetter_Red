@@ -1,0 +1,14 @@
+{
+  "name": "tora-book-typesetter-red",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tora Book Typesetter RED — the definitive rebuild (engine core, zero runtime dependencies)",
+  "scripts": {
+    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/layout/s5-s6.test.js && node tests/e2e/pipeline.test.js",
+    "test:unit": "node tests/unit/parser.test.js && node tests/unit/typography.test.js",
+    "test:gate:s4": "node tests/integration/registry.test.js",
+    "test:gate:s5s6": "node tests/layout/s5-s6.test.js"
+  },
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" }
+}

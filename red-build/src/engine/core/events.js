@@ -6,7 +6,11 @@
  * המכשור אסור לשנות פריסה — no-op proof נאכף ב‑CI (REQ-GOV-01/U-A7).
  */
 class EventLog {
-  constructor() {
+  /**
+   * @param {string} verbosity - 'off'|'minimal'|'standard'|'full' (key: trace-verbosity, REQ-GOV-01)
+   */
+  constructor(verbosity = 'full') {
+    this.verbosity = verbosity; // settings['trace-verbosity']
     this.events = [];
     this.droppedEvents = 0; // חייב להישאר 0 (REQ-GOV-01)
     this.stageOrder = [
@@ -21,6 +25,9 @@ class EventLog {
       this.droppedEvents++;
       return;
     }
+    if (this.verbosity === 'off') return;              // trace-verbosity → off: no logging at all
+    if (this.verbosity === 'minimal') payload = {};    // stage+label only
+    if (this.verbosity !== 'full') pageIndex = null;   // standard: no per-page detail
     this.events.push({
       seq: this.events.length + 1,
       stage, label, pageIndex,
