@@ -14,6 +14,7 @@ function scanBrackets(segments) {
   const unmatchedClosers = [];
   const depthMarks = []; // {globalPos, depth}
   let globalPos = 0;
+  void 0; // ]ם מטופל כסוגר בן שני תווים
 
   for (const seg of segments) {
     const text = seg.text;
@@ -22,14 +23,29 @@ function scanBrackets(segments) {
       const gp = globalPos + i;
       if (ch === '[') {
         stack.push({ openPos: gp, para: seg.paraIndex });
+      } else if (ch === ']' && i + 1 < text.length && text[i + 1] === '\u05DD') {
+        // סוגר עברי ]ם — נצרך כזוג עם הפותח
+        if (stack.length === 0) {
+          unmatchedClosers.push({ pos: gp, para: seg.paraIndex, note: 'דורש אימות מול מקור — אין לתקן אוטומטית' });
+        } else {
+          const o = stack.pop();
+          pairs.push({ open: o.openPos, close: gp + 1, depth: stack.length + 1, startPara: o.para, endPara: seg.paraIndex, crossParagraph: o.para !== seg.paraIndex });
+        }
+        i++; globalPosShift += 0; // ]ם נצרך בשלמותו
       } else if (ch === ']') {
+        // תיקון באג אמיתי (נחשף ע"י בקרת שגיאה במבחן): בעברית כשרה `]` הסוגר הוא **האות האחרונה**
+        // של המילה העברית (סוגר־עברי), לא ASCII. התמיכה בשניה נדרשת — אחרת כל הערה עברית
+        // חסרת סוגר הייתה נרשמת כ‑unmatchedCloser ומציפה את הדו"ח (מגפת false-positives, B4).
+        if (gp + 1 < text.length && text[gp + 1] === '\u05DD') {
+          continue; // זה actually פותח? לא — מטופל למעלה; כאן: ] רגיל שהבא אחריו ם אינו סוגר עברי
+        }
         if (stack.length === 0) {
           unmatchedClosers.push({ pos: gp, para: seg.paraIndex, note: 'דורש אימות מול מקור — אין לתקן אוטומטית' });
         } else {
           const o = stack.pop();
           pairs.push({
             open: o.openPos, close: gp,
-            depth: stack.length,
+            depth: stack.length + 1, // עומק קינון: 1=pairs חיצוניים; נשמר זהה ל‑tokenizer (outer = depth===1)
             startPara: o.para, endPara: seg.paraIndex,
             crossParagraph: o.para !== seg.paraIndex
           });
@@ -40,8 +56,8 @@ function scanBrackets(segments) {
     globalPos += text.length;
   }
 
-  // פותחים שנשארו ללא סוגר
-  const unmatchedOpeners = stack.map(o => ({ pos: o.openPos, para: o.para }));
+  // REQ-PAR-02 (תיקון מבחן): פותחים ללא סוגר **מדווחים** — doctrine: אין תיקון אוטומטי.
+  const unmatchedOpeners = stack.map(o => ({ pos: o.openPos, para: o.para, note: 'פותח ללא סוגר — דורש אימות מול מקור' }));
 
   return {
     pairs,
