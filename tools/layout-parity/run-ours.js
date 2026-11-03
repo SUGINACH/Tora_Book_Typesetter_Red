@@ -115,13 +115,17 @@ function main() {
   };
 
   const t0 = Date.now();
-  const result = typeset(text, settings, { noRecommendations: true });
+  // **S4.13:** בתי גופן הערות-צד (HadassahFriedlaender — כמו המקור) —
+  // המנוע נרשם אותם וגולש את הערות במטריקות הנכונות.
+  const marginFontPath = path.join(RB, 'ui/assets/imud/fonts/Hadassah-Friedlaender-Regular.ttf');
+  const marginFontBytes = fs.existsSync(marginFontPath) ? fs.readFileSync(marginFontPath) : null;
+  const result = typeset(text, settings, { noRecommendations: true, marginFontBytes });
   console.error(`typeset: ${result.pages.length} pages in ${Date.now() - t0}ms (hash ${String(result.layoutHash).slice(0, 12)}) [profile: ${result.legacyProfile ? 'imud-legacy' : 'dp'}]`);
 
   // ---------- דטרמיניזם: הרצה שנייה חייבת לתת hash ועמודים זהים ----------
   if (wantDeterminism) {
     const t1 = Date.now();
-    const again = typeset(text, settings, { noRecommendations: true });
+    const again = typeset(text, settings, { noRecommendations: true, marginFontBytes });
     const ok = again.layoutHash === result.layoutHash && again.pages.length === result.pages.length;
     console.error(`determinism: run2 ${again.pages.length} pages in ${Date.now() - t1}ms (hash ${String(again.layoutHash).slice(0, 12)}) — ${ok ? 'OK (identical)' : 'MISMATCH'}`);
     if (!ok) { console.error('determinism FAILED — hash or page count differs between runs'); process.exit(3); }

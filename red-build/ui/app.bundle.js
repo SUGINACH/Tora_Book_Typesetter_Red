@@ -9382,7 +9382,7 @@ __modules["src/engine/layout/legacy-imud-flow.js"] = function (require, module, 
  */
 
 const crypto = require('crypto');
-const { MeasureAPI } = require('../typography/measure-api');
+const { MeasureAPI, registeredFonts: registeredMeasureFonts, registerFont: registerMeasureFont } = require('../typography/measure-api');
 const { EventLog } = require('../core/events');
 const { Ledger } = require('../core/ledger');
 
@@ -9798,10 +9798,28 @@ function wrapText(text, api, widthPx, sizePt) {
 /**
  * legacyTypeset — הנתיב החי לפרופיל IMUD (התנהגות המקור = המפרט).
  */
-function legacyTypeset(rawText, settings) {
+function legacyTypeset(rawText, settings, env) {
   const cfg = readConfig(settings._imudRaw || {});
   const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
+  // **S4.13 (רישום גופן הערות-הצד):** הקריאה יכולה לספק את בתי הגופן
+  // (env.marginFontBytes) — נרשם כאן פעם אחת; הגלישה מידדת במטריקות שלו.
+  if (env && env.marginFontBytes && !registeredMeasureFonts.has('Hadassah Friedlaender')) {
+    registerMeasureFont('Hadassah Friedlaender', env.marginFontBytes);
+  }
   const api = new MeasureAPI(settings, impl);
+  // **S4.13 (גופן הערות-צד — כמו המקור):** הערות הצד מודפסות בגופן
+  // HadassahFriedlaender (מוכח מהייחוס: שורות השוליים sz=6 בפונט
+  // 'HadassahFriedlaender', לא GuttmanRashi). הגלישה שלהן חייבת למדוד
+  // במטריקות שלו — בגופן הגוף הרוחבים שונים והשבירה מתפצלת אחרת
+  // (נצפה: 'מכלל ימי השבת,' 47.2px בגוף מול 52.5px ב-Hadassah — הייחוס
+  // שובר אחרי 'מכלל ימי'). אם הגופן לא נרשם — נפילה שקופה לגופן הגוף.
+  let marginApi = api;
+  if (impl === 'font-metrics' && registeredMeasureFonts.has('Hadassah Friedlaender')) {
+    marginApi = new MeasureAPI(
+      { 'body-font': 'Hadassah Friedlaender', 'body-font-size-pt': SZ.marginNote, 'body-line-height': 1.2 },
+      'font-metrics'
+    );
+  }
   const brk = new LineBreaker(api, cfg);
   const { meta, tokens } = tokenizeDoc(rawText, cfg);
 
@@ -10429,7 +10447,10 @@ function legacyTypeset(rawText, settings) {
       // חושב אחרי ה-+=7 של מרווח הפסקה ונספג 7px למטה (נצפה: הערת-הצד
       // בעמ' 11 עוגנה 331pt במקום ~325.7 — ראשית הפסקה; הייחוס: 323.2).
       const anchor = y - 7 - u.lines.length * u.pitch;
-      const lines = wrapText(u.sideNote, api, GEO.MARGIN_W - 2, SZ.marginNote);
+      // **S4.13:** הגלישה בגופן HadassahFriedlaender וברוחב טור השוליים המלא
+      // (50.5px — הוכח מהייחוס: השורה הארוכה ביותר 'חילוקי משמעות' = 50.4px;
+      // היה −2px שחתך אותה).
+      const lines = wrapText(u.sideNote, marginApi, GEO.MARGIN_W, SZ.marginNote);
       pg.marginNotes.push({
         side: sideName === 'right' ? 'right' : 'left',
         anchorY: anchor,
