@@ -50,6 +50,49 @@ describe('REQ-LB-02 Knuth-Plass optimal breaking', () => {
     const out = lines.flatMap(l => l.words);
     assertEq(out.length, words.length);
   });
+  it('נעילת ביקורת 03.11 (ביקורת חיצונית): במסלול הגיבוי penalty אסור לעולם אינו מסיים שורה — יחידת NBSP לא נקרעת ולא מאבדת את צמדהּ', () => {
+    // פסקה שמכריחה נפילה לגיבוי (מילה רחבה מהטור — אין מקף), עם יחידות NBSP בשאר הפסקה.
+    // בעבר: ה-forbidden בין תתי־הקופסות חתם שורה ⇒ היחידה נקרעה וה-NBSP אבד (אובדן תוכן).
+    const long = 'מילהארוכהשבורה'.repeat(3);          // רחבה מהטור ⇒ ה־DP לא מוצא פתרון ⇒ גיבוי
+    const unit1 = 'על\u00A0הרי', unit2 = 'ב\u00A0שביל', unit3 = 'כי\u00A0כן';
+    const words = [long, unit1, 'טקסט', unit2, 'נוסף', long, unit3, 'ועוד'];
+    const lines = breakLines(words, COLW, W, 20, {});
+    const toks = lines.flatMap(l => l.words);
+    // א. כל יחידת NBSP שלמה כטוקן אחד — מספר היחידות נשמר (3), ולא נותרו רסיסים בלי \u00A0
+    const glued = toks.filter(t => t.includes('\u00A0'));
+    assertEq(glued.length, 3, 'שלוש היחידות שלמות כטוקנים עם \\u00A0');
+    assert(glued.includes('על\u00A0הרי') && glued.includes('ב\u00A0שביל') && glued.includes('כי\u00A0כן'), 'היחידות עצמן נשמרו מילה־במילה');
+    // ב. אף רסיס: שום שורה אינה מכילה חצי יחידה ("על" / "הרי" / "כי" / "כן" כטוקן בודד)
+    for (const frag of ['על', 'הרי', 'ב', 'שביל', 'כי', 'כן']) {
+      assert(!toks.includes(frag), `רסיס "${frag}" — היחידה נקרעה בגיבוי`);
+    }
+    // ג. שימור תוכן וסדר קריאה: שחזור מלא של רצף המילים (הטוקן של היחידה זהה למילה המקורית)
+    assertEq(toks.length, words.length, 'מספר הטוקנים = מספר המילים (אין איבוד/כפילות)');
+    for (let i = 0; i < words.length; i++) assertEq(toks[i], words[i], `טוקן ${i} זהה למקור (סדר נשמר)`);
+    // ד. סיום: שורת הסיום מסומנת; אין שורה ריקה
+    assert(lines.length >= 3, `שורות סבירות (${lines.length})`);
+    assert(lines.every(l => l.words.length > 0), 'אין שורה ריקה');
+    assert(lines[lines.length - 1].isLast === true, 'השורה האחרונה מסומנת isLast');
+    // ה. גלישה מותרת רק לטוקן בודד רחב מהטור (המילה הארוכה) — כמו במסלול הראשי
+    for (const ln of lines) {
+      if (ln.words.length > 1) {
+        const total = ln.words.reduce((s, w) => s + W(w), 0) + (ln.words.length - 1) * W(' ');
+        assert(total <= COLW * 1.35, `גלישה מיותרת בגיבוי: ${total} > ${COLW}`);
+      }
+    }
+  });
+  it('נעילת ביקורת 03.11 — שני המסלורים אחידים: פסקה בת־פתרון (DP) שומרת אף־היא על יחידות NBSP שלמות', () => {
+    // אותן יחידות, בלי המילה הארוכה ⇒ DP רגיל. החזרה החוצה מוכיחה שני המסלורים
+    // כבולים לאותם איסורים — לא רק בנתיב החירום.
+    const units = ['על\u00A0הרי', 'טקסט', 'ב\u00A0שביל', 'נוסף', 'כי\u00A0כן', 'ועוד'];
+    const lines = breakLines(units, COLW, W, 20, {});
+    const toks = lines.flatMap(l => l.words);
+    assertEq(toks.filter(t => t.includes('\u00A0')).length, 3, 'DP: שלוש היחידות שלמות');
+    for (const frag of ['על', 'הרי', 'ב', 'שביל', 'כי', 'כן']) {
+      assert(!toks.includes(frag), `DP: רסיס "${frag}"`);
+    }
+    assertEq(toks.length, units.length, 'DP: מספר טוקנים נשמר');
+  });
 });
 
 describe('REQ-LB-03 protectors (NBSP gluing)', () => {

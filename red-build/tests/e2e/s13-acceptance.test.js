@@ -16,8 +16,18 @@ if (!fs.existsSync(ART)) fs.mkdirSync(ART, { recursive: true });
 const CORPUS = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'canonical_corpus.txt'), 'utf8');
 const DEJAVU = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
 const HAS_DEJAVU = fs.existsSync(DEJAVU);
+const { spawnSync } = require('child_process');
+function hasTool(name) {
+  const r = spawnSync(name, ['-v'], { stdio: 'ignore' });
+  return !(r.error && r.error.code === 'ENOENT');
+}
+const HAS_PDFTOOLS = hasTool('pdfinfo') && hasTool('pdftotext') && hasTool('pdftoppm');
 
-const CANONICAL_HASH_PREFIX = '75b8c605'; // נעול מ־S9 ואילך — הוכחה בין־קומיטית
+const CANONICAL_HASH_PREFIX = '7ccad899'; // ננעל מחדש 03.11 (ביקורת חיצונית): ה־DP של Knuth-Plass
+// היה מת מ־S1 (off-by-one: שבירת הסיום נכתבה ל-cost[j] במקום cost[n]) — כל שבירות
+// השורות יצאו מהגיבוי הגרידי. ההחייאה + תיקוני השורש (NBSP בגיבוי, רוחבי glue,
+// raggedEnd, מדידת ׳/״) שינו את הפריסה הקנונית; המנעול הקודם 75b8c605 תיעד את
+// המצב הגרידי. ההוכחה הבין־קומיטית מתחילה מחדש מכאן.
 
 // DOM shim מינימלי לרינדור
 function makeDoc() {
@@ -39,22 +49,24 @@ function makeDoc() {
 }
 
 // =====================================================================
+// **חיזוק ביקורת 03.11:** המטריצה הוגדרה פעם אחת ברמת המודול — משמשת גם את
+// בדיקת המטריצה (S13.1-1) וגם את זהות הנתיבים המוגברת (S13.2) — מקור יחיד.
+const CONFIGS = {
+  'default': {},
+  'ornaments': { 'h2-orn-top': 'pyramid', 'chapter-end-ornament': 'pyramid', 'col-divider-style': 'thin' },
+  'aq-on': { 'aq-enabled': true },
+  'continuous-notes': { 'footnote-reset-policy': 'continuous' },
+  'verso-headers': { 'header-verso-right-source': 'h1', 'header-verso-center-source': 'page-num', 'header-recto-left-source': 'h2' },
+  'custom-styles': {
+    _customStyles: JSON.stringify({ styles: [
+      { id: 'quote', name: 'ציטוט', trigger: { inlineMarker: { open: '«', close: '»' } }, layoutMode: 'regular', style: { italic: true, fontSizePt: 13 } },
+      { id: 'callout', name: 'קריאה', trigger: { linePrefix: 'קריאה:' }, layoutMode: 'full-width', style: { bold: true }, counter: { enabled: true, format: 'hebrew-geresh', reset: 'part' } }
+    ] })
+  }
+};
+
 describe('S13.1-1 — מטריצת רגרסיה מלאה: 6 קונפיגורציות × 3 נתיבים — דו"ח מצטבר', () => {
   const doc = makeDoc();
-  const CONFIGS = {
-    'default': {},
-    'ornaments': { 'h2-orn-top': 'pyramid', 'chapter-end-ornament': 'pyramid', 'col-divider-style': 'thin' },
-    'aq-on': { 'aq-enabled': true },
-    'continuous-notes': { 'footnote-reset-policy': 'continuous' },
-    'verso-headers': { 'header-verso-right-source': 'h1', 'header-verso-center-source': 'page-num', 'header-recto-left-source': 'h2' },
-    'custom-styles': {
-      _customStyles: JSON.stringify({ styles: [
-        { id: 'quote', name: 'ציטוט', trigger: { inlineMarker: { open: '«', close: '»' } }, layoutMode: 'regular', style: { italic: true, fontSizePt: 13 } },
-        { id: 'callout', name: 'קריאה', trigger: { linePrefix: 'קריאה:' }, layoutMode: 'full-width', style: { bold: true }, counter: { enabled: true, format: 'hebrew-geresh', reset: 'part' } }
-      ] })
-    }
-  };
-
   const matrix = [];
   for (const [name, overrides] of Object.entries(CONFIGS)) {
     const settings = { ...getDefaultSettings(), ...overrides };
@@ -137,26 +149,74 @@ describe('S13.2 — דטרמיניזם משולש (repeat / inter-commit / cross
     assertEq(a.layoutHash, b.layoutHash, 'hash זהה');
   });
 
-  it('inter-commit: ברירת המחדל זהה לנעול מ־S9 (75b8c605…) — המנוע לא הוסט מאז', () => {
+  it('inter-commit: הקנוני נעול מחדש (7ccad899…) — ראה תיעוד הקבוע למעלה; המנוע לא הוסט מאז הנעילה מחדש', () => {
     const r = typeset(CORPUS, getDefaultSettings(), { noRecommendations: true });
     assert(r.layoutHash.startsWith(CANONICAL_HASH_PREFIX), `hash ${r.layoutHash.slice(0, 16)} — נעול ${CANONICAL_HASH_PREFIX}`);
   });
 
-  it('cross-path: live/html/pdf — אותו מסמך, אותם עמודים; חילוץ טקסט זהה', () => {
+  it('cross-path: live/html/pdf — זהות מלאה בכל 6 התצורות: מולטיסט תווים מול כל הטקסט המצויר (לא עוד סף 85%) + pdfinfo + parity גיאומטרי ≤6px', () => {
     if (!HAS_DEJAVU) { console.error('  [מדלג — DejaVu לא במערכת]'); return; }
-    const r = typeset(CORPUS, getDefaultSettings(), { noRecommendations: true });
-    const exp = exportPdf(CORPUS, getDefaultSettings(), fs.readFileSync(DEJAVU), 'DejaVu Sans');
-    assert(exp.ok);
-    assertEq(exp.result.pages.length, r.pages.length, 'אותו מספר עמודים בנתיב ה־PDF');
-    const pdfPath = path.join(ART, '_tmp-crosspath.pdf');
-    fs.writeFileSync(pdfPath, exp.bytes);
-    try {
-      const txt = execFileSync('pdftotext', [pdfPath, '-']).toString('utf8');
-      const engine = r.pages.map(p => [...(p.spanning ? p.spanning.lines : []), ...p.columns.flat()].map(l => (l.words || []).join(' ')).join(' ')).join(' ');
-      const norm = (s) => s.replace(/[\s\u200E\u200F\u202A-\u202E]+/g, '').split('').sort().join('');
-      // ה־PDF מצייר גם גיליון/TOC — חילוץ הגוף נכלל במלואו בחילוץ
-      assert(norm(txt).length >= norm(engine).length * 0.85, 'חילוץ ה־PDF מכסה את גוף המנוע');
-    } finally { fs.unlinkSync(pdfPath); }
+    // **חיזוק ביקורת 03.11 (החלטת משתמש):** פופלר הוא דרישת קבלה קשיחה — בדיקת
+    // חילוץ ה־PDF חשובה מכדי לוותר עליה. כשל מפורש ולא ENOENT שקט.
+    assert(HAS_PDFTOOLS, 'נדרש poppler-utils (pdfinfo/pdftotext/pdftoppm) לבדיקת קבלה — התקנה: sudo apt-get install poppler-utils');
+    const norm = (s) => s.replace(/[\s\u200E\u200F\u202A-\u202E]+/g, '').split('').sort().join('');
+    const rows = [];
+    for (const [name, overrides] of Object.entries(CONFIGS)) {
+      const settings = { ...getDefaultSettings(), ...overrides };
+      const r = typeset(CORPUS, settings, { noRecommendations: true });
+      const exp = exportPdf(CORPUS, overrides, fs.readFileSync(DEJAVU), 'DejaVu Sans');
+      assert(exp.ok, `${name}: exportPdf`);
+      const pdfPath = path.join(ART, '_tmp-crosspath.pdf');
+      fs.writeFileSync(pdfPath, exp.bytes);
+      try {
+        // א. מספרי עמודים: pdfinfo ≡ מנוע ≡ live
+        const info = execFileSync('pdfinfo', [pdfPath]).toString('utf8');
+        assertEq(Number(info.match(/Pages:\s+(\d+)/)[1]), exp.result.pages.length, `${name}: pdfinfo ≡ מנוע`);
+        assertEq(exp.result.pages.length, r.pages.length, `${name}: live ≡ pdf (עמודים)`);
+        // ב. זהות תוכן מלאה: מולטיסט תווים מול כל הטקסט המצויר בפועל (מהקרנה — מקור יחיד)
+        const txt = execFileSync('pdftotext', [pdfPath, '-']).toString('utf8');
+        const drawnWords = [];
+        for (const pg of exp.projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) for (const w of ln.words) drawnWords.push(w.text);
+          for (const fn of pg.footnotes) drawnWords.push(fn.marker, ...fn.text.split(/\s+/));
+          if (pg.folio && pg.folio.text) drawnWords.push(pg.folio.text);
+          if (pg.header) for (const s of pg.header.slots) drawnWords.push(s.text);
+        }
+        const engineTxt = drawnWords.filter(Boolean).join(' ');
+        assertEq(norm(txt), norm(engineTxt), `${name}: חילוץ ≡ כל הטקסט המצויר (מולטיסט מדויק — לא כיסוי 85%)`);
+        // ג. parity גיאומטרי לכל תצורה: bbox דיו ברסטר מול המודל ≤6px (עמוד גוף מלא)
+        const pgIdx = 3;
+        const prefix = path.join(ART, '_tmp-xp');
+        execFileSync('pdftoppm', ['-r', '96', '-f', String(pgIdx + 1), '-l', String(pgIdx + 1), pdfPath, prefix]);
+        const files = fs.readdirSync(ART).filter(f => f.startsWith('_tmp-xp-')).sort();
+        const raw = fs.readFileSync(path.join(ART, files[files.length - 1]));
+        const mm = raw.toString('latin1').match(/^P6\n(\d+) (\d+)\n(\d+)\n/);
+        const off = mm[0].length, W = +mm[1], H = +mm[2];
+        let minX = 1e9, maxX = -1, minY = 1e9, maxY = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const i = off + (y * W + x) * 3;
+          if (raw[i] < 128 && raw[i + 1] < 128 && raw[i + 2] < 128) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+        for (const f of files) fs.unlinkSync(path.join(ART, f));
+        const b = exp.projected.inkBounds[pgIdx];
+        if (b) {
+          const worst = Math.max(Math.abs(minX - b.minX), Math.abs(maxX - b.maxX), Math.abs(minY - b.minY), Math.abs(maxY - b.maxY));
+          rows.push({ config: name, pages: exp.result.pages.length, identity: true, worstBboxPx: +worst.toFixed(2) });
+          assert(worst <= 6, `${name}: bbox דיו Δ=${worst.toFixed(1)}px ≤ 6px (רסטר מול מודל)`);
+        } else {
+          rows.push({ config: name, pages: exp.result.pages.length, identity: true, worstBboxPx: null, note: 'אין דיו בעמוד הדגימה' });
+        }
+      } finally { if (fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath); }
+    }
+    assertEq(rows.length, 6, 'נבדקו כל 6 התצורות');
+    fs.writeFileSync(path.join(ART, 's13-crosspath.json'), JSON.stringify({
+      generatedBy: 's13-acceptance/cross-path (חיזוק ביקורת 03.11)',
+      rule: 'מולטיסט תווים מדויק מול כל הטקסט המצויר; pdfinfo ≡ live ≡ pdf; bbox ≤6px',
+      tolerance: { bboxPx: 6 }, configs: rows
+    }, null, 2));
   });
 });
 

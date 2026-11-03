@@ -207,17 +207,20 @@ function writePdf(opts) {
         emitWord(w, cx, baseY, fs);
       }
     }
-    // גיליון
+    // גיליון — מקור יחיד (D-81): מיקום/רוחב מהקרן; נפילה לנוסחה הישנה רק אם חסר
     if (pg.folio && pg.folio.text) {
-      const fw = pg.folio.text.length * 6;
-      emitWord(pg.folio.text, pg.width / 2 - fw / 2, pg.folio.y + 10, 10);
+      const fw = pg.folio.w != null ? pg.folio.w : pg.folio.text.length * 6;
+      const fx = pg.folio.x != null ? pg.folio.x : pg.width / 2 - fw / 2;
+      const fy = pg.folio.baselineY != null ? pg.folio.baselineY : pg.folio.y + 10;
+      emitWord(pg.folio.text, fx, fy, 10);
     }
-    // כותרת עליונה — סלוטים לפי מיקום פיזי
+    // כותרת עליונה — סלוטים לפי מיקום פיזי מהקרן (D-81); נפילה מתועדת לנוסחה הישנה
     if (pg.header) {
       for (const s of pg.header.slots) {
-        const sw = s.text.length * 5.5;
-        const x = s.pos === 'right' ? pg.width - 60 - sw : s.pos === 'center' ? (pg.width - sw) / 2 : 60;
-        emitWord(s.text, x, pg.header.y + 10, 9);
+        const sw = s.w != null ? s.w : s.text.length * 5.5;
+        const x = s.x != null ? s.x : (s.pos === 'right' ? pg.width - 60 - sw : s.pos === 'center' ? (pg.width - sw) / 2 : 60);
+        const y = pg.header.baselineY != null ? pg.header.baselineY : pg.header.y + 10;
+        emitWord(s.text, x, y, s.sizePt || 9);
       }
     }
     // סימני חיתוך (חוץ ל־TrimBox; אורך 5מ״מ)

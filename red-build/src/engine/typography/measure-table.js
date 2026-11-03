@@ -23,9 +23,13 @@ const FONT_PROFILES = {
 
 function charWidthEm(ch) {
   if (HEBREW_WIDTHS[ch] !== undefined) return HEBREW_WIDTHS[ch];
+  // **תיקון שורש (ביקורת 03.11): בדיקת WIDE_MARKS לפני סל העברי — בעבר הסל
+  // 0x0590–0x05FF (=0.5em) לכד את ׳(U+05F3) ו״(U+05F4) לפני שנבדקו ב-WIDE_MARKS
+  // (0.18em/0.36em) ⇒ הגדרות מתות וגרשיים נמדדו 0.5em; impl B (פיקסטשור, שנבנה
+  // מ-WIDE_MARKS) מדד אותם נכון — והפער בין המימושים הוסט את שבירות ה-DP.
+  if (WIDE_MARKS[ch] !== undefined) return WIDE_MARKS[ch];
   const c = ch.codePointAt(0);
   if (c >= 0x0590 && c <= 0x05FF) return 0.5;   // ניקוד/תווים עבריים נוספים
-  if (WIDE_MARKS[ch] !== undefined) return WIDE_MARKS[ch];
   if (/[A-Za-z0-9]/.test(ch)) return 0.52;
   return 0.4;
 }

@@ -15,7 +15,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Run full test suite (171 tests, zero deps)
+      # **תיקון CI (ביקורת 03.11):** בדיקות הקבלה (S13) והייצוא (S12) מאמתות מול
+      # האמת בכלים חיצוניים (pdfinfo/pdftotext/pdftoppm — poppler) ומייצאות PDF
+      # עם גופן DejaVu. בלעדיהם הריצה האחרונה נכשלה (ENOENT ב-pdftotext) וכל
+      # שרשרת npm test נעצרה. החלטת המשתמש: להתקין, לא לוותר.
+      - name: Install Poppler (pdfinfo/pdftotext/pdftoppm) + DejaVu font
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils fonts-dejavu-core
+      - name: Verify external tools are present (fail fast with clear message)
+        run: |
+          for t in pdfinfo pdftotext pdftoppm; do
+            command -v "$t" >/dev/null 2>&1 || { echo "MISSING: $t (expected after poppler-utils install)"; exit 1; }
+          done
+          test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf || { echo "MISSING: DejaVuSans.ttf (expected after fonts-dejavu-core install)"; exit 1; }
+      - name: Run full test suite (307 tests, zero deps)
         run: cd red-build && npm test
       - name: Determinism check
         run: cd red-build && npm run test:determinism

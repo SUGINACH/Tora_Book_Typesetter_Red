@@ -2013,9 +2013,13 @@ const FONT_PROFILES = {
 
 function charWidthEm(ch) {
   if (HEBREW_WIDTHS[ch] !== undefined) return HEBREW_WIDTHS[ch];
+  // **תיקון שורש (ביקורת 03.11): בדיקת WIDE_MARKS לפני סל העברי — בעבר הסל
+  // 0x0590–0x05FF (=0.5em) לכד את ׳(U+05F3) ו״(U+05F4) לפני שנבדקו ב-WIDE_MARKS
+  // (0.18em/0.36em) ⇒ הגדרות מתות וגרשיים נמדדו 0.5em; impl B (פיקסטשור, שנבנה
+  // מ-WIDE_MARKS) מדד אותם נכון — והפער בין המימושים הוסט את שבירות ה-DP.
+  if (WIDE_MARKS[ch] !== undefined) return WIDE_MARKS[ch];
   const c = ch.codePointAt(0);
   if (c >= 0x0590 && c <= 0x05FF) return 0.5;   // ניקוד/תווים עבריים נוספים
-  if (WIDE_MARKS[ch] !== undefined) return WIDE_MARKS[ch];
   if (/[A-Za-z0-9]/.test(ch)) return 0.52;
   return 0.4;
 }
@@ -2388,6 +2392,14 @@ __modules["src/engine/typography/kp-linebreak.js"] = function (require, module, 
 const INF = Number.POSITIVE_INFINITY;
 const STRETCH_RATIO = 0.6;   // מתיחות רווח יחסית
 const SHRINK_RATIO = 0.5;    // כיווץ רווח יחסית
+const LINE_DEMERIT = 100;    // עלות בסיס לכל שורה: ברירת מחדל במודל ragged — ה־DP
+                            // ממזער מספר שורות (הרינדור מצייר מרווחים טבעיים).
+// השלמת ביקורת 03.11 (D-79): הרינדור של המנוע ragged (יישור לימין; מרווחים
+// טבעיים ב-DOM וב-PDF). לכן במודל השבירה כל שורה מקבלת "מתיחת סוף-שורה"
+// כמו \raggedright של TeX — אחרת שורה במילה בודדת (stretch=0 ⇒ ratio=0)
+// היא "חינם" וה־DP מתפוצץ לשורות מילה-בודדת. כשהשורות מיושרות בפועל
+// (align=stretch) ניתן לכבות: opts.raggedEnd=false.
+const RAGGED_END_STRETCH_FACTOR = 10; // × maxWidthPx — מתיחה גדולה סופית-מעשית
 
 function buildItems(words, measure) {
   const items = [];
@@ -2448,17 +2460,28 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
     for (let j = i; j < n; j++) {
       const it = items[j];
       if (it.kind === 'box') w += it.width;
-      else if (it.kind === 'glue') { stretch += it.stretch; shrink += it.shrink; }
+      // **תיקון שורש (ביקורת 03.11): רוחב glue נכלל ברוחב הטבעי של השורה —
+      // כמו ב-TeX (Σ תיבות + Σ רווחים). בעבר נצברו רק stretch/shrink ⇒ ה־DP
+      // "חשב" ששורה נכנסת בעוד רוחבה הטבעי (כולל רווחים) חורג מהטור.
+      else if (it.kind === 'glue') { w += it.width; stretch += it.stretch; shrink += it.shrink; }
       else if (it.kind === 'penalty') {
         if (it.forbidden) continue; // תוך-יחידה: אין כאן מקום שבירה (legalCut כבר מבטל); ההצברה נמשכת
-        // סיום שורה (penalty סופי של הפסקה) — good break
+        // סיום שורה (penalty סופי של הפסקה) — good break.
+        // **תיקון שורש (ביקורת 03.11): השבירה הסופית היא צומת סוף-הפסקה n —
+        // בעבר נכתבה ל-cost[j] (אינדקס הפריט עצמו, n−1) ⇒ cost[n] נותר INF לעולם
+        // ⇒ ה־DP מעולם לא סיפק פתרון וכל שבירות השורות במנוע מאז S1 יצאו מהגיבוי
+        // הגרידי (עם באג ה-NBSP). התיקון מחיה את Knuth-Plass בפועל.
         const slack = maxWidthPx - w;
-        const ratio = slack >= 0 ? (stretch > 0 ? slack / stretch : 0) : (shrink > 0 ? slack / shrink : -2);
+        // raggedEnd: מתיחת סוף-שורה (D-79) — שורות ragged אינן נמדדות במתיחת
+        // בין-מילים אלא בכניסה טבעית; היתרה עד לקצה הטור "נבלעת" במתיחת הסוף.
+        const raggedEnd = opts.raggedEnd !== false;
+        const effStretch = stretch + (raggedEnd ? maxWidthPx * RAGGED_END_STRETCH_FACTOR : 0);
+        const ratio = slack >= 0 ? (effStretch > 0 ? slack / effStretch : 0) : (shrink > 0 ? slack / shrink : -2);
         let b = badness(ratio);
         if (b < INF && w < maxWidthPx * (runts / 100)) b += 60; // עונש runt בשורת הסיום
         if (b < INF) {
-          const cand = cost[i] + b;
-          if (cand < cost[j]) { cost[j] = cand; parent[j] = i; }
+          const cand = cost[i] + b + LINE_DEMERIT;
+          if (cand < cost[n]) { cost[n] = cand; parent[n] = i; }
         }
         break;
       }
@@ -2472,10 +2495,12 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
         const cut = j + 1; // נקודת שבירה חוקית: אחרי תיבה, לפני ה‑glue העוקב
         if (!(items[cut].kind === 'glue' && !items[cut].internal && items[cut + 1] && items[cut + 1].kind === 'box')) continue;
         const slack = maxWidthPx - w;
-        const ratio = slack >= 0 ? (stretch > 0 ? slack / stretch : 0) : (shrink > 0 ? slack / shrink : -2);
+        const raggedEnd = opts.raggedEnd !== false;
+        const effStretch = stretch + (raggedEnd ? maxWidthPx * RAGGED_END_STRETCH_FACTOR : 0);
+        const ratio = slack >= 0 ? (effStretch > 0 ? slack / effStretch : 0) : (shrink > 0 ? slack / shrink : -2);
         const b = badness(ratio);
         if (b >= INF) continue;
-        const cand = cost[i] + b;
+        const cand = cost[i] + b + LINE_DEMERIT;
         if (cand < cost[cut]) { cost[cut] = cand; parent[cut] = i; }
       }
     }
@@ -2517,23 +2542,56 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
   return lines;
 }
 
+/**
+ * מסלול גיבוי (כשה־DP לא מצא פתרון אפשרי, למשל מילה רחבה מהעמודה — אין מקף).
+ * תיקון שורש (ביקורת 03.11, S13): בגיבוי חלים **אותם איסורי שבירה** כמו במסלול
+ * הראשי — בעבר כל penalty חתם שורה, כולל `forbidden` (בין תתי־קופסות של יחידת
+ * NBSP) ⇒ היחידה נקרעה בין שורות **ואיבדה את \u00A0 שלה** (אובדן תוכן, BRZ-15;
+ * ורוחב פנימי נמדד כרווח רגיל). כעת:
+ * 1. penalty אסור לעולם אינו מסיים שורה — היחידה משוחזרת כטוקן אחד עם \u00A0
+ *    (זהה לשחזור המסלור הראשי).
+ * 2. רוחב טוקן נצבר מהפריטים (תיבות + glue פנימי 0.26em) — זהה למסלור הראשי,
+ *    לא מדידה מחודשת של מחרוזת NBSP (הייתה מודדת 0.4em פנימי — עיוות רוחב).
+ * 3. התקדמות מובטחת: טוקן שגולש פותח שורה חדשה; טוקן רחב מהעמודה נשאר לבד
+ *    בשורה משלו — אין לולאה ואין דילוג תוכן. מעבר אחד על הפריטים.
+ */
 function greedyFallback(items, maxWidthPx, measure, lineHeightPx) {
+  const space = measure(' ');
   const lines = [];
-  let cur = [], w = 0;
+  let toks = [];            // טוקנים של השורה הנוכחית
+  let w = 0;                // רוחב השורה (כולל רווחים בין טוקנים)
+  let cur = null, curW = 0, joinNext = false;  // טוקן בבנייה + רוחבו מהפריטים
+
+  const flush = () => {
+    if (!toks.length) return;
+    lines.push({ words: toks, widthPx: w, heightPx: lineHeightPx, isLast: false });
+    toks = []; w = 0;
+  };
+  const pushTok = () => {
+    if (cur === null) return;
+    const sp = toks.length ? space : 0;
+    if (toks.length && w + sp + curW > maxWidthPx) flush(); // הטוקן הבא ייפתח שורה חדשה
+    toks.push(cur); w += sp + curW;
+    cur = null; curW = 0; joinNext = false;
+  };
+
   for (const it of items) {
-    if (it.kind === 'penalty') { if (cur.length) { lines.push(mkLine(cur, measure, lineHeightPx)); cur = []; w = 0; } continue; }
+    if (it.kind === 'penalty') {
+      if (it.final) continue;            // סוף פסקה — הטיפול שלאחר הלולאה סוגר את האחרון
+      if (it.forbidden) { joinNext = true; continue; } // אין חיתוך בתוך יחידה — לעולם
+      continue;
+    }
+    if (it.kind === 'glue') {
+      if (it.internal && cur !== null) { curW += it.width; } // רווח פנימי בתוך היחידה
+      continue; // glue רגיל בין טוקנים: רוחבו נכנס כ־sp בעת pushTok
+    }
     if (it.kind !== 'box') continue;
-    const sp = cur.length ? measure(' ') : 0;
-    if (w + sp + it.width > maxWidthPx && cur.length) { lines.push(mkLine(cur, measure, lineHeightPx)); cur = []; w = 0; }
-    cur.push(it.text); w += (cur.length > 1 ? measure(' ') : 0) + it.width;
+    if (cur !== null && joinNext) { cur += '\u00A0' + it.text; curW += it.width; joinNext = false; } // המשך הצמד — ואיפוס: המילה הרגילה הבאה לא תיבלע
+    else { pushTok(); cur = it.text; curW = it.width; }
   }
-  if (cur.length) lines.push(mkLine(cur, measure, lineHeightPx));
+  pushTok(); flush();
   if (lines.length) lines[lines.length - 1].isLast = true;
   return lines;
-}
-function mkLine(words, measure, h) {
-  const widthPx = words.reduce((s, t) => s + measure(t), 0) + Math.max(0, words.length - 1) * measure(' ');
-  return { words, widthPx, heightPx: h, isLast: false };
 }
 
 module.exports = { breakLines, badness, STRETCH_RATIO, SHRINK_RATIO };
@@ -6535,6 +6593,14 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
         for (let i = 0; i < col.length; i++) {
           const ln = col[i];
           if (ln.kind !== 'heading' || !(ln.level >= 3 && ln.level <= 6)) continue;
+          // **תיקון שורש (ביקורת 03.11): מפריד אחד לכל כותרת — מתחת לשורתה
+          // האחרונה. בעבר הוצב מפריד בכל שורה של כותרת גולשת (5 שורות ⇒ 5 מפרידים
+          // עם מפתח rollback זהה ⇒ התנגשות מונים). השורה האחרונה = אין שורת
+          // המשך לאותו tokenId בטור זה, ואין המשך בראש הטור הבא.
+          const continuesInCol = !!(col[i + 1] && col[i + 1].kind === 'heading' && col[i + 1].tokenId === ln.tokenId);
+          const continuesNextCol = !!(page.columns[c + 1] && page.columns[c + 1][0]
+            && page.columns[c + 1][0].kind === 'heading' && page.columns[c + 1][0].tokenId === ln.tokenId);
+          if (continuesInCol || continuesNextCol) continue;
           const before = col.slice(0, i + 1); // כולל הכותרת — המשמרת בודקת ראש־טור/ריק
           const usedSoFar = before.reduce((s, l) => s + (l.heightPx || 0), 0);
           const remaining = tpl.contentBox.height - usedSoFar;

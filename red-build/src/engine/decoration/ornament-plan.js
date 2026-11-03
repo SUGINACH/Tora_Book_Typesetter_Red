@@ -172,6 +172,14 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
         for (let i = 0; i < col.length; i++) {
           const ln = col[i];
           if (ln.kind !== 'heading' || !(ln.level >= 3 && ln.level <= 6)) continue;
+          // **תיקון שורש (ביקורת 03.11): מפריד אחד לכל כותרת — מתחת לשורתה
+          // האחרונה. בעבר הוצב מפריד בכל שורה של כותרת גולשת (5 שורות ⇒ 5 מפרידים
+          // עם מפתח rollback זהה ⇒ התנגשות מונים). השורה האחרונה = אין שורת
+          // המשך לאותו tokenId בטור זה, ואין המשך בראש הטור הבא.
+          const continuesInCol = !!(col[i + 1] && col[i + 1].kind === 'heading' && col[i + 1].tokenId === ln.tokenId);
+          const continuesNextCol = !!(page.columns[c + 1] && page.columns[c + 1][0]
+            && page.columns[c + 1][0].kind === 'heading' && page.columns[c + 1][0].tokenId === ln.tokenId);
+          if (continuesInCol || continuesNextCol) continue;
           const before = col.slice(0, i + 1); // כולל הכותרת — המשמרת בודקת ראש־טור/ריק
           const usedSoFar = before.reduce((s, l) => s + (l.heightPx || 0), 0);
           const remaining = tpl.contentBox.height - usedSoFar;

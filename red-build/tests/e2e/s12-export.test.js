@@ -187,7 +187,12 @@ describe('S12.1-5 — שכבת מדידה מתמטית: פרנסר גופנים 
 
   it('שקילות שבירות שורות על הקורפוס הקנוני — artifact נשמר (לפני החלפת ברירת מחדל)', () => {
     clearRegisteredFonts();
-    const reg = registerFont('פיקסטשור', bytes);
+    // **תיקון שורש (ביקורת 03.11): פיקסטשור נטול־קרנינג. בעבר נרשם הפיקסטשור עם
+    // צמד הקרנינג (א+ב=−0.04em) — impl B מודד קרנינג וimpl A (טבלה) לא ⇒ המדידות
+    // אינן שקולות. בגרירה הישנה זה לא הופיע במקרה; ה־DP (המחודש) רגיש לגבולות
+    // כניסה וההבדל נחשף (12 שורות). שקילות אמיתית דורשת מדידות שקולות.
+    const noKernBytes = buildTtfFixture({ kern: false }).bytes;
+    const reg = registerFont('פיקסטשור', noKernBytes);
     assert(reg.ok);
     const rA = typeset(CORPUS, getDefaultSettings(), { noRecommendations: true });
     const rB = typeset(CORPUS, { ...getDefaultSettings(), 'body-font': 'פיקסטשור', 'measure-impl': 'font-metrics' }, { noRecommendations: true });

@@ -1,0 +1,45 @@
+{
+  "generatedBy": "s13-acceptance/cross-path (חיזוק ביקורת 03.11)",
+  "rule": "מולטיסט תווים מדויק מול כל הטקסט המצויר; pdfinfo ≡ live ≡ pdf; bbox ≤6px",
+  "tolerance": {
+    "bboxPx": 6
+  },
+  "configs": [
+    {
+      "config": "default",
+      "pages": 18,
+      "identity": true,
+      "worstBboxPx": 3.73
+    },
+    {
+      "config": "ornaments",
+      "pages": 26,
+      "identity": true,
+      "worstBboxPx": 3.73
+    },
+    {
+      "config": "aq-on",
+      "pages": 18,
+      "identity": true,
+      "worstBboxPx": 3.73
+    },
+    {
+      "config": "continuous-notes",
+      "pages": 18,
+      "identity": true,
+      "worstBboxPx": 3.73
+    },
+    {
+      "config": "verso-headers",
+      "pages": 18,
+      "identity": true,
+      "worstBboxPx": 3.73
+    },
+    {
+      "config": "custom-styles",
+      "pages": 18,
+      "identity": true,
+      "worstBboxPx": 3.73
+    }
+  ]
+}

@@ -43,9 +43,12 @@ function str4(s) { return [s.charCodeAt(0), s.charCodeAt(1), s.charCodeAt(2), s.
 /**
  * בונה TTF מינימלי תקני: head, hhea, maxp, hmtx, cmap(fmt4), glyf, loca, OS/2, name, post.
  * glyph 0 = .notdef; glyph 1..n = תווי הקורפוס (לפי סדר codepoint).
+ * @param {{kern?:boolean}} [opts] — kern:false משמט את צמד הקרנינג (לבדיקת שקילות A↔B:
+ *   impl B מודד קרנינג וimpl A (טבלה) לא — פיקסטשור עם kern אינו שקול מדידה).
  * @returns {{bytes:Buffer, groundTruth:{unitsPerEm, advances:Object, kernPair:[string,string,number], capHeight:number}}}
  */
-function buildTtfFixture() {
+function buildTtfFixture(opts = {}) {
+  const withKern = opts.kern !== false;
   const chars = corpusChars();
   const unitsPerEm = 1000;
   const nGlyphs = chars.length + 1; // + .notdef
@@ -134,12 +137,14 @@ function buildTtfFixture() {
   const loca = [];
   for (let i = 0; i <= nGlyphs; i++) loca.push(...u16(0)); // short loca: offset/2 — הכל 0
 
-  // ---- kern (fmt 0): זוג אחד ----
+  // ---- kern (fmt 0): זוג אחד — אלא אם opts.kern:false (תת-טבלה עם 0 צמדים) ----
+  const nPairs = withKern ? 1 : 0;
+  const subLen = 14 + (withKern ? 6 : 0);
   const kernSub = [
-    ...u16(0), ...u16(14 + 6), ...u16(1), // version, length, coverage (format 0, horizontal)
-    ...u16(1), ...u16(0), ...u16(0),      // nPairs, searchRange, entrySelector
-    ...u16(0),                            // rangeShift
-    ...u16(gidOf.get('א')), ...u16(gidOf.get('ב')), ...s16(KERN_VALUE)
+    ...u16(0), ...u16(subLen), ...u16(1), // version, length, coverage (format 0, horizontal)
+    ...u16(nPairs), ...u16(0), ...u16(0), // nPairs, searchRange, entrySelector
+    ...u16(0),                          // rangeShift
+    ...(withKern ? [...u16(gidOf.get('א')), ...u16(gidOf.get('ב')), ...s16(KERN_VALUE)] : [])
   ];
   const kern = [
     ...u16(0), ...u16(1), // version, nTables

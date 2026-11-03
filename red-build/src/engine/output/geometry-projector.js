@@ -109,7 +109,10 @@ function projectPage(page, settings, api) {
 
   // גיליון
   if (page.folioDisplay) {
-    out.folio = { y: tpl.contentBox.bottom + 2, x: 0, w: tpl.width, text: scrubPUAText(String(page.folioDisplay)) };
+    // **D-81:** מיקום/רוחב מהמקור היחיד (הקרן, מדידה 10pt) — הכותב וה-ink-bbox צורכים אותו.
+    const ft = scrubPUAText(String(page.folioDisplay));
+    const fw = Math.max(1, Math.round(measure.measureTextWidth(ft, 10)));
+    out.folio = { y: tpl.contentBox.bottom + 2, x: Math.round((tpl.width - fw) / 2), w: fw, sizePt: 10, text: ft };
   }
 
   // כותרת עליונה — סלוטים חיים (right/center/left) עם טקסט מפורש (D-61)
@@ -118,7 +121,17 @@ function projectPage(page, settings, api) {
       .map(pos => ({ pos, ...page.header.slots[pos] }))
       .filter(s => s && s.text);
     if (slots.length) {
-      out.header = { y: Math.max(0, tpl.contentBox.top - 18), slots: slots.map(s => ({ pos: s.pos, text: scrubPUAText(String(s.text || '')), align: s.align })) };
+      // **D-81:** סלוט כותרת עליונה — מיקום/רוחב מפורשים מהמקור היחיד (9pt):
+      // הכותב, הכותב החי ותיבת הדיו צורכים את אותם מספרים — לא עוד נוסחאות מקומיות.
+      out.header = {
+        y: Math.max(0, tpl.contentBox.top - 18),
+        slots: slots.map(s => {
+          const t = scrubPUAText(String(s.text || ''));
+          const w = Math.max(1, Math.round(measure.measureTextWidth(t, 9)));
+          const x = s.pos === 'right' ? tpl.width - 60 - w : s.pos === 'center' ? Math.round((tpl.width - w) / 2) : 60;
+          return { pos: s.pos, align: s.align, text: t, x, w, sizePt: 9 };
+        })
+      };
     }
   }
 
@@ -246,7 +259,24 @@ function projectDocument(result, settings, api) {
       }
     }
     for (const fn of pg.footnotes) if ((fn.marker + fn.text).trim()) acc(fn.x, fn.baselineY - 9, fn.w, 14);
-    if (pg.folio && pg.folio.text) acc(pg.width / 2 - 10, pg.folio.baselineY - 8, 20, 12);
+    // **D-81:** כל טקסט מצויר נכנס לתיבת הדיו — גם גיליון וגם סלוטי כותרת עליונה,
+    // במיקום/רוחב של המקור היחיד (הקרן). בעבר הכותרת לא נצברה כלל ⇒ המודל היה
+    // צר מהרסטר בעמודים עם כותרת — פער שנחשף בחיזוק בדיקת הקבלה (S13, 03.11).
+    if (pg.folio && pg.folio.text) {
+      const w = pg.folio.w != null ? pg.folio.w : Math.max(20, pg.folio.text.length * 6);
+      const x = pg.folio.x != null ? pg.folio.x : (pg.width - w) / 2;
+      const by = pg.folio.baselineY != null ? pg.folio.baselineY : pg.folio.y + 10;
+      acc(x, by - 10, w, 16);
+    }
+    if (pg.header) {
+      for (const s of pg.header.slots || []) {
+        if (!s.text || !s.text.trim()) continue;
+        const w = s.w != null ? s.w : s.text.length * 5.5;
+        const x = s.x != null ? s.x : (s.pos === 'right' ? pg.width - 60 - w : s.pos === 'center' ? (pg.width - w) / 2 : 60);
+        const by = pg.header.baselineY != null ? pg.header.baselineY : pg.header.y + 10;
+        acc(x, by - 10, w, 15);
+      }
+    }
     if (minX === Infinity) return null;
     return { minX, minY, maxX, maxY };
   });
