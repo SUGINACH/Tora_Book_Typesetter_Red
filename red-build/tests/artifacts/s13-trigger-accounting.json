@@ -1,0 +1,18 @@
+{
+  "stagesHit": [
+    "balance",
+    "decorations",
+    "folio",
+    "justify",
+    "ledger-finalize",
+    "measure",
+    "page-plan",
+    "parse",
+    "protections",
+    "render",
+    "scope-map",
+    "toc"
+  ],
+  "eventsTotal": 12,
+  "notExercised": []
+}

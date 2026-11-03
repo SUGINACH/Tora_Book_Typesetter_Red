@@ -1,0 +1,136 @@
+{
+  "generatedBy": "s13-acceptance",
+  "doc": "canonical_corpus.txt",
+  "configs": [
+    {
+      "config": "default",
+      "pages": 18,
+      "ms": 61,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+      "findingsOpen": 115,
+      "findingsHigh": 0,
+      "openByKind": {
+        "column-imbalance": 8,
+        "runt-line": 50,
+        "heading-escort": 8,
+        "note-marker-line-break": 48,
+        "rollback-compromise": 1
+      },
+      "htmlDeterministic": true,
+      "pdfDeterministic": true,
+      "pdfPages": 18
+    },
+    {
+      "config": "ornaments",
+      "pages": 26,
+      "ms": 34,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "d1dcfdfc2a6480f4ab380e6495782f03316c3f159fb9a6007c54bef8f15bc739",
+      "findingsOpen": 129,
+      "findingsHigh": 0,
+      "openByKind": {
+        "column-imbalance": 15,
+        "runt-line": 50,
+        "heading-escort": 8,
+        "note-marker-line-break": 48,
+        "page-underfill": 7,
+        "rollback-compromise": 1
+      },
+      "htmlDeterministic": true,
+      "pdfDeterministic": true,
+      "pdfPages": 26
+    },
+    {
+      "config": "aq-on",
+      "pages": 18,
+      "ms": 31,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+      "findingsOpen": 115,
+      "findingsHigh": 0,
+      "openByKind": {
+        "column-imbalance": 8,
+        "runt-line": 50,
+        "heading-escort": 8,
+        "note-marker-line-break": 48,
+        "rollback-compromise": 1
+      },
+      "htmlDeterministic": true,
+      "pdfDeterministic": true,
+      "pdfPages": 18
+    },
+    {
+      "config": "continuous-notes",
+      "pages": 18,
+      "ms": 20,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+      "findingsOpen": 115,
+      "findingsHigh": 0,
+      "openByKind": {
+        "column-imbalance": 8,
+        "runt-line": 50,
+        "heading-escort": 8,
+        "note-marker-line-break": 48,
+        "rollback-compromise": 1
+      },
+      "htmlDeterministic": true,
+      "pdfDeterministic": true,
+      "pdfPages": 18
+    },
+    {
+      "config": "verso-headers",
+      "pages": 18,
+      "ms": 17,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+      "findingsOpen": 115,
+      "findingsHigh": 0,
+      "openByKind": {
+        "column-imbalance": 8,
+        "runt-line": 50,
+        "heading-escort": 8,
+        "note-marker-line-break": 48,
+        "rollback-compromise": 1
+      },
+      "htmlDeterministic": true,
+      "pdfDeterministic": true,
+      "pdfPages": 18
+    },
+    {
+      "config": "custom-styles",
+      "pages": 18,
+      "ms": 22,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+      "findingsOpen": 115,
+      "findingsHigh": 0,
+      "openByKind": {
+        "column-imbalance": 8,
+        "runt-line": 50,
+        "heading-escort": 8,
+        "note-marker-line-break": 48,
+        "rollback-compromise": 1
+      },
+      "htmlDeterministic": true,
+      "pdfDeterministic": true,
+      "pdfPages": 18
+    }
+  ],
+  "paths": [
+    "live",
+    "html",
+    "pdf"
+  ],
+  "acceptance": {
+    "maxHighOpen": 0,
+    "contentPreservedAll": true
+  }
+}
