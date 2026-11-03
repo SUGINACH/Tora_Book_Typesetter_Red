@@ -1072,6 +1072,23 @@ function legacyTypeset(rawText, settings, env) {
       let ly = block.yTop;
       for (const u of lUnits) ly = emitUnit(pg, colL, u, ly, 'left');
       y = Math.max(ry, ly);
+      // **S4.14 (דיאג גיאומטריה):** dump של מבנה הבלוקים להשוואה מול תוויות
+      // הייחוס (block-2col W×H | col:right Np Nl Kw) — מופעל רק עם
+      // RED_DEBUG_BLOCKS=1 ואינו משפיע על הפלט.
+      if (process.env.RED_DEBUG_BLOCKS) {
+        const cnt = (units) => ({
+          p: units.filter(u => u.kind === 'para').length,
+          l: units.filter(u => u.kind === 'para').reduce((a, u) => a + u.lines.length, 0),
+          h: units.filter(u => u.kind === 'heading').map(u => 'h' + u.level).join(','),
+          w: units.filter(u => u.kind === 'para' && u.hasWindow).length,
+        });
+        pg._blocks = pg._blocks || [];
+        pg._blocks.push({ yTop: Math.round(block.yTop*10)/10, r: cnt(rUnits), l: cnt(lUnits), rH: Math.round((ry-block.yTop)*10)/10, lH: Math.round((ly-block.yTop)*10)/10, split: !!block.split });
+      }
+    }
+    if (process.env.RED_DEBUG_BLOCKS && stack.some(s => s.type === 'span')) {
+      pg._blocks = pg._blocks || [];
+      for (const s of stack) if (s.type === 'span') pg._blocks.push({ span: true, y: Math.round(s.y*10)/10, h: s.h });
     }
     pg.columns[0] = colR;
     pg.columns[1] = colL;
