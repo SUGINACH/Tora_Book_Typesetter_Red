@@ -21,6 +21,8 @@
 
 const crypto = require('crypto');
 const { MeasureAPI } = require('../typography/measure-api');
+const { EventLog } = require('../core/events');
+const { Ledger } = require('../core/ledger');
 
 // ---------- גיאומטריה (px @96dpi; PDF = px×0.75) — מכויל מהייחוס ----------
 const GEO = {
@@ -452,8 +454,18 @@ function legacyTypeset(rawText, settings) {
     return {
       index: -1, type, legacy: true, pageNumber: null, folioDisplay: '',
       headerSlots: null, bands: [], columns: [[], []], marginNotes: [], footnotes: [],
+      sideNotes: [], // **תיקון S4.10:** חוזה התוצאה — dp-planner.layoutHash ו-serialize
+      // קוראים p.sideNotes.length גם על תוצאות מורשת (בלי זה ה-worker קורס
+      // והאפליקציה החיה מציגה 0 עמודים — נמצא בביקורת הדפדפן).
       fnSep: false, toc: null, _metadata: meta,
-      template: { width: GEO.PAGE_W, height: GEO.PAGE_H, contentBox: { top: GEO.FLOW_TOP, bottom: FLOW_BOTTOM } }
+      // **S4.10:** תבנית מלאה — גם צרכני DP (כגון הקרנות/בדיקות) שקוראים
+      // template.columns/contentBox.height לא יקרסו על תוצאת מורשת.
+      template: {
+        width: GEO.PAGE_W, height: GEO.PAGE_H,
+        columns: [{ x: GEO.COL_R_X, w: GEO.COL_W }, { x: GEO.COL_L_X, w: GEO.COL_W }],
+        gutter: 13.48,
+        contentBox: { top: GEO.FLOW_TOP, bottom: FLOW_BOTTOM, height: GEO.FLOW_H }
+      }
     };
   }
   function newPage(type) {
@@ -991,17 +1003,25 @@ function legacyTypeset(rawText, settings) {
 
   // ---- תוצאה ----
   const tokensOut = tokens.map(t => ({ id: 'lt' + t.id, type: t.type, level: t.level, text: t.text, num: t.num || null }));
-  const hash = crypto.createHash('sha256');
-  for (const pg of pages) {
-    hash.update(pg.type + '|' + (pg.folioDisplay || '') + '|');
-    for (const col of pg.columns) for (const ln of col) hash.update(ln.words.join(' ') + '|');
-  }
+  const layoutHashValue = 'legacy-' + legacyLayoutHashDigest(pages);
+  // **תיקון S4.10 (חוזה התוצאה בנתיב החי):** לפני כן הוחזרו ledger: null, events: null
+  // ופגעו ב-serializeTypesetResult/buildReport של ה-worker — כל בקשת עימוד
+  // באפליקציה החיה קרסה ("Cannot read properties of undefined (reading 'length')")
+  // והדף הציג 0 עמודים. כעת מוחזרים EventLog/Ledger אמיתיים (מינימליים,
+  // דטרמיניסטיים) — הסריאליזציה, הדוח ותצוגת הממצאים עובדים בשני המנועים.
+  const events = new EventLog('minimal');
+  events.emit('parse', 'legacy-imud: tokenize + sections', { tokens: tokensOut.length });
+  events.emit('measure', 'legacy-imud: line breaking', { impl: settings['measure-impl'] || 'table' });
+  events.emit('page-plan', 'legacy-imud: flow + columns', { pages: pages.length });
+  events.emit('folio', 'legacy-imud: folios + TOC', {});
+  events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
+  const ledger = new Ledger();
   return {
-    metadata: meta, tokens: tokensOut, pages, ledger: null, events: null,
+    metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
     tocPages: [], numberingAudit: null, settings,
     contentPreserved: true,
-    layoutHash: 'legacy-' + hash.digest('hex').slice(0, 16),
+    layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
     ornaments: null, retreat: null, sideNotes: null, endnotePages: null,
     endnotePagesInfo: { count: 0, pages: [] },
@@ -1010,8 +1030,21 @@ function legacyTypeset(rawText, settings) {
   };
 }
 
+/**
+ * **S4.10:** hash קנוני של תוצאת המורשת — מיוצא גם ל-buildReport כדי שדטרמיניזם
+ * יימדד מחדש באותה שיטה בדיוק (hash של DP על עמודי מורשת אינו מוגדר).
+ */
+function legacyLayoutHashDigest(pages) {
+  const hash = crypto.createHash('sha256');
+  for (const pg of pages) {
+    hash.update(pg.type + '|' + (pg.folioDisplay || '') + '|');
+    for (const col of pg.columns) for (const ln of col) hash.update((ln.words || []).join(' ') + '|');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
 module.exports = {
   GEO, SZ, HEADING_MODES, toGematria, stripEditorialNotes, parseMetadata,
   tokenizeDoc, LineBreaker, findNotes, readConfig, legacyTypeset,
-  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH
+  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH, legacyLayoutHashDigest
 };

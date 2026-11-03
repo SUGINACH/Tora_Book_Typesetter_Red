@@ -45,7 +45,9 @@ function layoutHash(pages) {
   const canon = pages.map(p => ({
     i: p.index, t: p.type,
     c: p.columns.map(col => col.map(ln => `${lineTokenId(ln)}:${(ln.words || []).join('\u00A7')}`)),
-    fn: p.footnotes.length, sn: p.sideNotes.length
+    // **S4.10:** דפנסיביות — עמודי מנוע המורשת אינם מחויבים לכל השדות
+    // (לפני כן p.sideNotes.length קרס על undefined). לעמודי DP אין שינוי ערך.
+    fn: (p.footnotes || []).length, sn: (p.sideNotes || []).length
   }));
   return crypto.createHash('sha256').update(JSON.stringify(canon), 'utf8').digest('hex');
 }

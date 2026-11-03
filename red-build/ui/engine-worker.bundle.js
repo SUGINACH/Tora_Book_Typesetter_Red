@@ -353,6 +353,8 @@ var __paths = {
   "src/engine/audit/editing-recommendations.js|../parser/block-tokenizer": "src/engine/parser/block-tokenizer.js",
   "src/engine/audit/editing-recommendations.js|./text-edits": "src/engine/audit/text-edits.js",
   "src/engine/layout/legacy-imud-flow.js|../typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/engine/layout/legacy-imud-flow.js|../core/events": "src/engine/core/events.js",
+  "src/engine/layout/legacy-imud-flow.js|../core/ledger": "src/engine/core/ledger.js",
   "src/engine/extensions/apply-styles.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/decoration/shaar-pages.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/decoration/shaar-pages.js|./custom-pages": "src/engine/decoration/custom-pages.js",
@@ -366,6 +368,7 @@ var __paths = {
   "src/engine/layout/endnote-pages.js|../notes/markers": "src/engine/notes/markers.js",
   "src/ui/worker-protocol.js|../audit/report-schema": "src/audit/report-schema.js",
   "src/audit/report-schema.js|../engine/layout/dp-planner": "src/engine/layout/dp-planner.js",
+  "src/audit/report-schema.js|../engine/layout/legacy-imud-flow": "src/engine/layout/legacy-imud-flow.js",
   "src/engine/decoration/asset-registry.js|./svg-sanitize": "src/engine/decoration/svg-sanitize.js",
   "src/engine/output/export-api.js|../core/settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/output/export-api.js|./dom-renderer": "src/engine/output/dom-renderer.js",
@@ -395,6 +398,7 @@ var __paths = {
   "src/engine/output/dom-renderer.js|../decoration/folio": "src/engine/decoration/folio.js",
   "src/engine/output/dom-renderer.js|./line-font": "src/engine/output/line-font.js",
   "src/engine/output/dom-renderer.js|./shaar-content": "src/engine/output/shaar-content.js",
+  "src/engine/output/dom-renderer.js|../layout/legacy-imud-flow": "src/engine/layout/legacy-imud-flow.js",
   "src/engine/decoration/page-decorations.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/typography/font-subset.js|./font-metrics": "src/engine/typography/font-metrics.js",
   "src/engine/output/geometry-projector.js|./dom-renderer": "src/engine/output/dom-renderer.js",
@@ -3310,7 +3314,9 @@ function layoutHash(pages) {
   const canon = pages.map(p => ({
     i: p.index, t: p.type,
     c: p.columns.map(col => col.map(ln => `${lineTokenId(ln)}:${(ln.words || []).join('\u00A7')}`)),
-    fn: p.footnotes.length, sn: p.sideNotes.length
+    // **S4.10:** דפנסיביות — עמודי מנוע המורשת אינם מחויבים לכל השדות
+    // (לפני כן p.sideNotes.length קרס על undefined). לעמודי DP אין שינוי ערך.
+    fn: (p.footnotes || []).length, sn: (p.sideNotes || []).length
   }));
   return crypto.createHash('sha256').update(JSON.stringify(canon), 'utf8').digest('hex');
 }
@@ -5446,6 +5452,8 @@ __modules["src/engine/layout/legacy-imud-flow.js"] = function (require, module, 
 
 const crypto = require('crypto');
 const { MeasureAPI } = require('../typography/measure-api');
+const { EventLog } = require('../core/events');
+const { Ledger } = require('../core/ledger');
 
 // ---------- גיאומטריה (px @96dpi; PDF = px×0.75) — מכויל מהייחוס ----------
 const GEO = {
@@ -5877,8 +5885,18 @@ function legacyTypeset(rawText, settings) {
     return {
       index: -1, type, legacy: true, pageNumber: null, folioDisplay: '',
       headerSlots: null, bands: [], columns: [[], []], marginNotes: [], footnotes: [],
+      sideNotes: [], // **תיקון S4.10:** חוזה התוצאה — dp-planner.layoutHash ו-serialize
+      // קוראים p.sideNotes.length גם על תוצאות מורשת (בלי זה ה-worker קורס
+      // והאפליקציה החיה מציגה 0 עמודים — נמצא בביקורת הדפדפן).
       fnSep: false, toc: null, _metadata: meta,
-      template: { width: GEO.PAGE_W, height: GEO.PAGE_H, contentBox: { top: GEO.FLOW_TOP, bottom: FLOW_BOTTOM } }
+      // **S4.10:** תבנית מלאה — גם צרכני DP (כגון הקרנות/בדיקות) שקוראים
+      // template.columns/contentBox.height לא יקרסו על תוצאת מורשת.
+      template: {
+        width: GEO.PAGE_W, height: GEO.PAGE_H,
+        columns: [{ x: GEO.COL_R_X, w: GEO.COL_W }, { x: GEO.COL_L_X, w: GEO.COL_W }],
+        gutter: 13.48,
+        contentBox: { top: GEO.FLOW_TOP, bottom: FLOW_BOTTOM, height: GEO.FLOW_H }
+      }
     };
   }
   function newPage(type) {
@@ -6416,17 +6434,25 @@ function legacyTypeset(rawText, settings) {
 
   // ---- תוצאה ----
   const tokensOut = tokens.map(t => ({ id: 'lt' + t.id, type: t.type, level: t.level, text: t.text, num: t.num || null }));
-  const hash = crypto.createHash('sha256');
-  for (const pg of pages) {
-    hash.update(pg.type + '|' + (pg.folioDisplay || '') + '|');
-    for (const col of pg.columns) for (const ln of col) hash.update(ln.words.join(' ') + '|');
-  }
+  const layoutHashValue = 'legacy-' + legacyLayoutHashDigest(pages);
+  // **תיקון S4.10 (חוזה התוצאה בנתיב החי):** לפני כן הוחזרו ledger: null, events: null
+  // ופגעו ב-serializeTypesetResult/buildReport של ה-worker — כל בקשת עימוד
+  // באפליקציה החיה קרסה ("Cannot read properties of undefined (reading 'length')")
+  // והדף הציג 0 עמודים. כעת מוחזרים EventLog/Ledger אמיתיים (מינימליים,
+  // דטרמיניסטיים) — הסריאליזציה, הדוח ותצוגת הממצאים עובדים בשני המנועים.
+  const events = new EventLog('minimal');
+  events.emit('parse', 'legacy-imud: tokenize + sections', { tokens: tokensOut.length });
+  events.emit('measure', 'legacy-imud: line breaking', { impl: settings['measure-impl'] || 'table' });
+  events.emit('page-plan', 'legacy-imud: flow + columns', { pages: pages.length });
+  events.emit('folio', 'legacy-imud: folios + TOC', {});
+  events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
+  const ledger = new Ledger();
   return {
-    metadata: meta, tokens: tokensOut, pages, ledger: null, events: null,
+    metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
     tocPages: [], numberingAudit: null, settings,
     contentPreserved: true,
-    layoutHash: 'legacy-' + hash.digest('hex').slice(0, 16),
+    layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
     ornaments: null, retreat: null, sideNotes: null, endnotePages: null,
     endnotePagesInfo: { count: 0, pages: [] },
@@ -6435,10 +6461,23 @@ function legacyTypeset(rawText, settings) {
   };
 }
 
+/**
+ * **S4.10:** hash קנוני של תוצאת המורשת — מיוצא גם ל-buildReport כדי שדטרמיניזם
+ * יימדד מחדש באותה שיטה בדיוק (hash של DP על עמודי מורשת אינו מוגדר).
+ */
+function legacyLayoutHashDigest(pages) {
+  const hash = crypto.createHash('sha256');
+  for (const pg of pages) {
+    hash.update(pg.type + '|' + (pg.folioDisplay || '') + '|');
+    for (const col of pg.columns) for (const ln of col) hash.update((ln.words || []).join(' ') + '|');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
 module.exports = {
   GEO, SZ, HEADING_MODES, toGematria, stripEditorialNotes, parseMetadata,
   tokenizeDoc, LineBreaker, findNotes, readConfig, legacyTypeset,
-  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH
+  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH, legacyLayoutHashDigest
 };
 
 };
@@ -8923,8 +8962,16 @@ function buildReport(result, opts = {}) {
   const diagnosticsOn = result && result.settings ? result.settings['diagnostics-enabled'] !== false : true;
   const compact = opts.compact || !diagnosticsOn;
   // **דטרמיניזם נמדד (P1-6):** hash מחושב מחדש מהפלט ומושווה לתוצאה — לא קבוע.
+  // **S4.10:** תוצאת מנוע-מורשת מקבלת hash מחדש בשיטת המורשת עצמה — hash של DP
+  // על עמודי מורשת אינו מוגדר (שדות שונים) והיה מסמן אקראיות שקרית.
   const { layoutHash } = require('../engine/layout/dp-planner');
-  const recomputed = result.pages ? layoutHash(result.pages) : null;
+  const { legacyLayoutHashDigest } = require('../engine/layout/legacy-imud-flow');
+  let recomputed = null;
+  if (result.pages) {
+    recomputed = result.legacyProfile
+      ? 'legacy-' + legacyLayoutHashDigest(result.pages)
+      : layoutHash(result.pages);
+  }
   const deterministic = recomputed === result.layoutHash;
   const findings = [];
   for (const rec of result.ledger.issues.values()) {
@@ -9509,6 +9556,14 @@ const PT_CLASS = {
   'filler': 'page page--filler'
 };
 
+// **S4.10:** סוגי עמודי מנוע המורשת (legacy-imud-flow) — מיפוי למחלקות ה-CSS.
+// 'toc-detailed' אצלנו (בייחוס toc-detail) ו-'blank' ייחודי למורשת.
+const LEGACY_PT_CLASS = {
+  'toc-detailed': 'page page--toc page--toc-detail',
+  'blank': 'page page--blank',
+  'sign-open': 'page page--sign-open'
+};
+
 const ATOMIC_SPACE = '\uE000';
 const PAREN_MARK = '\uE101';
 
@@ -10001,7 +10056,218 @@ function renderShaarContent(page, settings, doc, metadata) {
  * שני הנתיבים הציגו עמודים בלי כותרת עליונה בזמן שהבדיקות העבירו את הארגומנט
  * במפורש ולא תפסו את הנתק (דיווח משתמש 3: "אין כותרות עליונות").
  */
+/**
+ * **S4.10 — רנדור DOM של עמוד legacy-imud-flow (התצוגה החיה).**
+ *
+ * הגיאומטריה כולה כבר מחושבת במנוע המורשת ב-px@96 (מכויל מהייחוס):
+ * פסים (סימן/h2/h0/h3), שערים, טורים (ימני 403.61 / שמאלי 120.72, רוחב 269.41),
+ * הערות תחתית, הערות צד בשוליים, שורות TOC, כותרת עליונה תלת-סלוטית ועמודון.
+ * הרנדר מצייר אותה גיאומטריה בדיוק — מה שרואים בתצוגה = מה שיוצא ב-PDF
+ * (legacy-projector) — אותו מקור אמת אחד.
+ */
+function renderLegacyPage(pg, settings, doc) {
+  const { GEO, SZ } = require('../layout/legacy-imud-flow');
+  const BAND_X = GEO.COL_L_X;
+  const BAND_W = 2 * GEO.COL_W + 13.48;
+  const root = doc.createElement('article');
+  root.className = LEGACY_PT_CLASS[pg.type] || PT_CLASS[pg.type] || 'page';
+  root.dataset.pageIndex = String(pg.index);
+  root.setAttribute('id', `page-${pg.index}`);
+  root.dir = 'rtl';
+  root.style.width = `${GEO.PAGE_W}px`;
+  root.style.height = `${GEO.PAGE_H}px`;
+  root.style.position = 'relative';
+  root.style.overflow = 'hidden';
+  const bf = settings['body-font'];
+  if (bf) root.style.fontFamily = fontStack(bf);
+  const pt2px = (pt) => pt * (96 / 72);
+  const position = (el, x, y, w, h) => {
+    el.style.position = 'absolute';
+    el.style.left = `${x}px`; el.style.top = `${y}px`;
+    if (w != null) el.style.width = `${w}px`;
+    if (h != null) el.style.height = `${h}px`;
+  };
+  const mkLine = (text, sizePt, align) => {
+    const el = doc.createElement('div');
+    el.className = 'line';
+    el.setAttribute('dir', 'rtl');
+    el.style.fontSize = `${pt2px(sizePt)}px`;
+    el.style.lineHeight = '1.1';
+    el.style.whiteSpace = 'nowrap';
+    el.style.overflow = 'visible';
+    el.style.textAlign = align;
+    el.textContent = scrubPUAText(text);
+    return el;
+  };
+
+  // ---- כותרת עליונה תלת-סלוטית (פס 42.6–57.6pt ⇒ px) ----
+  const hs = pg.headerSlots;
+  if (hs && (hs.right || hs.center || hs.left)) {
+    const hdr = doc.createElement('div');
+    hdr.className = 'running-head';
+    hdr.setAttribute('dir', 'rtl');
+    position(hdr, 60, 52, GEO.PAGE_W - 120, 22);
+    hdr.style.display = 'flex';
+    hdr.style.justifyContent = 'space-between';
+    hdr.style.alignItems = 'baseline';
+    const slots = [
+      ['rh rh--r', hs.right, SZ.hdrR],
+      ['rh rh--c', hs.center, SZ.hdrC],
+      ['rh rh--l', hs.left, SZ.hdrL]
+    ];
+    for (const [cls, txt, sz] of slots) {
+      const s = doc.createElement('span');
+      s.className = cls;
+      s.textContent = txt || '';
+      s.style.fontSize = `${pt2px(sz)}px`;
+      hdr.appendChild(s);
+    }
+    root.appendChild(hdr);
+  }
+
+  // ---- פסים: סימן/h2/h0/h3 — ממורכזים ברוחב הפס ----
+  for (const b of (pg.bands || [])) {
+    const el = mkLine(b.text, b.sizePt, 'center');
+    el.className += ` band band--${b.kind || 'title'}`;
+    position(el, BAND_X, b.y, BAND_W, b.h);
+    root.appendChild(el);
+  }
+
+  // ---- תוכן השערים ----
+  for (const g of (pg.gateLines || [])) {
+    const el = mkLine(g.text, g.sizePt, 'center');
+    el.className += ' band band--gate';
+    position(el, BAND_X, g.y, BAND_W, pt2px(g.sizePt) * 1.3);
+    root.appendChild(el);
+  }
+
+  // ---- טורים: ימני ואז שמאלי; preface/shaar/toc = טור רחב יחיד ----
+  const isSingle = pg.type === 'preface' || pg.type === 'toc-general' || pg.type === 'toc-detailed'
+    || String(pg.type || '').startsWith('shaar');
+  const colDefs = isSingle
+    ? [{ x: GEO.COL_L_X, w: BAND_W }]
+    : [{ x: GEO.COL_R_X, w: GEO.COL_W }, { x: GEO.COL_L_X, w: GEO.COL_W }];
+  const colsWrap = doc.createElement('div');
+  colsWrap.className = 'columns';
+  pg.columns.forEach((colLines, ci) => {
+    const def = colDefs[Math.min(ci, colDefs.length - 1)];
+    const colEl = doc.createElement('section');
+    colEl.className = 'column';
+    position(colEl, def.x, GEO.FLOW_TOP, def.w, GEO.FLOW_H);
+    colEl.style.overflow = 'visible';
+    for (const ln of colLines) {
+      const el = doc.createElement('div');
+      el.className = 'line' + (ln.isLast ? ' line--last' : '');
+      el.setAttribute('dir', 'rtl');
+      el.style.position = 'absolute';
+      el.style.right = '0';
+      el.style.top = `${(ln.y || 0) - GEO.FLOW_TOP}px`;
+      el.style.width = `${def.w}px`;
+      // **תיבת השורה = גובה המסגרת מהמנוע (pitch):** בלי גובה מפורש, שורת
+      // חלון (1.5×) מנפחת את התיבה וחופפת את השורה הבאה במדידת ה-DOM
+      // (האודיט החי מדווח LINE_OVERLAP). התוכן עשוי לגלוש ויזואלית — כמו
+      // line-height:0.85 של מילת-החלון במקור — אבל התיבה נשארת בגובה הפס.
+      el.style.height = `${ln.heightPx || 16}px`;
+      el.style.fontSize = `${pt2px(ln.sizePt || SZ.body)}px`;
+      el.style.lineHeight = '1';
+      el.style.overflow = 'visible';
+      el.style.whiteSpace = 'nowrap';
+      el.style.textAlign = ln.kind === 'heading' ? 'center' : (ln.isLast ? 'center' : 'justify');
+      if (ln.window && ln.windowWords && ln.windowWords.length) {
+        // מילת-חלון (1.5×) בשפה הימנית + הטקסט — תיבה אחת, בסיס משותף
+        const win = doc.createElement('span');
+        win.className = 'w w--window';
+        win.textContent = scrubPUAText(ln.windowWords.join(' ')) + ' ';
+        win.style.fontSize = `${pt2px((ln.sizePt || SZ.body) * 1.5)}px`;
+        el.appendChild(win);
+      }
+      el.appendChild(doc.createTextNode(scrubPUAText((ln.words || []).join(' '))));
+      if (ln.tokenId != null) el.dataset.tokenId = String(ln.tokenId);
+      colEl.appendChild(el);
+    }
+    colsWrap.appendChild(colEl);
+  });
+  root.appendChild(colsWrap);
+
+  // ---- הערות צד בטורי השוליים ----
+  for (const mn of (pg.marginNotes || [])) {
+    const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
+    for (const l of (mn.lines || [])) {
+      const el = mkLine(l.text, SZ.marginNote, 'right');
+      el.className += ' margin-note';
+      position(el, x, l.y, GEO.MARGIN_W, GEO.MN_PITCH);
+      root.appendChild(el);
+    }
+  }
+
+  // ---- הערות שוליים (תחתית) ----
+  for (const fn of (pg.footnotes || [])) {
+    const el = doc.createElement('div');
+    el.className = 'footnote';
+    el.setAttribute('dir', 'rtl');
+    const y0 = fn.lines && fn.lines[0] ? fn.lines[0].y : GEO.FLOW_TOP;
+    const h = (fn.lines ? fn.lines.length : 1) * GEO.FN_PITCH;
+    position(el, GEO.COL_L_X, y0, BAND_W, h);
+    el.style.fontSize = `${pt2px(SZ.fnBody)}px`;
+    el.style.lineHeight = `${GEO.FN_PITCH}px`;
+    el.style.textAlign = 'right';
+    el.textContent = scrubPUAText((fn.marker ? fn.marker + ' ' : '') + (fn.lines || []).map(l => (Array.isArray(l.words) ? l.words : String(l.words).split(' ')).join(' ')).join(' '));
+    root.appendChild(el);
+  }
+
+  // ---- תוכן-עניינים: כותרת + שורות (כותרת מימין במדרגות, מספר משמאל) ----
+  if (pg.toc) {
+    if (pg.toc.title) {
+      const el = mkLine(pg.toc.title, SZ.tocTitle, 'center');
+      el.className += ' toc-title';
+      position(el, BAND_X, GEO.FLOW_TOP + 136, BAND_W, 30);
+      root.appendChild(el);
+    }
+    for (const r of (pg.toc.rows || [])) {
+      const row = doc.createElement('div');
+      row.className = 'toc-row';
+      row.setAttribute('dir', 'rtl');
+      position(row, GEO.TOC_NUM_X, r.y, (r.x1 || 560) - GEO.TOC_NUM_X, 26);
+      row.style.display = 'flex';
+      row.style.justifyContent = 'space-between';
+      row.style.fontSize = `${pt2px(r.sizePt || 10.5)}px`;
+      row.style.lineHeight = '1.2';
+      const t = doc.createElement('span');
+      t.className = 'toc-text';
+      t.style.marginRight = `${Math.max(0, 560 - (r.x1 || 560))}px`; // מדרגות לפי רמה
+      t.textContent = scrubPUAText(r.text || '');
+      row.appendChild(t);
+      if (r.folio) {
+        const n = doc.createElement('span');
+        n.className = 'toc-num';
+        n.style.fontSize = `${pt2px(SZ.tocNum)}px`;
+        n.textContent = r.folio;
+        row.appendChild(n);
+      }
+      root.appendChild(row);
+    }
+  }
+
+  // ---- עמודון ----
+  if (pg.folioDisplay) {
+    const folio = doc.createElement('div');
+    folio.className = 'folio';
+    folio.setAttribute('dir', 'rtl');
+    position(folio, 0, GEO.FOLIO_BASELINE - 14, GEO.PAGE_W, 18);
+    folio.style.textAlign = 'center';
+    folio.style.fontSize = `${pt2px(SZ.folio)}px`;
+    folio.textContent = pg.folioDisplay;
+    root.appendChild(folio);
+  }
+  return root;
+}
+
 function renderPage(page, settings, doc, header) {
+  // **S4.10 — עמודי מנוע המורשת:** לעמודי legacy-imud-flow יש צורה משלהם
+  // (גיאומטריה מפורשת ב-px: bands/gateLines/columns/footnotes/marginNotes/toc)
+  // שאינה תואמת את חוזה ה-DP — הרנדר הכללי קרס על template.columns חסר
+  // והתצוגה החיה הציגה 0 עמודים. רנדר ייעודי נאמן לגיאומטריית המורשת.
+  if (page && page.legacy) return renderLegacyPage(page, settings, doc);
   if (header == null && page && page.header) header = page.header;
   if (!page.template) {
     // עמודי הערות שלא חוברו לרצף המספור — תבנית ברירת מחדל חוקית (A4) במקום קריסה

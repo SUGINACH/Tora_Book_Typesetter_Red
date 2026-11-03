@@ -68,8 +68,16 @@ function buildReport(result, opts = {}) {
   const diagnosticsOn = result && result.settings ? result.settings['diagnostics-enabled'] !== false : true;
   const compact = opts.compact || !diagnosticsOn;
   // **דטרמיניזם נמדד (P1-6):** hash מחושב מחדש מהפלט ומושווה לתוצאה — לא קבוע.
+  // **S4.10:** תוצאת מנוע-מורשת מקבלת hash מחדש בשיטת המורשת עצמה — hash של DP
+  // על עמודי מורשת אינו מוגדר (שדות שונים) והיה מסמן אקראיות שקרית.
   const { layoutHash } = require('../engine/layout/dp-planner');
-  const recomputed = result.pages ? layoutHash(result.pages) : null;
+  const { legacyLayoutHashDigest } = require('../engine/layout/legacy-imud-flow');
+  let recomputed = null;
+  if (result.pages) {
+    recomputed = result.legacyProfile
+      ? 'legacy-' + legacyLayoutHashDigest(result.pages)
+      : layoutHash(result.pages);
+  }
   const deterministic = recomputed === result.layoutHash;
   const findings = [];
   for (const rec of result.ledger.issues.values()) {
