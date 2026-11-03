@@ -484,12 +484,32 @@ def main():
             return out
         seq = []
         for p in docjson["pages"]:
+            # **S4.13 (סלים דטרמיניסטיים לשוליים):** שורות הערות-הצד (col=None,
+            # גודל<7) של שני טורי השוליים מעורבבות בחילוץ לפי y — וג'יטר עיגון
+            # של ±2pt בין הצדדים הופך את סדר הקריאה לבלתי-יציב (נצפה:
+            # התאמת שורות-שוליים 0.46 למרות גלישה זהה). הפרדה לפי x0
+            # (ימין>300pt, שמאל≤300pt) וקריאה של כל טור שוליים בנפרד — מודדת
+            # את התוכן והגלישה, לא את ג'יטר העיגון. שאר שורות ה-col=None
+            # (TOC/שערים/הערות-תחתית) נקראות ראשית לפי y.
+            none_rows, mright, mleft = [], [], []
             by_col = {"right": [], "left": [], "single": []}
             for ln in p["lines"]:
-                by_col.setdefault(ln.get("col") or "single", []).append(ln)
+                c = ln.get("col")
+                if c in ("right", "left", "single"):
+                    by_col[c].append(ln)
+                elif ln.get("size") is not None and ln["size"] < 7:
+                    (mright if (ln.get("x0") or 0) > 300 else mleft).append(ln)
+                else:
+                    none_rows.append(ln)
             for name in ("right", "left", "single"):
                 for ln in cluster_sorted(by_col[name]):
                     seq.append(norm(ln["text"]))
+            for ln in cluster_sorted(none_rows):
+                seq.append(norm(ln["text"]))
+            for ln in cluster_sorted(mright):
+                seq.append(norm(ln["text"]))
+            for ln in cluster_sorted(mleft):
+                seq.append(norm(ln["text"]))
         return [s for s in seq if s]
 
     rl0 = reading_lines(ref)

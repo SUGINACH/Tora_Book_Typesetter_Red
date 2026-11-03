@@ -9394,7 +9394,15 @@ const GEO = {
   MARGIN_R_X: 686.3, MARGIN_L_X: 56.7, MARGIN_W: 50.5, // טורי שוליים (margin-col)
   FLOW_TOP: 96.7,                               // ראשית זרימת הגוף בעמוד רגיל
   FLOW_H: 925,                                  // **מכויל:** הייחוס ממלא עד ~1013px+; 925 מייצג את הקיבולת האפקטיבית
-  LINE_H: 21,                                   // **מכויל מהייחוס:** פס הגוף הדומיננטי 15.75pt=21px (הדפסת הדפדפן מקרבת את 16×1.34=21.44 לפיקסל שלם)
+  // **S4.13 (פס שורה אמיתי — היסוד לכל הסטייה המצטברת):** המקור מגדיר
+  // line-height: var(--line-height-body)=1.34 על 12pt ⇒ 16.08pt = **21.44px**
+  // לכל תיבת שורה. הדפדפן שומר את השבר בסכומי ה-DOM (scrollHeight), ורק
+  // ההדפסה ל-PDF מצמידה כל שורה לפיקסל שלם — לכן במדידת הייחוס נראים פסים
+  // מעורבים 21/22px (15.75/16.5pt, היסטוגרמה: 1277+1101) שהממוצע שלהם 21.44.
+  // הקליברציה הקודמת (21 שטוח) חסכה 0.44px לשורה ⇒ 2% קיבולת ⇒ כשורה
+  // לטור ⇒ +2 שורות לעמוד — בדיוק הסטייה המצטברת שנצפתה (עמודינו 90-93
+  // שורות מול 87-90 בייחוס). כעת: המילוי, הפריסה והמודל כולם ב-21.44.
+  LINE_H: 21.44,
   H2_SPACER: 180,                               // h2-spacer לפני סימן+כותרת
   HEADER_BASELINE: 71.9,                        // פס כותרת: גליפים 42.56–57.56pt
   FOLIO_BASELINE: 1054.5,                       // עמודון: y0=783.82pt (גליף ~1045px), ממורכז
@@ -9672,16 +9680,22 @@ class LineBreaker {
     const { disp, out, notes } = this.splitWords(text);
     const spaceW = this.w(' ', sizePt);
     // טווחי סוגריים מאוזנים — מילים בתוכם נמדדות בגודל מוקטן
+    // **S4.13 (תיקון שורש — זיהוי ברמת תווים כמו findParenMatches במקור):**
+    // הזיהוי הקודם (מילה-שמתחילה-ב-( עד מילה-שמסתיימת-ב-)) החמיץ את המקרה
+    // הנפוץ 'מחשבת).' — סוגר עם פיסוק אחריו — וכל טווחי הסוגריים בפסקאות
+    // כאלה נמדדו בגודל מלא (12pt במקום 10pt) ⇒ שורות קצרות יותר בשבירה
+    // מול הייחוס. המקור סופר עומק סוגריים לכל אורך הטקסט (מקונן, חוצה
+    // מילים); כאן: מילה שנמצאת בתוך עומק>0 או נוגעת בסוגר — מוקטנת.
     const parenWords = new Set();
     {
-      const stack = [];
+      let depth = 0;
       for (let i = 0; i < out.length; i++) {
         const wd = out[i];
-        if (wd.startsWith('(')) stack.push(i);
-        if (wd.endsWith(')') && stack.length) {
-          const from = stack.pop();
-          for (let k = from; k <= i; k++) parenWords.add(k);
+        for (let c = 0; c < wd.length; c++) {
+          if (wd[c] === '(') depth++;
+          else if (wd[c] === ')' && depth > 0) depth--;
         }
+        if (depth > 0 || wd.includes('(') || wd.includes(')')) parenWords.add(i);
       }
     }
     const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
@@ -9693,8 +9707,13 @@ class LineBreaker {
     const estLines = Math.max(1, Math.ceil(totalW / colWidthPx));
     const firstHasNote = out.slice(0, Math.min(cfg.dropWordCount, out.length))
       .some(w => w.includes(cfg.fnOpen));
+    // **S4.13 (createDropWord של המקור):** פסקה שמתחילה בסוגריים — בלי חלון
+    // ("פסקה שמתחילה בסוגריים ( ) — בלי עיצוב מילה ראשונה"). ההוכחה מהייחוס:
+    // פסקת "(הדברים פשוטים...)" בהקדמה מודפסת אצל המקור בלי מילת-חלון כלל
+    // (כל השורות ברוחב מלא), ואצלנו הופיע "(הדברים" כחלון 1.5× בגודל 17.25.
+    const startsWithParen = /^\(/.test(String(text).trim());
     let useWindow = false, windowW = 0, windowWords = null;
-    if (allowWindow && cfg.dropWordMode === 'window' && estLines >= cfg.dropWordMinLines && !firstHasNote) {
+    if (allowWindow && !startsWithParen && cfg.dropWordMode === 'window' && estLines >= cfg.dropWordMinLines && !firstHasNote) {
       useWindow = true;
       windowWords = out.slice(0, cfg.dropWordCount);
       windowW = this.w(disp.slice(0, cfg.dropWordCount).join(' '), sizePt * 1.5) + 6;
@@ -9745,7 +9764,12 @@ const H2_AREA_H = 271.3;   // **מכויל מהייחוס (עמ' 11):** הזרי
 const H3_SPAN_H = 40;      // **מכויל מהייחוס:** span מ-368 ועד הגוף ב-407.6 (עמ' 11)
 const H0_AREA_H = 251.3;   // **מכויל מהייחוס (עמ' 10):** הזרימה מתחילה ב-348px; הכותרת ב-309px
 const SINGLE_W = 552.3;    // .single-wide-col = 2×269.41+13.48 (grid)
-const H0_LINE_H = 22.2;    // 15.33px × 1.45 (line-height של h0-body)
+// **S4.13:** פס שורת ההקדמה — אותו line-height של הגוף (1.34) על 11.5pt
+// ⇒ 15.41pt = 20.55px. מדידת הייחוס בעמוד ההקדמה: פסים 15.0–16.3pt (ממוצע 20.5px
+// לפני הצמדת ההדפסה). הערך הקודם (22.2 = ×1.45) היה קליברציה שגויה שדחפה
+// את שורות ההקדמה והזיזה את נקודות החיתוך שלה (נצפה ב-P7: שורות ההקדמה
+// הראשונות שנותרו שונות אחרי תיקון LINE_H).
+const H0_LINE_H = 20.55;
 const TOC_TITLE_BLOCK_H = 213;
 
 /** גובה פריט כותרת inline (h4/h5/h6) בטור — גודל×1.22 + מרווחי המקור. */
@@ -9994,7 +10018,9 @@ function legacyTypeset(rawText, settings) {
             balanceBlock(block, colBottom() - block.yTop);
           }
           const curY = block ? blockBottom() : top;
-          if (colBottom() - curY < H3_SPAN_H + 6) break fillPage;
+          // **S4.13:** סף 60px — כמו המקור (if (currentAvailH < 60) break
+          // לפני הצבת כותרת רוחבית); היה H3_SPAN_H+6≈46.
+          if (colBottom() - curY < 60) break fillPage;
           stack.push({ type: 'span', text: tok.text, y: curY, h: H3_SPAN_H, tokenId: tok.id });
           openBlock(curY + H3_SPAN_H);
           ti++;
@@ -10102,8 +10128,10 @@ function legacyTypeset(rawText, settings) {
             finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending);
             const bottom = blockBottom();
             // המשך רק אם נשאר מקום לשורה נוספת ויש תוכן — אחרת שוברים עמוד.
+            // **S4.13:** הסף 45px — כמו תנאי לולאת הבלוקים של המקור
+            // ((remPageHeight − reservedNow()) > 45); היה LINE_H≈21.
             // (בלוק ריק + אין מקום ⇒ break — אין לולאה אינסופית.)
-            if (colBottom() - bottom >= GEO.LINE_H && ti < toks.length) {
+            if (colBottom() - bottom > 45 && ti < toks.length) {
               openBlock(bottom); // openBlock מאתחל fill: 0 — המשך מילוי מהטור הימני
               continue;
             }
@@ -10178,7 +10206,8 @@ function legacyTypeset(rawText, settings) {
             // של המקור: מילוי → balanceColumns → בלוק הבא באותו עמוד.
             finalizeBlock(block, tok, false);
             const bottom = blockBottom();
-            if (colBottom() - bottom >= GEO.LINE_H) {
+            // **S4.13:** סף 45px כמו המקור (ראו הערה במסלול fit=0).
+            if (colBottom() - bottom > 45) {
               openBlock(bottom);
               continue;
             }
@@ -10321,8 +10350,11 @@ function legacyTypeset(rawText, settings) {
       const it = items[c.i];
       // החלק הימני: p-cut — isEnd=false; החלון נשאר בשורה הראשונה (כמו createDropWord)
       r.push({ ...it, lines: it.lines.slice(0, c.l), isEnd: false, hasWindow: it.hasWindow && !it.isCont });
-      // החלק השמאלי: המשך — isCont=true, בלי חלון (הגליף כבר בימין)
-      l.push({ ...it, lines: it.lines.slice(c.l), isCont: true, hasWindow: false, from: it.from + c.l });
+      // החלק השמאלי: המשך — isCont=true, בלי חלון (הגליף כבר בימין), ובלי
+      // הערת-צד — **S4.13 (תיקון כפילות):** ההערה מוצמדת לפסקה במופעה
+      // הראשון (הטור הימני); ה-spread העתיק אותה גם להמשך והיא הודפסה
+      // פעמיים — בשני טורי השוליים (נצפה בעמ' 11: הערת h7#1 בשני הצדדים).
+      l.push({ ...it, lines: it.lines.slice(c.l), isCont: true, hasWindow: false, sideNote: null, from: it.from + c.l });
       for (let k = c.i + 1; k < items.length; k++) l.push(items[k]);
     } else {
       for (let k = c.i; k < items.length; k++) l.push(items[k]);
@@ -10393,7 +10425,10 @@ function legacyTypeset(rawText, settings) {
     }
     y += 7; // **S4.13:** מרווח 7px אחרי כל חתיקת <p> (כולל p-cut) — כמו ה-DOM של המקור
     if (u.sideNote) {
-      const anchor = y - u.lines.length * u.pitch;
+      // **S4.13 (תיקון עיגון):** ה-anchor חייב להיות **ראשית הפסקה** — הוא
+      // חושב אחרי ה-+=7 של מרווח הפסקה ונספג 7px למטה (נצפה: הערת-הצד
+      // בעמ' 11 עוגנה 331pt במקום ~325.7 — ראשית הפסקה; הייחוס: 323.2).
+      const anchor = y - 7 - u.lines.length * u.pitch;
       const lines = wrapText(u.sideNote, api, GEO.MARGIN_W - 2, SZ.marginNote);
       pg.marginNotes.push({
         side: sideName === 'right' ? 'right' : 'left',
