@@ -97,7 +97,9 @@ function createApp(doc, opts = {}) {
 
   const preview = buildPreviewTab(doc, {
     onActivatePage: (pageIndex) => onActivatePage(pageIndex),
-    onDebugDownload: (pageIndex) => opts.onDebugDownload && opts.onDebugDownload(buildDebugJson(pageIndex), pageIndex)
+    onDebugDownload: (pageIndex) => opts.onDebugDownload && opts.onDebugDownload(buildDebugJson(pageIndex), pageIndex),
+    // **S12 (REQ-EXP-01..04):** נתיב הייצוא האחיד — מקור יחיד לטקסט/הגדרות/הרחבות.
+    onExport: (kind) => onExportRequest(kind)
   });
 
   const testing = buildTestingTab(doc, {
@@ -287,6 +289,52 @@ function createApp(doc, opts = {}) {
     return true;
   }
 
+  // ================= S12: ייצוא (HTML עצמאי / PDF / ZIP) =================
+
+  /** בקשת ייצוא — קריאה בלבד (F-06: אין עימוד/אין שינוי מצב); הפלט דרך opts.onExportFile
+   * (בדפדפן: הורדה; בבדיקות: בדיקת הבתים). PDF דורש גופן מוטמע — opts.embeddedFont (בתים)
+   * או נפילה מתועדת להודעה (ללא גופן אין טקסט אמיתי — לא מזייפים). */
+  function onExportRequest(kind) {
+    if (!result) { status.setNotice('אין תוצאה לייצוא — העמוד עוד לא בוצע.'); return null; }
+    const { exportHtml, exportPdf, exportProjectZip } = require('../engine/output/export-api');
+    try {
+      if (kind === 'html') {
+        const html = exportHtml(result, settings, doc, { title: (result.metadata && result.metadata['ספר']) || 'ספר' });
+        if (opts.onExportFile) opts.onExportFile('html', html, 'book.html');
+        status.setNotice('יוצא HTML עצמאי (חד־קובץ, offline).');
+        return { ok: true, kind, data: html };
+      }
+      if (kind === 'pdf') {
+        if (typeof Buffer === 'undefined') {
+          // סביבת דפדפן בלי מודול בואפרות — נתיב ה־PDF דורש Buffer; הודעה מפורשת (לא כשל שקט)
+          status.setNotice('ייצוא PDF זמין בסביבת ההרצה המלאה (Node); בדפדפן השתמשו בייצוא HTML העצמאי והדפיסו ממנו.');
+          return { ok: false, reason: 'no-buffer-in-browser' };
+        }
+        if (!opts.embeddedFont) {
+          status.setNotice('ייצוא PDF דורש גופן מוטמע — נא לטעון גופן (TTF) בהגדרות המסמך.');
+          return { ok: false, reason: 'no-embedded-font' };
+        }
+        const res = exportPdf(text, settings, opts.embeddedFont);
+        if (!res.ok) { status.setNotice('ייצוא PDF נכשל: ' + res.error); return res; }
+        if (opts.onExportFile) opts.onExportFile('pdf', res.bytes, 'book.pdf');
+        status.setNotice(`יוצא PDF — ${res.info.pages} עמודים, ${res.info.outline} סימניות, טקסט נבחר.`);
+        return { ok: true, kind, data: res.bytes, info: res.info };
+      }
+      if (kind === 'zip') {
+        const bytes = exportProjectZip(text, settings, {
+          extensions: extensions.getBundle ? extensions.getBundle() : null
+        });
+        if (opts.onExportFile) opts.onExportFile('zip', bytes, 'book-project.zip');
+        status.setNotice('יוצאה חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות+ערכה).');
+        return { ok: true, kind, data: bytes };
+      }
+    } catch (e) {
+      status.setNotice('הייצוא נכשל: ' + (e && e.message ? e.message : String(e)));
+      return { ok: false, error: String(e && e.message || e) };
+    }
+    return null;
+  }
+
 
   function applyResultToViews() {
     caretMapObj = buildCaretMap(text, result);
@@ -390,6 +438,7 @@ function createApp(doc, opts = {}) {
     onExplicitRetypeset, onDocumentAction, onSettingChanged, onResetField,
     scheduleLightRefresh, activateFinding, saveTemplateJson, loadTemplateJson, buildDebugJson,
     importDocxFile, applyRecommendation, // **S11:** ייבוא DOCX + החלת המלצות
+    exportRequest: onExportRequest, // **S12:** ייצוא (html/pdf/zip) — קריאה בלבד
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),

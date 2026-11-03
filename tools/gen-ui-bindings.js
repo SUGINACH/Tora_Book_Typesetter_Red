@@ -116,6 +116,7 @@ const PANEL_ORDER = [
   { key: 'HEADERS', label: PANELS.HEADERS, kind: 'settings' },
   { key: 'TOC', label: PANELS.TOC, kind: 'settings' },
   { key: 'GRID', label: PANELS.GRID, kind: 'settings' },
+  { key: 'EXPORT', label: PANELS.EXPORT, kind: 'settings' },
   { key: 'ADVANCED', label: PANELS.ADVANCED, kind: 'settings' }
 ];
 

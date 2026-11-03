@@ -44,12 +44,17 @@ function applyDropWord(block, settings, api = {}) {
   const measure = api.measureTextWidth ? (t) => api.measureTextWidth(t, settings['body-font-size-pt']) : null;
   const widthPx = measure ? measure(decoratedWords.join(' ')) : null;
 
+  // **S12.1-6 (סגירת דחוי S3):** יישור cap-top ממדדי אמת — capHeightEm מה־API
+  // (OS/2 sCapHeight מגופן רשום במימוש B; נפילה לקירוב 0.7em במימוש A).
+  const capHeightEm = api.capHeightEm ? api.capHeightEm() : 0.7;
+
   const fw = {
     mode,                                   // drop | inline | bold
     words: decoratedWords,
     count: decoratedWords.length,
     widthPx,
     capTopAlign: Boolean(settings['first-word-align-cap-top']), // REQ-LB-05: cap-top ↔ body baseline, לא glyph baseline
+    capHeightEm,                            // **S12:** מדד אמת ליישור (לא עוד קבוע 0.7)
     fontSizePt: mode === 'drop' ? Math.round(settings['body-font-size-pt'] * 2) : settings['body-font-size-pt'],
     lineHeightPx: null                       // drop: יישור ע"י offset, לא גובה שורה — geometry-neutral
   };

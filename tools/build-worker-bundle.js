@@ -131,9 +131,16 @@ function collectBundle(entryRel, excludeSet) {
     const src = fs.readFileSync(absFile, 'utf8');
     modules.set(rel, src);
     const re = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
+    const lines = src.split('\n');
     let m;
     while ((m = re.exec(src)) !== null) {
       const name = m[1];
+      // **S12 (D-65 הפרדה):** require מסומן /* node-only */ — נתיב Node בלבד
+      // (PDF/ZIP מלאים); לא נאגד בחבילת דפדפן. הקריאה מוגנת בזמן ריצה
+      // (typeof Buffer) — בדפדפן הודעה מפורשת, לא כשל שקט.
+      const lineNo = src.slice(0, m.index).split('\n').length - 1;
+      const lineBefore = (lines[lineNo - 1] || '') + (lines[lineNo] || '');
+      if (/\/\*\s*node-only\s*\*\//.test(lineBefore)) continue;
       if (name === 'crypto') continue; // שימה חיצונית — מסופקת בזמן ריצה
       if (name === 'zlib') continue;  // **S11:** builtin של Node בלבד — בדפדפן require('zlib')→null
                                      // ואז zip-reader נופל למנפח הטהור (inflateRawPure) — אותו פלט
@@ -157,9 +164,14 @@ function buildOne(cfg) {
   for (const [rel, src] of modules) {
     modulesOut += `__modules[${JSON.stringify(rel)}] = function (require, module, exports) {\n${src}\n};\n`;
     const re = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
+    const lines2 = src.split('\n');
     let m;
     while ((m = re.exec(src)) !== null) {
       if (m[1] === 'crypto' || !m[1].startsWith('.')) continue;
+      // **S12:** node-only — לא נאגד; לא נרשם במפת הנתיבים (הקריאה מוגנת בזמן ריצה)
+      const ln = src.slice(0, m.index).split('\n').length - 1;
+      const around = (lines2[ln - 1] || '') + (lines2[ln] || '');
+      if (/\/\*\s*node-only\s*\*\//.test(around)) continue;
       const absFrom = path.join(RED, rel);
       const target = path.relative(RED, resolveRel(absFrom, m[1])).split(path.sep).join('/');
       pathEntries.push(`  ${JSON.stringify(`${rel}|${m[1]}`)}: ${JSON.stringify(target)}`);

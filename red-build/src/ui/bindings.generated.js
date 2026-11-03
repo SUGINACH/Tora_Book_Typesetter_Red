@@ -2820,6 +2820,65 @@ const BINDINGS = [
     "max": 2000,
     "step": 50,
     "note": "REQ-UI-02: ריכוז שינויים קלים (רקע/נושא/שער) לפני רינדור מחדש — 350–400ms לפי Spec §5.3"
+  },
+  {
+    "id": "measure-impl",
+    "control": "sel-measure-impl",
+    "panel": "מתקדם/מנוע",
+    "panelKey": "ADVANCED",
+    "labelHe": "measure-impl",
+    "type": "enum",
+    "def": "table",
+    "enum": [
+      "table",
+      "font-metrics"
+    ],
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "S12 D-72: מימוש מדידה — table = טבלאות מכוילות (ברירת מחדל); font-metrics = טבלאות אמת מגופן רשום (hmtx/cmap/kern/GPOS). שקילות שבירות מוכחת על הקורפוס הקנוני לפני החלפת ברירת מחדל."
+  },
+  {
+    "id": "pdf-crop-marks",
+    "control": "chk-crop-marks",
+    "panel": "מתקדם/מנוע",
+    "panelKey": "ADVANCED",
+    "labelHe": "pdf-crop-marks",
+    "type": "bool",
+    "def": false,
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "REQ-EXP-03: סימני חיתוך מחוץ לתבנית החיתוך (TrimBox) בייצוא PDF"
+  },
+  {
+    "id": "export-bleed-mm",
+    "control": "rng-bleed-mm",
+    "panel": "מתקדם/מנוע",
+    "panelKey": "ADVANCED",
+    "labelHe": "export-bleed-mm",
+    "type": "number",
+    "def": 3,
+    "enum": null,
+    "min": 0,
+    "max": 6,
+    "step": null,
+    "note": "REQ-EXP-03: דם הדפסה (BleedBox) במ״מ סביב החיתוך"
+  },
+  {
+    "id": "export-html-page-rules",
+    "control": "chk-html-page-rules",
+    "panel": "ייצוא (HTML/PDF/ZIP) ומדידה",
+    "panelKey": "EXPORT",
+    "labelHe": "export-html-page-rules",
+    "type": "bool",
+    "def": true,
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "REQ-EXP-02: כללי @page (גודל עמוד מהרישום) בייצוא HTML עצמאי — מדפיס מדויק"
   }
 ];
 
@@ -2877,6 +2936,11 @@ const PANELS = [
   {
     "key": "GRID",
     "label": "רשת העמוד ומספור",
+    "kind": "settings"
+  },
+  {
+    "key": "EXPORT",
+    "label": "ייצוא (HTML/PDF/ZIP) ומדידה",
     "kind": "settings"
   },
   {

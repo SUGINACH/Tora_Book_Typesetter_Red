@@ -237,3 +237,50 @@ D-68..D-71 — ראו `DECISIONS.md`.
 
 ### ידוע ותועד (לא חוסם S11)
 עורך SVG ויזואלי לערכות (Z2-2) עדיין כניסה מגודרת (המודל החי ב־theme-sets; עריכת JSON דרך ההרחבות זמינה כעת). HarfBuzz/metrics מתמטיים, ייצוא PDF/HTML/ZIP — S12. בדיקת axe-core — S13.
+
+---
+
+## S12 — ייצוא מושלם: PDF, HTML עצמאי, ZIP + שכבת מדידה מתמטית (03.11.2026) — הושלם
+
+### שינויים
+- **`src/engine/typography/font-metrics.js` (חדש):** פרנסר טבלאות גופן עצמאי — sfnt/head/hhea/hmtx/maxp/cmap (fmt4+fmt12)/kern fmt0/GPOS PairPos fmt1/OS/2 (sCapHeight@88 — אומת מול גופן אמיתי). דחיות שקופות (too-small/bad-sfnt/missing-table) — אפס קריסות.
+- **`font-subset.js` (חדש):** מצמצם TrueType לגליפי המסמך (glyf/loca/hmtx/cmap נבנים; רמזים מועתקים) עם בדיקת tofu מובנית (לא־ממופה או ריק־וחסר־רוחב ⇒ כשל) + שימור רוחבים מדויק (מאומת חוזר בפרנסר שלנו וב־fontTools חיצונית).
+- **`measure-table.js` (חדש) + `measure-api.js`:** הפרדת טבלאות מכוילות; מימוש `font-metrics` מאחורי דגל (registerFont מפורש; נפילה שקופה); קרנינג בר־מילה; capHeightEm/ascentEm/descentEm מפרופיל אמת.
+- **`geometry-projector.js` (חדש):** מקור גיאומטריה יחיד — CP5 → מלבנים מפורשים (מילים RTL/יישור/justify/AQ, בסיסי שורה CSS-line-box, מרזב, גיליון, כותרת, פס, שורות TOC) + ink-bbox לכל עמוד.
+- **`pdf-writer.js` (חדש):** PDF 1.4 טהור — Type0/CIDFontType2 + FontFile2 מוטמע + ToUnicode + W; Outlines (UTF-16BE) מכותרות; קישורי TOC (GoTo); סימני חיתוך + Trim/BleedBox; RTL ויזואלי; אפס תאריכים.
+- **`export-api.js` (חדש):** מנהה ייצוא — HTML עצמאי (בטוח־דפדפן), PDF (עימוד במדידת הגופן המוטמע — מסלול עקבי אחד), ZIP פרויקט. פיצול node-only להפרדת חבילות (D-75).
+- **`html-export.js`:** כללי @page מרישום גדלי העמוד + מידות עמוד מפורשות.
+- **`dropword.js`:** fw.capHeightEm מה־API (מדדי אמת; סגירת דחוי S3).
+- **רישום:** 4 מפתחות חיים (measure-impl/pdf-crop-marks/export-bleed-mm/export-html-page-rules) + פאנל "ייצוא ומדידה" (13 במניפסט); bindings ובאנדלים נבנו מחדש; באנדלר תומך סמן node-only.
+- **UI:** סרגל ייצוא בתצוגה (HTML/PDF/ZIP) — קריאה בלבד (F-06); שומר Buffer בדפדפן עם הודעה עברית מפורשת.
+- **תיקוני שורש שנמצאו בסגירת השער:** מלאי גופן מהטקסט המצויר (גרשיים נגזרים הושמטו בשקט ⇒ אובדן תוכן); כותרות סימניות UTF-16BE; W בסוגריים; בסיס שורה CSS-line-box (היה 0.78em מלמטה — היסט ~15px).
+
+### בדיקות
+```
+parser:            17/17     typography:        14/14
+registry-integration: 8/8    layout-s5-s6:      17/17
+e2e-pipeline:      14/14     s7-gate:           15/15
+s8-decoration:     39/39     s9-headers:        25/25
+s10-ui:            37/37     s11-extensions:    50/50
+s12-export:        24/24     (חדש — כל שערי S12.2)
+canonical:          6/6      negative-controls: 16/16
+————— סה"כ: 282 בדיקות ירוקות (לשעבר 258)
+test:determinism   OK (75b8c605ca3f3dd7 — ברירת המחדל לא הוסטה)
+test:scan (F-06)   0 הפרות
+```
+
+### שערי S12 (S12.2) — מצב
+- [x] **Parity report:** pdfinfo page-count equality; pdftotext ≡ כל הטקסט המצויר (מולטיסט תווים מדויק — אחרי נטרול ארטיפקטים bidi של המחלץ); ink-bbox מודל↔רסטר ≤6px בדגימה (סביבות גליף מתועדות) + פסי שורות מיושרים ±2px (38 פסים ↔ 38 צמרות מודל בעמוד גוף) — artifact s12-parity.json.
+- [x] **PDF:** סימניות עץ H1/H2 עם כותרות עברית מדויקות + יעדים; קישורי TOC = מספר שורות עם יעד; סימני חיתוך מוכחים ברסטר (הדיו מתרחב מעבר לתבנית) וכבויים כברירת מחדל.
+- [x] **HTML עצמאי:** חד־קובץ, dir=rtl, @page מהרישום, אפס הפניות חיצוניות (offline-guard עובד עם exit 7); כל עמוד ≡ הרינדור החי מילה־במילה; ייצוא כפול ⇒ בתים זהים.
+- [x] **MeasureAPI-B מאחורי דגל:** שקילות שבירות מלאה על הקנוני (18 עמודים/589 שורות/0 הבדלים) — artifact s12-linebreak-equality.json; parity A↔B ≤0.01px; ברירת המחדל נשארת table (רציפות hash).
+- [x] **מצמום גופנים:** 0 tofu (בדיקה מובנית + fontTools חיצונית); חיסכון 89% תועד (artifact s12-font-subset.json).
+- [x] **דטרמיניזם בין נתיבים:** PDF ×2 ⇒ בתים זהים; HTML ×2 ⇒ זהים; ZIP ×2 ⇒ זהים; אפס תאריכים.
+- [x] **ZIP:** כל החלקים (manifest/document/settings/extensions/theme) ב־JSON מובנה; roundtrip מלא; מיגרציית v1→v2 בתוך החבילה; דחיות שקופות.
+- [x] **cap-height:** fw.capHeightEm ממדדי אמת (OS/2 או נפילה מתועדת) — סגירת דחוי S3.
+
+### החלטות שנרשמו
+D-72..D-75 — ראו `DECISIONS.md`.
+
+### ידוע ותועד (לא חוסם S12)
+סימניות עומק 1–2 (H1/H2) — עומק מלא H3+ בהמשך לפי ביקוש. ייצוא PDF בדפדפן דורש סביבת Node (Buffer) — הודעה מפורשת; בדפדפן נתיב HTML+הדפסה מהדפדפן. סימניות/קישורים מאומתים ע"י פענוח עצמי + כלי poppler (pdfinfo/pdftotext/pdftoppm) — אין Chromium בסביבה; "Chromium print pipeline" נתיב ה־HTML העצמאי עם @page (מוכן להדפסה מהדפדפן). בדיקת axe-core — S13.

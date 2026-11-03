@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 41 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 43 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -115,6 +115,7 @@ var __paths = {
   "src/ui/app-shell.js|./retypeset-policy": "src/ui/retypeset-policy.js",
   "src/ui/app-shell.js|./caret-map": "src/ui/caret-map.js",
   "src/ui/app-shell.js|./inline-transport": "src/ui/inline-transport.js",
+  "src/ui/app-shell.js|../engine/output/export-api": "src/engine/output/export-api.js",
   "src/engine/output/project-io.js|../core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/editor-tab.js|../engine/decoration/folio": "src/engine/decoration/folio.js",
   "src/ui/settings-panel.js|./bindings.generated": "src/ui/bindings.generated.js",
@@ -149,7 +150,10 @@ var __paths = {
   "src/engine/layout/balancing.js|./ordering": "src/engine/layout/ordering.js",
   "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
-  "src/ui/caret-map.js|../engine/parser/dfa-lexer": "src/engine/parser/dfa-lexer.js"
+  "src/ui/caret-map.js|../engine/parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
+  "src/engine/output/export-api.js|./dom-renderer": "src/engine/output/dom-renderer.js",
+  "src/engine/output/export-api.js|./html-export": "src/engine/output/html-export.js",
+  "src/engine/output/export-api.js|../layout/page-templates": "src/engine/layout/page-templates.js"
 };
 __modules["src/ui/browser-entry.js"] = function (require, module, exports) {
 // src/ui/browser-entry.js — כניסת הדפדפן (מרוכז ל־ui/app.bundle.js ע"י הבונה)
@@ -340,7 +344,9 @@ function createApp(doc, opts = {}) {
 
   const preview = buildPreviewTab(doc, {
     onActivatePage: (pageIndex) => onActivatePage(pageIndex),
-    onDebugDownload: (pageIndex) => opts.onDebugDownload && opts.onDebugDownload(buildDebugJson(pageIndex), pageIndex)
+    onDebugDownload: (pageIndex) => opts.onDebugDownload && opts.onDebugDownload(buildDebugJson(pageIndex), pageIndex),
+    // **S12 (REQ-EXP-01..04):** נתיב הייצוא האחיד — מקור יחיד לטקסט/הגדרות/הרחבות.
+    onExport: (kind) => onExportRequest(kind)
   });
 
   const testing = buildTestingTab(doc, {
@@ -530,6 +536,52 @@ function createApp(doc, opts = {}) {
     return true;
   }
 
+  // ================= S12: ייצוא (HTML עצמאי / PDF / ZIP) =================
+
+  /** בקשת ייצוא — קריאה בלבד (F-06: אין עימוד/אין שינוי מצב); הפלט דרך opts.onExportFile
+   * (בדפדפן: הורדה; בבדיקות: בדיקת הבתים). PDF דורש גופן מוטמע — opts.embeddedFont (בתים)
+   * או נפילה מתועדת להודעה (ללא גופן אין טקסט אמיתי — לא מזייפים). */
+  function onExportRequest(kind) {
+    if (!result) { status.setNotice('אין תוצאה לייצוא — העמוד עוד לא בוצע.'); return null; }
+    const { exportHtml, exportPdf, exportProjectZip } = require('../engine/output/export-api');
+    try {
+      if (kind === 'html') {
+        const html = exportHtml(result, settings, doc, { title: (result.metadata && result.metadata['ספר']) || 'ספר' });
+        if (opts.onExportFile) opts.onExportFile('html', html, 'book.html');
+        status.setNotice('יוצא HTML עצמאי (חד־קובץ, offline).');
+        return { ok: true, kind, data: html };
+      }
+      if (kind === 'pdf') {
+        if (typeof Buffer === 'undefined') {
+          // סביבת דפדפן בלי מודול בואפרות — נתיב ה־PDF דורש Buffer; הודעה מפורשת (לא כשל שקט)
+          status.setNotice('ייצוא PDF זמין בסביבת ההרצה המלאה (Node); בדפדפן השתמשו בייצוא HTML העצמאי והדפיסו ממנו.');
+          return { ok: false, reason: 'no-buffer-in-browser' };
+        }
+        if (!opts.embeddedFont) {
+          status.setNotice('ייצוא PDF דורש גופן מוטמע — נא לטעון גופן (TTF) בהגדרות המסמך.');
+          return { ok: false, reason: 'no-embedded-font' };
+        }
+        const res = exportPdf(text, settings, opts.embeddedFont);
+        if (!res.ok) { status.setNotice('ייצוא PDF נכשל: ' + res.error); return res; }
+        if (opts.onExportFile) opts.onExportFile('pdf', res.bytes, 'book.pdf');
+        status.setNotice(`יוצא PDF — ${res.info.pages} עמודים, ${res.info.outline} סימניות, טקסט נבחר.`);
+        return { ok: true, kind, data: res.bytes, info: res.info };
+      }
+      if (kind === 'zip') {
+        const bytes = exportProjectZip(text, settings, {
+          extensions: extensions.getBundle ? extensions.getBundle() : null
+        });
+        if (opts.onExportFile) opts.onExportFile('zip', bytes, 'book-project.zip');
+        status.setNotice('יוצאה חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות+ערכה).');
+        return { ok: true, kind, data: bytes };
+      }
+    } catch (e) {
+      status.setNotice('הייצוא נכשל: ' + (e && e.message ? e.message : String(e)));
+      return { ok: false, error: String(e && e.message || e) };
+    }
+    return null;
+  }
+
 
   function applyResultToViews() {
     caretMapObj = buildCaretMap(text, result);
@@ -633,6 +685,7 @@ function createApp(doc, opts = {}) {
     onExplicitRetypeset, onDocumentAction, onSettingChanged, onResetField,
     scheduleLightRefresh, activateFinding, saveTemplateJson, loadTemplateJson, buildDebugJson,
     importDocxFile, applyRecommendation, // **S11:** ייבוא DOCX + החלת המלצות
+    exportRequest: onExportRequest, // **S12:** ייצוא (html/pdf/zip) — קריאה בלבד
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
@@ -660,6 +713,7 @@ const P = {
   HEADERS: 'כותרות עליונות',
   TOC: 'תוכן העניינים',
   GRID: 'רשת העמוד ומספור',
+  EXPORT: 'ייצוא (HTML/PDF/ZIP) ומדידה',
   ADVANCED: 'מתקדם/מנוע'
 };
 
@@ -837,6 +891,12 @@ const registry = [
   // **S10 — סגירת הבטחת D-44:** debounce-light-change-ms חוזר עם צרכן אמיתי —
   // ui/retypeset-policy קורא אותו בפועל (רענון קל מרוכז; בדיקת אפקט fx:debounce ב־s10).
   K('debounce-light-change-ms', 'number', 350, P.ADVANCED, 'rng-debounce-ms', ['ui/retypeset-policy'], 'fx:debounce', { min: 50, max: 2000, step: 50, note: 'REQ-UI-02: ריכוז שינויים קלים (רקע/נושא/שער) לפני רינדור מחדש — 350–400ms לפי Spec §5.3' }),
+
+  // ---- ייצוא ומדידה (EXPORT — S12; REQ-EXP-01..04, REQ-LB-01 impl B, D-18) ----
+  K('measure-impl', 'enum', 'table', P.ADVANCED, 'sel-measure-impl', ['typography/measure-api', 'core/pipeline'], 'fx:measure-impl', { enum: ['table', 'font-metrics'], note: 'S12 D-72: מימוש מדידה — table = טבלאות מכוילות (ברירת מחדל); font-metrics = טבלאות אמת מגופן רשום (hmtx/cmap/kern/GPOS). שקילות שבירות מוכחת על הקורפוס הקנוני לפני החלפת ברירת מחדל.' }),
+  K('pdf-crop-marks', 'bool', false, P.ADVANCED, 'chk-crop-marks', ['output/pdf-writer'], 'fx:crop-marks', { note: 'REQ-EXP-03: סימני חיתוך מחוץ לתבנית החיתוך (TrimBox) בייצוא PDF' }),
+  K('export-bleed-mm', 'number', 3, P.ADVANCED, 'rng-bleed-mm', ['output/pdf-writer'], 'fx:bleed-mm', { min: 0, max: 6, note: 'REQ-EXP-03: דם הדפסה (BleedBox) במ״מ סביב החיתוך' }),
+  K('export-html-page-rules', 'bool', true, P.EXPORT, 'chk-html-page-rules', ['output/html-export'], 'fx:html-page-rules', { note: 'REQ-EXP-02: כללי @page (גודל עמוד מהרישום) בייצוא HTML עצמאי — מדפיס מדויק' }),
 ];
 
 // ---- אימות פנימי: אין כפילויות id/control ----
@@ -4413,6 +4473,65 @@ const BINDINGS = [
     "max": 2000,
     "step": 50,
     "note": "REQ-UI-02: ריכוז שינויים קלים (רקע/נושא/שער) לפני רינדור מחדש — 350–400ms לפי Spec §5.3"
+  },
+  {
+    "id": "measure-impl",
+    "control": "sel-measure-impl",
+    "panel": "מתקדם/מנוע",
+    "panelKey": "ADVANCED",
+    "labelHe": "measure-impl",
+    "type": "enum",
+    "def": "table",
+    "enum": [
+      "table",
+      "font-metrics"
+    ],
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "S12 D-72: מימוש מדידה — table = טבלאות מכוילות (ברירת מחדל); font-metrics = טבלאות אמת מגופן רשום (hmtx/cmap/kern/GPOS). שקילות שבירות מוכחת על הקורפוס הקנוני לפני החלפת ברירת מחדל."
+  },
+  {
+    "id": "pdf-crop-marks",
+    "control": "chk-crop-marks",
+    "panel": "מתקדם/מנוע",
+    "panelKey": "ADVANCED",
+    "labelHe": "pdf-crop-marks",
+    "type": "bool",
+    "def": false,
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "REQ-EXP-03: סימני חיתוך מחוץ לתבנית החיתוך (TrimBox) בייצוא PDF"
+  },
+  {
+    "id": "export-bleed-mm",
+    "control": "rng-bleed-mm",
+    "panel": "מתקדם/מנוע",
+    "panelKey": "ADVANCED",
+    "labelHe": "export-bleed-mm",
+    "type": "number",
+    "def": 3,
+    "enum": null,
+    "min": 0,
+    "max": 6,
+    "step": null,
+    "note": "REQ-EXP-03: דם הדפסה (BleedBox) במ״מ סביב החיתוך"
+  },
+  {
+    "id": "export-html-page-rules",
+    "control": "chk-html-page-rules",
+    "panel": "ייצוא (HTML/PDF/ZIP) ומדידה",
+    "panelKey": "EXPORT",
+    "labelHe": "export-html-page-rules",
+    "type": "bool",
+    "def": true,
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "REQ-EXP-02: כללי @page (גודל עמוד מהרישום) בייצוא HTML עצמאי — מדפיס מדויק"
   }
 ];
 
@@ -4470,6 +4589,11 @@ const PANELS = [
   {
     "key": "GRID",
     "label": "רשת העמוד ומספור",
+    "kind": "settings"
+  },
+  {
+    "key": "EXPORT",
+    "label": "ייצוא (HTML/PDF/ZIP) ומדידה",
     "kind": "settings"
   },
   {
@@ -5995,8 +6119,27 @@ function buildPreviewTab(doc, opts) {
   pageIndicator.setAttribute('aria-live', 'polite');
   pageIndicator.textContent = 'אין עמודים';
 
+  // **S12 (REQ-EXP-01..04):** סרגל ייצוא — HTML עצמאי / PDF / חבילת ZIP.
+  // הפעולות מועברות ל־app-shell (מקור יחיד לטקסט/הגדרות/הרחבות); אין עימוד
+  // אוטומטי מהייצוא (F-06) — קריאה בלבד.
+  const exportBar = doc.createElement('div');
+  exportBar.className = 'export-bar';
+  exportBar.setAttribute('role', 'group');
+  exportBar.setAttribute('aria-label', 'ייצוא מסמך');
+  const mkExport = (id, label, aria) => {
+    const b = doc.createElement('button');
+    b.type = 'button'; b.className = 'btn btn--ghost'; b.textContent = label;
+    b.setAttribute('aria-label', aria);
+    b.addEventListener('click', () => opts.onExport && opts.onExport(id));
+    return b;
+  };
+  exportBar.appendChild(mkExport('html', '🌐 HTML עצמאי', 'ייצוא HTML עצמאי חד־קובץ'));
+  exportBar.appendChild(mkExport('pdf', '📄 PDF', 'ייצוא PDF עם טקסט נבחר, סימניות וקישורי תוכן'));
+  exportBar.appendChild(mkExport('zip', '🗜 חבילת פרויקט', 'ייצוא חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות)'));
+
   bar.appendChild(scrollMode); bar.appendChild(zoomOut); bar.appendChild(zoomPct); bar.appendChild(zoomIn); bar.appendChild(zoomFit);
   bar.appendChild(jumpInput); bar.appendChild(jumpBtn); bar.appendChild(pageIndicator);
+  bar.appendChild(exportBar);
   root.appendChild(bar);
 
   // ---- קנבס העמודים (רקע כהה) ----
@@ -9383,6 +9526,403 @@ module.exports = { lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, EN
 };
 __modules["src/ui/inline-transport.js"] = function (require, module, exports) {
 throw new Error('bundle: module src/ui/inline-transport.js excluded from this bundle (by design — see tools/build-worker-bundle.js)');
+};
+__modules["src/engine/output/export-api.js"] = function (require, module, exports) {
+// src/engine/output/export-api.js — Export orchestrator: HTML standalone / PDF / ZIP bundle (S12.1, REQ-EXP-01..04)
+'use strict';
+
+/**
+ * מנהה הייצוא — נקודת הכניסה האחידה של שלושת הנתיבים:
+ *  - exportHtml(result, settings, doc): HTML עצמאי חד־קובץ (dir=rtl, @page, offline);
+ *  - exportPdf(text, settings, fontBytes): PDF עם טקסט אמיתי + סימניות + קישורי TOC
+ *    + סימני חיתוך. **מסלול מדידה עקבי:** העימוד לייצוא רץ עם measure-impl=font-metrics
+ *    והגופן המוטמע — שבירות השורות והרוחבים בפועל מאותו גופ�ן (מקור גיאומטריה יחיד);
+ *  - exportProjectZip / importProjectZip: חבילת פרויקט ZIP מובנית (JSON — לא תבניות מחרוזות).
+ *
+ * דטרמיניזם בכל הנתיבים: אין Date.now; סדר קבוע; ייצוא כפול ⇒ בתים זהים.
+ */
+
+// **D-65 הפרדת חבילות:** המודולים להלן בטוחים־דפדפן (אין fs/pipeline) ונאגדים
+// גם בחבילת ה־UI. הנתיבים הכבדים (PDF/ZIP מלאים — pipeline+גופן+בינארי) נטענים
+// בעצלתות עם סמן /* node-only */ — הבאנדלר מדלג; הקריאות מוגנות ב־typeof Buffer.
+const getDefaultSettings = require('../core/settings-registry').getDefaultSettings;
+const { renderPage } = require('./dom-renderer');
+const { buildStandaloneHtml } = require('./html-export');
+const { PAGE_SIZES, MM_TO_PX } = require('../layout/page-templates');
+
+/** טעינה עצלה של נתיבי Node (מוגנת) — מחזירה null בסביבה בלי Buffer. */
+function nodeOnly(loader) {
+  if (typeof Buffer === 'undefined') return null; // דפדפן — הקריאה מלאכותית נמנעת מראש
+  return loader();
+}
+
+// ============ HTML עצמאי (REQ-EXP-02) ============
+
+/**
+ * ייצוא HTML עצמאי חד־קובץ. העמודים מרונדרים דרך dom-renderer (אותו מקור
+ * כמו התצוגה החיה) אל doc שסופק (document אמיתי בדפדפן / shim בבדיקות).
+ * @param {object} result — תוצאת typeset
+ * @param {object} settings — הגדרות ממוזגות
+ * @param {{createElement:Function}} doc — מפעל DOM
+ * @param {object} [meta] — {title}
+ */
+function exportHtml(result, settings, doc, meta = {}) {
+  // **זהות בתים עם הרינדור החי:** כל עמוד מוקרן דרך dom-renderer בדיוק כמו
+  // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
+  const pagesHtml = [];
+  for (const pg of result.pages) {
+    pagesHtml.push(renderPage(pg, settings, doc, result.metadata).outerHTML());
+  }
+  const sizeMm = pageMmOf(settings);
+  const pageRules = settings['export-html-page-rules'] !== false
+    ? `@page { size: ${round2mm(sizeMm.w)}mm ${round2mm(sizeMm.h)}mm; margin: 0 }\n`
+      + `.page{width:${Math.round(sizeMm.w * MM_TO_PX)}px;height:${Math.round(sizeMm.h * MM_TO_PX)}px}\n`
+    : '';
+  const html = buildStandaloneHtml(pagesHtml, settings, {
+    title: meta.title || (result.metadata && (result.metadata['ספר'] || result.metadata.title)) || 'ספר',
+    pageRules
+  });
+  return html;
+}
+
+// ============ PDF (REQ-EXP-03) ============
+
+/**
+ * ייצוא PDF מלא: עימוד במדידת הגופן המוטמע → הקרנה → כתיבה.
+ * @param {string} text — מסמך המקור
+ * @param {object} settingsIn — הגדרות המשתמש
+ * @param {Buffer} fontBytes — קובץ TTF להטמעה (למשל DejaVu)
+ * @param {string} [fontName] — שם פרופיל (ברירת מחדל: body-font של ההגדרות)
+ * @returns {{ok:boolean, error?:string, bytes?:Buffer, result?:object, projected?:object, info?:object}}
+ */
+function exportPdf(text, settingsIn, fontBytes, fontName) {
+  if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' }; // דפדפן — נתיב Node בלבד (מתועד)
+  /* node-only */ const { typeset } = require('../core/pipeline');
+  /* node-only */ const { registerFont, unregisterFont } = require('../typography/measure-api');
+  /* node-only */ const { parseFont, glyphIdOf } = require('../typography/font-metrics');
+  /* node-only */ const { buildSubset, charInventory } = require('../typography/font-subset');
+  /* node-only */ const { projectDocument } = require('./geometry-projector');
+  /* node-only */ const { writePdf } = require('./pdf-writer');
+  const profileName = fontName || settingsIn['body-font'] || 'ToraExport';
+  const reg = registerFont(profileName, fontBytes);
+  if (!reg.ok) { unregisterFont(profileName); return { ok: false, error: `font:${reg.error}` }; }
+  try {
+    const font = reg.profile;
+    // **סדר הפעולות (תיקון שורש):** עימוד → הקרנה → מלאי מ**כל הטקסט שמצויר
+    // בפועל** (גוף+פסים+TOC+מרזב+גיליון+כותרות) → מצמום → כתיבה.
+    // בעבר נבנה המלאי מטקסט המקור בלבד — וגרשיים נגזרים (גיליון כ״ב, תוויות
+    // TOC) הושמטו בשקט מהגופן ⇒ אובדן תוכן בייצוא.
+    const settings = {
+      ...getDefaultSettings(), ...settingsIn,
+      'body-font': profileName,
+      'measure-impl': 'font-metrics'
+    };
+    const result = typeset(text, settings, { noRecommendations: true });
+    const projected = projectDocument(result, settings);
+    const drawnParts = [];
+    for (const pg of projected.pages) {
+      for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) for (const w of ln.words) drawnParts.push(w.text);
+      for (const fn of pg.footnotes) drawnParts.push(fn.marker || '', fn.text || '');
+      if (pg.folio && pg.folio.text) drawnParts.push(pg.folio.text);
+      if (pg.header) for (const s of pg.header.slots) drawnParts.push(s.text);
+    }
+    const inventory = charInventory(drawnParts.join(' '));
+    const subset = buildSubset(font, inventory);
+    if (!subset.ok) return { ok: false, error: `subset:${subset.error}` };
+
+    // סימניות: H1 → רמה 1; H2 → רמה 2 (עץ מכותרות המודל)
+    const outline = [];
+    const firstPageByToken = new Map();
+    result.pages.forEach((pg) => {
+      for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.columns.flat()]) {
+        const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
+        if (tok != null && !firstPageByToken.has(tok)) firstPageByToken.set(tok, pg.index);
+      }
+    });
+    for (const b of result.tokens) {
+      if (b.type !== 'heading' || (b.level !== 1 && b.level !== 2)) continue;
+      const pg = firstPageByToken.get(b.id);
+      if (pg == null) continue;
+      outline.push({ title: b.text, page: pg, level: b.level });
+    }
+
+    // קישורי TOC: שורות tocPages עם targetPage נפתר (S9). מיקום השורות — פריסת
+    // הרנדרר (toc-rows: top 70, שורה ~24px) — מלבן לחיץ לכל שורה/פריט קבוצה.
+    const tocLinks = [];
+    for (const tp of result.tocPages || []) {
+      let yi = 0;
+      for (const row of (tp.toc && tp.toc.rows) || []) {
+        if (row.kind === 'group') {
+          let xi = 0;
+          for (const it of row.items || []) {
+            if (it.targetPage != null) tocLinks.push({ page: tp.index, x: 18 + xi, y: 70 + yi * 24, w: 60, h: 22, targetPage: it.targetPage });
+            xi += 80;
+          }
+        } else if (row.targetPage != null) {
+          tocLinks.push({ page: tp.index, x: 18, y: 70 + yi * 24, w: 700, h: 22, targetPage: row.targetPage });
+        }
+        yi++;
+      }
+    }
+
+    const pageSizeMm = pageMmOf(settings);
+    const fontForWriter = {
+      subsetBytes: subset.bytes,
+      widthsUnits: subset.widthsUnits,
+      unitsPerEm: subset.unitsPerEm,
+      cidOf: (ch) => {
+        const gNew = glyphIdOf(parseSubsetCache(subset), ch); // gid בתת־הגופן
+        return gNew;
+      },
+      charToGidEntries: () => [...subsetNewCmap(subset).entries()]
+    };
+    const bytes = writePdf({
+      pages: projected.pages,
+      pageSizeMm,
+      font: fontForWriter,
+      settings,
+      outline,
+      tocLinks
+    });
+    return {
+      ok: true, bytes, result, projected,
+      info: {
+        pages: result.pages.length,
+        glyphs: subset.kept,
+        fontBytes: subset.bytes.length,
+        outline: outline.length,
+        tocLinks: tocLinks.length,
+        layoutHash: result.layoutHash
+      }
+    };
+  } finally {
+    unregisterFont(profileName);
+  }
+}
+
+/** קריאת תת־הגופן (פעם אחת) למיפוי תו→gid חדש — ה־cidOf/charToGidEntries של הכותב. */
+const _subsetCache = new WeakMap();
+function parseSubsetCache(subset) {
+  if (!_subsetCache.has(subset)) {
+    /* node-only */ const { parseFont } = require('../typography/font-metrics');
+    _subsetCache.set(subset, parseFont(subset.bytes).font);
+  }
+  return _subsetCache.get(subset);
+}
+function subsetNewCmap(subset) {
+  const f = parseSubsetCache(subset);
+  const out = new Map();
+  for (const [cp, g] of f.charToGlyph) out.set(String.fromCodePoint(cp), g);
+  return out;
+}
+
+// ============ חבילת פרויקט ZIP (REQ-EXP-04) ============
+
+/**
+ * ייצוא חבילת פרויקט: מסמך + הגדרות (עם settings_version) + הרחבות + תבנית ערכה.
+ * כל החלקים JSON מובנה — אפס תבניות מחרוזות (שיעור regex-replacement).
+ * @returns {Buffer} — ZIP
+ */
+function exportProjectZip(text, settings, extras = {}) {
+  if (typeof Buffer === 'undefined') return Buffer.alloc(0); // דפדפן — נתיב Node בלבד (מתועד)
+  /* node-only */ const { buildZip } = require('./zip-writer');
+  /* node-only */ const { exportProject } = require('./project-io');
+  /* node-only */ const { exportExtensions } = require('../extensions/extensions-io');
+  const settingsJson = exportProject(null, cleanSettings(settings), { timestamp: null });
+  const extensionsJson = (extras.extensions != null)
+    ? exportExtensions(extras.extensions)
+    : exportExtensions({ styles: [], pages: [], images: [] });
+  const themeJson = JSON.stringify(extras.theme || { 'theme-set-id': settings['theme-set-id'] || 'default' }, null, 2);
+  const manifest = JSON.stringify({
+    format: 'tora-typesetter-project-zip',
+    format_version: 1,
+    parts: ['document.txt', 'settings.json', 'extensions.json', 'theme.json'],
+    settings_version: 2
+  }, null, 2);
+  return buildZip([
+    { name: 'manifest.json', data: manifest },
+    { name: 'document.txt', data: String(text || '') },
+    { name: 'settings.json', data: settingsJson },
+    { name: 'extensions.json', data: extensionsJson },
+    { name: 'theme.json', data: themeJson }
+  ]);
+}
+
+/**
+ * ייבוא חבילת פרויקט.
+ * @returns {{ok:boolean, error?:string, text?:string, settings?:object, extensions?:object, theme?:object, unknownKeys?:Array, issues?:Array}}
+ */
+function importProjectZip(bytes) {
+  if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' };
+  /* node-only */ const { readZip } = require('../import/zip-reader');
+  /* node-only */ const { importProject } = require('./project-io');
+  const zip = readZip(bytes);
+  if (!zip.ok) return { ok: false, error: `zip:${zip.error}` };
+  const entry = (name) => zip.entries.find(e => e.name === name);
+  const manifestE = entry('manifest.json');
+  const docE = entry('document.txt');
+  const setE = entry('settings.json');
+  if (!manifestE || !docE || !setE) return { ok: false, error: 'missing-parts' };
+  let manifest;
+  try { manifest = JSON.parse(manifestE.data.toString('utf8')); } catch (e) { return { ok: false, error: `manifest:${e.message}` }; }
+  if (manifest.format !== 'tora-typesetter-project-zip') return { ok: false, error: 'unknown-format' };
+  const proj = importProject(setE.data.toString('utf8'));
+  let extensions = null;
+  const extE = entry('extensions.json');
+  if (extE) {
+    /* node-only */ const { importExtensions } = require('../extensions/extensions-io');
+    const res = importExtensions(extE.data.toString('utf8'));
+    extensions = res; // כולל ok/errors — מדווח, לא שותק
+  }
+  let theme = null;
+  const themeE = entry('theme.json');
+  if (themeE) { try { theme = JSON.parse(themeE.data.toString('utf8')); } catch (e) { return { ok: false, error: `theme:${e.message}` }; } }
+  return {
+    ok: true,
+    text: docE.data.toString('utf8'),
+    settings: proj.settings,
+    extensions, theme,
+    unknownKeys: proj.unknownKeys,
+    issues: proj.issues
+  };
+}
+
+// ============ עזרים ============
+
+function pageMmOf(settings) {
+  const px = PAGE_SIZES[settings['page-size']] || PAGE_SIZES.A4;
+  return { w: px.w / MM_TO_PX, h: px.h / MM_TO_PX }; // px → מ״מ (אותו גורם)
+}
+function round2mm(v) { return Math.round(v * 100) / 100; }
+
+/** הגדרות נקיות לייצוא: מפתחות פנימיים (מקווקוות) מוסרים — נכסי זמן־ריצה. */
+function cleanSettings(settings) {
+  const out = {};
+  for (const [k, v] of Object.entries(settings || {})) {
+    if (k.startsWith('_')) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+module.exports = {
+  exportHtml, exportPdf, exportProjectZip, importProjectZip, pageMmOf
+};
+
+};
+__modules["src/engine/output/html-export.js"] = function (require, module, exports) {
+// src/engine/output/html-export.js — Standalone HTML export + offline guard (REQ-EXP, Orange exit-7 doctrine)
+'use strict';
+
+/**
+ * ייצוא HTML עצמאי: CSS מוטמע, ללא תלות רשת. offline-guard: כל הפניה חיצונית → דחייה (exit 7 במנוע CLI).
+ * סימוני page-break (⏎) אינם מיוצאים לעולם (F-01).
+ */
+
+const OFFLINE_PATTERNS = [
+  /https?:\/\/(?!localhost)/i,
+  /@import\s+url\(/i,
+  /<link[^>]+href=["']https?:/i,
+  /<script[^>]+src=["']https?:/i
+];
+
+/** בדיקת offline-guard על מחרוזת HTML; זורק עם פירוט אם נמצאה בקשה חיצונית. */
+function assertOfflineSafe(html) {
+  const hits = [];
+  for (const re of OFFLINE_PATTERNS) {
+    const m = html.match(re);
+    if (m) hits.push({ pattern: re.source, sample: html.slice(Math.max(0, m.index - 20), m.index + 60) });
+  }
+  if (hits.length) {
+    const err = new Error(`offline-guard: external references found (${hits.length})`);
+    err.code = 'ERR_OFFLINE_GUARD';
+    err.exitCode = 7; // Orange doctrine
+    err.hits = hits;
+    throw err;
+  }
+}
+
+const BASE_CSS = `
+html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',serif;direction:rtl}
+.book{display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 0}
+.page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
+.columns{position:absolute;top:0;left:0;right:0;bottom:0}
+.column{position:absolute;top:0;bottom:0}
+.line{white-space:normal;text-align:right}
+.line--last{text-align:center}
+.running-head{display:flex;width:100%}
+.head--sep-gray{border-bottom:1px solid #999}
+.head--sep-black{border-bottom:1.5px solid #000}
+.footnotes{position:absolute;bottom:8px;left:12px;right:12px;border-top:1px solid transparent;font-size:.8em}
+.footnotes--continuous{border-top:none}
+.fn-rule--regular{border-top:1px solid #000;height:0}
+.fn-rule--circles{border-top:3px dotted #000;height:0}
+.fn-rule--sparkle{border-top:2px dashed #6b6b6b;height:0}
+.fn-rule--star{border-top:3px double #4a4a4a;height:0}
+.fn-rule--diamond{border-top:2px solid #000;height:0;transform:scaleX(.6)}
+.fn--continuation{color:#555;font-style:italic}
+.folio{position:absolute;bottom:4px;width:100%;text-align:center}
+.folio--outer-left{left:8px;width:auto;text-align:left}
+.folio--outer-right{right:8px;width:auto;text-align:right}
+.folio--top{bottom:auto;top:4px}
+.folio--in-header{bottom:auto;top:6px}
+.page-num-badge{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;line-height:1}
+.page-num-frame-circle{border:1.2px solid #333;border-radius:50%;min-width:22px;height:22px;padding:1px}
+.page-num-frame-box{border:1.2px solid #333;border-radius:3px;min-width:22px;height:20px;padding:1px 4px}
+.side-note{position:absolute;font-size:.75em;max-height:60%;overflow:hidden}
+.col-divider{position:absolute;width:0;border-left:1px solid #999}
+.col-divider--thin{border-left:1px solid #999}
+.col-divider--dashed{border-left:1px dashed #999}
+.col-divider--double{border-left:3px double #999}
+.w--paren{color:#333}
+.endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
+.endnote-list{font-size:.85em;padding:0 12px}
+.endnote-note{margin:2px 0}
+.toc-page-title{font-size:16pt;font-weight:700;margin:12px 18px 18px;text-align:center}
+.toc-rows{position:absolute;top:70px;left:18px;right:18px;bottom:30px}
+.toc-row{display:flex;align-items:baseline;text-decoration:none;color:inherit;gap:6px;margin:2px 0}
+.toc-row .toc-dots{flex:1;border-bottom:1px dotted #000;min-width:24px;margin:0 6px 4px}
+.toc-row .toc-label{min-width:30px;text-align:left}
+.toc-row .toc-num{min-width:20px;color:#444}
+.toc-lvl-1{font-size:12pt;font-weight:700}
+.toc-lvl-2{font-size:11pt}
+.toc-lvl-3{font-size:10.5pt;margin-right:16px}
+.toc-lvl-4{font-size:10.5pt;margin-right:32px}
+.toc-lvl-5{font-size:10.5pt;margin-right:48px}
+.toc-lvl-6{font-size:10.5pt;margin-right:64px}
+.toc-lvl-7{font-size:8.8pt;margin-right:80px;font-style:italic}
+.toc-row--group{flex-wrap:wrap}
+.toc-row--group .toc-item{display:inline-flex;gap:4px;text-decoration:none;color:inherit}
+.toc-row--group .toc-item .grp-page{color:#333}
+.toc-row--group .toc-item + .toc-item::before{content:'|';margin:0 6px;color:#777}
+`;
+
+/** בניית מסמך HTML עצמאי מעמודי ה‑DOM שכבר רוכמו (string-level; עובד גם Node-side). */
+function buildStandaloneHtml(pagesHtml, settings, meta = {}) {
+  const title = meta.title || settings['book-name'] || 'ספר';
+  // **S12 (REQ-EXP-02):** כללי @page מרישום גדלי העמוד — הדפסה מדויקת מהקובץ העצמאי (אין רשת)
+  const pageRules = meta.pageRules || '';
+  const html = `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>${escapeHtml(title)}</title>
+<style>${pageRules}${BASE_CSS}</style>
+</head>
+<body>
+<main class="book">${pagesHtml.join('\n')}</main>
+</body>
+</html>`;
+  if (settings['offline-guard']) assertOfflineSafe(html);
+  return html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+module.exports = { buildStandaloneHtml, assertOfflineSafe, BASE_CSS };
+
 };
 
 var __entry = "src/ui/browser-entry.js";

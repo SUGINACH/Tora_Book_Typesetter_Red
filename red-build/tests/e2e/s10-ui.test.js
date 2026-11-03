@@ -288,9 +288,16 @@ describe('S10.2 שער 3 — חיפוש הגדרות בעברית + איפוס �
   fire(app.editor.textarea, 'paste', { clipboardData: { getData: () => SMALL_DOC } });
   const done = settle();
 
-  it('12 פאנלים (Z2) עם כל הכיתובים; כל מפתח רישום מרונדר', () => {
+  it('כל פאנלי הרישום (Z2) עם כל הכיתובים; כל מפתח רישום מרונדר', () => {
     const panels = app.settingsPanel.root.querySelectorAll('.acc-panel');
-    assertEq(panels.length, 12, '12 פאנלים');
+    const { PANELS } = require('../../src/ui/bindings.generated');
+    const expectedPanels = PANELS.length; // מקור האמת של ה־UI (S12: 13 — נוסף ייצוא ומדידה)
+    assertEq(panels.length, expectedPanels, `כל פאנלי ה־UI (${expectedPanels})`);
+    assert(panels.length >= 12, 'לפחות 12 הפאנלים ההיסטוריים קיימים');
+    // שלמות: כל פאנל שיש בו מפתחות רישום מרונדר (פאנלי פעולה ריקים מותרים — SVG Builder/ייבוא)
+    const registryPanels = new Set(registry.map(r => r.panel));
+    const rendered = new Set(PANELS.map(p => p.label));
+    for (const rp of registryPanels) assert(rendered.has(rp), `פאנל רישום חסר ב־UI: ${rp}`);
     const rows = app.settingsPanel.root.querySelectorAll('.field-row');
     assertEq(rows.length, registry.length, `שורות שדה (${rows.length}) חייבות להשתוות לרישום (${registry.length})`);
     assertEq(BINDINGS.length, registry.length, 'המניפסט מכסה את כל הרישום');

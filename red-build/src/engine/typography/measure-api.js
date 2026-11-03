@@ -3,51 +3,131 @@
 
 /**
  * MeasureAPI — הכניסה היחידה למדידת רוחב/גובה. אסור לקרוא offsetHeight מפוזר (lint ב‑CI).
- * מימוש A = DOM oracle; מימוש B = מתמטי (טבלאות רוחב אותיות עבריות). חתימה זהה.
+ * מימוש A = 'table' (טבלאות מכוילות — ברירת המחדל, המשך רציפות S1–S11);
+ * מימוש B = 'font-metrics' (S12: טבלאות אמת מקובץ גופן שנטען — hmtx/cmap/kern/GPOS)
+ * חתימה זהה; הפרופיל נרשם דרך registerFont ומופעל דרך ההגדרה measure-impl.
  */
+
+const { charWidthEm, FONT_PROFILES } = require('./measure-table');
+const fm = require('./font-metrics');
 
 const DEFAULT_TRACKING = 0.02; // em
 
-// טבלת רוחות אותיות עברית (יחסיים ל‑em, קירוב Frank-Ruhl/David). נלקח מ־metrics כללי של גופני ספרות.
-const HEBREW_WIDTHS = {
-  'א': 0.66, 'ב': 0.58, 'ג': 0.56, 'ד': 0.62, 'ה': 0.60, 'ו': 0.42, 'ז': 0.44, 'ח': 0.70, 'ט': 0.60,
-  'י': 0.32, 'כ': 0.58, 'ך': 0.58, 'ל': 0.52, 'מ': 0.70, 'ם': 0.72, 'נ': 0.60, 'ן': 0.60, 'ס': 0.62,
-  'ע': 0.62, 'פ': 0.60, 'ף': 0.62, 'צ': 0.62, 'ץ': 0.64, 'ק': 0.64, 'ר': 0.52, 'ש': 0.66, 'ת': 0.60
-};
-const WIDE_MARKS = { ' ': 0.26, '\uE000': 0.26, '.': 0.24, ',': 0.24, ';': 0.24, ':': 0.24, '-': 0.34, '–': 0.5, '"': 0.28, "'": 0.16, '“': 0.4, '”': 0.4, '״': 0.36, '׳': 0.18, '[': 0.3, ']': 0.3, '(': 0.3, ')': 0.3 };
+/** גופנים רשומים (פרופיל → פרנסר). ההרשמה מפורשת — אין טעינת רשת (offline). */
+const registeredFonts = new Map();
 
-function charWidthEm(ch) {
-  if (HEBREW_WIDTHS[ch] !== undefined) return HEBREW_WIDTHS[ch];
-  const c = ch.codePointAt(0);
-  if (c >= 0x0590 && c <= 0x05FF) return 0.5;   // ניקוד/תווים עבריים נוספים
-  if (WIDE_MARKS[ch] !== undefined) return WIDE_MARKS[ch];
-  if (/[A-Za-z0-9]/.test(ch)) return 0.52;
-  return 0.4;
+/**
+ * רישום גופן למדידת אמת (S12.1-5). קלט: בתים בלבד (Uint8Array/Buffer).
+ * @returns {{ok:boolean, error?:string, profile?:object, glyphCount?:number, mappedChars?:number}}
+ */
+function registerFont(profileName, bytes) {
+  const res = fm.parseFont(bytes);
+  if (!res.ok) return { ok: false, error: res.error };
+  registeredFonts.set(String(profileName), res.font);
+  return { ok: true, profile: res.font, glyphCount: res.font.numGlyphs, mappedChars: res.font.charToGlyph.size };
 }
 
+/** הסרת גופן רשום (בדיקות). */
+function unregisterFont(profileName) { registeredFonts.delete(String(profileName)); }
+function clearRegisteredFonts() { registeredFonts.clear(); }
+
 class MeasureAPI {
-  constructor(settings, impl = 'math') {
+  constructor(settings, impl = 'table') {
     this.settings = settings;
-    this.impl = impl; // 'math' | 'dom'
+    this.impl = impl === 'font-metrics' ? 'font-metrics' : 'table'; // 'table' | 'font-metrics'
+    this.fontProfileName = null;
+    this.fontProfile = null;
+    this.fontFactor = 1;
     this.cache = new Map();
-    this.stats = { calls: 0, hits: 0 };
+    this.stats = { calls: 0, hits: 0, fontFallbacks: 0 };
+    if (this.impl === 'font-metrics') this._bindProfile();
+  }
+
+  /** קשירת פרופיל הגופן לפי שם הגופן בהגדרות; fallback שקוף לטבלה אם לא נרשם. */
+  _bindProfile() {
+    const name = this.settings['body-font'];
+    if (name && registeredFonts.has(name)) {
+      this.fontProfileName = name;
+      this.fontProfile = registeredFonts.get(name);
+      this.fontFactor = FONT_PROFILES[name] || 1;
+    } else {
+      // לא נרשם גופן — מימוש B נופל בשקיפות לטבלה (מדידה עקבית, לא כשל שקט)
+      this.impl = 'table';
+      this.stats.fontFallbacks++;
+    }
   }
 
   _fontSpec(sizePt) {
     return sizePt || this.settings['body-font-size-pt'];
   }
 
-  /** רוחב טקסט ב‑px לפי גופן/גודל (impl B מתמטי; impl A ישתמש בדומה בעת רנדור). */
+  /** רוחב תו בודד ב־em לפי המימוש. */
+  _charEm(ch) {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      const units = fm.advanceUnitsOf(this.fontProfile, ch);
+      if (units !== 0) return (units / this.fontProfile.unitsPerEm) * this.fontFactor;
+      // 0 ללא מיפוי ⇒ fallback מכויל (גם ניקוד אמיתי=0 ייפול לסלולר 0.5 — זניח לרוחב)
+      this.stats.fontFallbacks++;
+      return charWidthEm(ch);
+    }
+    return charWidthEm(ch);
+  }
+
+  /** קרנינג בין תווים סמוכים ב־em (מימוש A: 0 תמיד — כמו S1–S11). */
+  _kernEm(a, b) {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      const k = fm.kernUnitsOf(this.fontProfile, a, b);
+      if (k !== 0) return (k / this.fontProfile.unitsPerEm) * this.fontFactor;
+    }
+    return 0;
+  }
+
+  /**
+   * רוחב טקסט ב‑px. מימוש B כולל קרנינג בר־מילה (hmtx + kern/GPOS) —
+   * ההבדל היחיד מ־A בנוסף לרוחבי הגליפים עצמם.
+   */
   measureTextWidth(text, sizePt = null, trackingEm = DEFAULT_TRACKING) {
     const size = this._fontSpec(sizePt);
-    const key = `${size}|${trackingEm}|${text}`;
+    const key = `${this.impl}|${this.fontProfileName || ''}|${size}|${trackingEm}|${text}`;
     this.stats.calls++;
     if (this.cache.has(key)) { this.stats.hits++; return this.cache.get(key); }
+    const str = String(text);
     let w = 0;
-    for (const ch of text) w += charWidthEm(ch) + trackingEm;
+    let prev = null;
+    for (const ch of str) {
+      if (prev !== null) w += this._kernEm(prev, ch);
+      w += this._charEm(ch) + trackingEm;
+      prev = ch;
+    }
     const px = Math.max(0, w * size * (96 / 72)); // pt→px
     this.cache.set(key, px);
     return px;
+  }
+
+  /**
+   * **S12.1-6 — cap-height מטבלאות אמת** (OS/2 sCapHeight; נפילה: ascender×0.7).
+   * משמש את יישור המילה הראשונה (dropword) במקום הקירוב הקבוע.
+   */
+  capHeightEm() {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      return fm.capHeightEmOf(this.fontProfile) * this.fontFactor;
+    }
+    return 0.7; // הקירוב ההיסטורי (תיעוד dropword CSS)
+  }
+
+  /** **S12 (parity גיאומטרי):** ascent/descent ב־em — מפרופיל הגופן (hhea)
+   * כשנטען, אחרת הפרופיל המכויל (0.80/0.20 — תואם קו הבסיס ההיסטורי). */
+  ascentEm() {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      return (this.fontProfile.ascender / this.fontProfile.unitsPerEm) * this.fontFactor;
+    }
+    return 0.80;
+  }
+  descentEm() {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      return Math.abs(this.fontProfile.descender / this.fontProfile.unitsPerEm) * this.fontFactor;
+    }
+    return 0.20;
   }
 
   /** שורת "גובה" אחידה (baseline grid): fontSize × lineHeight (BRZ-2). */
@@ -70,4 +150,7 @@ class MeasureAPI {
   cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
 }
 
-module.exports = { MeasureAPI, charWidthEm };
+module.exports = {
+  MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts,
+  charWidthEm, registeredFonts
+};

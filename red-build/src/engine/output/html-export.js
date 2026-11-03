@@ -87,12 +87,14 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 /** בניית מסמך HTML עצמאי מעמודי ה‑DOM שכבר רוכמו (string-level; עובד גם Node-side). */
 function buildStandaloneHtml(pagesHtml, settings, meta = {}) {
   const title = meta.title || settings['book-name'] || 'ספר';
+  // **S12 (REQ-EXP-02):** כללי @page מרישום גדלי העמוד — הדפסה מדויקת מהקובץ העצמאי (אין רשת)
+  const pageRules = meta.pageRules || '';
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8"/>
 <title>${escapeHtml(title)}</title>
-<style>${BASE_CSS}</style>
+<style>${pageRules}${BASE_CSS}</style>
 </head>
 <body>
 <main class="book">${pagesHtml.join('\n')}</main>

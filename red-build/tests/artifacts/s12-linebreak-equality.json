@@ -1,0 +1,10 @@
+{
+  "doc": "canonical_corpus.txt",
+  "pages": 18,
+  "lines": 589,
+  "diffs": 0,
+  "hashA": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+  "hashB": "75b8c605ca3f3dd74dd3ba43bfe11284da3c558ecd425aa880e8559a596a05c4",
+  "implA": "table",
+  "implB": "font-metrics(fixture)"
+}

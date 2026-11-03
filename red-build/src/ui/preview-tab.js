@@ -74,8 +74,27 @@ function buildPreviewTab(doc, opts) {
   pageIndicator.setAttribute('aria-live', 'polite');
   pageIndicator.textContent = 'אין עמודים';
 
+  // **S12 (REQ-EXP-01..04):** סרגל ייצוא — HTML עצמאי / PDF / חבילת ZIP.
+  // הפעולות מועברות ל־app-shell (מקור יחיד לטקסט/הגדרות/הרחבות); אין עימוד
+  // אוטומטי מהייצוא (F-06) — קריאה בלבד.
+  const exportBar = doc.createElement('div');
+  exportBar.className = 'export-bar';
+  exportBar.setAttribute('role', 'group');
+  exportBar.setAttribute('aria-label', 'ייצוא מסמך');
+  const mkExport = (id, label, aria) => {
+    const b = doc.createElement('button');
+    b.type = 'button'; b.className = 'btn btn--ghost'; b.textContent = label;
+    b.setAttribute('aria-label', aria);
+    b.addEventListener('click', () => opts.onExport && opts.onExport(id));
+    return b;
+  };
+  exportBar.appendChild(mkExport('html', '🌐 HTML עצמאי', 'ייצוא HTML עצמאי חד־קובץ'));
+  exportBar.appendChild(mkExport('pdf', '📄 PDF', 'ייצוא PDF עם טקסט נבחר, סימניות וקישורי תוכן'));
+  exportBar.appendChild(mkExport('zip', '🗜 חבילת פרויקט', 'ייצוא חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות)'));
+
   bar.appendChild(scrollMode); bar.appendChild(zoomOut); bar.appendChild(zoomPct); bar.appendChild(zoomIn); bar.appendChild(zoomFit);
   bar.appendChild(jumpInput); bar.appendChild(jumpBtn); bar.appendChild(pageIndicator);
+  bar.appendChild(exportBar);
   root.appendChild(bar);
 
   // ---- קנבס העמודים (רקע כהה) ----
