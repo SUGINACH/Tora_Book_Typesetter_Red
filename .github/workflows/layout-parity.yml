@@ -72,9 +72,8 @@ jobs:
             echo "✗ HARD invariants FAILED (exit $ec) — כשל נכונות אמיתי"; exit 1
           fi
           if [ "$ec" -eq 2 ]; then
-            score=$(python3 -c "import json;print(json.load(open('audits/layout-parity-artifacts/parity-report.json'))['score'])")
+            score=$(python3 -c "import json;print(json.load(open('audits/layout-parity-artifacts/parity-report.json'))['summary']['score'])")
             echo "⚠ PARITY gaps remain — score: ${score}% (open calibration: P1/P3b/P4/P6/P7; full report in artifact)"
-            echo "parity_score=${score}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Always upload the full report + our PDF
