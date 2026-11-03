@@ -263,7 +263,76 @@ function buildTestingTab(doc, opts) {
     }
   }
 
-  return { root, setResult };
+  // ================= S11: המלצות עריכה עם הוכחה (REQ-GOV-11) =================
+  const recsWrap = doc.createElement('section');
+  recsWrap.className = 'recommendations';
+  recsWrap.setAttribute('aria-label', 'המלצות עריכה עם הוכחה');
+  const recsTitle = doc.createElement('h3');
+  recsTitle.textContent = 'המלצות עריכה (עם הוכחת reflow חיה — בלי הוכחה לא מוצג)';
+  recsWrap.appendChild(recsTitle);
+  const recsList = doc.createElement('div');
+  recsList.className = 'recommendations-list';
+  recsWrap.appendChild(recsList);
+  root.appendChild(recsWrap);
+
+  function setRecommendations(recsResult) {
+    recsList.textContent = '';
+    if (!recsResult) {
+      const d = doc.createElement('div');
+      d.className = 'recommendations-none';
+      d.textContent = 'המלצות כבויות בריצה זו.';
+      recsList.appendChild(d);
+      return;
+    }
+    const head = doc.createElement('div');
+    head.className = 'recommendations-head';
+    head.setAttribute('role', 'status');
+    if (recsResult.computed && recsResult.recommendations.length) {
+      head.textContent = `חושבו ${recsResult.recommendations.length} המלצות מוכחות (${recsResult.dryRuns} הרצות בדיקה; ${recsResult.rejected} מועמדות נפסלו בהיעדר הוכחה).`;
+    } else if (recsResult.computed) {
+      head.textContent = 'אין המלצות עריכה כרגע — אין ממצאים המקבלים המלצה, או שאף עריכה לא עברה את מבחן ההוכחה.';
+    } else {
+      head.textContent = `המלצות לא חושבו אוטומטית (${recsResult.reason}). ניתן לדרוש חישוב מפורש.`;
+    }
+    recsList.appendChild(head);
+    for (const rec of recsResult.recommendations || []) {
+      const card = doc.createElement('article');
+      card.className = 'recommendation-card';
+      card.dataset.recId = rec.id;
+
+      const what = doc.createElement('div');
+      what.className = 'recommendation-what';
+      const kindHe = rec.finding.kind === 'runt-line' ? 'שורת שדון' : rec.finding.kind === 'column-imbalance' ? 'אי־איזון טורים' : 'הכלה';
+      what.textContent = `${kindHe} בעמוד ${(rec.finding.page || 0) + 1} → הצעה: ${rec.edit.description}`;
+      card.appendChild(what);
+
+      const diff = doc.createElement('div');
+      diff.className = 'recommendation-diff';
+      const before = doc.createElement('div');
+      before.className = 'recommendation-diff-side recommendation-diff-before';
+      before.textContent = `לפני: ${rec.edit.before}`;
+      const after = doc.createElement('div');
+      after.className = 'recommendation-diff-side recommendation-diff-after';
+      after.textContent = `אחרי: ${rec.edit.after}`;
+      diff.appendChild(before); diff.appendChild(after);
+      card.appendChild(diff);
+
+      const proof = doc.createElement('div');
+      proof.className = 'recommendation-proof';
+      proof.textContent = `✓ הוכחה: ${rec.proof.beforeHash.slice(0, 12)}… → ${rec.proof.afterHash.slice(0, 12)}… · הממצא ${rec.proof.removedFinding} הוסר · ממצאים חדשים: 0 · עמודים ${rec.proof.pagesBefore}→${rec.proof.pagesAfter}`;
+      card.appendChild(proof);
+
+      const apply = doc.createElement('button');
+      apply.type = 'button'; apply.className = 'btn btn--ghost';
+      apply.textContent = '✔ החל עריכה במקור';
+      apply.setAttribute('aria-label', 'החלת ההמלצה על טקסט המקור');
+      apply.addEventListener('click', () => opts.onApplyRecommendation && opts.onApplyRecommendation(rec));
+      card.appendChild(apply);
+      recsList.appendChild(card);
+    }
+  }
+
+  return { root, setResult, setRecommendations };
 }
 
 module.exports = { buildTestingTab, STATUS_HE };

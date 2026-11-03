@@ -1,6 +1,6 @@
 // ui/engine-worker.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת ה־Worker (המנוע המלא — אין לטעון בחוט ה־UI)
-// מודולים: 37 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 41 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -85,6 +85,7 @@ var __modules = {};
 var __cache = {};
 function __require(from, name) {
   if (name === 'crypto') return __crypto;
+  if (name === 'zlib') return null; // **S11:** אין zlib בדפדפן — null מפעיל את המנפח הטהור (zip-reader)
   var key = __resolve(from, name);
   if (__cache[key]) return __cache[key].exports;
   var mod = { exports: {} };
@@ -116,6 +117,9 @@ var __paths = {
   "src/engine/core/pipeline.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/core/pipeline.js|./ledger": "src/engine/core/ledger.js",
   "src/engine/core/pipeline.js|./events": "src/engine/core/events.js",
+  "src/engine/core/pipeline.js|../audit/editing-recommendations": "src/engine/audit/editing-recommendations.js",
+  "src/engine/core/pipeline.js|../extensions/style-schema": "src/engine/extensions/style-schema.js",
+  "src/engine/core/pipeline.js|../extensions/apply-styles": "src/engine/extensions/apply-styles.js",
   "src/engine/core/pipeline.js|../decoration/ornament-fit": "src/engine/decoration/ornament-fit.js",
   "src/engine/core/pipeline.js|../decoration/shaar-pages": "src/engine/decoration/shaar-pages.js",
   "src/engine/core/pipeline.js|../decoration/custom-pages": "src/engine/decoration/custom-pages.js",
@@ -145,6 +149,11 @@ var __paths = {
   "src/engine/layout/balancing.js|./ordering": "src/engine/layout/ordering.js",
   "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/audit/editing-recommendations.js|../core/pipeline": "src/engine/core/pipeline.js",
+  "src/engine/audit/editing-recommendations.js|../parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
+  "src/engine/audit/editing-recommendations.js|../parser/block-tokenizer": "src/engine/parser/block-tokenizer.js",
+  "src/engine/audit/editing-recommendations.js|./text-edits": "src/engine/audit/text-edits.js",
+  "src/engine/extensions/apply-styles.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/decoration/shaar-pages.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/decoration/shaar-pages.js|./custom-pages": "src/engine/decoration/custom-pages.js",
   "src/engine/decoration/shaar-pages.js|./theme-sets": "src/engine/decoration/theme-sets.js",
@@ -259,9 +268,15 @@ const { applyHeadingModes } = require('../layout/headings-escort');
 const { markerFor, makeCounter, splitPlaceholder, MARK_TAG } = require('../notes/markers');
 const Ledger = require('./ledger').Ledger;
 const EventLog = require('./events').EventLog;
+const { computeEditingRecommendations } = require('../audit/editing-recommendations');
 
 const PAREN_SENTINEL = '\uE101';
 const ATOMIC = '\uE000';
+// **S11 (REQ-PAR-06):** סנטינל סגנון inline: \uE103<styleId>\uE104<word> — דפוס PAREN_SENTINEL (D-42).
+// המדידה מכפילה בגורם הגודל של הסגנון; הרנדרר מקיף span.custom-style עם data-style.
+const CUSTOM_SENTINEL = '\uE103';
+const CUSTOM_SEP = '\uE104';
+const CUSTOM_RE = /^\uE103([^\uE104]+)\uE104/;
 
 /** זיהוי דיבור המתחיל: עד נקודה/מקף (REQ-PAR-ST-03; dh-auto-detect). */
 function detectDh(text, enabled) {
@@ -327,9 +342,33 @@ function typeset(rawText, settingsIn, env = {}) {
   const notesMode = settings['note-placement-mode'];
   const parenScale = Number(settings['paren-style-scale']) || 1;
 
+  // **S11 (REQ-PAR-06):** סגנונות מותאמים — פענוח + רישום שגיאות אימות (כמו _customPages).
+  // הפקד הזה אינו ברישום ההגדרות (נכס מסמך, לא הגדרת מנוע) — דפוס _customPages של S8.
+  const customStylesRes = settings._customStyles
+    ? require('../extensions/style-schema').parseCustomStyles(settings._customStyles)
+    : { ok: true, styles: [], errors: [] };
+  const customStyles = customStylesRes.styles;
+  const { CustomStyleCounters, matchBlockStyle, matchInlineStyles, inlineSizeFactor } = require('../extensions/apply-styles');
+  const counters = new CustomStyleCounters();
+  for (const err of customStylesRes.errors) {
+    const rec = ledger.create('settings-verification', `custom-styles:${err.code}`, null, { path: err.path, message: err.message }, 'parse');
+    ledger.transition(rec.issue_id, 'persists', 'parse', `custom style rejected: ${err.code}`);
+  }
+  // **S11:** עוגני תוכן לפסקאות — לזיהוי ממצאים בין הרצות (בפרט הוכחות המלצות־עריכה):
+  // tail = 40 התווים האחרונים של שורת המקור; head = 40 הראשונים. העברת מילה בין
+  // פסקאות משנה את הזנב של הנותן/המקבל בלבד — ולכן זהות שאר הפסקאות נשמרת.
+  settings._tokenTexts = new Map();
+
   // ---- CP1: parse ----
   const { metadata, bodyLines } = lexDocument(rawText);
   const tokens = tokenize(bodyLines);
+  for (const t of tokens) {
+    const rawLine = String(t.raw != null ? t.raw : (t.text != null ? t.text : ''));
+    settings._tokenTexts.set(t.id, {
+      head: rawLine.slice(0, 40),
+      tail: rawLine.slice(-40)
+    });
+  }
   const hashIn = contentHash(tokens);
   eventLog.emit('parse', 'cp1-parsed', { tokens: tokens.length, contentHash: hashIn });
   prog('parse', 5, 'פענוח המסמך', { tokens: tokens.length });
@@ -402,6 +441,10 @@ function typeset(rawText, settingsIn, env = {}) {
   const endnoteTokens = [];        // טוקני הערת־סיום גלויים (endnotes mode)
   const endnoteTitleByPart = new Map(); // D-40: הוראות כותרת־מחלקה per-part
   const markersByToken = new Map(); // tokenId → [{noteIndex, marker}] (סמן אחיד — D-30)
+  // **S11:** חשבונאות שימור תוכן לסגנונות שמסיטים פסקה שלמה מהגוף —
+  // הסמן נספר במקור פעם אחת, בדיוק כמו note-ref רגיל (D-30).
+  const customFootnoteMarkers = new Map(); // tokenId → סמן (מוצג בגוף, הטקסט במרזב)
+  const customEndnoteTokens = new Set();   // tokenIds שזרמו לעמודי ההערות (הסמן מודפס שם)
   let currentPart = 0;
   let fwCount = 0;
   const markerStyle = settings['footnote-marker-style'];
@@ -486,7 +529,7 @@ function typeset(rawText, settingsIn, env = {}) {
     }
 
     // ---- paragraph ----
-    const colW = columnWidthFor({ kind: 'paragraph' }, settings);
+    // (colW נקבע לאחר התאמת הסגנון המותאם — full-width נמדד ברוחב מלא; S11)
     let dh = null;
     if (settings['dh-auto-detect']) {
       const flat = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
@@ -519,6 +562,56 @@ function typeset(rawText, settingsIn, env = {}) {
     const assignedMarkers = new Set();
     const noteAssignments = [];
 
+    // **S11 (REQ-PAR-06): התאמת סגנונות מותאמים — לפני המדידה** (שורש הסיבתיות:
+    // הסגנון נקבע לפני שבירת השורות, לא אחרי — דפוס D-42).
+    const csBlock = customStyles.length ? matchBlockStyle(flatBody, customStyles) : null;
+    const csInlineSpans = [];
+    if (customStyles.length) {
+      for (const im of matchInlineStyles(flatBody, customStyles)) {
+        for (const r of im.ranges) {
+          csInlineSpans.push({ from: r.from, to: r.to, styleId: im.styleId, factor: inlineSizeFactor(im.style.style, settings['body-font-size-pt']) });
+        }
+      }
+    }
+    // endnote-mode: הפסקה כולה זורמת לעמודי ההערות של החלק (סמן הסגנון אם הוגדר מונה)
+    if (csBlock && csBlock.style.layoutMode === 'endnote') {
+      const mark = counters.nextMark(csBlock.style, { part: currentPart || 1, page: null });
+      endnoteTokens.push({ tokenId: t.id, text: flatBody, part: currentPart || 1, customStyle: csBlock.style.id, ...(mark ? { marker: mark } : {}), lines: [] });
+      customEndnoteTokens.add(t.id); // הסמן (מוקצה בבניית עמודי ההערות) נספר במקור
+      continue;
+    }
+    // footnote-mode: הפסקה כולה הופכת הערת שוליים — בגוף נשאר הסמן בלבד (מקום הפסקה = מקום העיגון).
+    // נתיב זה דורש מרזב פעיל; בלי מרזב — הסגנון חוזר להיות חזותי בלבד (BRZ-15: לא מאבדים תוכן).
+    if (csBlock && csBlock.style.layoutMode === 'footnote' && notesMode === 'footnotes' && settings['footnotes-enabled']) {
+      const mark = counters.nextMark(csBlock.style, { part: currentPart || 1, page: null });
+      const fnMark = mark || markerFor(nextMarkerNum({ page: null, part: currentPart || 1 }), markerStyle);
+      const fnNotes = [{ text: flatBody, marker: fnMark, tokenId: t.id, part: currentPart || 1, customStyle: csBlock.style.id }];
+      const fnBodyMarkers = [fnMark];
+      // הסמן בגוף מתויג (D-53) ומודבק לשכן כמו כל סמן — מקור יחיד bindMarkersToNeighbors
+      const fnWords = bindMarkersToNeighbors([fnMark], new Set([fnMark]));
+      const fnWLimit = columnWidthFor({ kind: 'paragraph' }, settings);
+      const fnLines = api.layoutLines(fnWords, fnWLimit, null, { runts: settings['runt-min-width-pct'] });
+      const fnBlk = {
+        kind: 'paragraph', tokenId: t.id, parts: t.parts, notes: fnNotes, bodyMarkers: fnBodyMarkers,
+        lines: fnLines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh: null,
+        // **S11:** הקצאת הסמן נרשמת כמו note-ref — עקביות סמנים גוף/מרזב (P1-3, D-30)
+        noteAssignments: [{ noteIndex: 0, marker: fnMark }],
+        parenCharSpans: [], flatWordOffsets: [],
+        customStyle: { id: csBlock.style.id, name: csBlock.style.name, layoutMode: 'footnote', styleSpec: csBlock.style.style, counterMark: fnMark, linkedOrnaments: csBlock.style.linkedOrnaments }
+      };
+      for (const ln of fnBlk.lines) ln.customStyle = fnBlk.customStyle;
+      customFootnoteMarkers.set(t.id, fnMark); // חשבונאות שימור תוכן: הסמן במקור
+      blocks.push(fnBlk);
+      continue;
+    }
+
+    // full-width-mode: המדידה ברוחב מלא (כמו H1) — לפני הפריסה, לא אחריה
+    const colW = (csBlock && csBlock.style.layoutMode === 'full-width')
+      ? fullWidthWidth(settings)
+      : columnWidthFor({ kind: 'paragraph' }, settings);
+    const customFactorById = new Map(csInlineSpans.map(s => [s.styleId, s.factor]));
+    let csInfo = null; // **S11:** סגנון הבלוק שיוצמד לשורות ולבלוק (מדלג על ערכי איטרציות קודמות)
+
     for (const p of t.parts) {
       if (p.kind === 'text') {
         const src = normalizeText(p.value);
@@ -526,7 +619,15 @@ function typeset(rawText, settingsIn, env = {}) {
           const info = flatWordOffsets[Math.min(flatWordIdx, flatWordOffsets.length - 1)];
           flatWordIdx++;
           const inParen = parenSpans.length > 0 && info && offsetInSpans(info.at, parenSpans);
-          allWords.push(inParen && parenScale !== 1 ? PAREN_SENTINEL + wordRaw : wordRaw);
+          // **S11:** חברות בטווח inline = **חפיפה** (לא הכלה): מילה הפותחת במפריד «
+          // («וזה) חופפת את טווח התוכן שאחריו; מילה שלפני הפתיחה לא. וכך גם בסגירה.
+          const wLen = info ? String(info.word || wordRaw).length : String(wordRaw).length;
+          const inCustom = csInlineSpans.length > 0 && info
+            ? csInlineSpans.find(s => info.at < s.to && (info.at + wLen) > s.from) : null;
+          // עדיפות: טווח inline מותאם על פני סוגריים (שניהם לא יכולים לחפור בפועל — הסגנון תופס ראשון)
+          if (inCustom) allWords.push(CUSTOM_SENTINEL + inCustom.styleId + CUSTOM_SEP + wordRaw);
+          else if (inParen && parenScale !== 1) allWords.push(PAREN_SENTINEL + wordRaw);
+          else allWords.push(wordRaw);
         }
       } else {
         // note-ref: uniform marker allocation (D-30/D-41) — policy numbering + style
@@ -559,9 +660,16 @@ function typeset(rawText, settingsIn, env = {}) {
     // Pasting lone markers to their neighbors (BRZ-11) — before measurement
     const boundWords = bindMarkersToNeighbors(allWords, assignedMarkers);
 
-    // Measurement with a pre-pass of parentheses: PAREN_SENTINEL words in scale (D-42)
+    // Measurement with a pre-pass of parentheses (D-42) + custom inline styles (S11):
+    // PAREN_SENTINEL → parenScale; CUSTOM_SENTINEL<id> → size factor of the style.
     const measureWithParen = (x) => {
       const clean0 = String(x).replace(/\uE102/g, ''); // תג סמן — מוסר ממדידה (D-53)
+      const csM = CUSTOM_RE.exec(clean0);
+      if (csM) {
+        const f = customFactorById.get(csM[1]);
+        const base = api.measureTextWidth(clean0.slice(csM[0].length));
+        return f != null ? base * f : base;
+      }
       const isParen = clean0.startsWith(PAREN_SENTINEL);
       const clean = isParen ? clean0.slice(PAREN_SENTINEL.length) : clean0;
       const base = api.measureTextWidth(clean);
@@ -570,20 +678,54 @@ function typeset(rawText, settingsIn, env = {}) {
     const protectedWords = protectWords(boundWords, measureWithParen, colW);
     const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] }, measureWithParen);
 
-    // Cleaning the sentinel from the lines + tagging parenSpans for rendering (local index)
+    // Cleaning the sentinels from the lines + tagging parenSpans/customSpans for rendering
     for (const ln of lines) {
       const spans = [];
+      const customSpans = [];
       ln.words = (ln.words || []).map((w, wi) => {
+        if (CUSTOM_RE.test(w)) {
+          const m = CUSTOM_RE.exec(w);
+          customSpans.push({ wi, styleId: m[1] });
+          return w.slice(m[0].length);
+        }
         if (w.startsWith(PAREN_SENTINEL)) { spans.push(wi); return w.slice(PAREN_SENTINEL.length); }
         return w;
       });
       if (spans.length && parenScale !== 1) ln.parenSpans = spans;
+      if (customSpans.length) ln.customSpans = customSpans;
+    }
+    // **S11:** הסגנון ברמת הבלוק על הפסקה (לא-footnote): דגלי פריסה + מונה + עיטורים מקושרים
+    if (csBlock && csBlock.style.layoutMode !== 'footnote' && csBlock.style.layoutMode !== 'endnote') {
+      const counterMark = counters.nextMark(csBlock.style, { part: currentPart || 1, page: null });
+      csInfo = {
+        id: csBlock.style.id, name: csBlock.style.name, layoutMode: csBlock.style.layoutMode,
+        styleSpec: csBlock.style.style, counterMark, linkedOrnaments: csBlock.style.linkedOrnaments
+      };
+      const ORN_PAD_PX = 18; // הזמנת גובה לעיטור מקושר — דפוס h2Orn (F-08): גיאומטריה מוזמנת בזמן אמת
+      if (csInfo.linkedOrnaments && csInfo.linkedOrnaments.top && lines.length) {
+        lines[0].heightPx = (lines[0].heightPx || 0) + ORN_PAD_PX;
+        lines[0].csOrnPadTop = ORN_PAD_PX;
+      }
+      if (csInfo.linkedOrnaments && csInfo.linkedOrnaments.bottom && lines.length) {
+        const lastLn = lines[lines.length - 1];
+        lastLn.heightPx = (lastLn.heightPx || 0) + ORN_PAD_PX;
+        lastLn.csOrnPadBottom = ORN_PAD_PX;
+      }
+      for (const ln of lines) ln.customStyle = csInfo;
+      // המונה מוצג בשורה הראשונה של הבלוק (הפס של full-width מטופל ברנדרר מהמידע על הפס)
+      if (csInfo.counterMark && lines.length) lines[0].csCounterMark = csInfo.counterMark;
     }
     const blk = {
       kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, bodyMarkers, lines,
       unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh,
-      noteAssignments, parenCharSpans: parenSpans, flatWordOffsets
+      noteAssignments, parenCharSpans: parenSpans, flatWordOffsets,
+      customStyle: csInfo
     };
+    if (blk.customStyle) {
+      blk.fullWidth = blk.customStyle.layoutMode === 'full-width';
+      blk.forcePageBreakBefore = blk.customStyle.layoutMode === 'new-location';
+      blk.asSideNote = blk.customStyle.layoutMode === 'side-note';
+    }
     const fwRes = applyDropWord(blk, settings, api);
     if (fwRes.applied) fwCount++;
     blocks.push(blk);
@@ -893,6 +1035,10 @@ function typeset(rawText, settingsIn, env = {}) {
     const refs = t.parts.filter(p => p.kind === 'note-ref');
     const assigns = markersByToken.get(t.id) || [];
     const out = [...wordSeq(body)];
+    // **S11:** פסקה שהוסבה כולה להערה בסגנון מותאם — הסמן נספר במקור פעם אחת:
+    // footnote ⇒ הוקצה בבלוק; endnote ⇒ מה שהודפס בעמודי ההערות (printedEndnoteMarker)
+    if (customFootnoteMarkers.has(t.id)) out.push(...wordSeq(customFootnoteMarkers.get(t.id)));
+    if (customEndnoteTokens.has(t.id)) out.push(...wordSeq(printedEndnoteMarker.get(t.id) || ''));
     for (let i = 0; i < refs.length; i++) {
       const p = refs[i];
       const marker = assigns[i] ? assigns[i].marker : '';
@@ -1110,6 +1256,17 @@ function typeset(rawText, settingsIn, env = {}) {
   eventLog.emit('render', 'cp5-render-ready', { layoutHash: finalHash });
   prog('render', 100, 'מוכן לתצוגה', { totalPages: pages.length, layoutHash: finalHash });
 
+  // **S11 (REQ-GOV-11):** המלצות עריכה — רק עם הוכחת dry-run חיה (D-16).
+  // דוק >200 עמודים ⇒ לא אוטומטי (שומר ביצועים); env.wantRecommendations=true ⇒ כן.
+  let recommendations = null;
+  if (!env || env.noRecommendations !== true) {
+    recommendations = computeEditingRecommendations(
+      rawText, settingsIn || {},
+      { pages, ledger, layoutHash: finalHash },
+      { force: !!(env && env.wantRecommendations === true) }
+    );
+  }
+
   return {
     metadata, tokens, pages, ledger, events: eventLog,
     toc, numbers,
@@ -1127,7 +1284,9 @@ function typeset(rawText, settingsIn, env = {}) {
     sideNotes: sideNotePlacement,
     endnotePages: endnotePagesInfo,
     endnotePagesInfo,
-    scope
+    scope,
+    customStyles: customStylesRes,  // **S11:** הסגנונות שהופעלו בפועל (כולל שגיאות אימות)
+    recommendations                 // **S11:** המלצות עריכה עם הוכחות (או null אם כובו)
   };
 }
 
@@ -2411,6 +2570,41 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       continue;
     }
 
+    // **S11 (REQ-PAR-06):** דגלי פריסה של סגנונות מותאמים על פסקאות —
+    // הדגלים נקבעו בפרה־פאס (pipeline) לפני המדידה; כאן רק צריכה (דפוס D-09).
+    if (blk.kind === 'paragraph' && blk.customStyle) {
+      const cs = blk.customStyle;
+      if (cs.layoutMode === 'new-location' && blk.forcePageBreakBefore && cur.columns.some(c => c.length)) {
+        flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
+        eventLog.emit('page-plan', 'custom-style-new-location', { style: cs.id, token: blk.tokenId }, cur.index);
+      }
+      if (cs.layoutMode === 'side-note' && blk.asSideNote) {
+        // הפסקה הופכת הערת צד מעוגנת לפסקה הבאה שאחריה (המארחת) — דפוס H7
+        const host = blocks.slice(bi + 1).find(b => b.kind === 'paragraph' && !(b.customStyle && b.customStyle.layoutMode === 'side-note'));
+        cur.sideNotes.push({
+          text: blk.lines.map(l => (l.words || []).join(' ')).join(' ').trim(),
+          anchorToken: host ? host.tokenId : blk.tokenId,
+          ownToken: blk.tokenId, isCustomStyle: cs.id,
+          counterMark: cs.counterMark || null
+        });
+        eventLog.emit('page-plan', 'custom-style-side-note', { style: cs.id, token: blk.tokenId }, cur.index);
+        continue;
+      }
+      if (cs.layoutMode === 'full-width' && blk.fullWidth) {
+        // פס חוצה־טורים (callout) — דפוס FWD-1 של H2; פס אחד בראש העמוד.
+        // אם כבר יש פס/תוכן בעמוד — עמוד חדש (קריאה פותחת מיקום משלה).
+        if (cur.spanning || cur.columns.some(c => c.length)) { flushPage(); cur = newPage(PAGE_TYPES.REGULAR); }
+        const bandH = blk.lines.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+        cur.spanning = {
+          lines: blk.lines.map((ln, i) => ({ ...ln, meta: { tokenId: blk.tokenId, firstOfBlock: i === 0, docPart: blk.part }, seq: seqCounter++ })),
+          heightPx: bandH,
+          customStyle: cs
+        };
+        eventLog.emit('page-plan', 'custom-style-band', { style: cs.id, token: blk.tokenId, heightPx: bandH }, cur.index);
+        continue;
+      }
+    }
+
     // תקציב הערות לפני מיקום (F-17 probe==reserved, כולל מדיניות הערה ארוכה)
     if (blk.kind === 'paragraph') reserveNotes(blk);
 
@@ -2857,7 +3051,15 @@ const CHECKS = {
           const key = `${lineToken(ln)}|${(ln.words || []).join(' ')}`;
           if (seenRunt.has(key)) continue;
           seenRunt.add(key);
-          violations.push({ kind: 'runt-line', target: `line@${lineToken(ln)}`, page: page.index, evidence: { widthPx: Math.round(ln.widthPx), minPx: Math.round(minPx) }, ledgerRef: ledger.create('runt-line', lineToken(ln) || 'unknown', page.index, { widthPx: ln.widthPx }, 'protections').issue_id });
+          // **S11:** textHead = **זנב הפסקה המארחת** (מתוך settings._tokenTexts) —
+          // עוגן תוכן יציב לזיהוי הממצא בין הרצות: העברת מילה בין פסקאות משנה
+          // את זנב הנותן/המקבל בלבד; שאר הפסקאות שומרות על זהותן. המפל לכתחילה:
+          // מילות השורה (כשאין מפת טוקנים).
+          const tokAnchors = settings._tokenTexts
+            ? settings._tokenTexts.get(lineToken(ln)) : null;
+          const textHead = (tokAnchors && tokAnchors.tail)
+            || (ln.words || []).join(' ').slice(0, 40);
+          violations.push({ kind: 'runt-line', target: `line@${lineToken(ln)}`, page: page.index, evidence: { widthPx: Math.round(ln.widthPx), minPx: Math.round(minPx), textHead }, ledgerRef: ledger.create('runt-line', lineToken(ln) || 'unknown', page.index, { widthPx: ln.widthPx, textHead }, 'protections').issue_id });
         }
       }
     }
@@ -3867,6 +4069,727 @@ class EventLog {
 module.exports = { EventLog };
 
 };
+__modules["src/engine/audit/editing-recommendations.js"] = function (require, module, exports) {
+// src/engine/audit/editing-recommendations.js — המלצות עריכה עם הוכחת dry-run (S11.1-4/5, REQ-GOV-11)
+'use strict';
+
+/**
+ * **D-16: editing-recommendations require dry-run proof.**
+ * כשהמנוע מיצה את האפשרויות החוקיות (runt בלתי־ניתן, אי־איזון ששרד נסיגה, הכלה
+ * שלא נפתרה) — מוצעות **עריכות טקסטואליות** (העברת מילה בין פסקאות) עם הוכחה
+ * חיה: הפעלה מחדש של המנוע על הטקסט הערוך מוכיחה שהמלצת העריכה (א) מסירה
+ * את הממצא המקורי, ו(ב) **לא מייצרת אף ממצא חדש**. המלצה בלי הוכחה נפסלת
+ * מראש (rejected) — לעולם לא מוצגת למשתמש.
+ *
+ * שקיפות (U-A10): כל המלצה נושאת artifact מלא — לפני/אחרי, hash-ים,
+ * חתימות ממצאים, מספרי עמודים. ההשוואה לפי kind+target (identity) — לא לפי
+ * מספר עמוד (מספרי עמוד זזים בגלל העריכה עצמה).
+ *
+ * תקציב: עד 8 הרצות ניסיון (dry-runs) ועד 3 המלצות מוחזרות; דוק ≥200 עמודים
+ * — המלצות לא מחושבות אוטומטית (שומר הביצועים; זמין לפי דרישה).
+ */
+
+// המנוע נדרש בזמן קריאה (לא בטעינה) — מנע תלות מעגלית pipeline ↔ recommendations.
+// Node מוחזר את המודול השלם בקריאה השנייה (cache).
+let _typeset = null;
+function engineTypeset(text, settings, env) {
+  if (!_typeset) _typeset = require('../core/pipeline').typeset;
+  return _typeset(text, settings, env);
+}
+const { lexDocument } = require('../parser/dfa-lexer');
+const { tokenize, normalizeText } = require('../parser/block-tokenizer');
+const { applyEdit } = require('./text-edits'); // **S11:** מקור יחיד טהור — גם ל־UI (בלי pipeline)
+
+const QUALIFYING_KINDS = ['runt-line', 'column-imbalance', 'containment'];
+const MAX_DRY_RUNS = 8;
+const MAX_RECOMMENDATIONS = 3;
+const MAX_PAGES_GUARD = 200;
+
+/** חתימת ממצא — identity יציב בין ריצות: עוגן תוכן (textHead מהראיות) במקום
+ *  מזהה טוקן שזז כשהעריכה משנה את מספר הפסקאות. עמוד לדיווח בלבד. */
+function sigOf(rec) {
+  const pb = rec && rec.predicate_before;
+  if (pb && typeof pb === 'object' && pb.textHead) return `${rec.kind}@th:${pb.textHead}`;
+  return `${rec.kind}@${rec.target}`;
+}
+
+/** הממצאים המקבלים המלצות — המנוע מיצה אפשרויות (לא resolved). */
+function qualifyingFindings(result) {
+  const out = [];
+  if (!result || !result.ledger) return out;
+  for (const rec of result.ledger.issues.values()) {
+    if (rec.status === 'resolved') continue;
+    if (!QUALIFYING_KINDS.includes(rec.kind)) continue;
+    out.push(rec);
+  }
+  return out;
+}
+
+/**
+ * מיפוי טוקנים → שורות המקור: הליכה קדימה על שורות המקור עם מצביע טוקנים.
+ * @returns {{lines:string[], tokenLineIdx:Map<string,number>, tokens:Array}|null}
+ */
+function mapTokensToRawLines(rawText) {
+  const { bodyLines } = lexDocument(rawText);
+  const tokens = tokenize(bodyLines);
+  const rawLines = String(rawText).split('\n');
+  const tokenLineIdx = new Map();
+  let ti = 0;
+  for (let li = 0; li < rawLines.length && ti < tokens.length; li++) {
+    const trimmed = rawLines[li].trim();
+    if (!trimmed) continue; // שורה ריקה — לא טוקן
+    if (normalizeText(trimmed) === normalizeText(tokens[ti].raw || '')) {
+      tokenLineIdx.set(tokens[ti].id, li);
+      ti++;
+    }
+    // שורת מטא־דאטה בראש (לפני הטוקן הראשון) — לא צורכת טוקן; מזוהה בהמשך
+    // ע"י אי־התאמה. ההוכחה החיה מגינה מפני זיהוי שגוי: עריכה שלא משנה hash נפסלת.
+  }
+  if (ti < tokens.length) return null; // מיפוי לא שלם — לא מייצרים המלצות (שקוף)
+  return { lines: rawLines, tokenLineIdx, tokens };
+}
+
+/** טוקן הפסקה הבא אחרי tokenId. */
+function nextParagraphToken(tokens, tokenId) {
+  const i = tokens.findIndex(t => t.id === tokenId);
+  if (i < 0) return null;
+  for (let j = i + 1; j < tokens.length; j++) {
+    if (tokens[j].type === 'paragraph') return tokens[j];
+  }
+  return null;
+}
+
+/** האם טוקן הוא פסקה פשוטה (בלי הערות) — מועמדת לעריכה. */
+function isPlainParagraph(tok) {
+  if (!tok || tok.type !== 'paragraph') return false;
+  const notes = (tok.parts || []).filter(p => p.kind !== 'text');
+  return notes.length === 0;
+}
+
+/**
+ * מועמדות עריכה לממצא (עד 2 לממצא; מילה עוברת בין פסקאות שכנות באותו חלק):
+ *  - move-word-down: המילה הראשונה של הפסקה הבאה → סוף פסקת הממצא
+ *  - move-word-up:   המילה האחרונה של פסקת הממצא → ראש הפסקה הבאה
+ */
+function candidateEdits(finding, map) {
+  let anchorTok = map.tokens.find(t => t.id === finding.target) || null;
+  if (finding.kind === 'runt-line' && typeof finding.target === 'string' && finding.target.startsWith('line@')) {
+    anchorTok = map.tokens.find(t => t.id === finding.target.slice(5)) || null;
+  }
+  if (!anchorTok || !isPlainParagraph(anchorTok)) return [];
+  const nextTok = nextParagraphToken(map.tokens, anchorTok.id);
+  if (!nextTok || !isPlainParagraph(nextTok)) return [];
+  if ((nextTok.part || 1) !== (anchorTok.part || 1)) return []; // לא חוצה חלקים
+
+  const fromLine = map.tokenLineIdx.get(anchorTok.id);
+  const toLine = map.tokenLineIdx.get(nextTok.id);
+  if (fromLine == null || toLine == null) return [];
+
+  const fromWords = map.lines[fromLine].trim().split(/\s+/).filter(Boolean);
+  const toWords = map.lines[toLine].trim().split(/\s+/).filter(Boolean);
+  // משמרות מינימליות: לא מוחקים תוכן לעולם — המילה רק עוברת. המקבל/הנותן
+  // נשארים עם טקסט; פסקה בת מילה אחת רשאית להימזג קדימה (המילה עוברת — לא נאבד).
+  if (toWords.length < 3) return [];        // הנותן (הבאה) חייב להישאר עם ≥2 מילים
+  if (fromWords.length < 1) return [];
+
+  const out = [];
+  out.push({
+    type: 'move-word-down',
+    fromLine: toLine, toLine: fromLine,
+    description: `להעביר את המילה «${toWords[0]}» מפתיחת הפסקה הבאה אל סוף פסקה זו — מאריך את השורה האחרונה שלה ומקצר את ראש הבאה`,
+    before: `${map.lines[fromLine]} ⟂ ${map.lines[toLine]}`,
+    after: `${map.lines[fromLine]} ${toWords[0]} ⟂ ${toWords.slice(1).join(' ')}`
+  });
+  out.push({
+    type: 'move-word-up',
+    fromLine: fromLine, toLine: toLine,
+    description: `להעביר את המילה «${fromWords[fromWords.length - 1]}» מסוף פסקה זו אל פתיחת הפסקה הבאה — מקצר את סופה ומאריך את ראש הבאה`,
+    before: `${map.lines[fromLine]} ⟂ ${map.lines[toLine]}`,
+    after: `${fromWords.slice(0, -1).join(' ')} ⟂ ${fromWords[fromWords.length - 1]} ${map.lines[toLine]}`
+  });
+  return out;
+}
+
+/** החלת עריכה בודדת על שורות המקור → מסמך חדש (או null אם לא ניתן) — **applyEdit של text-edits**
+ *  (מקור יחיד: אותה פונקציה משמשת את המנוע ואת ה־UI). היא מיובאת למעלה. */
+
+/** רשימת הממצאים לפי חתימות (compact, להוכחה). */
+function findingSigs(result) {
+  const out = [];
+  for (const rec of result.ledger.issues.values()) {
+    if (rec.status === 'resolved') continue;
+    out.push({ sig: sigOf(rec), kind: rec.kind, target: rec.target, page: rec.page });
+  }
+  return out;
+}
+
+/**
+ * חישוב ההמלצות. כל המלצה כוללת proof — אחרת היא לא מוחזרת.
+ * @param {string} rawText
+ * @param {object} settings — כפי שהועברו ל־typeset
+ * @param {object} result — תוצאת typeset
+ * @param {{force?:boolean}} [opts] — force: עקיפת שומר הגודל (דרישה מפורשת)
+ * @returns {{computed:boolean, reason:string, recommendations:Array, rejected:number, dryRuns:number}}
+ */
+function computeEditingRecommendations(rawText, settings, result, opts) {
+  const force = !!(opts && opts.force);
+  if (!result || !result.pages) return { computed: false, reason: 'no-result', recommendations: [], rejected: 0, dryRuns: 0 };
+  if (!force && result.pages.length > MAX_PAGES_GUARD) {
+    return { computed: false, reason: `doc-size-guard:${result.pages.length}>${MAX_PAGES_GUARD}`, recommendations: [], rejected: 0, dryRuns: 0 };
+  }
+  const findings = qualifyingFindings(result);
+  if (!findings.length) return { computed: true, reason: 'no-qualifying-findings', recommendations: [], rejected: 0, dryRuns: 0 };
+  const map = mapTokensToRawLines(rawText);
+  if (!map) return { computed: true, reason: 'raw-mapping-failed', recommendations: [], rejected: 0, dryRuns: 0 };
+
+  const before = {
+    hash: result.layoutHash,
+    sigs: findingSigs(result).map(s => s.sig),
+    pages: result.pages.length
+  };
+  const recommendations = [];
+  let rejected = 0, dryRuns = 0;
+
+  outer:
+  for (const finding of findings) {
+    for (const edit of candidateEdits(finding, map)) {
+      if (dryRuns >= MAX_DRY_RUNS || recommendations.length >= MAX_RECOMMENDATIONS) break outer;
+      dryRuns++;
+      const editedText = applyEdit(map.lines, edit);
+      if (editedText == null) { rejected++; continue; }
+      const after = engineTypeset(editedText, settings, { noRecommendations: true }); // אין המלצות בתוך dry-run (מנע רקורסיה)
+      const afterSigs = findingSigs(after).map(s => s.sig);
+      const targetSig = sigOf(finding);
+      const removed = !afterSigs.includes(targetSig);
+      const added = afterSigs.filter(s => !before.sigs.includes(s) && s !== targetSig);
+      if (after.layoutHash === before.hash) { rejected++; continue; } // no-op — לא המלצה
+      if (!removed || added.length > 0) { rejected++; continue; }     // בלי הוכחה — נפסל (D-16)
+      recommendations.push({
+        id: `rec-${recommendations.length + 1}`,
+        finding: { kind: finding.kind, target: finding.target, page: finding.page, evidence: finding.predicate_before || null },
+        edit: {
+          type: edit.type, description: edit.description,
+          lineFrom: map.lines[edit.fromLine], lineTo: map.lines[edit.toLine],
+          lineFromIdx: edit.fromLine, lineToIdx: edit.toLine, // להחלה ב־UI על טקסט המקור
+          before: edit.before, after: edit.after
+        },
+        proof: {
+          beforeHash: before.hash, afterHash: after.layoutHash,
+          pagesBefore: before.pages, pagesAfter: after.pages.length,
+          removedFinding: targetSig, newFindings: added, dryRunIndex: dryRuns
+        }
+      });
+      if (recommendations.length >= MAX_RECOMMENDATIONS) break outer;
+    }
+  }
+  return { computed: true, reason: 'ok', recommendations, rejected, dryRuns };
+}
+
+module.exports = {
+  computeEditingRecommendations, qualifyingFindings, findingSigs,
+  candidateEdits, sigOf, mapTokensToRawLines,
+  QUALIFYING_KINDS, MAX_DRY_RUNS, MAX_RECOMMENDATIONS, MAX_PAGES_GUARD
+};
+// **S11:** applyEdit עבר ל־text-edits.js (מקור יחיד טהור — בלי תלות במנוע; לשימוש ה־UI).
+
+};
+__modules["src/engine/audit/text-edits.js"] = function (require, module, exports) {
+// src/engine/audit/text-edits.js — עריכות טקסט להמלצות עריכה (S11; טהור — בלי תלות במנוע)
+'use strict';
+
+/**
+ * החלת עריכת העברת־מילה על שורות המקור — מקור יחיד להמלצות־העריכה (engine)
+ * ולהחלתן ב־UI (app-shell). מודול טהור: אין pipeline, אין מדידה — רק המרת מערך שורות.
+ *
+ *  - move-word-down: המילה הראשונה של שורת fromLine (הפסקה הבאה) → סוף שורת toLine (פסקת הממצא)
+ *  - move-word-up:   המילה האחרונה של שורת fromLine (פסקת הממצא) → ראש שורת toLine (הפסקה הבאה)
+ */
+
+function wordsOf(line) { return String(line != null ? line : '').trim().split(/\s+/).filter(Boolean); }
+
+/**
+ * @param {string[]} lines — שורות המקור (מקור אמת: הטקסט המוצג בעורך)
+ * @param {{type:'move-word-down'|'move-word-up', fromLine:number, toLine:number}} edit
+ * @returns {string|null} — המסמך הערוך (join '\n'), או null אם לא ניתן להחיל
+ */
+function applyEdit(lines, edit) {
+  if (!Array.isArray(lines) || !edit) return null;
+  const next = lines.slice();
+  const fi = edit.fromLine, ti = edit.toLine;
+  if (!Number.isInteger(fi) || !Number.isInteger(ti) || fi < 0 || ti < 0 || fi >= next.length || ti >= next.length) return null;
+  if (fi === ti) return null;
+  const from = wordsOf(next[fi]);
+  const to = wordsOf(next[ti]);
+  if (edit.type === 'move-word-down') {
+    // fromLine = הפסקה הבאה (מסירה את ראשונה); toLine = פסקת הממצא (מקבלת בסוף)
+    const w = from.shift();
+    if (!w) return null;
+    to.push(w);
+    next[ti] = to.join(' ');
+    next[fi] = from.join(' ');
+  } else if (edit.type === 'move-word-up') {
+    // fromLine = פסקת הממצא (מסירה את אחרונה); toLine = הפסקה הבאה (מקבלת בראש)
+    const w = from.pop();
+    if (!w) return null;
+    to.unshift(w);
+    next[fi] = from.join(' ');
+    next[ti] = to.join(' ');
+  } else {
+    return null;
+  }
+  return next.join('\n');
+}
+
+module.exports = { applyEdit, wordsOf };
+
+};
+__modules["src/engine/extensions/style-schema.js"] = function (require, module, exports) {
+// src/engine/extensions/style-schema.js — Custom Text Styles schema + validation (S11.1-1, REQ-PAR-06)
+'use strict';
+
+/**
+ * חוזה סגנונות מותאמים (REQ-PAR-06): trigger (linePrefix/inlineMarker/pattern/combinator
+ * AND/OR), layoutMode ∈ {regular, full-width, side-note, footnote, endnote, new-location},
+ * style מלא, counterReset, linkedOrnaments.
+ *
+ * **אימות עם שגיאות עבריות קריאות־לאדם** (§8.3: "הודעות שגיאה מובנות") — כל שגיאה:
+ * {code, path, styleId, message} כאשר message הוא משפט עברי מלא המציין מה בדיוק
+ * לא תקין ומה התקין. אין שגיאות כלליות מהסוג "invalid JSON".
+ *
+ * דטרמיניזם: אין Date/Math.random; סדר האימות קבוע; הודעות קבועות.
+ */
+
+const LAYOUT_MODES = ['regular', 'full-width', 'side-note', 'footnote', 'endnote', 'new-location'];
+const ORNAMENTS = ['pyramid', 'lance', 'shoshanta', 'scroll'];
+const COUNTER_FORMATS = ['hebrew-geresh', 'decimal'];
+const COUNTER_RESETS = ['part', 'page', 'never'];
+const STYLE_PROPS = [
+  'fontName', 'fontSizePt', 'bold', 'italic', 'color', 'background',
+  'border', 'indentEm', 'align', 'letterSpacingEm', 'textTransform'
+];
+const ALIGNS = ['right', 'center', 'left', 'stretch'];
+const TRANSFORMS = ['none', 'small-caps'];
+
+/** תווית עברית לשדה — משמשת את הודעות השגיאה ואת חיפוש ההרחבות. */
+const FIELD_LABELS = {
+  id: 'מזהה', name: 'שם', trigger: 'טריגר', layoutMode: 'מצב פריסה', style: 'סגנון',
+  counter: 'מונה', linkedOrnaments: 'עיטורים מקושרים'
+};
+
+function isPlainObject(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+
+/**
+ * אימות טריגר בודד (רקורסיבי לקומבינטור). טריגר תקין = בדיוק אחד מ:
+ * linePrefix | inlineMarker | pattern | combinator.
+ * @returns {boolean} ok
+ */
+function validateTrigger(tr, styleId, errors, path) {
+  if (tr == null) {
+    errors.push({ code: 'trigger-empty', path, styleId, message: `הסגנון «${styleId}» אינו מגדיר טריגר — חובה אחד מ: linePrefix, inlineMarker, pattern או combinator.` });
+    return false;
+  }
+  if (!isPlainObject(tr)) {
+    errors.push({ code: 'trigger-not-object', path, styleId, message: `הטריגר של הסגנון «${styleId}» חייב להיות אובייקט, לא ${Array.isArray(tr) ? 'מערך' : typeof tr}.` });
+    return false;
+  }
+  const has = (k) => Object.prototype.hasOwnProperty.call(tr, k);
+  const leaves = ['linePrefix', 'inlineMarker', 'pattern'].filter(has);
+  const isComb = has('combinator');
+  const given = leaves.length + (isComb ? 1 : 0);
+  if (given > 1) {
+    errors.push({ code: 'trigger-ambiguous', path, styleId, message: `הסגנון «${styleId}» מגדיר ${given} טריגרים עץ־בעץ — חובה בדיוק אחד (לשילוב תנאים השתמש ב־combinator).` });
+    return false;
+  }
+  if (isComb) {
+    const c = tr.combinator;
+    if (!isPlainObject(c) || !['AND', 'OR'].includes(c.op)) {
+      errors.push({ code: 'combinator-bad-op', path: `${path}.combinator.op`, styleId, message: `בסגנון «${styleId}»: op של combinator חייב להיות AND או OR (קיבל ${JSON.stringify(c && c.op)}).` });
+      return false;
+    }
+    if (!Array.isArray(c.conditions) || c.conditions.length < 2) {
+      errors.push({ code: 'combinator-few-conditions', path: `${path}.combinator.conditions`, styleId, message: `בסגנון «${styleId}»: ל־combinator ${c.op} דרושים לפחות שני תנאים (קיבל ${Array.isArray(c.conditions) ? c.conditions.length : 0}).` });
+      return false;
+    }
+    let ok = true;
+    for (let i = 0; i < c.conditions.length; i++) {
+      ok = validateTrigger(c.conditions[i], styleId, errors, `${path}.combinator.conditions[${i}]`) && ok;
+    }
+    return ok;
+  }
+  if (has('linePrefix')) {
+    const v = tr.linePrefix;
+    if (typeof v !== 'string' || !v.trim()) {
+      errors.push({ code: 'linePrefix-bad', path: `${path}.linePrefix`, styleId, message: `בסגנון «${styleId}»: linePrefix חייב להיות מחרוזת לא ריקה (למשל "צד:").` });
+      return false;
+    }
+    return true;
+  }
+  if (has('inlineMarker')) {
+    const m = tr.inlineMarker;
+    // **S11 (§8 "כל סוגי הטקסט נתונים לבחירת המשתמש"):** מפריד סימטרי (open === close,
+    // כמו ~…~ או *…*) חוקי — הזיווג במחסנית מבחין פתיחה/סגירה לפי סדר ההופעה.
+    if (!isPlainObject(m) || typeof m.open !== 'string' || typeof m.close !== 'string' || !m.open || !m.close) {
+      errors.push({ code: 'inlineMarker-bad', path: `${path}.inlineMarker`, styleId, message: `בסגנון «${styleId}»: inlineMarker חייב לכלול open ו־close — שתי מחרוזות לא ריקות (זהות או שונות; למשל open:"«", close:"»" או שניהם "~").` });
+      return false;
+    }
+    return true;
+  }
+  // pattern
+  const p = tr.pattern;
+  if (typeof p !== 'string' || !p) {
+    errors.push({ code: 'pattern-bad', path: `${path}.pattern`, styleId, message: `בסגנון «${styleId}»: pattern חייב להיות מחרוזת של ביטוי־רגולרי לא ריקה.` });
+    return false;
+  }
+  try { new RegExp(p); } catch (e) {
+    errors.push({ code: 'pattern-invalid', path: `${path}.pattern`, styleId, message: `בסגנון «${styleId}»: הביטוי «${p}» אינו תקין — ${e.message}.` });
+    return false;
+  }
+  return true;
+}
+
+function validateStyle(st, styleId, errors, path) {
+  if (!isPlainObject(st)) {
+    errors.push({ code: 'style-not-object', path, styleId, message: `הסגנון החזותי של «${styleId}» חייב להיות אובייקט (fontSizePt, bold, color וכו').` });
+    return false;
+  }
+  let ok = true;
+  for (const k of Object.keys(st)) {
+    if (!STYLE_PROPS.includes(k)) {
+      errors.push({ code: 'style-unknown-prop', path: `${path}.${k}`, styleId, message: `בסגנון «${styleId}»: המאפיין «${k}» אינו מוכר. המאפיינים החוקיים: ${STYLE_PROPS.join(', ')}.` });
+      ok = false;
+    }
+  }
+  if ('fontSizePt' in st && !(Number(st.fontSizePt) >= 6 && Number(st.fontSizePt) <= 48)) {
+    errors.push({ code: 'style-bad-size', path: `${path}.fontSizePt`, styleId, message: `בסגנון «${styleId}»: גודל גופן חייב להיות בטווח 6–48 (קיבל ${JSON.stringify(st.fontSizePt)}).` });
+    ok = false;
+  }
+  if ('color' in st && !/^#[0-9a-fA-F]{3,8}$/.test(String(st.color))) {
+    errors.push({ code: 'style-bad-color', path: `${path}.color`, styleId, message: `בסגנון «${styleId}»: צבע חייב להיות הקסדצימלי כמו #1a1a1a (קיבל ${JSON.stringify(st.color)}).` });
+    ok = false;
+  }
+  if ('background' in st && !/^#[0-9a-fA-F]{3,8}$/.test(String(st.background))) {
+    errors.push({ code: 'style-bad-background', path: `${path}.background`, styleId, message: `בסגנון «${styleId}»: רקע חייב להיות הקסדצימלי (קיבל ${JSON.stringify(st.background)}).` });
+    ok = false;
+  }
+  if ('align' in st && !ALIGNS.includes(st.align)) {
+    errors.push({ code: 'style-bad-align', path: `${path}.align`, styleId, message: `בסגנון «${styleId}»: יישור חייב להיות אחד מ ${ALIGNS.join(', ')} (קיבל ${JSON.stringify(st.align)}).` });
+    ok = false;
+  }
+  if ('textTransform' in st && !TRANSFORMS.includes(st.textTransform)) {
+    errors.push({ code: 'style-bad-transform', path: `${path}.textTransform`, styleId, message: `בסגנון «${styleId}»: textTransform חייב להיות none או small-caps.` });
+    ok = false;
+  }
+  for (const k of ['bold', 'italic']) {
+    if (k in st && typeof st[k] !== 'boolean') {
+      errors.push({ code: 'style-bad-bool', path: `${path}.${k}`, styleId, message: `בסגנון «${styleId}»: ${k} חייב להיות true/false.` });
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+function validateCounter(ct, styleId, errors, path) {
+  if (ct == null) return true; // אין מונה — תקין
+  if (!isPlainObject(ct)) {
+    errors.push({ code: 'counter-not-object', path, styleId, message: `המונה של «${styleId}» חייב להיות אובייקט {enabled, format, reset}.` });
+    return false;
+  }
+  let ok = true;
+  if ('format' in ct && !COUNTER_FORMATS.includes(ct.format)) {
+    errors.push({ code: 'counter-bad-format', path: `${path}.format`, styleId, message: `בסגנון «${styleId}»: תבנית מונה חייבת להיות hebrew-geresh או decimal (קיבל ${JSON.stringify(ct.format)}).` });
+    ok = false;
+  }
+  if ('reset' in ct && !COUNTER_RESETS.includes(ct.reset)) {
+    errors.push({ code: 'counter-bad-reset', path: `${path}.reset`, styleId, message: `בסגנון «${styleId}»: מדיניות איפוס חייבת להיות part, page או never (קיבל ${JSON.stringify(ct.reset)}).` });
+    ok = false;
+  }
+  if ('enabled' in ct && typeof ct.enabled !== 'boolean') {
+    errors.push({ code: 'counter-bad-enabled', path: `${path}.enabled`, styleId, message: `בסגנון «${styleId}»: enabled חייב להיות true/false.` });
+    ok = false;
+  }
+  return ok;
+}
+
+function validateOrnaments(lo, styleId, errors, path) {
+  if (lo == null) return true;
+  if (!isPlainObject(lo)) {
+    errors.push({ code: 'ornaments-not-object', path, styleId, message: `העיטורים המקושרים של «${styleId}» חייבים להיות אובייקט {top, bottom}.` });
+    return false;
+  }
+  let ok = true;
+  for (const k of Object.keys(lo)) {
+    if (!['top', 'bottom'].includes(k)) {
+      errors.push({ code: 'ornament-unknown-slot', path: `${path}.${k}`, styleId, message: `בסגנון «${styleId}»: חריץ עיטור חייב להיות top או bottom (קיבל «${k}»).` });
+      ok = false;
+    } else if (lo[k] !== null && !ORNAMENTS.includes(lo[k])) {
+      errors.push({ code: 'ornament-unknown-kind', path: `${path}.${k}`, styleId, message: `בסגנון «${styleId}»: סוג עיטור חייב להיות אחד מ ${ORNAMENTS.join(', ')} (קיבל ${JSON.stringify(lo[k])}).` });
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+/**
+ * פענוח + אימות רשימת סגנונות מותאמים.
+ * @param {string|object} json — מערך, או {styles:[...]}
+ * @returns {{ok:boolean, styles:Array, errors:Array}} — styles מנורמלים (defaults מלאים)
+ */
+function parseCustomStyles(json) {
+  let raw;
+  try {
+    raw = typeof json === 'string' ? JSON.parse(json) : json;
+  } catch (e) {
+    return { ok: false, styles: [], errors: [{ code: 'unparseable-json', path: '$', styleId: null, message: `הקובץ אינו JSON תקין — ${e.message}. כדאי לבדוק פסיקים ומרכאות כפולות.` }] };
+  }
+  const list = Array.isArray(raw) ? raw : (isPlainObject(raw) && Array.isArray(raw.styles) ? raw.styles : null);
+  if (!list) {
+    return { ok: false, styles: [], errors: [{ code: 'bad-shape', path: '$', styleId: null, message: 'קובץ הסגנונות חייב להיות מערך, או אובייקט עם שדה styles (למשל {"styles":[...]}).' }] };
+  }
+  const errors = [];
+  const seenIds = new Set();
+  const styles = [];
+  list.forEach((d, i) => {
+    const where = `styles[${i}]`;
+    if (!isPlainObject(d)) {
+      errors.push({ code: 'style-not-object', path: where, styleId: null, message: `הסגנון במקום ${i} אינו אובייקט — נדחה.` });
+      return;
+    }
+    const id = typeof d.id === 'string' && d.id.trim() ? d.id.trim() : null;
+    if (!id) {
+      errors.push({ code: 'missing-id', path: `${where}.id`, styleId: null, message: `לסגנון במקום ${i} חסר מזהה (id) — חובה שם ייחודי כמו "quote".` });
+      return;
+    }
+    if (seenIds.has(id)) {
+      errors.push({ code: 'duplicate-id', path: `${where}.id`, styleId: id, message: `מזהה הסגנון «${id}» מופיע פעמיים — מזהים חייבים להיות ייחודיים.` });
+      return;
+    }
+    seenIds.add(id);
+    let ok = true;
+    ok = validateTrigger(d.trigger, id, errors, `${where}.trigger`) && ok;
+    const layoutMode = d.layoutMode || 'regular';
+    if (!LAYOUT_MODES.includes(layoutMode)) {
+      errors.push({ code: 'bad-layout-mode', path: `${where}.layoutMode`, styleId: id, message: `בסגנון «${id}»: מצב פריסה חייב להיות אחד מ ${LAYOUT_MODES.join(', ')} (קיבל ${JSON.stringify(d.layoutMode)}).` });
+      ok = false;
+    }
+    if ('style' in d) ok = validateStyle(d.style, id, errors, `${where}.style`) && ok;
+    ok = validateCounter(d.counter, id, errors, `${where}.counter`) && ok;
+    ok = validateOrnaments(d.linkedOrnaments, id, errors, `${where}.linkedOrnaments`) && ok;
+    if (!ok) return; // סגנון פגום — לא נכנס לרשימה (הודעותיו כבר נרשמו)
+    styles.push({
+      id,
+      name: typeof d.name === 'string' && d.name.trim() ? d.name.trim() : id,
+      trigger: d.trigger,
+      layoutMode,
+      style: d.style || {},
+      counter: d.counter && d.counter.enabled ? {
+        enabled: true,
+        format: d.counter.format || 'decimal',
+        reset: d.counter.reset || 'never'
+      } : null,
+      linkedOrnaments: d.linkedOrnaments || null
+    });
+  });
+  return { ok: errors.length === 0, styles, errors };
+}
+
+/**
+ * אימות רשימת תמונות מוטמעות (embedded images §8.3). src חייב data: URI —
+ * offline-guard: הפניית http(s) חיצונית נדחית עם הודעה עברית (Orange exit-7 doctrine).
+ */
+function validateImages(list) {
+  const errors = [];
+  const images = [];
+  if (!Array.isArray(list)) return { ok: true, images, errors };
+  const seenIds = new Set();
+  list.forEach((im, i) => {
+    const where = `images[${i}]`;
+    if (!isPlainObject(im) || typeof im.id !== 'string' || !im.id.trim()) {
+      errors.push({ code: 'image-missing-id', path: where, styleId: null, message: `לתמונה במקום ${i} חסר מזהה (id) — נדחתה.` });
+      return;
+    }
+    if (seenIds.has(im.id)) {
+      errors.push({ code: 'image-duplicate-id', path: `${where}.id`, styleId: im.id, message: `מזהה התמונה «${im.id}» מופיע פעמיים.` });
+      return;
+    }
+    seenIds.add(im.id);
+    const src = typeof im.src === 'string' ? im.src : '';
+    if (!src) {
+      errors.push({ code: 'image-missing-src', path: `${where}.src`, styleId: im.id, message: `לתמונה «${im.id}» חסר מקור (src).` });
+      return;
+    }
+    if (/^https?:\/\//i.test(src)) {
+      errors.push({ code: 'image-external-src', path: `${where}.src`, styleId: im.id, message: `התמונה «${im.id}» מפנה לכתובת חיצונית — אסור (מנוע אופליין). יש להטמיע תמונות כ־data: URI בלבד.` });
+      return;
+    }
+    if (!src.startsWith('data:')) {
+      errors.push({ code: 'image-bad-src', path: `${where}.src`, styleId: im.id, message: `מקור התמונה «${im.id}» חייב להתחיל ב־data: (קיבל «${src.slice(0, 24)}…»).` });
+      return;
+    }
+    const w = Number(im.w), h = Number(im.h);
+    if (!(w > 0 && h > 0)) {
+      errors.push({ code: 'image-bad-dims', path: where, styleId: im.id, message: `לתמונה «${im.id}» חסרים ממדים תקינים (w/h חיוביים במ״מ).` });
+      return;
+    }
+    images.push({ id: im.id, src, w, h, alt: typeof im.alt === 'string' ? im.alt : '' });
+  });
+  return { ok: errors.length === 0, images, errors };
+}
+
+module.exports = {
+  LAYOUT_MODES, ORNAMENTS, STYLE_PROPS, FIELD_LABELS,
+  parseCustomStyles, validateImages
+};
+
+};
+__modules["src/engine/extensions/apply-styles.js"] = function (require, module, exports) {
+// src/engine/extensions/apply-styles.js — התאמת טריגרים + מונים + טווחי inline (S11.1-1/2, REQ-PAR-06)
+'use strict';
+
+/**
+ * מנוע ההחלה של סגנונות מותאמים. שלוש שכבות:
+ *  1. matchBlockStyle — טריגר ברמת הפסקה (linePrefix / pattern / combinator AND|OR)
+ *  2. matchInlineRanges — טריגר ברמת טווח בתוך הטקסט (inlineMarker «…», מפרידים שרירותיים)
+ *  3. CustomStyleCounters — מונים לפי counterReset (part/page/never) —
+ *     סימון יחיד דרך notes/markers.markerFor (מקור יחיד; לא מספר מדומה).
+ *
+ * דטרמיניזם: אין Date/Math.random; הסדר קבוע (סדר ההצהרה); first-match-wins.
+ */
+
+const { markerFor } = require('../notes/markers');
+
+/** התאמת טריגר־עלים בודד (בלי combinator — עלה). */
+function matchLeaf(spec, line) {
+  if ('linePrefix' in spec) return typeof spec.linePrefix === 'string' && line.startsWith(spec.linePrefix);
+  if ('pattern' in spec) {
+    try { return new RegExp(spec.pattern).test(line); } catch (e) { return false; }
+  }
+  if ('inlineMarker' in spec) {
+    // עלה inlineMarker בהקשר בלוק: הפסקה מכילה לפחות טווח פתוח+סגור תקין
+    const ranges = inlineRanges(line, spec.inlineMarker);
+    return ranges.length > 0;
+  }
+  return false;
+}
+
+/** התאמת טריגר כלשהו (רקורסיבי — combinator AND/OR). */
+function matchTriggerSpec(spec, line) {
+  if (!spec || typeof spec !== 'object') return false;
+  if ('combinator' in spec) {
+    const c = spec.combinator;
+    if (!c || !Array.isArray(c.conditions)) return false;
+    if (c.op === 'AND') return c.conditions.every(sub => matchTriggerSpec(sub, line));
+    if (c.op === 'OR') return c.conditions.some(sub => matchTriggerSpec(sub, line));
+    return false;
+  }
+  return matchLeaf(spec, line);
+}
+
+/** טווחי inlineMarker בשורה: זוגות open/close לא חופפים, בסדר הופעתם.
+ * **S11:** מפריד סימטרי (open === close, כמו ~…~) — טוגל: מופע ראשון פותח,
+ * הבא סוגר (לפי סדר ההופעה), ולהפך — מחסנית לא עוזרת כשהסניף הראשון
+ * תמיד תופס קודם. */
+function inlineRanges(line, marker) {
+  if (!marker || typeof marker.open !== 'string' || typeof marker.close !== 'string') return [];
+  const out = [];
+  const stack = [];
+  const symmetric = marker.open === marker.close;
+  for (let i = 0; i < line.length; i++) {
+    if (line.startsWith(marker.open, i)) {
+      if (symmetric) {
+        // טוגל: פתוח אם אין פתיחה תלויה; סגור אחרת
+        if (stack.length) {
+          const from = stack.pop();
+          out.push({ from: from + marker.open.length, to: i }); // טווח התוכן בין המפרידים
+        } else {
+          stack.push(i);
+        }
+        i += marker.open.length - 1;
+        continue;
+      }
+      stack.push(i); i += marker.open.length - 1;
+    } else if (line.startsWith(marker.close, i)) {
+      const from = stack.pop();
+      if (from !== undefined) out.push({ from: from + marker.open.length, to: i }); // טווח התוכן בין המפרידים
+      i += marker.close.length - 1;
+    }
+  }
+  return out; // סדירות: לפי מקום הסגירה; stack לא־מזווג נשמר — ההתאמה תקפה רק לזוגות שנסגרו
+}
+
+/**
+ * התאמת סגנון ברמת פסקה. first-match-wins לפי סדר ההצהרה (דטרמיניסטי).
+ * @param {string} line — הטקסט השטוח של הפסקה (בלי הערות)
+ * @param {Array} styles — רשימה מנורמלת מ־parseCustomStyles
+ * @returns {{style, ranges}|null}
+ */
+function matchBlockStyle(line, styles) {
+  for (const st of styles || []) {
+    if (!st || !st.trigger) continue;
+    if (matchTriggerSpec(st.trigger, line)) {
+      return { style: st };
+    }
+  }
+  return null;
+}
+
+/**
+ * סגנוני inline תואמים לשורה (כמה סגנונות יכולים לתפוס טווחים שונים;
+ * טווח חופף — הראשון בהצהרה זוכה; שאר נפסלים לאותו טווח).
+ * @returns {Array<{styleId, ranges}>}
+ */
+function matchInlineStyles(line, styles) {
+  const out = [];
+  const taken = []; // טווחים שנתפסו {from,to}
+  for (const st of styles || []) {
+    if (!st || !st.trigger || !('inlineMarker' in st.trigger)) continue;
+    if ('combinator' in st.trigger) continue; // קומבינטור נוסה ברמת הבלוק בלבד (תיעוד חוזה)
+    const ranges = inlineRanges(line, st.trigger.inlineMarker)
+      .filter(r => !taken.some(t => r.from < t.to && t.from < r.to)); // אי־חפיפה
+    if (!ranges.length) continue;
+    for (const r of ranges) taken.push(r);
+    out.push({ styleId: st.id, style: st, ranges });
+  }
+  return out;
+}
+
+/**
+ * מונה per-style: counterReset part/page/never; תבנית hebrew-geresh/decimal —
+ * **markerFor של notes/markers (מקור יחיד — לא העתקה).**
+ */
+class CustomStyleCounters {
+  constructor() {
+    this.state = new Map(); // styleId → {seq, lastPart, lastPage}
+  }
+  /**
+   * הסמן הבא של הסגנון.
+   * @param {object} st — סגנון מנורמל (counter: {format, reset} | null)
+   * @param {{part:number, page:number}} ctx — הקשר התוכן הנוכחי
+   */
+  nextMark(st, ctx) {
+    if (!st || !st.counter || !st.counter.enabled) return null;
+    const key = st.id;
+    let s = this.state.get(key);
+    if (!s) { s = { seq: 0, lastPart: null, lastPage: null }; this.state.set(key, s); }
+    if (st.counter.reset === 'part' && s.lastPart != null && ctx.part !== s.lastPart) s.seq = 0;
+    if (st.counter.reset === 'page' && s.lastPage != null && ctx.page !== s.lastPage) s.seq = 0;
+    s.seq += 1; s.lastPart = ctx.part; s.lastPage = ctx.page;
+    return markerFor(s.seq, st.counter.format === 'hebrew-geresh' ? 'hebrew-geresh' : 'decimal');
+  }
+}
+
+/** רוחב גופן יחסי של סגנון לגוף — למדידת טווחי inline בגודל שונה. */
+function inlineSizeFactor(styleSpec, bodySizePt) {
+  if (!styleSpec || !styleSpec.fontSizePt) return 1;
+  const base = Number(bodySizePt) || 14;
+  return Math.max(0.25, Number(styleSpec.fontSizePt) / base);
+}
+
+module.exports = {
+  matchBlockStyle, matchInlineStyles, matchTriggerSpec, inlineRanges,
+  CustomStyleCounters, inlineSizeFactor
+};
+
+};
 __modules["src/engine/decoration/ornament-fit.js"] = function (require, module, exports) {
 // src/engine/decoration/ornament-fit.js — fit-to-text JS measurement + divider height rules (REQ-ORN-01..04)
 'use strict';
@@ -4236,6 +5159,7 @@ function parseCustomPageTypes(json) {
     }
     pages.push({
       id, type: 'custom',
+      name: typeof d.name === 'string' && d.name.trim() ? d.name.trim() : null, // **S11 (§8.3):** כותרת קריאה לאדם (תקציר שיתוף/רשימת UI)
       position: { at: at, part },
       counted: d.counted !== false, // ברירת מחדל: נספר (PT-09)
       background: typeof d.background === 'string' ? d.background : null,
@@ -4257,7 +5181,11 @@ function planCustomPages(customDefs, docStructure) {
   const out = { start: [], beforePart: new Map(), afterPart: new Map(), end: [] };
   for (const d of customDefs || []) {
     switch (d.position.at) {
-      case 'before-shaar-main': if (docStructure.hasShaarMain) out.start.push(d); break;
+      // **S11 (תיקון שער 5):** לפני השער הראשי — וגם כשאין שער כזה (בלי ערכת נושא):
+      // העמוד המותאם פותח את המסמך, לפני הפתיחה/התוכן. הסרת התניה מגדירה את
+      // ההתנהגות המובטחת בשער: "עמוד לוגו לפני הפתיחה מוצב ונספר" גם במסמכים
+      // צנועים בלי שער־ערכת (העיגון המבני היחיד שקיים תמיד הוא ראש המסמך).
+      case 'before-shaar-main': out.start.push(d); break;
       case 'after-shaar-main': out.start.push(d); break; // אחרי שער ראשי/בראש המסמך אם אין
       case 'before-part': {
         const k = d.position.part;
@@ -5645,7 +6573,9 @@ function serializeTypesetResult(result) {
     tocInsert: result.tocInsert,
     numberingAudit: result.numberingAudit,
     tokens: result.tokens.map(t => ({ id: t.id, type: t.type, level: t.level || null, raw: t.raw || '' })),
-    droppedEvents: result.events.droppedEvents
+    droppedEvents: result.events.droppedEvents,
+    recommendations: result.recommendations || null,   // **S11:** המלצות עריכה עם הוכחות (plain)
+    customStyles: result.customStyles ? { ok: result.customStyles.ok, count: result.customStyles.styles.length, errors: result.customStyles.errors } : null
   };
 }
 

@@ -16,6 +16,9 @@ const { migrate, mergeWithDefaults } = require('../engine/output/project-io');
 const { buildStatusStrip } = require('./status-strip');
 const { buildEditorTab } = require('./editor-tab');
 const { buildSettingsTab } = require('./settings-panel');
+const { buildExtensionsPanel } = require('./extensions-panel');
+const { importDocx } = require('../engine/import/docx-import');
+const { applyEdit } = require('../engine/audit/text-edits'); // **S11:** מקור יחיד טהור — בלי pipeline
 const { buildPreviewTab } = require('./preview-tab');
 const { buildTestingTab } = require('./testing-tab');
 const { WorkerEngineClient } = require('./worker-client');
@@ -54,6 +57,7 @@ function createApp(doc, opts = {}) {
     onTextChange: (t) => { text = t; markHeavyDirty('טקסט השתנה'); },
     onDocumentAction: (action, payload) => onDocumentAction(action, payload),
     onImportTxt: () => opts.onRequestTxtImport && opts.onRequestTxtImport(),
+    onImportDocx: () => opts.onRequestDocxImport && opts.onRequestDocxImport(),
     onClearDocument: () => onDocumentAction('clear', ''),
     onCaretMove: (charIndex) => onCaretMove(charIndex),
     onJumpToPage: (pageIndex) => { switchTab('preview'); preview.scrollToPage(pageIndex); }
@@ -69,13 +73,36 @@ function createApp(doc, opts = {}) {
     onOpenImports: () => opts.onOpenImports && opts.onOpenImports()
   });
 
+  // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
+  // שינוי הרחבות = כבד (F-06): אין עימוד אוטומטי — ⚡ בלבד.
+  const extensions = buildExtensionsPanel(doc, {
+    onBundleChange: (bundle) => {
+      if (bundle && bundle.styles.length) {
+        settings._customStyles = JSON.stringify(bundle.styles.map(s => ({
+          id: s.id, name: s.name, trigger: s.trigger, layoutMode: s.layoutMode,
+          style: s.style, counter: s.counter, linkedOrnaments: s.linkedOrnaments
+        })));
+      } else delete settings._customStyles;
+      if (bundle && bundle.pages.length) {
+        settings._customPages = JSON.stringify({ pages: bundle.pages });
+      } else delete settings._customPages;
+      if (bundle) markHeavyDirty('הרחבות השתנו');
+      else markHeavyDirty('הרחבות הוסרו');
+    },
+    onRequestImport: () => opts.onRequestExtensionsImport && opts.onRequestExtensionsImport(),
+    onExport: () => opts.onSaveExtensions && opts.onSaveExtensions(extensions.exportText()),
+    onShare: () => { status.setNotice(extensions.shareText()); }
+  });
+  settingsPanel.root.appendChild(extensions.root);
+
   const preview = buildPreviewTab(doc, {
     onActivatePage: (pageIndex) => onActivatePage(pageIndex),
     onDebugDownload: (pageIndex) => opts.onDebugDownload && opts.onDebugDownload(buildDebugJson(pageIndex), pageIndex)
   });
 
   const testing = buildTestingTab(doc, {
-    onActivateFinding: (f) => activateFinding(f) // כלל 2: נתיב ההפעלה האחיד
+    onActivateFinding: (f) => activateFinding(f), // כלל 2: נתיב ההפעלה האחיד
+    onApplyRecommendation: (rec) => applyRecommendation(rec) // **S11:** החלה על המקור
   });
 
   // ================= בניית שלד =================
@@ -233,12 +260,39 @@ function createApp(doc, opts = {}) {
     settingsPanel.refreshValues();
   }
 
-  // ================= תוצאה → תצוגות =================
+  // ================= S11: ייבוא DOCX + החלת המלצות =================
+
+  /** ייבוא קובץ DOCX (בתים) — המרה במקור היחיד; סירוב פורמט = הודעה עברית בלי קריסה (חוק 14). */
+  function importDocxFile(bytes, fileName) {
+    const res = importDocx(bytes, fileName);
+    if (res.ok) {
+      onDocumentAction('open', res.text); // נתיב מיידי (progress מוצג)
+      status.setNotice(res.message);
+    } else {
+      status.setNotice(res.message); // «פורמט לא נתמך» — לא נטען, לא קורס
+    }
+    return res.ok;
+  }
+
+  /** החלת המלצה על טקסט המקור — החלת העריכה באותה פונקציה שהוכיחה אותה (מקור יחיד). */
+  function applyRecommendation(rec) {
+    if (!rec || !rec.edit || rec.edit.lineFromIdx == null || rec.edit.lineToIdx == null) return false;
+    const lines = String(text).split('\n');
+    const next = applyEdit(lines, { type: rec.edit.type, fromLine: rec.edit.lineFromIdx, toLine: rec.edit.lineToIdx });
+    if (next == null) { status.setNotice('ההמלצה לא הוחלה — השורות במקור השתנו מאז חישובה.'); return false; }
+    text = next;
+    editor.setText(text);
+    onExplicitRetypeset(); // פעולה מפורשת — נתיב מיידי
+    status.setNotice('ההמלצה הוחלה והמסמך עומד מחדש.');
+    return true;
+  }
+
 
   function applyResultToViews() {
     caretMapObj = buildCaretMap(text, result);
     preview.setResult(result, settings);
     testing.setResult(result);
+    testing.setRecommendations(result.recommendations || null); // **S11:** המלצות עם הוכחות
     // מפת שבירות עמודים לעורך (⏎ — תצוגה בלבד, F-01)
     const breaks = [];
     for (const pg of result.pages) {
@@ -332,9 +386,10 @@ function createApp(doc, opts = {}) {
   status.setFonts(opts.fontStatus || 'ready');
 
   return {
-    root, switchTab, editor, settingsPanel, preview, testing, status, engine,
+    root, switchTab, editor, settingsPanel, preview, testing, status, engine, extensions,
     onExplicitRetypeset, onDocumentAction, onSettingChanged, onResetField,
     scheduleLightRefresh, activateFinding, saveTemplateJson, loadTemplateJson, buildDebugJson,
+    importDocxFile, applyRecommendation, // **S11:** ייבוא DOCX + החלת המלצות
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),

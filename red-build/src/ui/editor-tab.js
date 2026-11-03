@@ -35,8 +35,8 @@ function buildEditorTab(doc, opts) {
   const btnDocx = doc.createElement('button');
   btnDocx.type = 'button'; btnDocx.className = 'btn'; btnDocx.textContent = '📝 ייבוא DOCX';
   btnDocx.setAttribute('aria-label', 'ייבוא מסמך וורד');
-  btnDocx.disabled = true; // **S11 — stub guarded:** המנוע עוד לא נבנה; הכפתור נעול מראש
-  btnDocx.title = 'ייבוא DOCX ייבנה בשלב S11';
+  btnDocx.title = 'ייבוא DOCX: כותרות וורד → כותרות המנוע; הערות וורד → הערות סוגריים; פסקאות → טקסט';
+  btnDocx.addEventListener('click', () => opts.onImportDocx && opts.onImportDocx()); // **S11:** נפתח — המנוע נבנה
   const btnClear = doc.createElement('button');
   btnClear.type = 'button'; btnClear.className = 'btn btn--ghost'; btnClear.textContent = '🗑 נקה';
   btnClear.setAttribute('aria-label', 'ניקוי העורך');

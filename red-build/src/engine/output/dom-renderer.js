@@ -83,15 +83,36 @@ function renderLine(ln, doc, settings = {}) {
   // הגובה כבר תוקצב בפריסה, הרנדור רק מצייר בתוך התיבה (מקור יחיד — F-09).
   if (ln.h2OrnPadTop) el.style.paddingTop = `${ln.h2OrnPadTop}px`;
   if (ln.h2OrnPadBottom) el.style.paddingBottom = `${ln.h2OrnPadBottom}px`;
+  // **S11 (REQ-PAR-06):** הזמנת עיטורים מקושרים של סגנון מותאם — אותו דפוס (F-08).
+  if (ln.csOrnPadTop) el.style.paddingTop = `${ln.csOrnPadTop}px`;
+  if (ln.csOrnPadBottom) el.style.paddingBottom = `${ln.csOrnPadBottom}px`;
+  // **S11 (REQ-PAR-06):** סגנון ברמת הבלוק — class + סגנון מובנה + מונה גלוי בשורה הראשונה.
+  if (ln.customStyle) {
+    el.className += ' custom-style';
+    el.dataset.style = ln.customStyle.id || '';
+    applyCustomStyleSpec(el, ln.customStyle.styleSpec, doc);
+    if (ln.csCounterMark) {
+      const cm = doc.createElement('span');
+      cm.className = 'cs-counter';
+      cm.textContent = ln.csCounterMark;
+      prependChild(el, cm);
+    }
+  }
   // **D-42:** מילים בתוך סוגריים — span.w--paren עם font-size בסקאלה (geometry-neutral).
   // מילים רגילות — span.w אחיד (מיצג גם ב‑DOM אמיתי וגם ב‑shim של הבדיקות).
+  // **S11:** טווחי inline מסגנון מותאך — span.w--custom עם data-style (גודל מוחל כבר במדידה).
   const parenScale = Number(settings['paren-style-scale']) || 1;
   const words = (ln.words || []).map(w => scrubPUAText(w.replace(/\u00A0/g, '\u00A0')));
   const spans = ln.parenSpans || [];
-  if (spans.length && parenScale !== 1) {
+  const customs = ln.customSpans || [];
+  if ((spans.length && parenScale !== 1) || customs.length) {
     for (let i = 0; i < words.length; i++) {
       const span = doc.createElement('span');
-      if (spans.includes(i)) {
+      const cIdx = customs.findIndex(c => c.wi === i);
+      if (cIdx >= 0) {
+        span.className = 'w w--custom';
+        span.dataset.style = customs[cIdx].styleId;
+      } else if (spans.includes(i)) {
         span.className = 'w w--paren';
         span.style.fontSize = `${Math.round(parenScale * 100)}%`;
       } else {
@@ -108,6 +129,28 @@ function renderLine(ln, doc, settings = {}) {
   return el;
 }
 
+/** **S11:** הכנסת ילד ראשון — insertBefore כשיש; fallback ל־unshift (תאימות ל־shims של הבדיקות). */
+function prependChild(el, node) {
+  if (typeof el.insertBefore === 'function') el.insertBefore(node, el.firstChild || null);
+  else { (el.children || (el.children = [])).unshift(node); node.parentNode = el; }
+}
+
+/** **S11 (REQ-PAR-06):** החלת סגנון מותאם על יסוד DOM — מקור יחיד לכל מוצרי הדגל. */
+function applyCustomStyleSpec(el, spec, doc) {
+  void doc;
+  if (!spec || typeof spec !== 'object') return;
+  if (spec.fontSizePt) el.style.fontSize = `${spec.fontSizePt}pt`;
+  if (spec.bold) el.style.fontWeight = '700';
+  if (spec.italic) el.style.fontStyle = 'italic';
+  if (spec.color) el.style.color = spec.color;
+  if (spec.background) el.style.background = spec.background;
+  if (spec.border) el.style.borderRight = `3px solid ${typeof spec.border === 'string' ? spec.border : '#1a1a1a'}`;
+  if (spec.indentEm) { el.style.paddingRight = `${spec.indentEm}em`; el.style.marginRight = `${spec.indentEm}em`; }
+  if (spec.align) el.style.textAlign = spec.align === 'stretch' ? 'justify' : spec.align;
+  if (spec.letterSpacingEm) el.style.letterSpacing = `${spec.letterSpacingEm}em`;
+  if (spec.textTransform === 'small-caps') el.style.fontVariant = 'small-caps';
+}
+
 function renderFootnoteArea(page, settings, doc) {
   if (!settings['footnotes-enabled'] || !page.footnotes.length) return null;
   const area = doc.createElement('div');
@@ -122,7 +165,8 @@ function renderFootnoteArea(page, settings, doc) {
     const marker = n.marker || markerFor(Number.isInteger(n.docIndex) ? n.docIndex : (n.markerNum || 1), settings['footnote-marker-style']);
     const el = doc.createElement('div');
     const cont = n.isContinuation || n.mode === 'split-rest';
-    el.className = 'footnote' + (cont ? ' fn--continuation' : '');
+    el.className = 'footnote' + (cont ? ' fn--continuation' : '') + (n.customStyle ? ' footnote--custom' : '');
+    if (n.customStyle) el.dataset.style = n.customStyle;
     el.dir = 'rtl';
     el.textContent = `${cont ? '(המשך) ' : ''}${marker}\u200F ${scrubPUAText(n.text || n)}`;
     area.appendChild(el);
@@ -251,6 +295,18 @@ function renderSpanningBand(page, settings, doc) {
   const band = doc.createElement('div');
   band.className = 'spanning-band';
   band.dir = 'rtl';
+  // **S11 (REQ-PAR-06):** פס callout מסגנון מותאם — class + סגנון מובנה (full-width).
+  if (page.spanning.customStyle) {
+    band.className += ' custom-style';
+    band.dataset.style = page.spanning.customStyle.id || '';
+    applyCustomStyleSpec(band, page.spanning.customStyle.styleSpec, doc);
+    if (page.spanning.customStyle.counterMark) {
+      const cm = doc.createElement('span');
+      cm.className = 'cs-counter';
+      cm.textContent = page.spanning.customStyle.counterMark;
+      prependChild(band, cm);
+    }
+  }
   const spanTop = page.template.contentBox.top;
   band.style.top = `${spanTop}px`;
   band.style.height = `${page.spanning.heightPx}px`;
@@ -457,7 +513,8 @@ function renderPage(page, settings, doc, header) {
   // הערות צד: מיקום מוחלט לפי ה‑placement (S7.1.2) — anchor לפסקה המארחת
   for (const sn of page.sideNotes || []) {
     const el = doc.createElement('aside');
-    el.className = 'side-note';
+    el.className = 'side-note' + (sn.isCustomStyle ? ' side-note--custom' : '');
+    if (sn.isCustomStyle) el.dataset.style = sn.isCustomStyle;
     el.dataset.anchor = sn.anchorToken || '';
     el.dir = 'rtl';
     if (sn.yTop != null) el.style.top = `${Math.round(sn.yTop)}px`;
@@ -466,10 +523,10 @@ function renderPage(page, settings, doc, header) {
       el.style.right = 'auto';
     }
     if (sn.colWidth) el.style.width = `${sn.colWidth}px`;
-    el.textContent = scrubPUAText(sn.text);
+    el.textContent = (sn.counterMark ? `${sn.counterMark} ` : '') + scrubPUAText(sn.text);
     root.appendChild(el);
   }
   return root;
 }
 
-module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent };
+module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent, applyCustomStyleSpec };

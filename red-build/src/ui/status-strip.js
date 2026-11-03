@@ -52,7 +52,15 @@ function buildStatusStrip(doc, opts) {
   pages.className = 'chip chip--pages';
   pages.textContent = '📄 0 עמודים';
 
-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages]) root.appendChild(el);
+  // ---- הודעות חולפות (S11: ייבוא/סירוב פורמט/החלת המלצה — חוק 14 בלי חלונות) ----
+  const notice = doc.createElement('span');
+  notice.className = 'chip chip--notice';
+  notice.setAttribute('role', 'status');
+  notice.setAttribute('aria-live', 'polite');
+  notice.textContent = '';
+  let noticeTimer = null;
+
+  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, notice]) root.appendChild(el);
 
   return {
     root, bolt,
@@ -89,7 +97,14 @@ function buildStatusStrip(doc, opts) {
       const map = { loading: '🔤 גופנים: נטענים…', ready: '🔤 גופנים: מוכנים', error: '🔤 גופנים: שגיאת טעינה' };
       fonts.textContent = map[status] || map.ready;
     },
-    setPages(n) { pages.textContent = `📄 ${n} עמודים`; }
+    setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
+    /** הודעה חולפת (8 שניות) — ייבוא, סירוב פורמט, החלת המלצה. */
+    setNotice(text) {
+      notice.textContent = String(text != null ? text : '');
+      notice.classList.toggle('chip--notice-on', !!text);
+      if (noticeTimer != null) clearTimeout(noticeTimer);
+      if (text) noticeTimer = setTimeout(() => { notice.textContent = ''; notice.classList.remove('chip--notice-on'); noticeTimer = null; }, 8000);
+    }
   };
 }
 

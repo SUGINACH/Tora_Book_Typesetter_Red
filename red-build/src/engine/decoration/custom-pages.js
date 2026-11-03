@@ -59,6 +59,7 @@ function parseCustomPageTypes(json) {
     }
     pages.push({
       id, type: 'custom',
+      name: typeof d.name === 'string' && d.name.trim() ? d.name.trim() : null, // **S11 (§8.3):** כותרת קריאה לאדם (תקציר שיתוף/רשימת UI)
       position: { at: at, part },
       counted: d.counted !== false, // ברירת מחדל: נספר (PT-09)
       background: typeof d.background === 'string' ? d.background : null,
@@ -80,7 +81,11 @@ function planCustomPages(customDefs, docStructure) {
   const out = { start: [], beforePart: new Map(), afterPart: new Map(), end: [] };
   for (const d of customDefs || []) {
     switch (d.position.at) {
-      case 'before-shaar-main': if (docStructure.hasShaarMain) out.start.push(d); break;
+      // **S11 (תיקון שער 5):** לפני השער הראשי — וגם כשאין שער כזה (בלי ערכת נושא):
+      // העמוד המותאם פותח את המסמך, לפני הפתיחה/התוכן. הסרת התניה מגדירה את
+      // ההתנהגות המובטחת בשער: "עמוד לוגו לפני הפתיחה מוצב ונספר" גם במסמכים
+      // צנועים בלי שער־ערכת (העיגון המבני היחיד שקיים תמיד הוא ראש המסמך).
+      case 'before-shaar-main': out.start.push(d); break;
       case 'after-shaar-main': out.start.push(d); break; // אחרי שער ראשי/בראש המסמך אם אין
       case 'before-part': {
         const k = d.position.part;

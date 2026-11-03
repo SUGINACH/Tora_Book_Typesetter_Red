@@ -39,7 +39,9 @@ function serializeTypesetResult(result) {
     tocInsert: result.tocInsert,
     numberingAudit: result.numberingAudit,
     tokens: result.tokens.map(t => ({ id: t.id, type: t.type, level: t.level || null, raw: t.raw || '' })),
-    droppedEvents: result.events.droppedEvents
+    droppedEvents: result.events.droppedEvents,
+    recommendations: result.recommendations || null,   // **S11:** המלצות עריכה עם הוכחות (plain)
+    customStyles: result.customStyles ? { ok: result.customStyles.ok, count: result.customStyles.styles.length, errors: result.customStyles.errors } : null
   };
 }
 

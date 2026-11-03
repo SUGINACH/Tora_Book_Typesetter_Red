@@ -95,7 +95,15 @@ const CHECKS = {
           const key = `${lineToken(ln)}|${(ln.words || []).join(' ')}`;
           if (seenRunt.has(key)) continue;
           seenRunt.add(key);
-          violations.push({ kind: 'runt-line', target: `line@${lineToken(ln)}`, page: page.index, evidence: { widthPx: Math.round(ln.widthPx), minPx: Math.round(minPx) }, ledgerRef: ledger.create('runt-line', lineToken(ln) || 'unknown', page.index, { widthPx: ln.widthPx }, 'protections').issue_id });
+          // **S11:** textHead = **זנב הפסקה המארחת** (מתוך settings._tokenTexts) —
+          // עוגן תוכן יציב לזיהוי הממצא בין הרצות: העברת מילה בין פסקאות משנה
+          // את זנב הנותן/המקבל בלבד; שאר הפסקאות שומרות על זהותן. המפל לכתחילה:
+          // מילות השורה (כשאין מפת טוקנים).
+          const tokAnchors = settings._tokenTexts
+            ? settings._tokenTexts.get(lineToken(ln)) : null;
+          const textHead = (tokAnchors && tokAnchors.tail)
+            || (ln.words || []).join(' ').slice(0, 40);
+          violations.push({ kind: 'runt-line', target: `line@${lineToken(ln)}`, page: page.index, evidence: { widthPx: Math.round(ln.widthPx), minPx: Math.round(minPx), textHead }, ledgerRef: ledger.create('runt-line', lineToken(ln) || 'unknown', page.index, { widthPx: ln.widthPx, textHead }, 'protections').issue_id });
         }
       }
     }

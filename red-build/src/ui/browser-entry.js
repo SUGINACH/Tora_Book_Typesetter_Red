@@ -33,6 +33,21 @@ function pickFile(accept, cb) {
   inp.click();
 }
 
+/** קובץ בינארי (DOCX) — קריאה כ־ArrayBuffer → Uint8Array (S11). */
+function pickBinaryFile(accept, cb) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = accept;
+  inp.addEventListener('change', () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => cb(new Uint8Array(r.result), f.name);
+    r.readAsArrayBuffer(f);
+  });
+  inp.click();
+}
+
 function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
@@ -41,6 +56,9 @@ function boot() {
     transport: workerTransport(worker),
     fontStatus: (typeof document !== 'undefined' && document.fonts) ? 'loading' : 'ready',
     onRequestTxtImport: () => pickFile('.txt,text/plain', (text) => app.onDocumentAction('import-txt', text)),
+    onRequestDocxImport: () => pickBinaryFile('.docx', (bytes, name) => app.importDocxFile(bytes, name)), // **S11**
+    onRequestExtensionsImport: () => pickFile('.json,application/json', (json) => app.extensions.importFromText(json, 'הרחבות.json')), // **S11**
+    onSaveExtensions: (json) => downloadJson('tora-extensions.json', json), // **S11**
     onSaveTemplate: (json) => downloadJson('settings-template.json', json),
     onLoadTemplate: () => pickFile('.json,application/json', (json) => {
       try {

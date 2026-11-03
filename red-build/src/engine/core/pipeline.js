@@ -33,9 +33,15 @@ const { applyHeadingModes } = require('../layout/headings-escort');
 const { markerFor, makeCounter, splitPlaceholder, MARK_TAG } = require('../notes/markers');
 const Ledger = require('./ledger').Ledger;
 const EventLog = require('./events').EventLog;
+const { computeEditingRecommendations } = require('../audit/editing-recommendations');
 
 const PAREN_SENTINEL = '\uE101';
 const ATOMIC = '\uE000';
+// **S11 (REQ-PAR-06):** סנטינל סגנון inline: \uE103<styleId>\uE104<word> — דפוס PAREN_SENTINEL (D-42).
+// המדידה מכפילה בגורם הגודל של הסגנון; הרנדרר מקיף span.custom-style עם data-style.
+const CUSTOM_SENTINEL = '\uE103';
+const CUSTOM_SEP = '\uE104';
+const CUSTOM_RE = /^\uE103([^\uE104]+)\uE104/;
 
 /** זיהוי דיבור המתחיל: עד נקודה/מקף (REQ-PAR-ST-03; dh-auto-detect). */
 function detectDh(text, enabled) {
@@ -101,9 +107,33 @@ function typeset(rawText, settingsIn, env = {}) {
   const notesMode = settings['note-placement-mode'];
   const parenScale = Number(settings['paren-style-scale']) || 1;
 
+  // **S11 (REQ-PAR-06):** סגנונות מותאמים — פענוח + רישום שגיאות אימות (כמו _customPages).
+  // הפקד הזה אינו ברישום ההגדרות (נכס מסמך, לא הגדרת מנוע) — דפוס _customPages של S8.
+  const customStylesRes = settings._customStyles
+    ? require('../extensions/style-schema').parseCustomStyles(settings._customStyles)
+    : { ok: true, styles: [], errors: [] };
+  const customStyles = customStylesRes.styles;
+  const { CustomStyleCounters, matchBlockStyle, matchInlineStyles, inlineSizeFactor } = require('../extensions/apply-styles');
+  const counters = new CustomStyleCounters();
+  for (const err of customStylesRes.errors) {
+    const rec = ledger.create('settings-verification', `custom-styles:${err.code}`, null, { path: err.path, message: err.message }, 'parse');
+    ledger.transition(rec.issue_id, 'persists', 'parse', `custom style rejected: ${err.code}`);
+  }
+  // **S11:** עוגני תוכן לפסקאות — לזיהוי ממצאים בין הרצות (בפרט הוכחות המלצות־עריכה):
+  // tail = 40 התווים האחרונים של שורת המקור; head = 40 הראשונים. העברת מילה בין
+  // פסקאות משנה את הזנב של הנותן/המקבל בלבד — ולכן זהות שאר הפסקאות נשמרת.
+  settings._tokenTexts = new Map();
+
   // ---- CP1: parse ----
   const { metadata, bodyLines } = lexDocument(rawText);
   const tokens = tokenize(bodyLines);
+  for (const t of tokens) {
+    const rawLine = String(t.raw != null ? t.raw : (t.text != null ? t.text : ''));
+    settings._tokenTexts.set(t.id, {
+      head: rawLine.slice(0, 40),
+      tail: rawLine.slice(-40)
+    });
+  }
   const hashIn = contentHash(tokens);
   eventLog.emit('parse', 'cp1-parsed', { tokens: tokens.length, contentHash: hashIn });
   prog('parse', 5, 'פענוח המסמך', { tokens: tokens.length });
@@ -176,6 +206,10 @@ function typeset(rawText, settingsIn, env = {}) {
   const endnoteTokens = [];        // טוקני הערת־סיום גלויים (endnotes mode)
   const endnoteTitleByPart = new Map(); // D-40: הוראות כותרת־מחלקה per-part
   const markersByToken = new Map(); // tokenId → [{noteIndex, marker}] (סמן אחיד — D-30)
+  // **S11:** חשבונאות שימור תוכן לסגנונות שמסיטים פסקה שלמה מהגוף —
+  // הסמן נספר במקור פעם אחת, בדיוק כמו note-ref רגיל (D-30).
+  const customFootnoteMarkers = new Map(); // tokenId → סמן (מוצג בגוף, הטקסט במרזב)
+  const customEndnoteTokens = new Set();   // tokenIds שזרמו לעמודי ההערות (הסמן מודפס שם)
   let currentPart = 0;
   let fwCount = 0;
   const markerStyle = settings['footnote-marker-style'];
@@ -260,7 +294,7 @@ function typeset(rawText, settingsIn, env = {}) {
     }
 
     // ---- paragraph ----
-    const colW = columnWidthFor({ kind: 'paragraph' }, settings);
+    // (colW נקבע לאחר התאמת הסגנון המותאם — full-width נמדד ברוחב מלא; S11)
     let dh = null;
     if (settings['dh-auto-detect']) {
       const flat = t.parts.filter(p => p.kind === 'text').map(p => p.value).join(' ');
@@ -293,6 +327,56 @@ function typeset(rawText, settingsIn, env = {}) {
     const assignedMarkers = new Set();
     const noteAssignments = [];
 
+    // **S11 (REQ-PAR-06): התאמת סגנונות מותאמים — לפני המדידה** (שורש הסיבתיות:
+    // הסגנון נקבע לפני שבירת השורות, לא אחרי — דפוס D-42).
+    const csBlock = customStyles.length ? matchBlockStyle(flatBody, customStyles) : null;
+    const csInlineSpans = [];
+    if (customStyles.length) {
+      for (const im of matchInlineStyles(flatBody, customStyles)) {
+        for (const r of im.ranges) {
+          csInlineSpans.push({ from: r.from, to: r.to, styleId: im.styleId, factor: inlineSizeFactor(im.style.style, settings['body-font-size-pt']) });
+        }
+      }
+    }
+    // endnote-mode: הפסקה כולה זורמת לעמודי ההערות של החלק (סמן הסגנון אם הוגדר מונה)
+    if (csBlock && csBlock.style.layoutMode === 'endnote') {
+      const mark = counters.nextMark(csBlock.style, { part: currentPart || 1, page: null });
+      endnoteTokens.push({ tokenId: t.id, text: flatBody, part: currentPart || 1, customStyle: csBlock.style.id, ...(mark ? { marker: mark } : {}), lines: [] });
+      customEndnoteTokens.add(t.id); // הסמן (מוקצה בבניית עמודי ההערות) נספר במקור
+      continue;
+    }
+    // footnote-mode: הפסקה כולה הופכת הערת שוליים — בגוף נשאר הסמן בלבד (מקום הפסקה = מקום העיגון).
+    // נתיב זה דורש מרזב פעיל; בלי מרזב — הסגנון חוזר להיות חזותי בלבד (BRZ-15: לא מאבדים תוכן).
+    if (csBlock && csBlock.style.layoutMode === 'footnote' && notesMode === 'footnotes' && settings['footnotes-enabled']) {
+      const mark = counters.nextMark(csBlock.style, { part: currentPart || 1, page: null });
+      const fnMark = mark || markerFor(nextMarkerNum({ page: null, part: currentPart || 1 }), markerStyle);
+      const fnNotes = [{ text: flatBody, marker: fnMark, tokenId: t.id, part: currentPart || 1, customStyle: csBlock.style.id }];
+      const fnBodyMarkers = [fnMark];
+      // הסמן בגוף מתויג (D-53) ומודבק לשכן כמו כל סמן — מקור יחיד bindMarkersToNeighbors
+      const fnWords = bindMarkersToNeighbors([fnMark], new Set([fnMark]));
+      const fnWLimit = columnWidthFor({ kind: 'paragraph' }, settings);
+      const fnLines = api.layoutLines(fnWords, fnWLimit, null, { runts: settings['runt-min-width-pct'] });
+      const fnBlk = {
+        kind: 'paragraph', tokenId: t.id, parts: t.parts, notes: fnNotes, bodyMarkers: fnBodyMarkers,
+        lines: fnLines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh: null,
+        // **S11:** הקצאת הסמן נרשמת כמו note-ref — עקביות סמנים גוף/מרזב (P1-3, D-30)
+        noteAssignments: [{ noteIndex: 0, marker: fnMark }],
+        parenCharSpans: [], flatWordOffsets: [],
+        customStyle: { id: csBlock.style.id, name: csBlock.style.name, layoutMode: 'footnote', styleSpec: csBlock.style.style, counterMark: fnMark, linkedOrnaments: csBlock.style.linkedOrnaments }
+      };
+      for (const ln of fnBlk.lines) ln.customStyle = fnBlk.customStyle;
+      customFootnoteMarkers.set(t.id, fnMark); // חשבונאות שימור תוכן: הסמן במקור
+      blocks.push(fnBlk);
+      continue;
+    }
+
+    // full-width-mode: המדידה ברוחב מלא (כמו H1) — לפני הפריסה, לא אחריה
+    const colW = (csBlock && csBlock.style.layoutMode === 'full-width')
+      ? fullWidthWidth(settings)
+      : columnWidthFor({ kind: 'paragraph' }, settings);
+    const customFactorById = new Map(csInlineSpans.map(s => [s.styleId, s.factor]));
+    let csInfo = null; // **S11:** סגנון הבלוק שיוצמד לשורות ולבלוק (מדלג על ערכי איטרציות קודמות)
+
     for (const p of t.parts) {
       if (p.kind === 'text') {
         const src = normalizeText(p.value);
@@ -300,7 +384,15 @@ function typeset(rawText, settingsIn, env = {}) {
           const info = flatWordOffsets[Math.min(flatWordIdx, flatWordOffsets.length - 1)];
           flatWordIdx++;
           const inParen = parenSpans.length > 0 && info && offsetInSpans(info.at, parenSpans);
-          allWords.push(inParen && parenScale !== 1 ? PAREN_SENTINEL + wordRaw : wordRaw);
+          // **S11:** חברות בטווח inline = **חפיפה** (לא הכלה): מילה הפותחת במפריד «
+          // («וזה) חופפת את טווח התוכן שאחריו; מילה שלפני הפתיחה לא. וכך גם בסגירה.
+          const wLen = info ? String(info.word || wordRaw).length : String(wordRaw).length;
+          const inCustom = csInlineSpans.length > 0 && info
+            ? csInlineSpans.find(s => info.at < s.to && (info.at + wLen) > s.from) : null;
+          // עדיפות: טווח inline מותאם על פני סוגריים (שניהם לא יכולים לחפור בפועל — הסגנון תופס ראשון)
+          if (inCustom) allWords.push(CUSTOM_SENTINEL + inCustom.styleId + CUSTOM_SEP + wordRaw);
+          else if (inParen && parenScale !== 1) allWords.push(PAREN_SENTINEL + wordRaw);
+          else allWords.push(wordRaw);
         }
       } else {
         // note-ref: uniform marker allocation (D-30/D-41) — policy numbering + style
@@ -333,9 +425,16 @@ function typeset(rawText, settingsIn, env = {}) {
     // Pasting lone markers to their neighbors (BRZ-11) — before measurement
     const boundWords = bindMarkersToNeighbors(allWords, assignedMarkers);
 
-    // Measurement with a pre-pass of parentheses: PAREN_SENTINEL words in scale (D-42)
+    // Measurement with a pre-pass of parentheses (D-42) + custom inline styles (S11):
+    // PAREN_SENTINEL → parenScale; CUSTOM_SENTINEL<id> → size factor of the style.
     const measureWithParen = (x) => {
       const clean0 = String(x).replace(/\uE102/g, ''); // תג סמן — מוסר ממדידה (D-53)
+      const csM = CUSTOM_RE.exec(clean0);
+      if (csM) {
+        const f = customFactorById.get(csM[1]);
+        const base = api.measureTextWidth(clean0.slice(csM[0].length));
+        return f != null ? base * f : base;
+      }
       const isParen = clean0.startsWith(PAREN_SENTINEL);
       const clean = isParen ? clean0.slice(PAREN_SENTINEL.length) : clean0;
       const base = api.measureTextWidth(clean);
@@ -344,20 +443,54 @@ function typeset(rawText, settingsIn, env = {}) {
     const protectedWords = protectWords(boundWords, measureWithParen, colW);
     const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] }, measureWithParen);
 
-    // Cleaning the sentinel from the lines + tagging parenSpans for rendering (local index)
+    // Cleaning the sentinels from the lines + tagging parenSpans/customSpans for rendering
     for (const ln of lines) {
       const spans = [];
+      const customSpans = [];
       ln.words = (ln.words || []).map((w, wi) => {
+        if (CUSTOM_RE.test(w)) {
+          const m = CUSTOM_RE.exec(w);
+          customSpans.push({ wi, styleId: m[1] });
+          return w.slice(m[0].length);
+        }
         if (w.startsWith(PAREN_SENTINEL)) { spans.push(wi); return w.slice(PAREN_SENTINEL.length); }
         return w;
       });
       if (spans.length && parenScale !== 1) ln.parenSpans = spans;
+      if (customSpans.length) ln.customSpans = customSpans;
+    }
+    // **S11:** הסגנון ברמת הבלוק על הפסקה (לא-footnote): דגלי פריסה + מונה + עיטורים מקושרים
+    if (csBlock && csBlock.style.layoutMode !== 'footnote' && csBlock.style.layoutMode !== 'endnote') {
+      const counterMark = counters.nextMark(csBlock.style, { part: currentPart || 1, page: null });
+      csInfo = {
+        id: csBlock.style.id, name: csBlock.style.name, layoutMode: csBlock.style.layoutMode,
+        styleSpec: csBlock.style.style, counterMark, linkedOrnaments: csBlock.style.linkedOrnaments
+      };
+      const ORN_PAD_PX = 18; // הזמנת גובה לעיטור מקושר — דפוס h2Orn (F-08): גיאומטריה מוזמנת בזמן אמת
+      if (csInfo.linkedOrnaments && csInfo.linkedOrnaments.top && lines.length) {
+        lines[0].heightPx = (lines[0].heightPx || 0) + ORN_PAD_PX;
+        lines[0].csOrnPadTop = ORN_PAD_PX;
+      }
+      if (csInfo.linkedOrnaments && csInfo.linkedOrnaments.bottom && lines.length) {
+        const lastLn = lines[lines.length - 1];
+        lastLn.heightPx = (lastLn.heightPx || 0) + ORN_PAD_PX;
+        lastLn.csOrnPadBottom = ORN_PAD_PX;
+      }
+      for (const ln of lines) ln.customStyle = csInfo;
+      // המונה מוצג בשורה הראשונה של הבלוק (הפס של full-width מטופל ברנדרר מהמידע על הפס)
+      if (csInfo.counterMark && lines.length) lines[0].csCounterMark = csInfo.counterMark;
     }
     const blk = {
       kind: 'paragraph', tokenId: t.id, parts: t.parts, notes, bodyMarkers, lines,
       unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh,
-      noteAssignments, parenCharSpans: parenSpans, flatWordOffsets
+      noteAssignments, parenCharSpans: parenSpans, flatWordOffsets,
+      customStyle: csInfo
     };
+    if (blk.customStyle) {
+      blk.fullWidth = blk.customStyle.layoutMode === 'full-width';
+      blk.forcePageBreakBefore = blk.customStyle.layoutMode === 'new-location';
+      blk.asSideNote = blk.customStyle.layoutMode === 'side-note';
+    }
     const fwRes = applyDropWord(blk, settings, api);
     if (fwRes.applied) fwCount++;
     blocks.push(blk);
@@ -667,6 +800,10 @@ function typeset(rawText, settingsIn, env = {}) {
     const refs = t.parts.filter(p => p.kind === 'note-ref');
     const assigns = markersByToken.get(t.id) || [];
     const out = [...wordSeq(body)];
+    // **S11:** פסקה שהוסבה כולה להערה בסגנון מותאם — הסמן נספר במקור פעם אחת:
+    // footnote ⇒ הוקצה בבלוק; endnote ⇒ מה שהודפס בעמודי ההערות (printedEndnoteMarker)
+    if (customFootnoteMarkers.has(t.id)) out.push(...wordSeq(customFootnoteMarkers.get(t.id)));
+    if (customEndnoteTokens.has(t.id)) out.push(...wordSeq(printedEndnoteMarker.get(t.id) || ''));
     for (let i = 0; i < refs.length; i++) {
       const p = refs[i];
       const marker = assigns[i] ? assigns[i].marker : '';
@@ -884,6 +1021,17 @@ function typeset(rawText, settingsIn, env = {}) {
   eventLog.emit('render', 'cp5-render-ready', { layoutHash: finalHash });
   prog('render', 100, 'מוכן לתצוגה', { totalPages: pages.length, layoutHash: finalHash });
 
+  // **S11 (REQ-GOV-11):** המלצות עריכה — רק עם הוכחת dry-run חיה (D-16).
+  // דוק >200 עמודים ⇒ לא אוטומטי (שומר ביצועים); env.wantRecommendations=true ⇒ כן.
+  let recommendations = null;
+  if (!env || env.noRecommendations !== true) {
+    recommendations = computeEditingRecommendations(
+      rawText, settingsIn || {},
+      { pages, ledger, layoutHash: finalHash },
+      { force: !!(env && env.wantRecommendations === true) }
+    );
+  }
+
   return {
     metadata, tokens, pages, ledger, events: eventLog,
     toc, numbers,
@@ -901,7 +1049,9 @@ function typeset(rawText, settingsIn, env = {}) {
     sideNotes: sideNotePlacement,
     endnotePages: endnotePagesInfo,
     endnotePagesInfo,
-    scope
+    scope,
+    customStyles: customStylesRes,  // **S11:** הסגנונות שהופעלו בפועל (כולל שגיאות אימות)
+    recommendations                 // **S11:** המלצות עריכה עם הוכחות (או null אם כובו)
   };
 }
 

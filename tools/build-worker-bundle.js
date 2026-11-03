@@ -135,6 +135,8 @@ function collectBundle(entryRel, excludeSet) {
     while ((m = re.exec(src)) !== null) {
       const name = m[1];
       if (name === 'crypto') continue; // שימה חיצונית — מסופקת בזמן ריצה
+      if (name === 'zlib') continue;  // **S11:** builtin של Node בלבד — בדפדפן require('zlib')→null
+                                     // ואז zip-reader נופל למנפח הטהור (inflateRawPure) — אותו פלט
       if (!name.startsWith('.')) throw new Error(`bundle: non-relative require '${name}' in ${rel} — אסור בחבילת דפדפן`);
       const resolved = resolveRel(absFile, name);
       if (!resolved) throw new Error(`bundle: cannot resolve ${name} from ${rel}`);
@@ -173,6 +175,7 @@ var __modules = {};
 var __cache = {};
 function __require(from, name) {
   if (name === 'crypto') return __crypto;
+  if (name === 'zlib') return null; // **S11:** אין zlib בדפדפן — null מפעיל את המנפח הטהור (zip-reader)
   var key = __resolve(from, name);
   if (__cache[key]) return __cache[key].exports;
   var mod = { exports: {} };

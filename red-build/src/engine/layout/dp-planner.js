@@ -350,6 +350,41 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
       continue;
     }
 
+    // **S11 (REQ-PAR-06):** דגלי פריסה של סגנונות מותאמים על פסקאות —
+    // הדגלים נקבעו בפרה־פאס (pipeline) לפני המדידה; כאן רק צריכה (דפוס D-09).
+    if (blk.kind === 'paragraph' && blk.customStyle) {
+      const cs = blk.customStyle;
+      if (cs.layoutMode === 'new-location' && blk.forcePageBreakBefore && cur.columns.some(c => c.length)) {
+        flushPage(); cur = newPage(PAGE_TYPES.REGULAR);
+        eventLog.emit('page-plan', 'custom-style-new-location', { style: cs.id, token: blk.tokenId }, cur.index);
+      }
+      if (cs.layoutMode === 'side-note' && blk.asSideNote) {
+        // הפסקה הופכת הערת צד מעוגנת לפסקה הבאה שאחריה (המארחת) — דפוס H7
+        const host = blocks.slice(bi + 1).find(b => b.kind === 'paragraph' && !(b.customStyle && b.customStyle.layoutMode === 'side-note'));
+        cur.sideNotes.push({
+          text: blk.lines.map(l => (l.words || []).join(' ')).join(' ').trim(),
+          anchorToken: host ? host.tokenId : blk.tokenId,
+          ownToken: blk.tokenId, isCustomStyle: cs.id,
+          counterMark: cs.counterMark || null
+        });
+        eventLog.emit('page-plan', 'custom-style-side-note', { style: cs.id, token: blk.tokenId }, cur.index);
+        continue;
+      }
+      if (cs.layoutMode === 'full-width' && blk.fullWidth) {
+        // פס חוצה־טורים (callout) — דפוס FWD-1 של H2; פס אחד בראש העמוד.
+        // אם כבר יש פס/תוכן בעמוד — עמוד חדש (קריאה פותחת מיקום משלה).
+        if (cur.spanning || cur.columns.some(c => c.length)) { flushPage(); cur = newPage(PAGE_TYPES.REGULAR); }
+        const bandH = blk.lines.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+        cur.spanning = {
+          lines: blk.lines.map((ln, i) => ({ ...ln, meta: { tokenId: blk.tokenId, firstOfBlock: i === 0, docPart: blk.part }, seq: seqCounter++ })),
+          heightPx: bandH,
+          customStyle: cs
+        };
+        eventLog.emit('page-plan', 'custom-style-band', { style: cs.id, token: blk.tokenId, heightPx: bandH }, cur.index);
+        continue;
+      }
+    }
+
     // תקציב הערות לפני מיקום (F-17 probe==reserved, כולל מדיניות הערה ארוכה)
     if (blk.kind === 'paragraph') reserveNotes(blk);
 

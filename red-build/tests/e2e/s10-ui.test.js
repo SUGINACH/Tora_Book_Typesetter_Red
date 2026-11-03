@@ -647,9 +647,9 @@ describe('S10.2 שער 7 + REQ-UI-01 — לשוניות, נגישות, רגרס�
     const markers = app.editor.root.querySelectorAll('.marker-item');
     assert(markers.length > 0, 'מפת שבירות מוצגת');
     assert(markers[0].textContent.includes('⏎'), 'סמן שבירה נראה');
-    // DOCX נעול + הודעה
-    assert(app.editor.docxButton.disabled === true, 'DOCX נעול עד S11');
-    assert(app.editor.docxButton.title.includes('S11'), 'הודעת שמירה עברית');
+    // **S11 — הנעילה הוסרה:** מנוע הייבוא נבנה; הכפתור מחובר ל־onImportDocx (סירוב פורמט = הודעה, לא קריסה)
+    assert(app.editor.docxButton.disabled !== true, 'DOCX פתוח (מנוע S11 נבנה)');
+    assert(app.editor.docxButton.title.includes('DOCX'), 'הסבר עברי על הכפתור');
     // ניקוי
     app.onDocumentAction('clear', '');
     assertEq(app.getText(), '');

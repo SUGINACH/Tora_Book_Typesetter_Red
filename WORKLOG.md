@@ -188,3 +188,52 @@ D-64..D-67 — ראו `DECISIONS.md`.
 
 ### ידוע ותועד (לא חוסם S10)
 פאנל בונה ה־SVG (Z2-2) — כניסה מגודרת עם הסבר (המודל החי ב־theme-sets; העורך הויזואלי המלא עם S11). פעולות דפדפן בלבד (פתיחת קבצים/הורדות) נבדקות ארכיטקטונית (bundle separation + offline) — הרצה חיה בדפדפן היא בדיקת עשן ידנית. בדיקת axe-core מלאה — S13 (REQ-UI-08).
+
+---
+
+## S11 — הרחבות: סגנונות מותאמים, DOCX, המלצות עריכה (03.11.2026) — הושלם
+
+### שינויים
+- **`src/engine/extensions/` (חדש):** `style-schema` (חוזה מלא: trigger leaf/combinator AND/OR, layoutMode שישה מצבים, style, counter, linkedOrnaments — אימות עם שגיאות עברית מאובחנות {code,path,styleId,message}; מפריד סימטרי ~…~ חוקי — D-68), `apply-styles` (matchBlockStyle first-match-wins, matchInlineStyles אי־חפיפה, inlineRanges עם טוגל לסימטריים, CustomStyleCounters דרך markerFor, inlineSizeFactor), `extensions-io` (חבילת tora-typesetter-extensions v1 — D-69).
+- **`src/engine/import/` (חדש):** `zip-reader` (STORE+DEFLATE; מנפח טהור ≡ zlib ביט־לביט; crc32; safeName נגד traversal), `xml-lite` ( SAX-ish events עם truncated/too-deep=100), `docx-import` (Heading1–7→כותרת N, הערות וורד→[...] במקום ההפניה, דחיית פורמט עברית — D-70).
+- **`src/engine/audit/` (חדש):** `editing-recommendations` (הוכחת dry-run חיה: הסרה+אפס חדשים+שינוי hash; ≤8 runs/≤3 recs; שומר >200 עמודים; qualifyingFindings לפי kind), `text-edits` (applyEdit — מקור יחיד טהור להוכחה ולהחלה).
+- **`src/engine/output/zip-writer.js` (חדש):** אריזה עצמאית (משמש DOCX-fixture, הרחבות והכנת S12).
+- **מנוע (`pipeline`, `dp-planner`, `dom-renderer`):** התאמת סגנונות **לפני המדידה** (דפוס D-42); סנטינל E101 לטווחי inline (מדידה בפקטור הסגנון); פס full-width חוצה־טורים עם מונה גלוי (cs-counter) + עיטור מקושר שמזמין גובה (csOrnPadTop — דפוס F-08); זרימות footnote/endnote שלמות עם חשבונאות סמנים מלאה (D-30: הסמן נספר במקור פעם אחת); side-note עם isCustomStyle; עמודים מותאמים `before-shaar-main` בראש המסמך גם בלי ערכת נושא + שדה name.
+- **`src/ui/`:** `extensions-panel` (ייבוא/ייצוא/שיתוף + שגיאות עבריות; ⚡ בלבד — F-06), `editor-tab` (כפתור DOCX פעיל), `testing-tab` (סקציית המלצות: כותרת, diff לפני/אחרי, הוכחה גלויה "ממצאים חדשים: 0", כפתור החלה דרך applyEdit), `app-shell` (importDocxFile + applyRecommendation — נתיב מיידי ⚡).
+- **מחוללי UI:** bundles נבנו מחדש (41+41 מודולים; המנוע רק ב־engine-worker).
+- **תיקוני שורש שנמצאו בסגירת השער:** (1) collectFootnoteText — בדיקת עומק שגויה השמיטה את כל הערות הוורד; (2) planCustomPages — before-shaar-main נדחה בשקט בלי ערכת נושא; (3) חשבונאות סמנים לזרימות footnote/endnote מותאמות (הסמן לא נספר במקור ⇒ contentPreserved=false).
+
+### בדיקות
+```
+parser:            17/17
+typography:        14/14
+registry-integration: 8/8
+layout-s5-s6:      17/17
+e2e-pipeline:      14/14
+s7-gate:           15/15
+s8-decoration:     39/39
+s9-headers:        25/25
+s10-ui:            37/37
+s11-extensions:    50/50    (חדש — כל שערי S11.2 + REQ-PAR-06/07 + REQ-GOV-11 + §8.3 + חוק 14)
+canonical:          6/6
+negative-controls: 16/16
+————— סה"כ: 258 בדיקות ירוקות (לשעבר 208)
+test:determinism   OK (75b8c605ca3f3dd7 — זהה ל־S9/S10; המנוע לא הוסט)
+test:scan (F-06)   0 הפרות · 3 נתיבים מפורשים בלבד
+```
+
+### שערי S11 (S11.2) — מצב
+- [x] 3 דוגמאות סגנון מקצה־לקצה: ציטוט «…» (span.w--custom + data-style + נטוי/צבע; הסנטינל לא דולף), הערת צד בקידומת (מחוץ לטורים, מעוגנת, מחלקת side-note--custom), קריאה חוצת טורים (פס + מונה א׳ + עיטור מזמין גובה בפועל padding-top) — כולל מדידה בגודל הסגנון (hash מושפע, לא רק צבע).
+- [x] קומבינטורים AND/OR; מפרידים שרירותיים ~…~ כמו «…»; endnote זורם לעמודי ההערות (הטקסט המלא שם, אפס בגוף); footnote יורד למרזב עם סמן בגוף (שימור תוכן מוכח בשתי הזרימות).
+- [x] עמוד לוגו לפני הפתיחה: מוצב כעמוד הראשון, נספר (יש גיליון), התוכן הקבוע מרונדר.
+- [x] DOCX roundtrip diff=0 מול ציפייה ממוספרת־ביד; הערות וורד → הערות־סוגריים במקום ההפניה ובהמשך למרזב המנוע; zip: STORE+DEFLATE, pure≡zlib; traversal נדחה; xml קטוע/עמוק — error מפורש.
+- [x] פורמט לא נתמך: 4 גרסאות דחייה (PDF/לא-zip/XML-שבור/בלי document.xml) — אין קריסה, אין טעינה, הודעה עברית «פורמט לא נתמך».
+- [x] המלצות: כל המלצה עם proof מלא (אפס חדשים, הסרה, שינוי hash, diff, מפתחות שורות); החלה מחזירה בדיוק את ה־hash המוכח; בלי ממצאים ⇒ computed:true + סיבה; שומר גודל >200 עמודים + force.
+- [x] הרחבות export→import→hash זהה; export דטרמיניסטי (אין תאריך); shareSummary קריא (שמות, מיקום בעברית).
+- [x] UI: פאנל הרחבות (ייבוא/רשימה/הזרקה/⚡/ללא עימוד אוטומטי), ייבוא פגום ⇒ שגיאות עבריות וללא טעינה, DOCX בעורך (טקסט+עימוד מיידי; סירוב לא משנה כלום), המלצות בבדיקה עם הוכחה והחלה, אין PUA בטקסט העורך.
+
+### החלטות שנרשמו
+D-68..D-71 — ראו `DECISIONS.md`.
+
+### ידוע ותועד (לא חוסם S11)
+עורך SVG ויזואלי לערכות (Z2-2) עדיין כניסה מגודרת (המודל החי ב־theme-sets; עריכת JSON דרך ההרחבות זמינה כעת). HarfBuzz/metrics מתמטיים, ייצוא PDF/HTML/ZIP — S12. בדיקת axe-core — S13.
