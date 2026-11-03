@@ -1,7 +1,8 @@
 // tools/layout-parity/run-ours.js — הרצת RED על טקסט המבחן בנתיב החי + ייצור מודל + PDF
 //
-// שימוש: node run-ours.js [קובץ-טקסט] [תיקיית-פלט] [--determinism]
+// שימוש: node run-ours.js [קובץ-טקסט] [תיקיית-פלט] [--determinism] [--html]
 //   --determinism — מריץ את העימוד פעמיים ונכשל אם ה-hash/מספר העמודים שונים
+//   --html        — מייצא גם ours.html (ייצוא HTML עצמאי, אותו רינדור כמו התצוגה)
 //   (ברירת המחדל: audits/no_long_test_text.txt — בעל ייחוס; הקובץ הגדול:
 //   audits/very_long_test_text.txt — בדיקות אינווריאנטים מוחלטים בלבד, ראה verify-corpus.py).
 //
@@ -24,8 +25,45 @@ const { typeset } = require(path.join(RB, 'src/engine/core/pipeline'));
 const { getSettingDefs, getDefaultSettings } = require(path.join(RB, 'src/engine/core/settings-registry'));
 const { importImudSettings } = require(path.join(RB, 'src/engine/core/legacy-settings-map'));
 const { registerFont, unregisterFont } = require(path.join(RB, 'src/engine/typography/measure-api'));
-const { exportPdf } = require(path.join(RB, 'src/engine/output/export-api'));
+const { exportPdf, exportHtml } = require(path.join(RB, 'src/engine/output/export-api'));
 const { GEO } = require(path.join(RB, 'src/engine/layout/legacy-imud-flow'));
+
+// **S4.11 (--html):** מימוש DOM מינימלי ל-serialize של ייצוא ה-HTML ב-Node (אותו
+// חוזה כמו ה-shim של הבדיקות: createElement + outerHTML כפונקציה). העמודים
+// עצמם נבנים ע"י dom-renderer — מקור יחיד עם התצוגה החיה.
+function makeDocShim() {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  class El {
+    constructor(tag) { this.tagName = tag; this.children = []; this.style = {}; this.dataset = {}; this.attrs = {}; this._text = ''; this.className = ''; this.dir = ''; }
+    setAttribute(k, v) { this.attrs[k] = v; }
+    appendChild(c) { this.children.push(c); return c; }
+    insertBefore(n) { this.children.unshift(n); }
+    get firstChild() { return this.children[0]; }
+    get textContent() { return this.children.length ? this.children.map((c) => c.textContent).join('') : this._text; }
+    set textContent(v) { this._text = String(v); this.children = []; }
+    set innerHTML(v) { this._html = v; }
+    get innerHTML() { return this._html || ''; }
+    outerHTML() {
+      const attrs = Object.entries(this.attrs).map(([k, v]) => ` ${k}="${esc(v)}"`).join('')
+        + (this.className ? ` class="${esc(this.className)}"` : '')
+        + (this.dir ? ` dir="${esc(this.dir)}"` : '')
+        // dataset: camelCase ⇒ kebab-case — כמו ה-DOM האמיתי (data-page-index)
+        + Object.entries(this.dataset).map(([k, v]) => ` data-${k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}="${esc(v)}"`).join('');
+      const style = Object.entries(this.style).map(([k, v]) => `${k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}:${v}`).join(';');
+      const inner = this.children.length ? this.children.map((c) => c.outerHTML()).join('') : (this._html || esc(this._text));
+      return `<${this.tagName}${attrs}${style ? ` style="${esc(style)}"` : ''}>${inner}</${this.tagName}>`;
+    }
+  }
+  return {
+    createElement: (t) => new El(t),
+    // **S4.11:** הרנדרר משתמש גם בצומתי טקסט (מילת-החלון + גוף השורה)
+    createTextNode: (t) => ({
+      _text: String(t),
+      get textContent() { return this._text; },
+      outerHTML() { return esc(this._text); }
+    })
+  };
+}
 
 const PX = 0.75; // px→pt
 
@@ -56,8 +94,9 @@ function classifyOurs(pg, contentRowCount) {
 }
 
 function main() {
-  const args = process.argv.slice(2).filter(a => a !== '--determinism');
+  const args = process.argv.slice(2).filter((a) => a !== '--determinism' && a !== '--html');
   const wantDeterminism = process.argv.includes('--determinism');
+  const wantHtml = process.argv.includes('--html');
   const text = fs.readFileSync(args[0] || path.join(AUD, 'no_long_test_text.txt'), 'utf8');
   const outDir = args[1] || path.join(AUD, 'layout-parity-artifacts');
   const srcLabel = path.relative(ROOT, path.resolve(args[0] || path.join(AUD, 'no_long_test_text.txt'))).replace(/\\/g, '/');
@@ -337,6 +376,15 @@ function main() {
   const pdfPath = path.join(outDir, 'ours.pdf');
   fs.writeFileSync(pdfPath, Buffer.from(pdf.bytes));
   console.error(`pdf: ${pdfPath} — ${(pdf.bytes.length / 1024).toFixed(0)} KB`);
+
+  // ---------- **S4.11:** ייצוא HTML עצמאי (אותו רינדור כמו התצוגה החיה) ----------
+  if (wantHtml) {
+    const t2 = Date.now();
+    const html = exportHtml(result, settings, makeDocShim(), { title: 'RED — ייצוא קורפוס' });
+    const htmlPath = path.join(outDir, 'ours.html');
+    fs.writeFileSync(htmlPath, html);
+    console.error(`html: ${htmlPath} — ${(Buffer.byteLength(html) / 1024).toFixed(0)} KB in ${Date.now() - t2}ms`);
+  }
 
   unregisterFont('Guttman Rashi');
 }

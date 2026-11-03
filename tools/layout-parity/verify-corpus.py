@@ -31,12 +31,15 @@ verify-corpus.py — אימות אינווריאנטים מוחלטים של ה�
       (כמקור); כל הערה בפלט היא הערת [..] אמיתית מהמקור; כל הערת מקור
       מופיעה בפלט לפחות פעם אחת.
   C11 תקינות PDF — נפתח, מספר עמודים תואם למודל, כל הגופנים מוטמעים.
+  C12 ייצוא HTML — מספר העמודים בקובץ תואם למודל; לכל עמוד תוכן יש
+      כותרת עליונה (.running-head); כיוון rtl; אין מחרוזות של NaN/undefined.
+      (נבדק רק כשניתם נתיב ל-ours.html — ראה run-ours.js --html.)
 
 הדטרמיניזם נבדק בנפרד על ידי run-ours.js --determinism (הרצה כפולה
 בתוך אותו תהליך — hash ועמודים זהים).
 
 שימוש:
-  python3 verify-corpus.py <source.txt> <model.json> <ours.pdf> [report.json] [--justify-floor 0.6]
+  python3 verify-corpus.py <source.txt> <model.json> <ours.pdf> [report.json] [ours.html] [--justify-floor 0.6]
 
 קודי יציאה: 0 = הכל עובר | 1 = כשל אינווריאנט.
 """
@@ -140,6 +143,7 @@ def main():
     model_path = args[1] if len(args) > 1 else os.path.join(ROOT, "audits/very-long-artifacts/ours-model.json")
     pdf_path = args[2] if len(args) > 2 else os.path.join(ROOT, "audits/very-long-artifacts/ours.pdf")
     out_path = args[3] if len(args) > 3 else os.path.join(os.path.dirname(model_path), "corpus-report.json")
+    html_path = args[4] if len(args) > 4 else None  # **S4.11 (C12):** אופציונלי — ייצוא HTML
 
     src_text = open(src_path, encoding="utf-8").read()
     model = json.load(open(model_path, encoding="utf-8"))
@@ -437,6 +441,32 @@ def main():
     C.add("C10", "הערות שוליים — בלי כפילויות בעמוד, סמנים עוקבים, מקוריות ושלמות",
           not fn_bad, pagesWithNotes=pages_with_notes, srcNotes=len(src_note_set),
           count=len(fn_bad), sample=fn_bad[:5])
+
+    # ============ C12: ייצוא HTML (S4.11 — "כל הבדיקות על הקובץ הגדול") ============
+    # הייצוא החי בנתיב היישום: אותו dom-renderer כמו התצוגה. כאן נבדק
+    # הקובץ שהופק על ידי run-ours.js --html על אותו קורפוס בדיוק.
+    if html_path and os.path.exists(html_path):
+        html = open(html_path, encoding="utf-8").read()
+        html_bad = []
+        n_pages_html = html.count('data-page-index=')
+        if n_pages_html != len(pages):
+            html_bad.append({"why": "מספר עמודים ב-HTML שונה מהמודל",
+                             "html": n_pages_html, "model": len(pages)})
+        # לכל עמוד תוכן (body/chapter-open מהמודל) יש running-head בייצוא
+        body_idx = {i for i, p in enumerate(pages) if p["type"] in ("body", "chapter-open")}
+        n_rh = html.count('class="running-head"')
+        if n_rh < len(body_idx):
+            html_bad.append({"why": "כותרות עליונות חסרות בייצוא ה-HTML",
+                             "got": n_rh, "need": len(body_idx)})
+        if 'dir="rtl"' not in html:
+            html_bad.append({"why": "כיוון rtl חסר בייצוא"})
+        for tok in (">undefined<", ">NaN<", "undefined</", "NaN</"):
+            if tok in html:
+                html_bad.append({"why": f"מחרוזת פסולת בייצוא: {tok}"})
+        C.add("C12", "ייצוא HTML — עמודים/כותרות/rtl/נקיון (אותו רינדור כמו התצוגה)",
+              not html_bad, htmlKB=round(os.path.getsize(html_path) / 1024),
+              pagesHtml=n_pages_html, runningHeads=n_rh,
+              count=len(html_bad), sample=html_bad[:5])
 
     # ============ סיכום ============
     total = len(C.rows)

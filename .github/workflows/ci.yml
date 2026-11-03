@@ -37,6 +37,12 @@ jobs:
   # (header שלא הועבר, CSS חסוב, גופן שלא נטען). ה-job הזה מריץ את האפליקציה
   # בדפדפן headless אמיתי, טוען את ספר המבחן, ומודד גיאומטריה בפועל:
   # חפיפות שורות, גלישות מטור, כותרות עליונות, שערים, יישור וגופנים.
+  #
+  # **S4.11 (בקשת המשתמש: "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"):**
+  # ריצה כפולה — (1) ה-fixture הקטן כעשן-רגרסיה מהיר; (2) הקורפוס הגדול מאוד
+  # (audits/very_long_test_text.txt — 3.4MB, 849 עמודים בדפדפן) כבדיקה הקובעת.
+  # האודיט מודע-וירטואליזציה: התצוגה מרנדרת חלון חי בלבד מעל 60 עמודים, והאודיט
+  # סורק את הספר בגלילה ומבקר כל עמוד כשהוא חי — עם בדיקת כיסוי מלא (COVERAGE).
   layout-audit:
     runs-on: ubuntu-latest
     steps:
@@ -48,13 +54,21 @@ jobs:
         run: |
           npm install -g agent-browser
           agent-browser install --with-deps
-      - name: Run real-browser layout audit (fail on any layout problem)
+      - name: Layout audit — smoke (small fixture, fail fast)
         run: bash tools/layout-audit/run.sh
-      - name: Upload layout report on failure
+      - name: Layout audit — the very large corpus (849 pages, virtualization sweep)
+        run: |
+          LAYOUT_AUDIT_FIXTURE="$PWD/audits/very_long_test_text.txt" \
+          LAYOUT_AUDIT_OUT=/tmp/layout-audit-report-very-long.json \
+          LAYOUT_AUDIT_READY_TIMEOUT_MS=480000 \
+            bash tools/layout-audit/run.sh
+      - name: Upload layout reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: layout-audit-report
-          path: /tmp/layout-audit-report.json
+          path: |
+            /tmp/layout-audit-report.json
+            /tmp/layout-audit-report-very-long.json
           if-no-files-found: ignore
 

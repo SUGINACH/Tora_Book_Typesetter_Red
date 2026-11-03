@@ -10157,7 +10157,9 @@ function renderLegacyPage(pg, settings, doc) {
     colEl.style.overflow = 'visible';
     for (const ln of colLines) {
       const el = doc.createElement('div');
-      el.className = 'line' + (ln.isLast ? ' line--last' : '');
+      // **S4.11:** line--heading מסמן שורות כותרת מרובעות (ממורכזות מטבען)
+      // — האודיט החי מדלג עליהן בבדיקת היישור בלי סובלנות על סמך יחס.
+      el.className = 'line' + (ln.isLast ? ' line--last' : '') + (ln.kind === 'heading' ? ' line--heading' : '');
       el.setAttribute('dir', 'rtl');
       el.style.position = 'absolute';
       el.style.right = '0';

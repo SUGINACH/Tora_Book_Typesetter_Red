@@ -135,19 +135,23 @@ python3 tools/layout-parity/compare.py             # הדוח המתמטי המ�
 | C9 | שימור כותרות — כל כותרת h0..h6 מהמקור מופיעה בפלט |
 | C10 | הערות שוליים — אפס כפילויות בתוך עמוד; סמנים עוקבים מ-א' בכל עמוד (הוכח מהייחוס: כל אזורי ההערות של המקור פותחים ב-א'); כל הערה היא הערת [..] אמיתית וכל הערת מקור מופיעה |
 | C11 | PDF תקין — מספר עמודים תואם למודל, כל הגופנים מוטמעים |
+| C12 | ייצוא HTML (S4.11) — מספר עמודים תואם למודל; כותרת עליונה לכל עמוד תוכן; rtl; אין NaN/undefined — אותו dom-renderer כמו התצוגה החיה |
 
 הדטרמיניזם נבדק בנפרד: `run-ours.js --determinism` מריץ את העימוד פעמיים
 ונכשל אם ה-hash או מספר העמודים שונים.
 
 ```bash
-node tools/layout-parity/run-ours.js audits/very_long_test_text.txt audits/very-long-artifacts --determinism
+node tools/layout-parity/run-ours.js audits/very_long_test_text.txt audits/very-long-artifacts --determinism --html
 python3 tools/layout-parity/verify-corpus.py audits/very_long_test_text.txt \
-  audits/very-long-artifacts/ours-model.json audits/very-long-artifacts/ours.pdf
+  audits/very-long-artifacts/ours-model.json audits/very-long-artifacts/ours.pdf \
+  audits/very-long-artifacts/corpus-report.json audits/very-long-artifacts/ours.html
 ```
 
-**מצב נוכחי (04.11):** very_long — **11/11 (100%)**; no_long — 11/11 (100%);
-קבלה מול הייחוס (no_long בלבד) — 72.2% (HARD 4/4, PARITY 9/14; השאר
-כיול צפיפות עדין — P1/P3b/P4/P6/P7).
+**מצב נוכחי (04.11, S4.11):** very_long — **12/12 (100%)** כולל ייצוא HTML
+(16.3MB על 735 עמודים); no_long — 12/12 (100%); קבלה מול הייחוס (no_long
+בלבד) — 72.2% (HARD 4/4, PARITY 9/14; השאר כיול צפיפות עדין — P1/P3b/P4/P6/P7);
+אודיט דפדפן אמיתי על very_long — 849/849 עמודים, 53,574 שורות, **אפס בעיות**
+(סריקת-גלילה מודעת-וירטואליזציה — ראה tools/layout-audit/).
 
 ### מה הקורפוס הגדול חשף (ותוקן — S4.10)
 1. **כפילות הערות בתוך עמוד** — שלושה מסלולי דחיפה לתור ההערות, שניים מהם בלי
