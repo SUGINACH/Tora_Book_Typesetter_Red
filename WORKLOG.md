@@ -320,3 +320,13 @@ test:scan (F-06) 0 הפרות
 
 ### החלטות שנרשמו
 D-76.
+
+
+---
+
+## פריסה — GitHub Pages (03.11.2026)
+
+- **ענף `gh-pages`** (orphan): ‏index.html + styles.css + app.bundle.js (429,768B) + engine-worker.bundle.js (384,945B) + ‏.nojekyll — חבילת ה־UI בלבד, נתיבים יחסיים (תואמים לנתיב־המשנה של Pages), ה־Worker נטען יחסית (`new Worker('engine-worker.bundle.js')`), אפס הפניות חיצוניות (K-9; ההפניה היחידה בקוד היא מרחב־השם של SVG — לא בקשת רשת).
+- **Pages הופעל** (מקור: gh-pages/‎/) והאתר חי: ‏<https://suginach.github.io/Tora_Book_Typesetter_Red/> — נבדק בפועל: ‏index 200, שתי החבילות 200 בגדלים זהים־בתים למקומיים, ‏styles 200, ‏.nojekyll 200.
+- **ה־main לא הוכפל** (אין docs/ בענף הראשי) — עדכון עתידי = בנייה מחדש ודחיפת gh-pages. ה־CI (main/UNIFIED) אינו מופעל לדחיפות gh-pages.
+- **ידוע ותועד:** בדפדפן ייצוא PDF/ZIP דורש Node (Buffer) — הודעה עברית מפורשת ביישום (D-75); נתיב HTML עצמאי והרינדור החי עובדים בדפדפן במלואם.
