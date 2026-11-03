@@ -63,6 +63,12 @@ function toGematria(num) {
   if (isNaN(num) || num <= 0) return '';
   if (num === 15) return 'טו';
   if (num === 16) return 'טז';
+  // **מגן ספרים גדולים:** מעל 999 — חלק האלפים בגימטריה + גרשיים (לא נצפה
+  // בייחוס; מונע undefined ושומר דטרמיניזם — הקורפוס הגדול מגיע ל־~730).
+  if (num >= 1000) {
+    const th = Math.floor(num / 1000);
+    return toGematria(th) + "'" + toGematria(num % 1000);
+  }
   const hundreds = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
   const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
   const ones = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
@@ -178,9 +184,31 @@ function tokenizeDoc(rawText, cfg) {
   let text = stripEditorialNotes(rawText);
   const { meta, text: noMeta } = parseMetadata(text);
   text = noMeta;
+  const isHeadingLine = (s) => /^כותרת\s*\d/.test(s.trim());
   if (cfg.fnOpen) {
+    // **תיקון הדבקת שורת-הערה (נמצא בקורפוס הגדול, 04.11):** בעבר ההדבקה
+    // '\s+[' חצתה שורות גם לתוך כותרות — הערה שבאה אחרי 'כותרת 7' נבלעה
+    // לתוך הערת-הצד, והערת-צד נוספת שאחריה דרסה אותה סופית (3 הערות אבדו,
+    // 1,353 מילים בשימור התוכן). כעת: שורת-הערה נדבקת לפסקה הקודמת **בלבד**
+    // (במקור ההדבקה פעלה בתוך בלוק טקסט אחד; כותרת פותחת בלוק חדש);
+    // אחרי כותרת היא נשארת פסקה עצמאית — שורת סמן + הערה בתחתית — והתוכן
+    // נשמר במלואו. הדבקה בתוך-שורה ('מילה [הערה]') נשמרת כפי שהייתה.
     const esc = cfg.fnOpen.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-    text = text.replace(new RegExp('\\s+(' + esc + ')', 'g'), '$1');
+    const src = text.split('\n');
+    const out = [];
+    for (let i = 0; i < src.length; i++) {
+      const ln = src[i];
+      if (out.length && ln.trim().startsWith(cfg.fnOpen)) {
+        let j = out.length - 1;
+        while (j >= 0 && !out[j].trim()) j--;
+        if (j >= 0 && !isHeadingLine(out[j])) {
+          out[j] = out[j].replace(/\s+$/, '') + ln.trim();
+          continue;
+        }
+      }
+      out.push(ln);
+    }
+    text = out.join('\n').replace(new RegExp('[ \\t]+(' + esc + ')', 'g'), '$1');
   }
   const lines = text.split('\n');
   const tokens = [];
@@ -206,7 +234,10 @@ function tokenizeDoc(rawText, cfg) {
       const txt = (hMatch[3] || '').trim();
       const num = hMatch[2] ? parseInt(hMatch[2], 10) : null;
       if (lvl === 7 && HEADING_MODES[7] === 'side_note') {
-        pendingSideNote = txt;
+        // **תיקון הצטברות הערות-צד (נמצא בקורפוס הגדול):** שתי כותרות 7 בלי
+        // פסקה ביניהן (למשל h7 ← h3 ← h7 ← פסקה) — בעבר השנייה דרסה את הראשונה
+        // ותוכנה אבד. כעת הן מצטברות; ב-no_long אין אף מקרה כזה (0 סיכון פריטי).
+        pendingSideNote = pendingSideNote ? pendingSideNote + ' — ' + txt : txt;
       } else {
         tokens.push({ id: tokens.length, type: 'h' + lvl, level: lvl, text: txt, num });
       }
@@ -500,8 +531,20 @@ function legacyTypeset(rawText, settings) {
       sectionFirst = false;
 
       const fnQueue = [];
-      let noteCounter = 0; // איפוס מונה הערות לפי עמוד (כמו המקור)
       let fnReserved = 0;
+      // **תיקון כפילות הערות בעמוד (נמצא בקורפוס הגדול):** בעבר היו שלושה מסלולי
+      // דחיפה לתור — תקציב-מוקדם, המשך-פסקה ומיקום-שורה — ושניים מהם לא בדקו
+      // דה-דופ, ולכן הערה של פסקה שנפתחה ומוקמה באותו עמוד הופיעה פעמיים
+      // (very_long: 70 עמודים עם הערות כפולות). כעת כל הכניסה לתור דרך
+      // enqueueNote — הערה קיימת לא נוספת שנית, והסמן נגזר ממקומה בתור:
+      // מספור עמודי עוקב מ־א ואילך, זהה בין סמן הגוף לראש ההערה בתחתית
+      // (הוכח מהייחוס: כל אזורי ההערות של המקור פותחים ב־א', והערה של
+      // פסקה חוצת-עמודים חוזרת בעמוד ההמשך עם סמן א' מחדש).
+      const enqueueNote = (text, dup) => {
+        let idx = fnQueue.findIndex(q => q.text === text);
+        if (idx < 0) { fnQueue.push({ text, dup }); idx = fnQueue.length - 1; }
+        return LineBreaker.markerWord(idx + 1);
+      };
       // **S4.9 (התנהגות המקור הנצפית):** הערות של פסקה מופיעות ומוזרמות לתקציב
       // בכל עמוד שבו לפסקה שורות — גם בהמשכים (הייחוס מציג את הערה-א בעמודים
       // 11 וגם 12, והתקציב מצטמצם כבר בעמוד הראשון של הפסקה).
@@ -511,7 +554,7 @@ function legacyTypeset(rawText, settings) {
         const notes = paraNotes.get(tokenId);
         if (!notes) return;
         for (const n of notes) {
-          fnQueue.push({ marker: n.marker, text: n.text, dup: true });
+          enqueueNote(n.text, true);
         }
         fnReserved = fnReserveFor(fnQueue);
       };
@@ -581,21 +624,21 @@ function legacyTypeset(rawText, settings) {
           const allNotes = [];
           for (const lw of lines) {
             for (const w of lw.words) {
-              const a0 = w.indexOf(cfg.fnOpen);
-              const a1 = a0 >= 0 ? w.lastIndexOf(cfg.fnClose) : -1;
-              if (a0 >= 0 && a1 > a0 + cfg.fnOpen.length) {
-                allNotes.push(w.slice(a0 + cfg.fnOpen.length, a1));
+              // **תיקון מרובה-הערות במילה:** הדבקת '\s+[' בטוקניזר עשויה ליצור
+              // מילה כמו 'אותו[n1][n2]'. בעבר נלקח מ-[ הראשון עד-] האחרון
+              // והערות סמוכות התמזגו לאחת ענקית (נמצא בקורפוס הגדול:
+              // הערה של 1,288 מילים במקום שתיים). findNotes מפריד את כולן.
+              for (const n of findNotes(w, cfg.fnOpen, cfg.fnClose)) {
+                if (n.text) allNotes.push(n.text);
               }
             }
           }
           if (allNotes.length) {
             if (!paraNotes.has(tok.id)) {
-              paraNotes.set(tok.id, allNotes.map((t, i) => ({ marker: LineBreaker.markerWord(i + 1), text: t })));
+              paraNotes.set(tok.id, allNotes.map(t => ({ text: t })));
             }
             for (const n of paraNotes.get(tok.id)) {
-              if (!fnQueue.some(q => q.text === n.text)) {
-                fnQueue.push({ marker: n.marker, text: n.text, dup: true });
-              }
+              enqueueNote(n.text, true);
             }
             fnReserved = fnReserveFor(fnQueue);
           }
@@ -633,23 +676,28 @@ function legacyTypeset(rawText, settings) {
           const words = [];
           const markerIdx = []; // אינדקסים של סמני הערות (להסרה מדויקת במודל)
           for (const w of ln.words) {
-            const at0 = w.indexOf(cfg.fnOpen);
-            const at1 = at0 >= 0 ? w.lastIndexOf(cfg.fnClose) : -1;
-            if (at0 >= 0 && at1 > at0 + cfg.fnOpen.length) {
-              const prefix = w.slice(0, at0);
-              const inner = w.slice(at0 + cfg.fnOpen.length, at1);
-              const suffix = w.slice(at1 + cfg.fnClose.length);
-              if (prefix) words.push(prefix);
-              noteCounter += 1;
-              const marker = LineBreaker.markerWord(noteCounter);
-              fnQueue.push({ marker, text: inner });
-              if (!paraNotes.has(tok.id)) paraNotes.set(tok.id, []);
-              if (!paraNotes.get(tok.id).some(n => n.text === inner)) {
-                paraNotes.get(tok.id).push({ marker, text: inner });
+            // **תיקון מרובה-הערות במילה (כמו בתקציב המוקדם):** findNotes
+            // מפצל מילה מודבקת לכל ההערות שבה — כל אחת עם סמן משלה, והטקסט
+            // שלפניה/ביניהן/אחריה נשאר בגוף (כמו findDelimiterMatches במקור).
+            const wNotes = findNotes(w, cfg.fnOpen, cfg.fnClose);
+            if (wNotes.length) {
+              let pos = 0;
+              for (const n of wNotes) {
+                const prefix = w.slice(pos, n.start);
+                if (prefix) words.push(prefix);
+                if (n.text) {
+                  const marker = enqueueNote(n.text);
+                  if (!paraNotes.has(tok.id)) paraNotes.set(tok.id, []);
+                  if (!paraNotes.get(tok.id).some(x => x.text === n.text)) {
+                    paraNotes.get(tok.id).push({ text: n.text });
+                  }
+                  fnReserved = fnReserveFor(fnQueue);
+                  markerIdx.push(words.length);
+                  words.push(marker);
+                }
+                pos = n.end;
               }
-              fnReserved = fnReserveFor(fnQueue);
-              markerIdx.push(words.length);
-              words.push(marker);
+              const suffix = w.slice(pos);
               if (suffix) words.push(suffix);
             } else {
               words.push(w);
@@ -692,10 +740,11 @@ function legacyTypeset(rawText, settings) {
         pg.fnSep = true;
         // **S4.9:** השורה הראשונה של כל הערה קצרה ברוחב הסמן — אחרת המילים
         // גולשות מעבר לשפה השמאלית של הדף.
-        const items = fnQueue.map(n => {
-          const mkW = api.measureTextWidth(n.marker, SZ.fnBody, 0) + api.measureTextWidth(' ', SZ.fnBody, 0);
+        const items = fnQueue.map((n, i) => {
+          const marker = LineBreaker.markerWord(i + 1); // מספור עמודי מ־א ואילך (כמקור)
+          const mkW = api.measureTextWidth(marker, SZ.fnBody, 0) + api.measureTextWidth(' ', SZ.fnBody, 0);
           const lines = wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody);
-          return { marker: n.marker, lines, mkW };
+          return { marker, lines, mkW };
         });
         const totalH = items.reduce((a, n) => a + n.lines.length * GEO.FN_PITCH, 0);
         let yy = FLOW_BOTTOM - totalH;

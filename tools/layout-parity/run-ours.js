@@ -1,4 +1,9 @@
-// tools/layout-parity/run-ours.js — הרצת RED על טקסט המבחן בנתיב החי + ייצוא PDF
+// tools/layout-parity/run-ours.js — הרצת RED על טקסט המבחן בנתיב החי + ייצור מודל + PDF
+//
+// שימוש: node run-ours.js [קובץ-טקסט] [תיקיית-פלט] [--determinism]
+//   --determinism — מריץ את העימוד פעמיים ונכשל אם ה-hash/מספר העמודים שונים
+//   (ברירת המחדל: audits/no_long_test_text.txt — בעל ייחוס; הקובץ הגדול:
+//   audits/very_long_test_text.txt — בדיקות אינווריאנטים מוחלטים בלבד, ראה verify-corpus.py).
 //
 // **S4.9:** הנתיב החי כעת מפעיל את פורט מנוע המקור (legacy-imud-flow) כאשר
 // ההגדרות מגיעות מ-default_settings.json המקורי — בדיוק כמו עליית האפליקציה
@@ -51,8 +56,11 @@ function classifyOurs(pg, contentRowCount) {
 }
 
 function main() {
-  const text = fs.readFileSync(process.argv[2] || path.join(AUD, 'no_long_test_text.txt'), 'utf8');
-  const outDir = process.argv[3] || path.join(AUD, 'layout-parity-artifacts');
+  const args = process.argv.slice(2).filter(a => a !== '--determinism');
+  const wantDeterminism = process.argv.includes('--determinism');
+  const text = fs.readFileSync(args[0] || path.join(AUD, 'no_long_test_text.txt'), 'utf8');
+  const outDir = args[1] || path.join(AUD, 'layout-parity-artifacts');
+  const srcLabel = path.relative(ROOT, path.resolve(args[0] || path.join(AUD, 'no_long_test_text.txt'))).replace(/\\/g, '/');
   fs.mkdirSync(outDir, { recursive: true });
 
   const fontPath = path.join(RB, 'ui/assets/imud/fonts/Guttman-Rashi-Normal.ttf');
@@ -70,6 +78,15 @@ function main() {
   const t0 = Date.now();
   const result = typeset(text, settings, { noRecommendations: true });
   console.error(`typeset: ${result.pages.length} pages in ${Date.now() - t0}ms (hash ${String(result.layoutHash).slice(0, 12)}) [profile: ${result.legacyProfile ? 'imud-legacy' : 'dp'}]`);
+
+  // ---------- דטרמיניזם: הרצה שנייה חייבת לתת hash ועמודים זהים ----------
+  if (wantDeterminism) {
+    const t1 = Date.now();
+    const again = typeset(text, settings, { noRecommendations: true });
+    const ok = again.layoutHash === result.layoutHash && again.pages.length === result.pages.length;
+    console.error(`determinism: run2 ${again.pages.length} pages in ${Date.now() - t1}ms (hash ${String(again.layoutHash).slice(0, 12)}) — ${ok ? 'OK (identical)' : 'MISMATCH'}`);
+    if (!ok) { console.error('determinism FAILED — hash or page count differs between runs'); process.exit(3); }
+  }
 
   // ---------- דגם מבני (סכמת הייחוס) ----------
   const pages = [];
@@ -172,19 +189,24 @@ function main() {
     // מפריד הערות — הוסר (הגופן המוטמע חסר גליפי כוכבים; ראה legacy-projector)
 
     // הערות שוליים (תחתית) — col=null; טקסט ללא סמן לצרכי H1
+    const fnStruct = [];
     for (const fn of (pg.footnotes || [])) {
       let first = true;
+      const joined = [];
       for (const l of fn.lines) {
         const ws = Array.isArray(l.words) ? l.words : String(l.words).split(' ');
         const fullText = (first ? fn.marker + ' ' : '') + ws.join(' ');
+        joined.push(ws.join(' '));
         lines.push({
           col: null, text: fullText, font: 'GuttmanRashiNormal', size: 8.5,
           x0: GEO.COL_L_X * PX, x1: (GEO.COL_L_X + 2 * GEO.COL_W + 13.48) * PX,
           y0: l.y * PX, y1: (l.y + GEO.FN_PITCH) * PX, kind: 'footnote',
-          textNoMarkers: ws.join(' '), justified: false
+          textNoMarkers: ws.join(' '), justified: false, fnMarker: first ? fn.marker : null
         });
         first = false;
       }
+      // מבנה לאימות מתמטי (verify-corpus.py): סמן + טקסט מלא מאוחד
+      fnStruct.push({ marker: fn.marker, text: joined.join(' ') });
     }
 
     // שורות תוכן-עניינים — כמו בייחוס: שורת כותרת (חד-פעולתית — החילוץ מחזיר
@@ -240,7 +262,8 @@ function main() {
       index: pg.index, type,
       folio: pg.folioDisplay ? { text: pg.folioDisplay, numbered: true } : { text: null, numbered: false },
       header, tocEntries, columns: [], lines,
-      paragraphs: []
+      paragraphs: [],
+      footnotes: fnStruct.length ? fnStruct : undefined
     });
   }
 
@@ -289,7 +312,7 @@ function main() {
   const model = {
     meta: {
       source: 'ours-red', generator: 'tools/layout-parity/run-ours.js',
-      text: 'audits/no_long_test_text.txt', pages: pages.length,
+      text: srcLabel, pages: pages.length,
       engine: 'red-build legacy-imud-flow (live path: IMUD defaults + Guttman Rashi + font-metrics)',
       layoutHash: result.layoutHash
     },

@@ -23,6 +23,16 @@ const { getDefaultSettings } = require('../../src/engine/core/settings-registry'
 const REAL_DIR = path.join(__dirname, '..', 'fixtures', 'real');
 const REAL_FILES = ['no_long_test_text.txt', 'mid_long_test_text.txt', 'long_test_text.txt'];
 
+// **04.11 (בקשת משתמש: "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"):**
+// הקורפוס הגדול מאוד — 3.4MB, 2,571 כותרות, 10 חלקים, 363K מילים. נצרך ישירות
+// מ-audits/ (בלי לשכפל 3.4MB לתוך fixtures). זה הקורפוס שחשף את שלושת באגי
+// ההערות שתוקנו ב-legacy-imud-flow (כפילות בעמוד, מיזוג הערות סמוכות,
+// בליעת הערה לתוך הערת-צד + דריסה) — ראה audits/very-long-artifacts/corpus-report.json
+// ואת הוורקפלו layout-parity.yml (job: very-long-corpus) לאימות האינווריאנטים
+// המוחלטים המלא (C1..C11) מול אותו קובץ בדיוק.
+const VERY_LONG = path.join(__dirname, '..', '..', '..', 'audits', 'very_long_test_text.txt');
+const veryLongAvailable = fs.existsSync(VERY_LONG);
+
 describe('D-83 — ספרי־אמת ארוכים: עימוד מלא ללא קריסת מחסנית', () => {
 
   for (const file of REAL_FILES) {
@@ -65,6 +75,24 @@ describe('D-83 — ספרי־אמת ארוכים: עימוד מלא ללא קר�
     const result = typeset(doc, getDefaultSettings());
     assert(result.pages.length >= 350, `ספר 130K מילים ⇒ מאות עמודים (קיבלנו ${result.pages.length})`);
     assert(result.contentPreserved === true, 'שימור תוכן גם מעל סף V8');
+  });
+
+  // **04.11 — הקובץ ה"גדול מאוד" בנתיב ה-DP (הנתיב החי של העימוד הכללי):**
+  // מנוע המורשת (legacy-imud-flow) נבדק על אותו קובץ בוורקפלו layout-parity
+  // (run-ours.js --determinism + verify-corpus.py — 11/11 אינווריאנטים מוחלטים).
+  // כאן נבדק אותו בנתיב ה-DP: סקאלה מלאה, שימור, דטרמיניזם כפול.
+  (veryLongAvailable ? it : it.skip)('very_long_test_text.txt: ספר שלם (363K מילים) בנתיב DP — סקאלה, שימור, דטרמיניזם', () => {
+    const raw = fs.readFileSync(VERY_LONG, 'utf8');
+    const t0 = Date.now();
+    const result = typeset(raw, getDefaultSettings(), { noRecommendations: true });
+    const dt = Date.now() - t0;
+    assert(result.pages.length >= 900, `ספר 363K מילים ⇒ מעל 900 עמודים (קיבלנו ${result.pages.length})`);
+    assert(result.contentPreserved === true, 'שימור תוכן בסקאלה מלאה');
+    assert(dt < 120000, `זמן עימוד סביר (<2 דק׳; קיבלנו ${dt}ms)`);
+    const again = typeset(raw, getDefaultSettings(), { noRecommendations: true });
+    assert(result.layoutHash === again.layoutHash, 'hash זהה בין ריצות גם בספר הגדול');
+    assertEq(result.pages.length, again.pages.length, 'מספר עמודים יציב');
+    console.log(`  [real] very_long: words=${raw.split(/\s+/).filter(Boolean).length} pages=${result.pages.length} hash=${result.layoutHash.slice(0, 12)} ${dt}ms`);
   });
 
 });
