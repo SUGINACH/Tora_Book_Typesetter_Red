@@ -1,0 +1,73 @@
+name: layout-parity
+
+# בדיקת עימוד מתמטית־מוחלטת מול הייחוס של הגרסה הישנה (03.11 — בקשת המשתמש).
+#
+# הגרסה הישנה (הצהובה) הפיקה את קובצי ה-PDF ב-audits (כולל גרסאות עם סימון
+# גיאומטרי בלתי־נראה: תגיות p-end/p-cut + מידות בלוקים). extract-reference.py
+# הופך אותם לייצוג מתמטי מחויב (audits/layout-reference.json) — והרצה הזו
+# משווה את הפלט החי של RED (נתיב האפליקציה, גופן Guttman Rashi אמיתי,
+# מדידת font-metrics, ייצוא PDF) מול אותו ייחוס:
+#
+#   HARD   — אינווריאנטים מוחלטים: שימור תוכן, אפס חפיפות, גבולות עמוד, יישור.
+#   PARITY — זהות למקור: מספר/סוגי עמודים, עמודונים (גימטריה יחידה), כותרות
+#            עליונות, תוכן-עניינים כפול, רצף פסקאות (שורות+מילים), שקילות
+#            שבירת שורות, תיבות טורים, מיקום כותרת/עמודון, גופן, פס שורות,
+#            וקומפקטיות כותרות פתיחה.
+#
+# הציון (0-100%) הוא האמת המתמטית על מצב העימוד. כל תיקון אמור להעלות אותו;
+# ירידה = נסיגה. קודי יציאה: 0 תקין | 1 כשל HARD | 2 כשל PARITY | 3 שניהם.
+#
+# הערה: הייחוס נבדק לדטרמיניזם — ריצה מחדש של החילוץ חייבת לתת קובץ זהה
+# בתת-ספרה (git diff) — אחרת ההשוואה אינה תקפה.
+
+on:
+  push:
+    branches: [ main, UNIFIED ]
+  pull_request:
+    branches: [ main, UNIFIED ]
+  workflow_dispatch:
+
+jobs:
+  layout-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyMuPDF (חילוץ גיאומטריה מ-PDF)
+        run: pip install pymupdf==1.26.7
+
+      - name: Verify reference extraction is deterministic (committed JSON == PDFs)
+        run: |
+          python3 tools/layout-parity/extract-reference.py
+          git diff --exit-code -- audits/layout-reference.json || {
+            echo "✗ audits/layout-reference.json אינו תואם לחילוץ מקובצי ה-PDF — הרץ extract-reference.py והחלף ב-commit"; exit 1; }
+
+      - name: Run RED through the live path (IMUD defaults + real font → model + PDF)
+        run: node tools/layout-parity/run-ours.js
+
+      - name: Mathematical comparison against the old-version reference
+        run: |
+          python3 tools/layout-parity/compare.py \
+            audits/layout-reference.json \
+            audits/layout-parity-artifacts/ours-model.json \
+            audits/layout-parity-artifacts/ours.pdf \
+            audits/layout-parity-artifacts/parity-report.json
+
+      - name: Always upload the full report + our PDF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-parity-report
+          path: |
+            audits/layout-parity-artifacts/parity-report.json
+            audits/layout-parity-artifacts/ours-model.json
+            audits/layout-parity-artifacts/ours.pdf
+          if-no-files-found: warn
