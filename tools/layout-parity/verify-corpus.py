@@ -343,9 +343,19 @@ def main():
             lvl = e.get("level")
             label = e.get("pageLabel") or ""
             if lvl == 1:
-                # h1 → שער-משנה לא-ממוספר — גם במקור אין מספר (הוכח מהייחוס)
-                if label:
-                    toc_bad.append({"why": "לערך h1 יש עמודון (השער נסתר)", "text": e["text"][:30]})
+                # **S4.13 (מדויק מהייחוס):** לערך h1 כן יש עמודון — toGematria של
+                # מיקום עמוד השער (0-מבוסס). ההוכחה מהייחוס (no_long): הערך
+                # "הקדמות וכללים..." מסומן "ו" = toGematria(6) — עמוד ה-shaar-sub
+                # שלו (לעמוד עצמו אין פוליו מודפס; getTocPageLabel במקור נופל
+                # ל-toGematria(data-page-index)). ללא מידע שער (קורפוסים ישנים
+                # ללא gatePage) — בלי עמודון, כמו שהיה נהוג.
+                gp = e.get("gatePage")
+                if gp is None:
+                    if label:
+                        toc_bad.append({"why": "לערך h1 יש עמודון (השער נסתר)", "text": e["text"][:30]})
+                elif gematria(label or "") != gp:
+                    toc_bad.append({"why": "עמודון ה-h1 אינו גימטריית עמוד השער",
+                                    "text": e["text"][:30], "label": label, "gatePage": gp})
                 continue
             if not label:
                 toc_bad.append({"why": "ערך ללא עמודון", "text": e["text"][:30]})

@@ -438,8 +438,12 @@ def main():
 
     # ================= PARITY 6: רצף פסקאות =================
     rp, op = ref["document"]["paragraphSeq"], ours["document"]["paragraphSeq"]
-    rh = [norm(" ".join((p.get("head") or "").split()[:3])) for p in rp]
-    oh = [norm(" ".join((p.get("head") or "").split()[:3])) for p in op]
+    # **S4.13 (תיקון מדידה):** נרמול לפני קטיעת 3 המילים. הייחוס נחלץ מ-PDF שבו
+    # החילוץ כבר פיצר גרשיים בתוך ראשי-תיבות ('א"כ' → 'א כ') — אצלנו הגרשיים
+    # נשמרים ב-head ומנורמלים רק אחרי הקטיעה, ולכן 'א"כ מצאנו שלושה' הפך
+    # ל-4 מילים מנורמלות מול 3 בייחוס. נרמול ואז קטיעה — זהה לשני הצדדים.
+    rh = [norm(" ".join(norm(p.get("head") or "").split()[:3])) for p in rp]
+    oh = [norm(" ".join(norm(p.get("head") or "").split()[:3])) for p in op]
     sm6 = difflib.SequenceMatcher(None, rh, oh, autojunk=False)
     matched = sum(i2 - i1 for op_, i1, i2, _, _ in sm6.get_opcodes() if op_ == "equal")
     lines_match = words_match = 0
@@ -461,20 +465,48 @@ def main():
 
     # ================= PARITY 7: שקילות שבירת שורות =================
     def reading_lines(docjson):
+        # **S4.13 (מיון מקובץ):** שורות תוכן-עניינים (ערך + פוליו) חולקות כמעט
+        # את אותו y, עם ג'יטר חילוץ של ±0.5pt שמטה את הסדר בין הצדדים (אצל
+        # הייחוס הפוליו פעם מעל ופעם מתחת לערך). שורות במרחק ≤1.5pt נחשבות
+        # לאשכול אחת וממוינות פנימית מימין לשמאל (x0 יורד — קריאת RTL:
+        # טקסט הערך ואז הפוליו בקצה השמאלי). שורות גוף (פס ~16pt) אינן
+        # מושפעות — האשכול לא יכול לשרשר מעבר לשכן אמיתי.
+        def cluster_sorted(rows):
+            rows = sorted(rows, key=lambda l: l["y0"])
+            out = []
+            i = 0
+            while i < len(rows):
+                j = i + 1
+                while j < len(rows) and rows[j]["y0"] - rows[j - 1]["y0"] <= 1.5:
+                    j += 1
+                out.extend(sorted(rows[i:j], key=lambda l: -(l.get("x0") or 0)))
+                i = j
+            return out
         seq = []
         for p in docjson["pages"]:
             by_col = {"right": [], "left": [], "single": []}
             for ln in p["lines"]:
                 by_col.setdefault(ln.get("col") or "single", []).append(ln)
             for name in ("right", "left", "single"):
-                for ln in sorted(by_col[name], key=lambda l: l["y0"] if "y0" in l else 0):
+                for ln in cluster_sorted(by_col[name]):
                     seq.append(norm(ln["text"]))
         return [s for s in seq if s]
 
-    rl = reading_lines(ref)
+    rl0 = reading_lines(ref)
     # **S4.9:** צד הפלט נקרא משורות העמוד (p["lines"]) — אותה פונקציית קריאה
     # כמו הייחוס; הזרמים משווים מבחינה מבנית (גוף+כותרות+שוליים+הערות+TOC).
     ol = reading_lines(ours)
+    # **S4.13 (אינווריאנט קבוצת-המילים לשורה):** טקסט הייחוס נחלץ מה-PDF הישן
+    # על-ידי PyMuPDF, ולחילוץ הזה ארטיפקטים בידי מוכחים: גרשיים בתוך ראשי-תיבות
+    # הופכים את סדר המילים ('בע"מ' נחלץ 'מ"בע' — אחרי ניקוי הפיסוק: 'מ בע' מול
+    # 'בע מ' אצלנו), ופסיקים נפלטים בקצה הפוך (',השביתה' מול 'השביתה,'). אי
+    # אפשר לשחזר את הארטיפקטים של חילוץ ה-PDF שלהם — וגם לא צריך: שקילות
+    # שבירת שורות פירושה **אותן מילים נחתכות לאותן שורות**. לכן ההשוואה מנרמלת
+    # כל שורה לקבוצה ממוינת של מילותיה — מדידה של חלוקת המילים לשורות, חסינה
+    # מול סידור גליפים פנים-שורתי בחילוץ.
+    bag = lambda s: " ".join(sorted(s.split()))
+    rl = [bag(s) for s in rl0]
+    ol = [bag(s) for s in ol]
     sm7 = difflib.SequenceMatcher(None, rl, ol, autojunk=False)
     C.add("P7", "PARITY", "שקילות שבירת שורות (טקסט שורה-אחר-שורה)",
           sm7.ratio() >= 0.995,

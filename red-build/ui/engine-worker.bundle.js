@@ -6012,6 +6012,43 @@ function legacyTypeset(rawText, settings) {
       const blockBottom = () => block ? Math.max(block.cursor[0], block.cursor[1]) : top;
       const colBottom = () => FLOW_BOTTOM - fnReserved;
 
+      // **S4.13 (rollbackTrailingHeadings של המקור):** כותרות עוקבות בסוף הטור
+      // הנוכחי חוזרות יחד עם הפסקה שלא נכנסה — כדי שכותרת לא תישאר יתומה
+      // בתחתית הטור (המקור: tokenIndex -= rollbackTrailingHeadings(targetCol)).
+      // מחזיר כמה הוסרו; מעדכן את ה-cursor של הטור.
+      const rollbackTrailingHeadings = () => {
+        if (!block) return 0;
+        let n = 0;
+        while (block.cols[block.fill].length) {
+          const lastU = block.cols[block.fill][block.cols[block.fill].length - 1];
+          if (lastU.kind !== 'heading') break;
+          block.cols[block.fill].pop();
+          block.cursor[block.fill] -= lastU.h;
+          n++;
+        }
+        return n;
+      };
+
+      // **S4.13 (היגיון סיום בלוק — העתק מהמקור, שורות 3946-3997):** במקור כל
+      // בלוק מסתיים באחד מארבעה: (1) סוף פרק → איזון תמיד; (2) הטוקן הבא
+      // כותרת-רוחבית (span_1col) → איזון; (3) הטור הימני גולש לגובה הפנוי או
+      // הפרש הטורים > 60px → איזון; (4) אחרת — המילוי נשמר (במקור: מתיחה
+      // אנכית עדינה של הטור הקצר, שאינה מזיזה נקודות חיתוך ולכן לא ממומשת
+      // כאן). ה-S4.12 איזן בלי-תנאי בכל נקודות היציאה — עכשיו נאמן למקור.
+      const finalizeBlock = (blk, nextTok, sectionEnd) => {
+        if (!blk || isH0) return;
+        if (!(blk.cols[0].length || blk.cols[1].length)) return;
+        const availH = colBottom() - blk.yTop;
+        if (sectionEnd) { balanceBlock(blk, availH); return; }
+        const nextIsSpan = nextTok && nextTok.type[0] === 'h'
+          && (HEADING_MODES[nextTok.level] || 'inline_2col') === 'span_1col';
+        const rH = blk.cols[0].reduce((a, u) => a + unitH(u), 0);
+        const lH = blk.cols[1].reduce((a, u) => a + unitH(u), 0);
+        if (nextIsSpan || rH > availH || Math.abs(rH - lH) > 60) {
+          balanceBlock(blk, availH);
+        }
+      };
+
       fillPage: while (ti < toks.length || pending) {
         const tok = pending ? pending.token : toks[ti];
         const mode = tok.type[0] === 'h' ? (HEADING_MODES[tok.level] || 'inline_2col') : 'inline_2col';
@@ -6037,8 +6074,15 @@ function legacyTypeset(rawText, settings) {
           const h = headingItemH(tok.level);
           if (block.cursor[block.fill] + h > colBottom()) {
             if (block.fill === 0 && !isH0 && !(block.cols[0].length === 0)) {
+              // **S4.13:** גם כאן המקור מחזיר כותרות זנב לפני מעבר טור —
+              // כותרת שנותרה אחרונה בטור הימני תיפלט עם הפסקה הבאה בשמאלי.
+              ti -= rollbackTrailingHeadings();
               block.fill = 1; // המשך בטור השמאלי
             } else if (block.cols[block.fill].length || block.cols[0].length) {
+              // **S4.13:** סיום הבלוק לפני שבירת העמוד — כמו המקור (כל בלוק
+              // מסתיים בהיגיון הארבעה; כאן הטוקן הבא הוא הכותרת שלא נכנסה).
+              ti -= rollbackTrailingHeadings();
+              finalizeBlock(block, tok, false);
               break fillPage;
             }
           }
@@ -6106,6 +6150,11 @@ function legacyTypeset(rawText, settings) {
           else if (total - fit === 1 && fit === 1 && canPush) fit = 0;
         }
         if (fit === 0) {
+          // **S4.13 (rollbackTrailingHeadings של המקור):** כותרות שנצברו בסוף
+          // הטור הנוכחי חוזרות עם הפסקה שלא נכנסה — אחרת הן מתייתמות בתחתית
+          // הטור (המקור: tokenIndex -= rollbackTrailingHeadings(targetCol)
+          // לפני כל break מפני placeLines=0).
+          ti -= rollbackTrailingHeadings();
           // הטור הנוכחי מלא — מעבר לטור השמאלי (בלוק דו-טורי); אחרת עמוד הבא
           if (block.fill === 0 && !isH0 && block.cols[0].length > 0) {
             block.fill = 1;
@@ -6114,15 +6163,12 @@ function legacyTypeset(rawText, settings) {
           const anyContent = stack.length > 1 || block.cols[0].length > 0 || block.cols[1].length > 0;
           if (!anyContent) fit = 1; // התקדמות מאולצת — שורה אחת לפחות
           else if (!isH0 && (block.cols[0].length || block.cols[1].length)) {
-            // **S4.12 (איזון-והמשך כמו המקור):** במקום לשבור את העמוד עם טור
-            // שמאלי חלקי (נצפה: 27/2 שורות בעמ' 11 מול 21/21 במקור — הפרש
-            // הניצול שגרם ל-56 עמודים מול 54) — מאזנים את הבלוק הנוכחי
-            // (שני הטורים באותו גובה, תקרה colBottom) ופותחים בלוק המשך
-            // מתחתיו, וממשיכים למלא עד גמר העמוד. המקור (typesetter.js v19)
-            // עושה זאת בלולאת ה-while החיצונית: מילוי → balanceColumns →
-            // remPageHeight -= max(rH,lH) → בלוק הבא. הפסקה שנחתכה ממשיכה
-            // בבלוק החדש דרך pending — אותו מנגנון מדויק.
-            balanceBlock(block, colBottom() - block.yTop);
+            // **S4.13 (איזון-והמשך כמו המקור):** המקור מסיים כל בלוק בהיגיון
+            // הארבעה (סוף-פרק/span/גלישה/הפרש-60px — ראו finalizeBlock), ואז
+            // פותח בלוק הבא מתחת אם נשאר מקום (לולאת ה-while החיצונית:
+            // remPageHeight -= max(rH,lH) → בלוק הבא). הפסקה שלא נכנסה
+            // (toks[ti]) תיפתח שם מהטור הימני — כמו במקור.
+            finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending);
             const bottom = blockBottom();
             // המשך רק אם נשאר מקום לשורה נוספת ויש תוכן — אחרת שוברים עמוד.
             // (בלוק ריק + אין מקום ⇒ break — אין לולאה אינסופית.)
@@ -6181,8 +6227,12 @@ function legacyTypeset(rawText, settings) {
           pitch, sizePt: bodySz, sideNote: (!isCont && tok.sideNote) ? tok.sideNote : null
         });
         block.cursor[block.fill] += fit * pitch;
-        // **S4.9:** מרווח בין פסקאות — p { margin-bottom: 7px } במקור (רק בסוף פסקה)
-        if (isEnd) block.cursor[block.fill] += 7;
+        // **S4.13 (מרווח לכל חתיקה — כמו ה-DOM של המקור):** p{margin-bottom:7px}
+        // חל על **כל** אלמנט <p> — כולל p-cut (חתיכה גזורה) — והגובה שהמקור מודד
+        // (scrollHeight) כולל את המרווח של כל חתיקה שהוצבה. הקליברציה של S4.9
+        // ("רק בסוף פסקה") עבדה כשחתיכות היו נדירות; עם איזון מפצל-שורות מספרן
+        // מתרבה וההפרש (7px לכל גזירה) מצטבר לעמוד שלם — 53 מול 54 בייחוס.
+        block.cursor[block.fill] += 7;
         if (isEnd) { pending = null; ti++; }
         else {
           pending = { token: tok, lines, lineIdx: startIdx + fit };
@@ -6190,11 +6240,12 @@ function legacyTypeset(rawText, settings) {
           if (block.fill === 0 && !isH0 && block.cols[0].length > 0) {
             block.fill = 1;
           } else if (!isH0 && (block.cols[0].length || block.cols[1].length)) {
-            // **S4.12 (איזון-והמשך כמו המקור):** חיתוך בטור השמאלי לא שובר
-            // עמוד עם טור חלקי — מאזנים את הבלוק ופותחים בלוק המשך מתחת,
-            // וההמשך של הפסקה (pending) ממשיך שם מהטור הימני. כמו לולאת
-            // ה-while של המקור: מילוי → balanceColumns → בלוק הבא באותו עמוד.
-            balanceBlock(block, colBottom() - block.yTop);
+            // **S4.13 (איזון-והמשך כמו המקור):** חיתוך בטור השמאלי מסיים את
+            // מילוי הבלוק — היגיון הארבעה של המקור (finalizeBlock; הטוקן
+            // הבא = הפסקה שנחתכה, כלומר לא span), ואז בלוק המשך מתחת אם יש
+            // מקום. ההמשך (pending) נפתח שם מהטור הימני — כמו לולאת ה-while
+            // של המקור: מילוי → balanceColumns → בלוק הבא באותו עמוד.
+            finalizeBlock(block, tok, false);
             const bottom = blockBottom();
             if (colBottom() - bottom >= GEO.LINE_H) {
               openBlock(bottom);
@@ -6243,54 +6294,120 @@ function legacyTypeset(rawText, settings) {
     if (!queue.length) return 0;
     let total = 0;
     for (const n of queue) {
-      total += wrapText(n.text, api, SINGLE_W, SZ.fnBody).length * GEO.FN_PITCH;
+      // **S4.13 (כיול מהייחוס):** אותה נוסחת גלישה כמו הרינדור בפועל (השורה
+      // הראשונה קצרה ברוחב הסמן) — הצדדים חייבים להסכים על מספר השורות.
+      const mkW = api.measureTextWidth(LineBreaker.markerWord(1), SZ.fnBody, 0)
+        + api.measureTextWidth(' ', SZ.fnBody, 0);
+      total += wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody).length * GEO.FN_PITCH;
     }
-    return total + 24; // מפריד + מרווחים (כמו +24 במקור)
+    // התקרה מכוילת מהייחוס: 2 שורות → גוף נחתך ב-941px (שמורה 81px), 6 שורות
+    // → 875px (147px), 4 שורות → ~910px (~111px). הנתונים מתאימים ליניארית:
+    // rows×16.5 + 48 — כלומר תקרת-על (מפריד ✧✧✧ + מרווחים) של 48px, לא 24.
+    return total + 48;
   }
 
   /**
-   * איזון בלוק: חלוקת היחידות מחדש בין הטורים לגבהים שווים בקירוב —
-   * **בכפוף לגובה העמודה הפנוי** (colBottom − yTop). אם החלוקה המאוזנת גולשת,
-   * יחידות מוחזרות מהטור השני לראשון; אם גם זה לא מספיק — נשמר המילוי המקורי
-   * (שהוכח כחוקי בזמן המילוי). בלי זה בלוק 41/31 שורות היה הופך ל-24/48 —
-   * והטור השמאלי גולש מתחת לתחתית הזרימה.
+   * **S4.13: פורט נאמן של balanceColumns מהמקור (typesetter.js הצהוב, שורות 1327-1560).**
+   *
+   * האיזון הקודם (S4.9-S4.12) חילק יחידות שלמות בלבד — והוכח כקטסטרופלי כשהבלוק
+   * נפתח בכותרת: [h4 | כל-השאר] (h4 לבד בטור הימני, 26px מול ~600px) — בדיוק ההפך
+   * מהמקור שמפצל פסקאות בגבולות **שורות**. המקור:
+   *
+   *   1. איחוי חלקי אותו טוקן (p-cut + המשך) לפריט אחד עם כל השורות.
+   *   2. מועמדים {i, l}: פריטים 0..i-1 שלמים בימין; אם l>0 גם l שורות ראשונות של
+   *      פריט i בימין והשאר בשמאל. חוקיות: minFirst=minLast=2 (אין שורה בודדת
+   *      בתחילת/סוף חיתוך), וכותרת לא נשארת עם שורה אחת בלבד (prevIsHeading && l<2).
+   *      בנוסף {i+1, 0} אחרי כל פסקה — הימני מסתיים בסוף פסקה שלמה.
+   *   3. ציון (better של המקור): נכנס-בגובה > גלישה מינימלית > |rH−lH| מינימלי >
+   *      בשוויון — טור ימני גבוה יותר. המקור מוצא את נקודת המעבר בחיפוש בינארי
+   *      על מונוטוניות rH−lH וסורק ±3 (ומרחיק עד 80 אם אף מועמד לא נכנס); כאן
+   *      הגבהים אריתמטיים וסריקה מלאה מוצאת את אותו מיטב בדיוק.
+   *   4. החלק הימני של פסקה מפוצלת = p-cut (שורתו האחרונה מיושרת); השמאלי =
+   *      המשך (בלי חלון). אם אין אף מועמד — המילוי המקורי נשמר (כמו המקור).
    */
   function balanceBlock(block, availH) {
+    // ---- 1. איחוי חלקי אותו טוקן (כמו mergedItems במקור) ----
     const units = [...block.cols[0], ...block.cols[1]];
-    const totalH = units.reduce((a, u) => a + unitH(u), 0);
-    const target = totalH / 2;
-    const cap = Math.max(availH != null ? availH : Infinity, target);
+    if (!units.length) { block.split = null; return; }
+    const items = [];
+    for (const u of units) {
+      const last = items[items.length - 1];
+      if (u.kind === 'para' && last && last.kind === 'para' && last.tokenId === u.tokenId) {
+        last.lines.push(...u.lines);
+        last.isEnd = u.isEnd; // דגל הסוף מהחתיכה המאוחרת (cut נשאר cut)
+      } else if (u.kind === 'para') {
+        items.push({ ...u, lines: [...u.lines] });
+      } else {
+        items.push(u);
+      }
+    }
+    // ---- 2. מועמדים חוקיים (getSplitRules: minFirst=minLast=2) ----
+    const cands = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind !== 'para') continue;
+      const n = items[i].lines.length;
+      const prevIsHeading = i > 0 && items[i - 1].kind === 'heading';
+      for (let l = 1; l < n; l++) {
+        if (l < 2 || n - l < 2) continue;      // אין שורה בודדת בתחילת/סוף חלק
+        if (prevIsHeading && l < 2) continue;  // כותרת + שורה אחת בלבד (מכוסה ב-l≥2)
+        cands.push({ i, l });
+      }
+      cands.push({ i: i + 1, l: 0 }); // הימני מסתיים בסוף פסקה שלמה — לא בכותרת
+    }
+    if (!cands.length) { block.split = null; return; } // כותרות בלבד — המילוי נשמר
+    // ---- 3. הערכת מועמד (גבהים אריתמטיים; unitH = הקליברציה שלנו) ----
+    const evalC = (c) => {
+      let rH = 0, lH = 0;
+      for (let k = 0; k < c.i; k++) rH += unitH(items[k]);
+      if (c.l > 0) {
+        const it = items[c.i];
+        rH += c.l * it.pitch + 7; // חלק ימני — p-cut (גם הוא <p> עם מרווח 7px)
+        lH += (it.lines.length - c.l) * it.pitch + 7;
+        for (let k = c.i + 1; k < items.length; k++) lH += unitH(items[k]);
+      } else {
+        for (let k = c.i; k < items.length; k++) lH += unitH(items[k]);
+      }
+      return { rH, lH, diff: rH - lH, abs: Math.abs(rH - lH) };
+    };
+    const cap = (availH != null && isFinite(availH)) ? availH : Infinity;
+    let best = null, bestC = null;
+    const better = (a, b) => { // better(a, b) — a עדיף על b (העתק מדויק מהמקור)
+      if (a.fits !== b.fits) return a.fits;
+      if (!a.fits) return a.over < b.over;
+      if (a.abs !== b.abs) return a.abs < b.abs;
+      return a.diff >= 0 && b.diff < 0; // שוויון: עדיפות לטור ימני גבוה יותר
+    };
+    for (const c of cands) {
+      const e = evalC(c);
+      const cand = { fits: Math.max(e.rH, e.lH) <= cap + 0.01, over: Math.max(e.rH, e.lH), abs: e.abs, diff: e.diff };
+      if (!best || better(cand, best)) { best = cand; bestC = c; }
+    }
+    // ---- 4. החלה: פיצול הפריט בגבול השורה שנבחר ----
+    const c = bestC;
     const r = [], l = [];
-    let y = 0, idx = 0;
-    for (; idx < units.length; idx++) {
-      const u = units[idx];
-      const h = unitH(u);
-      if ((y + h <= target + GEO.LINE_H || (r.length === 0 && l.length === 0)) && y + h <= cap) { r.push(u); y += h; }
-      else break;
-    }
-    for (; idx < units.length; idx++) l.push(units[idx]);
-    // החזרת יחידות מ-l ל-r כש-l גולש
-    let rH = r.reduce((a, u) => a + unitH(u), 0);
-    let lH = l.reduce((a, u) => a + unitH(u), 0);
-    while (l.length && lH > cap && rH + unitH(l[0]) <= cap) {
-      const u = l.shift();
-      r.push(u); rH += unitH(u); lH -= unitH(u);
-    }
-    if (lH > cap) {
-      block.split = null; // נטישת האיזון — המילוי המקורי חוקי מהגדרתו
-      return;
+    for (let k = 0; k < c.i; k++) r.push(items[k]);
+    if (c.l > 0) {
+      const it = items[c.i];
+      // החלק הימני: p-cut — isEnd=false; החלון נשאר בשורה הראשונה (כמו createDropWord)
+      r.push({ ...it, lines: it.lines.slice(0, c.l), isEnd: false, hasWindow: it.hasWindow && !it.isCont });
+      // החלק השמאלי: המשך — isCont=true, בלי חלון (הגליף כבר בימין)
+      l.push({ ...it, lines: it.lines.slice(c.l), isCont: true, hasWindow: false, from: it.from + c.l });
+      for (let k = c.i + 1; k < items.length; k++) l.push(items[k]);
+    } else {
+      for (let k = c.i; k < items.length; k++) l.push(items[k]);
     }
     block.split = { r, l };
     // **S4.9:** ה-cursor מתעדכן לתחתיות האמיתיות — אחרי האיזון מיקום הפס/הבלוק
     // הבא (blockBottom) היה מחושב מהמילוי הקודם וחופף את זנב הטור המאוזן.
-    block.cursor[0] = block.yTop + rH;
-    block.cursor[1] = block.yTop + lH;
+    const e = evalC(c);
+    block.cursor[0] = block.yTop + e.rH;
+    block.cursor[1] = block.yTop + e.lH;
   }
 
   function unitH(u) {
     if (u.kind === 'heading') return u.h;
-    // פסקה שהסתיימה כוללת את מרווח ה-7px שאחריה
-    return u.lines.length * u.pitch + (u.isEnd ? 7 : 0);
+    // **S4.13:** כל חתיקת <p> — כולל p-cut — נושאת מרווח 7px בגובה הטור (DOM)
+    return u.lines.length * u.pitch + 7;
   }
 
   /** פריסת המחסנית: כותבת שורות עם y מפורש לטורי העמוד. */
@@ -6343,7 +6460,7 @@ function legacyTypeset(rawText, settings) {
       y += u.pitch;
       i++;
     }
-    if (u.isEnd) y += 7; // מרווח בין פסקאות (p{margin-bottom:7px} במקור)
+    y += 7; // **S4.13:** מרווח 7px אחרי כל חתיקת <p> (כולל p-cut) — כמו ה-DOM של המקור
     if (u.sideNote) {
       const anchor = y - u.lines.length * u.pitch;
       const lines = wrapText(u.sideNote, api, GEO.MARGIN_W - 2, SZ.marginNote);
@@ -6459,8 +6576,14 @@ function legacyTypeset(rawText, settings) {
 
   // folio של כל כותרת = העמוד שבו היא הוצבה
   const folioByToken = new Map();
-  for (const p of final) {
-    if (p._h1Token) folioByToken.set(p._h1Token.id, p.folioDisplay);
+  for (let pi = 0; pi < final.length; pi++) {
+    const p = final[pi];
+    // **S4.13 (פוליו ה-TOC של כותרת 1 — כמו getTocPageLabel במקור):** לעמוד
+    // השער של ה-h1 אין פוליו מודפס; המקור נופל שם ל- toGematria(data-page-index)
+    // — ההוכחה מהייחוס: הערך הראשון בתוכן-העניינים הכללי (ה-h1 "הקדמות
+    // וכללים") מסומן "ו" = גימטריה של מיקום עמוד השער (0-מבוסס 6), בעוד
+    // לעמוד עצמו אין פוליו כלל. שאר הכותרות: הפוליו המודפס של עמודן.
+    if (p._h1Token) folioByToken.set(p._h1Token.id, p.folioDisplay || toGematria(pi));
     for (const b of (p.bands || [])) if (b.tokenId != null) folioByToken.set(b.tokenId, p.folioDisplay);
     for (const col of p.columns) for (const ln of col) {
       if (ln.kind === 'heading' && ln.tokenId != null && !folioByToken.has(ln.tokenId)) folioByToken.set(ln.tokenId, p.folioDisplay);

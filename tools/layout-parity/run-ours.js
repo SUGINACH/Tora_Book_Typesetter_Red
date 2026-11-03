@@ -139,6 +139,10 @@ function main() {
     openPara = null;
   };
 
+  // **S4.13:** מפת עמוד-שער לכל h1 (לבדיקת C7 — עמודון ה-h1 ב-TOC)
+  const h1GatePages = new Map();
+  result.pages.forEach((p, i) => { if (p._h1Token) h1GatePages.set(p._h1Token.id, i); });
+
   for (const pg of result.pages) {
     // ---- שורות העמוד בסכמת הייחוס: col + גיאומטריה ב-pt ----
     const lines = [];
@@ -273,7 +277,13 @@ function main() {
             y0: (r.y + 0.3) * PX, y1: (r.y + 12) * PX, kind: 'toc-num', justified: false
           });
         }
-        tocEntries.push({ level: r.level, text: r.text, pageLabel: r.folio, targetPage: null });
+        // **S4.13:** gatePage — עמוד השער (0-מבוסס) של ה-h1; העמודון שלו ב-TOC
+        // הוא toGematria(אינדקס עמוד השער) כשאין לו פוליו מודפס (מוכח מהייחוס:
+        // "הקדמות וכללים" → "ו" = toGematria(6)). מנועל לבדיקת C7.
+        tocEntries.push({
+          level: r.level, text: r.text, pageLabel: r.folio, targetPage: null,
+          gatePage: h1GatePages.get(r.tokenId) != null ? h1GatePages.get(r.tokenId) : null
+        });
       }
       const bucket = pg.type === 'toc-general' ? 'general' : 'detailed';
       tocSummary[bucket] += tocEntries.length;
@@ -307,10 +317,13 @@ function main() {
   }
 
   // ---- פסקאות: זרימת חתיכות ליניארית — העתק מדויק של extract-reference.py ----
-  // **S4.12 (כיול סופי של רצף הפסקאות):** הייחוס בונה את הרצף כך — לכל עמוד,
-  // לכל טור (ימני ואז שמאלי), תגיות p-end/p-cut בסדר y; חתיכה פתוחה (open_para)
-  // מצטברת **בין עמודים וטורים** עד תגית p-end — אין סגירה בסוף עמוד, ואין
-  // קיבוץ לפי מזהה פסקה (חתיכות של פסקאות שונות מתמזגות עד p-end).
+  // **S4.13 (תיקון מדידה קריטי):** ההערה מ-S4.12 ("אין סגירה בסוף עמוד") הוכחה
+  // שגויה — extract-reference.py שורות 363-365 סוגרות open_para בסוף **כל עמוד**
+  // (הקוד בתוך לולאת העמודים, למרות ההערה "מסמך נגמר..."). פסקה שנחתכת בגבול
+  // עמוד = שני ערכים בייחוס (עמוד א + עמוד ב), ואצלנו היה אחד. זו הסיבה העיקרית
+  // לפער 278 מול 258 ב-P6. כעת: flushPara() בסוף כל עמוד — העתקה מדויקת.
+  // שאר הסמנטיקה נשמרת: חתיכה פתוחה מצטברת בין טורים באותו עמוד עד p-end
+  // (חתיכות של פסקאות שונות מתמזגות עד p-end — כמו הייחוס).
   // כאן: חתיכה = רצף רציף של שורות אותה פסקה באותו טור; סוף-פסקה = שורת
   // ה-line--last (isLast). מילת-החלון ממוזגת לשורה הראשונה (לא נספרת בנפרד).
   for (const p of pages) {
@@ -345,6 +358,9 @@ function main() {
         if (ended) flushPara(); // p-end — סגירת הרצף הפתוח
       }
     }
+    // **S4.13:** סגירה בסוף העמוד — כמו extract-reference.py (שורות 363-365,
+    // בתוך לולאת העמודים): פסקה חתוכה בגבול העמוד נסגרת כערך עצמאי.
+    flushPara();
   }
   flushPara();
 
