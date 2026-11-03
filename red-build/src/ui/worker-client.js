@@ -16,10 +16,20 @@ class WorkerEngineClient {
     }
     this.transport = transport;
     this.activeJob = null;      // {jobId, resolve, reject, onProgress, cancelled}
+    this.pending = new Map();   // **03.11:** עבודות צד (ייצוא/רישום גופן) — מקבילות לעימוד
     transport.setHandler((m) => this._onMessage(m));
   }
 
   _onMessage(m) {
+    // **03.11:** הודעות עבודות צד — לפי מזהה במפת ההמתנה
+    if (m && m.jobId && this.pending.has(m.jobId)) {
+      const p = this.pending.get(m.jobId);
+      this.pending.delete(m.jobId);
+      if (m.type === 'export-error') p.reject(new Error(`export: ${m.message}`));
+      else if (m.type === 'export-result' && m.ok === false) p.reject(new Error(`export: ${m.error || 'failed'}`));
+      else p.resolve(m);
+      return;
+    }
     const job = this.activeJob;
     if (!job || !m || m.jobId !== job.jobId) return; // הודעה מעבודה ישנה/זרה — נזרקת
     if (m.type === 'progress') {
@@ -35,6 +45,36 @@ class WorkerEngineClient {
       this.activeJob = null;
       if (!job.cancelled) job.reject(new Error(`engine: ${m.message}`));
     }
+  }
+
+  /** רישום עבודת צד במפת ההמתנה. */
+  _newPendingJob(prefix) {
+    const jobId = `${prefix}-${Date.now().toString(36)}-${++jobSeq}`;
+    let resolve, reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    this.pending.set(jobId, { resolve, reject });
+    return { jobId, promise };
+  }
+
+  /** **03.11:** רישום גופן TTF במנוע (למדידת גופן אמיתי בעימוד הבא). */
+  registerFont({ name, bytes }) {
+    const { jobId, promise } = this._newPendingJob('font');
+    this.transport.post({ type: 'register-font', jobId, name, bytes });
+    return promise;
+  }
+
+  /** **03.11:** רישום אוסף נכסי עיצוב ברישום שבמנוע (שני הצדדים פותרים imud:...). */
+  registerAssets({ collection, items }) {
+    const { jobId, promise } = this._newPendingJob('assets');
+    this.transport.post({ type: 'register-assets', jobId, collection, items });
+    return promise;
+  }
+
+  /** **03.11:** בקשת ייצוא PDF/ZIP במנוע המלא שב־Worker. bytes חוזר כ-Uint8Array. */
+  requestExport({ kind, text, settings, fontBytes, fontName, extensions }) {
+    const { jobId, promise } = this._newPendingJob('export');
+    this.transport.post({ type: 'export-request', jobId, kind, text, settings, fontBytes: fontBytes || null, fontName: fontName || null, extensions: extensions || null });
+    return promise;
   }
 
   /**

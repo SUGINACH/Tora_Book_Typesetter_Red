@@ -60,6 +60,7 @@ const { markerFor } = require('../notes/markers');
 const { planDecorations } = require('../decoration/page-decorations');
 const { resolveShaarBox } = require('../decoration/shaar-boxes');
 const { columnDividerHeightPx } = require('../decoration/ornament-fit');
+const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
 
@@ -333,14 +334,33 @@ function renderDecorations(page, doc) {
     el.style.top = `${Math.round(d.y)}px`;
     el.style.width = `${Math.round(d.w)}px`;
     el.style.height = `${Math.round(d.h)}px`;
+    // **03.11 (EXT-14):** עיטור מסוג 'image' — רקע מההפניה הפתורה (asset-registry)
+    if (d.image) {
+      const uri = assetUri(d.image);
+      if (uri) {
+        el.style.backgroundImage = `url("${uri}")`;
+        el.style.backgroundSize = '100% 100%';
+        el.style.backgroundRepeat = 'no-repeat';
+      }
+    }
     els.push(el);
   }
   return els;
 }
 
+/** **03.11 (EXT-14):** פתרון נכס — הפניות imud: מתורגמות ל-data-URI מהרישום
+ * (asset-registry); ערכים אחרים (URL/data-URI קיים) עוברים כמו שהם. */
+function assetUri(ref) {
+  if (!ref) return null;
+  const r = resolveAssetRef(ref);
+  return r.uri || null;
+}
+
 /**
  * **S8 (REQ-ORN-05/08):** רקע עמוד + תיבות שער לפי התוכנית שחושבה (page-decorations)
  * — רקע לפי מחלקת העמוד עם inset במ״מ; תיבת טקסט של שער ראשי לפי box פתור.
+ * **03.11 (EXT-14):** שלושת השערים (ראשי/משנה/אחורי) — עיצוב ה־SVG במסך מלא +
+ * תיבת כותרת מה-box של העיצוב (רישום נכסים) או מההגדרות.
  */
 function renderPageBackgroundAndShaar(page, settings, doc, metadata) {
   const els = [];
@@ -349,37 +369,49 @@ function renderPageBackgroundAndShaar(page, settings, doc, metadata) {
   if (plan.background && plan.background.image) {
     const el = doc.createElement('div');
     el.className = 'deco deco--page-background';
-    el.style.backgroundImage = `url("${plan.background.image}")`;
+    el.style.backgroundImage = `url("${assetUri(plan.background.image) || plan.background.image}")`;
     el.style.inset = `${inset}px`;
     els.push(el);
   }
   if (plan.background && plan.background.texture) {
     const el = doc.createElement('div');
     el.className = 'deco deco--page-texture';
-    el.style.backgroundImage = `url("${plan.background.texture}")`;
+    el.style.backgroundImage = `url("${assetUri(plan.background.texture) || plan.background.texture}")`;
     els.push(el);
   }
-  // שער ראשי: תמונת הערכה כרקע + תיבת טקסט (שם הספר) לפי box פתור (REQ-ORN-05)
-  const mainSlot = plan.slots.find(s => s.slot === 'shaar-main' && s.asset);
-  if (mainSlot) {
+  // עזר: שער במסך מלא מהפניה פתורה + תיבת כותרת לפי box מהעיצוב (אם נרשם)
+  const fullShaar = (slotName, cssClass, boxClass) => {
+    const slot = plan.slots.find(s => s.slot === slotName && s.asset);
+    if (!slot) return;
+    const resolved = resolveAssetRef(slot.asset);
+    const uri = resolved.uri || slot.asset;
     const bg = doc.createElement('div');
-    bg.className = 'deco deco--shaar-main';
-    bg.style.backgroundImage = `url("${mainSlot.asset}")`;
+    bg.className = cssClass;
+    bg.style.backgroundImage = `url("${uri}")`;
     bg.style.inset = '0';
     els.push(bg);
-    const { box } = resolveShaarBox('main', settings['theme-set-id'] || 'default', { box: settings['shaar-main-box'] }, null, { top: 40, bottom: 40, right: 30, left: 30 });
-    const tb = doc.createElement('div');
-    tb.className = 'shaar-main-box';
-    tb.dir = 'rtl';
-    tb.style.top = `${Math.round(box.top * MM_TO_PX)}px`;
-    tb.style.bottom = `${Math.round(box.bottom * MM_TO_PX)}px`;
-    tb.style.left = `${Math.round(box.left * MM_TO_PX)}px`;
-    tb.style.right = `${Math.round(box.right * MM_TO_PX)}px`;
-    const bookName = (metadata && (metadata['ספר'] || metadata['title'])) || '';
-    const topic = (metadata && metadata['נושא']) || '';
-    tb.textContent = [bookName, topic].filter(Boolean).join(' · ');
-    els.push(tb);
-  }
+    // תיבת כותרת — מה-box של העיצוב ברישום (מ״מ) או מההגדרות; בלי box מהעיצוב —
+    // ה-fallback המסורתי של resolveShaarBox (REQ-ORN-05: התיבה תמיד נבנית על שער עם תמונה)
+    const designBox = resolved.item && resolved.item.box ? resolved.item.box : null;
+    const boxRef = designBox || settings['shaar-main-box'] || null;
+    {
+      const { box } = resolveShaarBox('main', settings['theme-set-id'] || 'default', { box: boxRef }, null, { top: 40, bottom: 40, right: 30, left: 30 });
+      const tb = doc.createElement('div');
+      tb.className = boxClass;
+      tb.dir = 'rtl';
+      tb.style.top = `${Math.round(box.top * MM_TO_PX)}px`;
+      tb.style.bottom = `${Math.round(box.bottom * MM_TO_PX)}px`;
+      tb.style.left = `${Math.round(box.left * MM_TO_PX)}px`;
+      tb.style.right = `${Math.round(box.right * MM_TO_PX)}px`;
+      const bookName = (settings['imud-book-title'] || (metadata && (metadata['שם הספר'] || metadata['ספר'] || metadata['title']))) || ''; // S4.5: גם המזהה הארוך + על
+      const topic = (settings['imud-book-subtitle'] || (metadata && (metadata['נושא מפורט'] || metadata['נושא']))) || ''; // 03.11: כותרת־משנה מוגדרת
+      tb.textContent = [bookName, topic].filter(Boolean).join(' · ');
+      els.push(tb);
+    }
+  };
+  fullShaar('shaar-main', 'deco deco--shaar-main', 'shaar-main-box');
+  fullShaar('shaar-sub', 'deco deco--shaar-sub', 'shaar-sub-box');
+  fullShaar('shaar-back-frame', 'deco deco--shaar-back', 'shaar-back-box');
   return els;
 }
 

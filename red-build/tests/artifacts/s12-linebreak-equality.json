@@ -1,10 +1,10 @@
 {
   "doc": "canonical_corpus.txt",
   "pages": 18,
-  "lines": 588,
+  "lines": 596,
   "diffs": 0,
-  "hashA": "7ccad899d2107ee126add9798b52530750ef2a99fc9c6c33e0594d8672c3617c",
-  "hashB": "7ccad899d2107ee126add9798b52530750ef2a99fc9c6c33e0594d8672c3617c",
+  "hashA": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
+  "hashB": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
   "implA": "table",
   "implB": "font-metrics(fixture)"
 }

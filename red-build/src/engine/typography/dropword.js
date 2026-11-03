@@ -55,7 +55,13 @@ function applyDropWord(block, settings, api = {}) {
     widthPx,
     capTopAlign: Boolean(settings['first-word-align-cap-top']), // REQ-LB-05: cap-top ↔ body baseline, לא glyph baseline
     capHeightEm,                            // **S12:** מדד אמת ליישור (לא עוד קבוע 0.7)
-    fontSizePt: mode === 'drop' ? Math.round(settings['body-font-size-pt'] * 2) : settings['body-font-size-pt'],
+    // **S4.5 (03.11):** גודל וגופן המילה הראשונה — מהגדרות המקור (size-first-word=1.5,
+    // font-first-word). בעבר היה כפול 2 מוקשה; כעת ברירת המחדל הרישומית = 2 (המשכיות
+    // RED) והמיבוא מהמקור מציב 1.5. גופן ריק = גופן הגוף.
+    fontSizePt: mode === 'drop'
+      ? Math.round(settings['body-font-size-pt'] * (Number(settings['first-word-size-em']) || 2))
+      : settings['body-font-size-pt'],
+    fontFamily: settings['first-word-font'] || null, // null ⇒ גופן הגוף (ברירת המחדל של המקור: FrankReal)
     lineHeightPx: null                       // drop: יישור ע"י offset, לא גובה שורה — geometry-neutral
   };
 

@@ -1,6 +1,6 @@
 // ui/engine-worker.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת ה־Worker (המנוע המלא — אין לטעון בחוט ה־UI)
-// מודולים: 43 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 57 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -81,6 +81,199 @@ var __crypto = (function () {
   };
 })();
 
+
+var __RealBuffer = (typeof globalThis !== 'undefined' && globalThis.Buffer && globalThis.Buffer.from) ? globalThis.Buffer : null;
+var Buffer = __RealBuffer || (function () {
+  'use strict';
+  function utf8BytesOf(str) {
+    var out = [];
+    for (var i = 0; i < str.length;) {
+      var c = str.codePointAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      i += c > 0xffff ? 2 : 1;
+    }
+    return out;
+  }
+  function decodeUtf8(bytes, start, end) {
+    var s = '';
+    for (var i = start; i < end;) {
+      var c = bytes[i];
+      if (c < 0x80) { s += String.fromCharCode(c); i++; }
+      else if (c < 0xe0) { s += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; }
+      else if (c < 0xf0) { s += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; }
+      else {
+        var cp = ((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+        var off = cp - 0x10000;
+        s += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+        i += 4;
+      }
+    }
+    return s;
+  }
+  function hexToBytes(h) {
+    var out = [];
+    if (h.length % 2) h = '0' + h;
+    for (var i = 0; i < h.length; i += 2) out.push(parseInt(h.slice(i, i + 2), 16) || 0);
+    return out;
+  }
+  var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64ToBytes(s) {
+    s = String(s).replace(/[^A-Za-z0-9+\/]=*$/g, '').replace(/=+$/, '');
+    var out = [], bits = 0, acc = 0;
+    for (var i = 0; i < s.length; i++) {
+      var v = B64.indexOf(s[i]);
+      if (v < 0) continue;
+      acc = (acc << 6) | v; bits += 6;
+      if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); }
+    }
+    return out;
+  }
+  function bytesToB64(b, start, end) {
+    var s = '';
+    for (var i = start; i < end; i += 3) {
+      var n = (b[i] << 16) | ((b[i + 1] || 0) << 8) | (b[i + 2] || 0);
+      s += B64[(n >> 18) & 63] + B64[(n >> 12) & 63];
+      s += (i + 1 < end) ? B64[(n >> 6) & 63] : '=';
+      s += (i + 2 < end) ? B64[n & 63] : '=';
+    }
+    return s;
+  }
+  function Buf(arg, enc) {
+    var u8;
+    if (typeof arg === 'number') { u8 = new Uint8Array(arg); }
+    else if (arg instanceof Uint8Array) { u8 = new Uint8Array(arg); } // העתקה (כמו Node)
+    else if (arg instanceof ArrayBuffer) { u8 = new Uint8Array(arg); }
+    else if (arg && arg.buffer instanceof ArrayBuffer) { u8 = new Uint8Array(arg.buffer, arg.byteOffset, arg.length); }
+    else if (typeof arg === 'string') {
+      var enc_ = String(enc || 'utf8').toLowerCase();
+      var bytes = enc_ === 'latin1' || enc_ === 'binary'
+        ? (function () { var a = []; for (var i = 0; i < arg.length; i++) a.push(arg.charCodeAt(i) & 0xff); return a; })()
+        : enc_ === 'hex' ? hexToBytes(arg)
+        : enc_ === 'base64' ? b64ToBytes(arg)
+        : enc_ === 'ascii' ? (function () { var a = []; for (var i = 0; i < arg.length; i++) a.push(arg.charCodeAt(i) & 0x7f); return a; })()
+        : utf8BytesOf(arg);
+      u8 = new Uint8Array(bytes);
+    } else if (arg && typeof arg.length === 'number') {
+      u8 = new Uint8Array(arg);
+    } else {
+      throw new TypeError('Buffer: invalid argument');
+    }
+    Object.setPrototypeOf(u8, Buf.prototype);
+    return u8;
+  }
+  Buf.prototype = Object.create(Uint8Array.prototype);
+  Buf.prototype.constructor = Buf;
+  Buf.prototype.toString = function (enc, start, end) {
+    var e = String(enc || 'utf8').toLowerCase();
+    var s = Math.max(0, start | 0), n = this.length;
+    var t = Math.min(n, end == null ? n : (end | 0));
+    if (e === 'latin1' || e === 'binary') { var o = ''; for (var i = s; i < t; i++) o += String.fromCharCode(this[i]); return o; }
+    if (e === 'ascii') { var a = ''; for (var j = s; j < t; j++) a += String.fromCharCode(this[j] & 0x7f); return a; }
+    if (e === 'hex') { var h = ''; for (var k = s; k < t; k++) h += (this[k] < 16 ? '0' : '') + this[k].toString(16); return h; }
+    if (e === 'base64') return bytesToB64(this, s, t);
+    return decodeUtf8(this, s, t); // utf8 (ברירת מחדל)
+  };
+  Buf.prototype.slice = function (start, end) {
+    var s = start == null ? 0 : (start < 0 ? Math.max(0, this.length + start) : start);
+    var e = end == null ? this.length : (end < 0 ? this.length + end : end);
+    var u = new Uint8Array(this.buffer, this.byteOffset + s, Math.max(0, Math.min(this.length, e) - s));
+    Object.setPrototypeOf(u, Buf.prototype);
+    return u;
+  };
+  Buf.prototype.subarray = Buf.prototype.slice;
+  Buf.prototype.equals = function (o) {
+    if (!o || o.length !== this.length) return false;
+    for (var i = 0; i < this.length; i++) if (this[i] !== o[i]) return false;
+    return true;
+  };
+  Buf.prototype.fill = function (v) {
+    var b = (typeof v === 'number') ? (v & 0xff) : (typeof v === 'string' && v.length ? v.charCodeAt(0) & 0xff : 0);
+    for (var i = 0; i < this.length; i++) this[i] = b;
+    return this;
+  };
+  Buf.prototype.indexOf = function (v, byteOffset) {
+    var from = byteOffset | 0;
+    if (typeof v === 'string') { // תמיכה מינימלית בתו בודד/מחרוזת קצרה
+      for (var i = from; i <= this.length - v.length; i++) {
+        var ok = true;
+        for (var j = 0; j < v.length; j++) if (this[i + j] !== (v.charCodeAt(j) & 0xff)) { ok = false; break; }
+        if (ok) return i;
+      }
+      return -1;
+    }
+    var needle = (v instanceof Uint8Array) ? v : Buf.from(v);
+    for (var p = from; p <= this.length - needle.length; p++) {
+      var m = true;
+      for (var q = 0; q < needle.length; q++) if (this[p + q] !== needle[q]) { m = false; break; }
+      if (m) return p;
+    }
+    return -1;
+  };
+  function mkRead(name, size, be, signed) {
+    Buf.prototype[name] = function (off) {
+      var v = 0;
+      if (be) { for (var i = 0; i < size; i++) v = (v << 8) | this[off + i]; }
+      else { for (var j = size - 1; j >= 0; j--) v = (v << 8) | this[off + j]; }
+      if (signed && v >= (1 << (size * 8 - 1))) v -= (1 << (size * 8));
+      return v;
+    };
+  }
+  function mkWrite(name, size, be) {
+    Buf.prototype[name] = function (v, off) {
+      v = (v | 0) & ((size === 1 ? 0xff : size === 2 ? 0xffff : 0xffffffff));
+      if (be) { for (var i = size - 1; i >= 0; i--) { this[off + i] = v & 0xff; v = Math.floor(v / 256); } }
+      else { for (var j = 0; j < size; j++) { this[off + j] = v & 0xff; v = Math.floor(v / 256); } }
+      return off + size;
+    };
+  }
+  mkRead('readUInt8', 1, false, false); mkRead('readUInt16LE', 2, false, false); mkRead('readUInt16BE', 2, true, false);
+  mkRead('readUInt32LE', 4, false, false); mkRead('readUInt32BE', 4, true, false);
+  mkRead('readInt8', 1, false, true); mkRead('readInt16LE', 2, false, true); mkRead('readInt16BE', 2, true, true);
+  mkRead('readInt32LE', 4, false, true); mkRead('readInt32BE', 4, true, true);
+  mkWrite('writeUInt8', 1, false); mkWrite('writeUInt16LE', 2, false); mkWrite('writeUInt16BE', 2, true);
+  mkWrite('writeUInt32LE', 4, false); mkWrite('writeUInt32BE', 4, true);
+  mkWrite('writeInt8', 1, false); mkWrite('writeInt16LE', 2, false); mkWrite('writeInt16BE', 2, true);
+  mkWrite('writeInt32LE', 4, false); mkWrite('writeInt32BE', 4, true);
+  Buf.from = function (arg, enc, off, len) {
+    if (typeof arg === 'string') return new Buf(arg, enc);
+    if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) {
+      if (arg instanceof Uint8Array && (off != null || len != null)) {
+        var s = off | 0, e = len == null ? arg.length : s + len;
+        var cp = new Uint8Array(arg.subarray(s, e));
+        Object.setPrototypeOf(cp, Buf.prototype);
+        return cp;
+      }
+      return new Buf(arg);
+    }
+    if (arg && typeof arg.length === 'number') return new Buf(arg);
+    throw new TypeError('Buffer.from: invalid argument');
+  };
+  Buf.alloc = function (size, fill) { var b = new Buf(size); if (fill != null) b.fill(fill); return b; };
+  Buf.allocUnsafe = Buf.alloc;
+  Buf.isBuffer = function (x) { return x instanceof Uint8Array && Object.getPrototypeOf(x) === Buf.prototype || x instanceof Buf; };
+  Buf.byteLength = function (s, enc) {
+    if (s instanceof Uint8Array || s instanceof ArrayBuffer) return s.byteLength != null ? s.byteLength : s.length;
+    var e = String(enc || 'utf8').toLowerCase();
+    var str = String(s);
+    if (e === 'latin1' || e === 'binary' || e === 'ascii') return str.length;
+    if (e === 'hex') return Math.ceil(str.length / 2);
+    if (e === 'base64') return b64ToBytes(str).length;
+    return utf8BytesOf(str).length;
+  };
+  Buf.concat = function (list) {
+    var total = 0;
+    for (var i = 0; i < list.length; i++) total += list[i].length;
+    var u = new Uint8Array(total), p = 0;
+    for (var j = 0; j < list.length; j++) { u.set(list[j], p); p += list[j].length; }
+    Object.setPrototypeOf(u, Buf.prototype);
+    return u;
+  };
+  return Buf;
+})();
+
 var __modules = {};
 var __cache = {};
 function __require(from, name) {
@@ -101,6 +294,9 @@ function __resolve(from, name) {
 var __paths = {
   "src/ui/engine-worker-main.js|../engine/core/pipeline": "src/engine/core/pipeline.js",
   "src/ui/engine-worker-main.js|./worker-protocol": "src/ui/worker-protocol.js",
+  "src/ui/engine-worker-main.js|../engine/typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/ui/engine-worker-main.js|../engine/decoration/asset-registry": "src/engine/decoration/asset-registry.js",
+  "src/ui/engine-worker-main.js|../engine/output/export-api": "src/engine/output/export-api.js",
   "src/engine/core/pipeline.js|./settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/core/pipeline.js|../parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
   "src/engine/core/pipeline.js|../parser/block-tokenizer": "src/engine/parser/block-tokenizer.js",
@@ -167,7 +363,41 @@ var __paths = {
   "src/engine/layout/endnote-pages.js|./page-templates": "src/engine/layout/page-templates.js",
   "src/engine/layout/endnote-pages.js|../notes/markers": "src/engine/notes/markers.js",
   "src/ui/worker-protocol.js|../audit/report-schema": "src/audit/report-schema.js",
-  "src/audit/report-schema.js|../engine/layout/dp-planner": "src/engine/layout/dp-planner.js"
+  "src/audit/report-schema.js|../engine/layout/dp-planner": "src/engine/layout/dp-planner.js",
+  "src/engine/decoration/asset-registry.js|./svg-sanitize": "src/engine/decoration/svg-sanitize.js",
+  "src/engine/output/export-api.js|../core/settings-registry": "src/engine/core/settings-registry.js",
+  "src/engine/output/export-api.js|./dom-renderer": "src/engine/output/dom-renderer.js",
+  "src/engine/output/export-api.js|./html-export": "src/engine/output/html-export.js",
+  "src/engine/output/export-api.js|../layout/page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/output/export-api.js|../import/zip-reader": "src/engine/import/zip-reader.js",
+  "src/engine/output/export-api.js|../core/pipeline": "src/engine/core/pipeline.js",
+  "src/engine/output/export-api.js|../typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/engine/output/export-api.js|../typography/font-metrics": "src/engine/typography/font-metrics.js",
+  "src/engine/output/export-api.js|../typography/font-subset": "src/engine/typography/font-subset.js",
+  "src/engine/output/export-api.js|./geometry-projector": "src/engine/output/geometry-projector.js",
+  "src/engine/output/export-api.js|./pdf-writer": "src/engine/output/pdf-writer.js",
+  "src/engine/output/export-api.js|../typography/font-metrics": "src/engine/typography/font-metrics.js",
+  "src/engine/output/export-api.js|./zip-writer": "src/engine/output/zip-writer.js",
+  "src/engine/output/export-api.js|./project-io": "src/engine/output/project-io.js",
+  "src/engine/output/export-api.js|../extensions/extensions-io": "src/engine/extensions/extensions-io.js",
+  "src/engine/output/export-api.js|../import/zip-reader": "src/engine/import/zip-reader.js",
+  "src/engine/output/export-api.js|./project-io": "src/engine/output/project-io.js",
+  "src/engine/output/export-api.js|../extensions/extensions-io": "src/engine/extensions/extensions-io.js",
+  "src/engine/output/dom-renderer.js|../notes/markers": "src/engine/notes/markers.js",
+  "src/engine/output/dom-renderer.js|../decoration/page-decorations": "src/engine/decoration/page-decorations.js",
+  "src/engine/output/dom-renderer.js|../decoration/shaar-boxes": "src/engine/decoration/shaar-boxes.js",
+  "src/engine/output/dom-renderer.js|../decoration/ornament-fit": "src/engine/decoration/ornament-fit.js",
+  "src/engine/output/dom-renderer.js|../decoration/asset-registry": "src/engine/decoration/asset-registry.js",
+  "src/engine/output/dom-renderer.js|../layout/page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/output/dom-renderer.js|../decoration/folio": "src/engine/decoration/folio.js",
+  "src/engine/decoration/page-decorations.js|../layout/page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/typography/font-subset.js|./font-metrics": "src/engine/typography/font-metrics.js",
+  "src/engine/output/geometry-projector.js|./dom-renderer": "src/engine/output/dom-renderer.js",
+  "src/engine/output/geometry-projector.js|../typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/engine/output/zip-writer.js|../import/zip-reader": "src/engine/import/zip-reader.js",
+  "src/engine/output/project-io.js|../core/settings-registry": "src/engine/core/settings-registry.js",
+  "src/engine/extensions/extensions-io.js|./style-schema": "src/engine/extensions/style-schema.js",
+  "src/engine/extensions/extensions-io.js|../decoration/custom-pages": "src/engine/decoration/custom-pages.js"
 };
 __modules["src/ui/engine-worker-main.js"] = function (require, module, exports) {
 // src/ui/engine-worker-main.js — צד ה־Worker של המנוע (REQ-UI-03, D-65)
@@ -187,6 +417,61 @@ const { serializeTypesetResult, validateRequest, progressMessage } = require('./
 
 let cancelledJobs = new Set();
 
+/** טיפול register-font (03.11): רישום TTF למדידת גופן אמיתי בעימוד שיידרש. */
+function handleRegisterFont(msg, post) {
+  try {
+    const { registerFont } = require('../engine/typography/measure-api');
+    const u8 = msg.bytes instanceof ArrayBuffer ? new Uint8Array(msg.bytes) : new Uint8Array(msg.bytes.buffer, msg.bytes.byteOffset, msg.bytes.length);
+    const reg = registerFont(msg.name, u8);
+    if (reg.ok) {
+      const glyphCount = reg.profile && reg.profile.font && reg.profile.font.numGlyphs != null ? reg.profile.font.numGlyphs : null;
+      post({ type: 'register-font-result', jobId: msg.jobId, name: msg.name, ok: true, glyphCount });
+    } else {
+      post({ type: 'register-font-result', jobId: msg.jobId, name: msg.name, ok: false, error: reg.error || 'register-failed' });
+    }
+  } catch (e) {
+    post({ type: 'register-font-result', jobId: msg.jobId, name: msg.name, ok: false, error: e && e.message ? e.message : String(e) });
+  }
+}
+
+/** טיפול register-assets (03.11): אוסף עיצובים לרישום המנוע — חיטוי SVG בפנים. */
+function handleRegisterAssets(msg, post) {
+  try {
+    const { registerAssets } = require('../engine/decoration/asset-registry');
+    const res = registerAssets(msg.collection, msg.items);
+    post({ type: 'register-assets-result', jobId: msg.jobId, collection: msg.collection, registered: res.registered, rejected: res.rejected });
+  } catch (e) {
+    post({ type: 'register-assets-result', jobId: msg.jobId, collection: msg.collection, registered: 0, rejected: [{ id: '-', reason: e && e.message ? e.message : String(e) }] });
+  }
+}
+
+/** טיפול export-request (03.11): PDF/ZIP במנוע המלא — הודף הכבד חי ב־Worker בלבד.
+ * הפלט מועתק ל-Uint8Array טהור (בלי byteOffset) — structured-clone/transfer בטוחים. */
+function handleExportRequest(msg, post) {
+  try {
+    const { exportPdf, exportProjectZip } = require('../engine/output/export-api');
+    if (msg.kind === 'pdf') {
+      if (msg.fontBytes == null) {
+        post({ type: 'export-result', jobId: msg.jobId, kind: 'pdf', ok: false, error: 'no-embedded-font' });
+        return;
+      }
+      const u8 = msg.fontBytes instanceof ArrayBuffer ? new Uint8Array(msg.fontBytes) : new Uint8Array(msg.fontBytes.buffer, msg.fontBytes.byteOffset, msg.fontBytes.length);
+      const res = exportPdf(msg.text, msg.settings, u8, msg.fontName);
+      if (!res.ok) { post({ type: 'export-result', jobId: msg.jobId, kind: 'pdf', ok: false, error: res.error }); return; }
+      post({ type: 'export-result', jobId: msg.jobId, kind: 'pdf', ok: true, bytes: new Uint8Array(res.bytes), info: res.info || null });
+      return;
+    }
+    if (msg.kind === 'zip') {
+      const bytes = exportProjectZip(msg.text, msg.settings, { extensions: msg.extensions || null });
+      post({ type: 'export-result', jobId: msg.jobId, kind: 'zip', ok: true, bytes: new Uint8Array(bytes) });
+      return;
+    }
+    post({ type: 'export-error', jobId: msg.jobId, message: `unknown export kind ${msg.kind}` });
+  } catch (e) {
+    post({ type: 'export-error', jobId: msg.jobId, message: e && e.message ? e.message : String(e) });
+  }
+}
+
 /** מטפל הודעות — pure, מקבל post חיצוני (מבודד לבדיקות). */
 function createEngineWorkerMain(post) {
   if (typeof post !== 'function') throw new Error('engine-worker-main: post(message) required');
@@ -201,6 +486,9 @@ function createEngineWorkerMain(post) {
       cancelledJobs.add(msg.jobId);
       return;
     }
+    if (msg.type === 'register-font') { handleRegisterFont(msg, post); return; }
+    if (msg.type === 'register-assets') { handleRegisterAssets(msg, post); return; }
+    if (msg.type === 'export-request') { handleExportRequest(msg, post); return; }
     const jobId = msg.jobId;
     try {
       const result = typeset(msg.text, msg.settings, {
@@ -362,8 +650,15 @@ function typeset(rawText, settingsIn, env = {}) {
   settings._tokenTexts = new Map();
 
   // ---- CP1: parse ----
-  const { metadata, bodyLines } = lexDocument(rawText);
-  const tokens = tokenize(bodyLines);
+  // **S4.5 (03.11):** מזהי הטקסט מוגדרים — קידומת הערת סיום ותוחמי הערות מגיעים
+  // מההגדרות (ברירת מחדל = המקור: 'הערת סיום -', '[', ']'). ערך ריק מבטל זיהוי.
+  const parseOpts = {
+    endnotePrefix: settings['en-line-prefix'],
+    fnOpen: settings['fn-delim-open'],
+    fnClose: settings['fn-delim-close']
+  };
+  const { metadata, bodyLines } = lexDocument(rawText, parseOpts);
+  const tokens = tokenize(bodyLines, parseOpts);
   for (const t of tokens) {
     const rawLine = String(t.raw != null ? t.raw : (t.text != null ? t.text : ''));
     settings._tokenTexts.set(t.id, {
@@ -377,7 +672,7 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- scope-map (S2.1.3: BEFORE measuring) ----
   const segments = tokens.filter(t => t.type === 'paragraph').map((t, i) => ({ text: t.raw, paraIndex: i }));
-  const scope = scanBrackets(segments);
+  const scope = scanBrackets(segments, { open: parseOpts.fnOpen, close: parseOpts.fnClose });
   eventLog.emit('scope-map', 'cp2-scope', { pairs: scope.pairs.length, crossParagraph: scope.scopeMap.crossParagraphCount, unmatchedClosers: scope.unmatchedClosers.length });
   prog('scope-map', 10, 'מיפוי סוגריים והערות', { pairs: scope.pairs.length });
 
@@ -930,7 +1225,9 @@ function typeset(rawText, settingsIn, env = {}) {
   }
 
   // ---- headers ----
-  const bookName = metadata['ספר'] || metadata['title'] || '';
+  // **S4.5:** שם הספר — גם המזהה הארוך של המקור (שם הספר) וגם הקצר (ספר) ו-title;
+  // וכיסוי הגדרת-על של השער (imud-book-title) גוברת על כולם (החלטה מפורשת של המשתמש).
+  const bookName = settings['imud-book-title'] || metadata['שם הספר'] || metadata['ספר'] || metadata['title'] || '';
   const { trimEdgePunctuation } = require('../decoration/headers-builder');
   // **FWD-1:** הפס חוצה־טורים נסרק גם הוא — כותרת H2 חיה שם עכשיו (S8)
   const pageLines = (pg) => [
@@ -1366,6 +1663,8 @@ const registry = [
   K('first-word-length', 'number', 1, P.TYPO, 'sel-first-word-len', ['typography/dropword'], 'fx:fw-len', { enum: [1, 2] }),
   K('first-word-threshold-lines', 'number', 3, P.TYPO, 'rng-fw-threshold', ['typography/dropword'], 'fx:fw-threshold', { min: 2, max: 6 }),
   K('first-word-align-cap-top', 'bool', true, P.TYPO, 'chk-fw-cap-align', ['typography/dropword'], 'fx:fw-cap', { note: 'REQ-LB-05: קצה עליון לקו בסיס גוף — לא baseline' }),
+  K('first-word-size-em', 'number', 2, P.TYPO, 'rng-fw-size-em', ['typography/dropword'], 'fx:fw-size-em', { min: 1, max: 4, step: 0.1, note: 'S4.5: גודל המילה הראשונה ב-em (המקור: size-first-word=1.5; בעבר היה כפול 2 מוקשה)' }),
+  K('first-word-font', 'font', '', P.TYPO, 'sel-fw-font', ['typography/dropword'], 'fx:fw-font', { note: 'S4.5: גופן נפרד למילה הראשונה (המקור: font-first-word=FrankReal); ריק = גופן הגוף' }),
   K('dh-auto-detect', 'bool', true, P.TYPO, 'chk-dh-detect', ['parser/block-tokenizer'], 'fx:dh-detect', { note: 'דיבור המתחיל עד נקודה/מקף' }),
   K('dh-font', 'font', 'David HB', P.TYPO, 'sel-dh-font', ['typography/measure-api'], 'fx:dh-font'),
   K('body-last-line-align', 'enum', 'center', P.TYPO, 'sel-last-line-align', ['output/dom-renderer'], 'fx:last-line-align', { enum: ['center', 'right', 'stretch'], note: 'wiring מ‑Orange ✓' }),
@@ -1488,6 +1787,26 @@ const registry = [
   K('background-texture', 'string', '', P.THEMES, 'inp-bg-texture', ['decoration/page-decorations'], 'fx:bg-texture', { note: 'טקסטורה חוזרת (שכבת תשתית — פטורה מחפיפות באודיט)' }),
   K('background-inset-mm', 'number', 0, P.THEMES, 'rng-bg-inset', ['decoration/page-decorations'], 'fx:bg-inset', { min: 0, max: 30, note: 'שקיעת הרקע משולי העמוד במ״מ' }),
 
+  // ---- נכסי הפרויקט המקורי IMUD_TORANI (03.11, EXT-14 — הטמעה) ----
+  // הערכים הם הפניות 'imud:<collection>:<id>' — נפתרות בזמן רינדור דרך asset-registry.
+  // הפיקרים (בחירת עיצוב מהספרייה) חיים ב-UI (imud-decorations.js); המפתחות כאן
+  // משמרים את הבחירה בתבניות/חבילות פרויקט ומזרימים אותה למנוע.
+  K('imud-shaar-main', 'string', '', P.THEMES, 'inp-imud-shaar-main', ['decoration/page-decorations'], 'fx:imud-shaar-main', { note: 'עיצוב שער ראשי מספריית IMUD (הפניה imud:shaar-main:<id>) — מפעיל את עמודי השער' }),
+  K('imud-shaar-sub', 'string', '', P.THEMES, 'inp-imud-shaar-sub', ['decoration/page-decorations'], 'fx:imud-shaar-sub', { note: 'עיצוב שער משנה מספריית IMUD (imud:shaar-sub:<id>)' }),
+  K('imud-shaar-back', 'string', '', P.THEMES, 'inp-imud-shaar-back', ['decoration/page-decorations'], 'fx:imud-shaar-back', { note: 'עיצוב שער אחורי מספריית IMUD (imud:shaar-back:<id>)' }),
+  K('imud-orn-top', 'string', '', P.ORNAMENTS, 'inp-imud-orn-top', ['decoration/ornament-plan'], 'fx:imud-orn-top', { note: 'עיטור עליון לסימן H2 — עיצוב IMUD; דורש h2-orn-top=image' }),
+  K('imud-orn-bottom', 'string', '', P.ORNAMENTS, 'inp-imud-orn-bottom', ['decoration/ornament-plan'], 'fx:imud-orn-bottom', { note: 'עיטור תחתון לסימן H2 — עיצוב IMUD; דורש h2-orn-bottom=image' }),
+  K('imud-orn-side', 'string', '', P.ORNAMENTS, 'inp-imud-orn-side', ['decoration/ornament-plan'], 'fx:imud-orn-side', { note: 'עיטור צדדי (H2/H3) — עיצורי IMUD; דורש h2-orn-side/h3-side-orn=image' }),
+  K('imud-chapter-end', 'string', '', P.ORNAMENTS, 'inp-imud-chapter-end', ['decoration/ornament-plan'], 'fx:imud-chapter-end', { note: 'עיטור סיום־פרק — עיצוב IMUD; דורש chapter-end-ornament=image' }),
+  K('imud-divider', 'string', '', P.ORNAMENTS, 'inp-imud-divider', ['decoration/ornament-plan'], 'fx:imud-divider', { note: 'מפריד סעיפים מעוצב (323 עיצובים) — משמש מפרידי שער/כותרות במצב תמונה' }),
+  K('imud-book-title', 'string', '', P.THEMES, 'inp-imud-book-title', ['output/dom-renderer'], 'fx:imud-book-title', { note: 'כותרת הספר בשער (עקיפת מטא-נתוני המסמך אם הוגדר)' }),
+  K('imud-book-subtitle', 'string', '', P.THEMES, 'inp-imud-book-subtitle', ['output/dom-renderer'], 'fx:imud-book-subtitle', { note: 'כותרת־משנה בשער' }),
+
+  // ---- מזהי טקסט מוגדרים (S4.5 — chat-v20.3 היסטורי; ברירות מחדל = המקור) ----
+  K('en-line-prefix', 'string', 'הערת סיום -', P.NOTES, 'inp-en-line-prefix', ['parser/dfa-lexer', 'parser/block-tokenizer'], 'fx:en-prefix', { note: 'שורה המתחילה בקידומת ⇒ הערת סיום (הקידומת אינה מופיעה בפלט). ריק = ביטול הזיהוי. הוראת כותרת עמודי ההערות — רק בצורת הרבים «הערות סיום - כותרת»' }),
+  K('fn-delim-open', 'string', '[', P.NOTES, 'inp-fn-delim-open', ['parser/bracket-scanner', 'parser/block-tokenizer'], 'fx:fn-open', { note: 'תוחם פתיחת הערת שוליים; ריק = ביטול' }),
+  K('fn-delim-close', 'string', ']', P.NOTES, 'inp-fn-delim-close', ['parser/bracket-scanner', 'parser/block-tokenizer'], 'fx:fn-close', { note: 'תוחם סגירת הערת שוליים (בברירת המחדל נתמכת גם הצורה ]ם); ריק = ביטול' }),
+
   // ---- מתקדם/מנוע (ADVANCED) ----
   K('trace-verbosity', 'enum', 'standard', P.ADVANCED, 'sel-trace-verb', ['core/events', 'core/pipeline'], 'fx:trace-verb', { enum: ['off', 'minimal', 'standard', 'full'] }),
   // D-43 (P1-4): diagnostics-enabled אינו רשאי לדכא רישום ממצאים ("לא להשבית אבחון").
@@ -1550,24 +1869,67 @@ module.exports = { getSettingDefs, getDefaultSettings, findKey, derivePlacementF
 
 };
 __modules["src/engine/parser/dfa-lexer.js"] = function (require, module, exports) {
-// src/engine/parser/dfa-lexer.js — Layer 1: metadata recognition ONLY in preamble (REQ-PAR-01)
+// src/engine/parser/dfa-lexer.js — Layer 1: metadata recognition ONLY in preamble (REQ-PAR-01, S4.5)
 'use strict';
 
+/**
+ * **S4.5 (ביקורת 03.11, סקירה 2):** מזהי הטקסט של הפרויקט המקורי — רשימה מלאה.
+ * המקור: default_settings.json + טקסט ברירת המחדל של IMUD_TORANI (app.js):
+ *   שם הספר - … / נושא - … / נושא מפורט - … / פרטי מהדורא - … / שם המחבר - … /
+ *   מקום ושנת הוצאה - … / שמירת זכויות - … / פרטי הוצאה לאור - … /
+ *   פרטי קשר - … / פרטים נוספים - …
+ * ולצדם המפתחות הקצרים שנתמכו תמיד (ספר, מחבר, מהדורא, מקום, שנה, מהדורה,
+ * editors, title). הפתיח נסגר רק בשורה ריקה/כותרת/הערת סיום — לא בשורת מטא־נתון.
+ */
+const METADATA_KEYS = [
+  // ארוכים (טקסט ברירת המחדל המקורי)
+  'שם הספר', 'נושא', 'נושא מפורט', 'פרטי מהדורא', 'שם המחבר', 'מקום ושנת הוצאה',
+  'שמירת זכויות', 'פרטי הוצאה לאור', 'פרטי קשר', 'פרטים נוספים',
+  // קצרים (תמיכה היסטורית)
+  'ספר', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'
+];
+
 const HEADING_RE = /^(כותרת\s*([0-7])|חלק\s+([א-ת]+)|הקדמה)\s*[-–—]\s*(.+)$/;
-// **D-40 (תיקון P1-5):** הבחנה בין הערה ממוספרת לבין הוראת כותרת־מחלקה.
-// ממוספרת:  `הערת סיום-1 - טקסט` / `הערת סיום 1 - טקסט`  (המספר = עוגן הסמן במקור)
-// מחלקה:    `הערת סיום - כותרת`                      (הגדרת כותרת עמודי ההערות של החלק)
-const ENDNOTE_PREFIX = /^הערת סיום\s*[-–—]/;
+
+/** ברירת המחדל ההיסטורית של קידומת הערת הסיום (en-line-prefix, default_settings.json). */
+const DEFAULT_ENDNOTE_PREFIX = 'הערת סיום -';
+
+/**
+ * **S4.5 (תיקון סיווג):** בניית ביטוי קידומת הערת סיום מהגדרת המשתמש.
+ * קלט ריק/רווחים ⇒ null (זיהוי מבוטל — שורות נשארות פסקאות; החלטה מפורשת
+ * של המשתמש, לא כשל שקט). הקידומת חייבת להסתיים במקף/מקף-ארוך/קו — אחרת
+ * מוסיפים את המקף בעצמנו (ערך ההגדרה "הערת סיום" שקול ל-"הערת סיום -").
+ */
+function compileEndnotePrefix(prefix) {
+  const p = String(prefix == null ? DEFAULT_ENDNOTE_PREFIX : prefix).trim();
+  if (!p) return null;
+  const withDash = /[-–—]$/.test(p) ? p : p + ' -';
+  const esc = withDash.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*').replace(/[-–—]/g, '[-–—]');
+  return new RegExp('^' + esc + '\\s*(.*)$');
+}
+
+/** **S4.5:** הוראת כותרת עמודי ההערות — צורת רבים בלבד («הערות סיום - כותרת»).
+ * הצורה הבסיסית של D-40 (/^הערת\s*סיום…/) התנגשה עם מזהה התוכן ההיסטורי
+ * («הערת סיום - טקסט» = הערה) וגרמה להיעלמות תוכן. רבים (העערות/הערות) = מקטע;
+ * יחיד (הערת) = תמיד תוכן. */
+const ENDNOTE_CLASS_RE = /^הערות\s*סיום\s*[-–—]\s*(.+)$/;
+
+/** ביטויי ברירת המחדל (תאימות לאחור לייבוא ישיר; tokenize מקבל opts ומזהה משם). */
+const ENDNOTE_PREFIX = compileEndnotePrefix(DEFAULT_ENDNOTE_PREFIX);
 const ENDNOTE_NUMBERED = /^הערת\s*סיום\s*[-–—]?\s*([0-9]{1,4})\s*[-–—]\s*(.+)$/;
-const ENDNOTE_CLASS = /^הערת\s*סיום\s*[-–—]\s*(.+)$/;
-const METADATA_KEYS = ['ספר', 'נושא', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'];
+const ENDNOTE_CLASS = ENDNOTE_CLASS_RE;
 
 /**
  * DFA states: PREAMBLE -> BODY. יציאה מ‑PREAMBLE: שורה ריקה או כותרת ראשונה.
  * שורה כמו `נושא - דין סוכה ישנה` באמצע המסמך נשארת פסקה (REQ-PAR-01 / לקח Z.ai).
+ * @param {string} rawText
+ * @param {object} [opts] — { endnotePrefix: string } (S4.5: מזהה מוגדר; '' = מבוטל)
  */
-function lexDocument(rawText) {
-  const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
+function lexDocument(rawText, opts = {}) {
+  const endnoteRe = opts.endnotePrefixRe instanceof RegExp
+    ? opts.endnotePrefixRe
+    : compileEndnotePrefix(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX);
+  const lines = String(rawText).replace(/\r\n?/g, '\n').split('\n');
   const state = { phase: 'PREAMBLE' };
   const metadata = {};
   const body = [];
@@ -1577,7 +1939,7 @@ function lexDocument(rawText) {
 
     if (state.phase === 'PREAMBLE') {
       if (trimmed === '') { state.phase = 'BODY'; continue; }
-      if (HEADING_RE.test(trimmed) || ENDNOTE_PREFIX.test(trimmed)) {
+      if (HEADING_RE.test(trimmed) || (endnoteRe && endnoteRe.test(trimmed)) || ENDNOTE_CLASS_RE.test(trimmed)) {
         state.phase = 'BODY'; body.push(line); continue;
       }
       const m = trimmed.split(/\s+[-–—]\s+/);
@@ -1595,7 +1957,10 @@ function lexDocument(rawText) {
   return { metadata, bodyLines: body };
 }
 
-module.exports = { lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS, METADATA_KEYS };
+module.exports = {
+  lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS,
+  ENDNOTE_CLASS_RE, METADATA_KEYS, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix
+};
 
 };
 __modules["src/engine/parser/block-tokenizer.js"] = function (require, module, exports) {
@@ -1603,7 +1968,7 @@ __modules["src/engine/parser/block-tokenizer.js"] = function (require, module, e
 'use strict';
 
 const crypto = require('crypto');
-const { HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS } = require('./dfa-lexer');
+const { HEADING_RE, ENDNOTE_CLASS_RE, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix } = require('./dfa-lexer');
 const { scanBrackets } = require('./bracket-scanner');
 
 const ATOMIC_SPACE = '\uE000'; // V3/V4 breakthrough: רווח אטומי בתוך הערה — למדידה בלבד
@@ -1625,12 +1990,37 @@ function mkToken(type, payload) {
  * Tokenizer: שורות → טוקנים.
  * - כותרת N - … (N∈0..7) → heading (מקף חובה; בלי מקף = פסקה בשקט)
  * - `##…##` → editorial — מוסר לחלוטין מהפלט אך נרשם ל‑audit
- * - `הערת סיום - …` → endnote
+ * - `הערת סיום - …` → **endnote (תוכן!)** — הסמנטיקה המקורית (S4.5, תיקון D-40):
+ *   הקידומת מגדירה את הטקסט שאחריה כהערת סיום. במסמך המודפס הקידומת עצמה
+ *   אינה מופיעה (כלל פענוח, לא עיטור — מסמך chat-v20.3 ההיסטורי).
+ * - `הערת סיום-1 - טקסט` → endnote ממוספרת (D-40; עוגן סמן).
+ * - `הערות סיום - כותרת` (רבים!) → הוראת כותרת עמודי ההערות — הצורה היחידה
+ *   שאינה מתנגשת עם מזהה התוכן (ביקורת 03.11: הצורה הקודמת בלעה הערות אמיתיות).
+ * - תוחמי הערות השוליים מוגדרים: opts.fnOpen/fnClose (ברירת מחדל [ ]).
  * - `[a][b]` רצופים → הערות נפרדות (REQ-PAR-04)
  * - בתוך `[...]`: רווחים → \uE000 (אטומי, REQ-LB-04)
+ * @param {string[]} bodyLines
+ * @param {object} [opts] — { endnotePrefix, endnotePrefixRe, fnOpen, fnClose } (S4.5)
  */
-function tokenize(bodyLines) {
+function tokenize(bodyLines, opts = {}) {
   tokenSeq = 0;
+  // מזהה הערת הסיום: ביטוי מוכן (מה-lexer) או בנוי מהקידומת; '' ⇒ מבוטל
+  const endnoteRe = opts.endnotePrefixRe instanceof RegExp
+    ? opts.endnotePrefixRe
+    : compileEndnotePrefix(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX);
+  const endnoteNumRe = (() => {
+    // ממוספרת: `הערת סיום-1 - טקסט` — נבנית מאותה קידומת (ללא המקף האחרון) + מספר + מקף
+    const p = String(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX).trim() || DEFAULT_ENDNOTE_PREFIX;
+    const base = p.replace(/[-–—]\s*$/, '').trim();
+    if (!base) return null;
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+    return new RegExp('^' + esc + '\\s*[-–—]?\\s*([0-9]{1,4})\\s*[-–—]\\s*(.+)$');
+  })();
+  const fnOpen = opts.fnOpen != null ? String(opts.fnOpen) : '[';
+  const fnClose = opts.fnClose != null ? String(opts.fnClose) : ']';
+  // S4.5: תוחם ריק/רווחים ⇒ הזיהוי מבוטל — scanBrackets מקבל את הערך הגולמי
+  // (לא fallback ל-[) כדי שביטול מפורש לא ייהפך בטעות לזיהוי ברירת מחדל.
+  const fnEnabled = fnOpen.trim().length > 0 && fnClose.trim().length > 0;
   const tokens = [];
   for (const raw of bodyLines) {
     let line = normalizeText(raw.trim()); // editable: editorial ##…## מוסר מהשורה (Spec §7)
@@ -1642,21 +2032,26 @@ function tokenize(bodyLines) {
       tokens.push(mkToken('heading', { level, text: m[4] || m[0], raw: line }));
       continue;
     }
-    // **D-40 (תיקון P1-5):** הבחנה ממוספר/מחלקה — בעבר כל שורה "הערת סיום - X"
-    // פוענחה כהערת תוכן, וכותרת המחלקה ("הערות סיום") נהפכה להערה פיקטיבית
-    // ונותרה כשורה זרה בגוף הטקסט. כעת: ממוספרת ⇒ {num, text}; מחלקה ⇒ הוראה
-    // (directive) המגדירה את כותרת עמודי ההערות של החלק — לא תוכן, לא גוף.
-    const mNum = line.match(ENDNOTE_NUMBERED);
-    if (mNum) {
-      tokens.push(mkToken('endnote', { num: Number(mNum[1]), text: mNum[2].trim(), raw: line }));
-      continue;
+    // **S4.5 (תיקון D-40 — ביקורת 03.11):** סדר הבדיקות שהוחזר לסמנטיקה המקורית:
+    // 1) ממוספרת (עוגן) 2) תוכן (כל שורה המתחילה בקידומת = הערה!) 3) הוראת
+    // כותרת — רק בצורת הרבים «הערות סיום - …» שאינה יכולה להתנגש עם הקידומת.
+    if (endnoteNumRe) {
+      const mNum = line.match(endnoteNumRe);
+      if (mNum) {
+        tokens.push(mkToken('endnote', { num: Number(mNum[1]), text: mNum[2].trim(), raw: line }));
+        continue;
+      }
     }
-    if (ENDNOTE_CLASS.test(line) && !/\d/.test(line.slice(0, 14))) {
-      tokens.push(mkToken('endnote-class', { title: line.match(ENDNOTE_CLASS)[1].trim(), raw: line }));
-      continue;
+    if (endnoteRe) {
+      const mEnd = line.match(endnoteRe);
+      if (mEnd && mEnd[1] && mEnd[1].trim()) {
+        tokens.push(mkToken('endnote', { text: mEnd[1].trim(), raw: line }));
+        continue;
+      }
     }
-    if (ENDNOTE_PREFIX.test(line)) {
-      tokens.push(mkToken('endnote', { text: line.replace(ENDNOTE_PREFIX, '').trim(), raw: line }));
+    const mCls = line.match(ENDNOTE_CLASS_RE);
+    if (mCls) {
+      tokens.push(mkToken('endnote-class', { title: mCls[1].trim(), raw: line }));
       continue;
     }
     // editorial ##…## — הסרה מלאה (נרשם; לעולם לא נגלה בפלט — Spec §7)
@@ -1667,20 +2062,22 @@ function tokenize(bodyLines) {
       if (!line) continue;
     }
 
-    // חילוץ הערות [..] עם מחסנית; זוגות רצופים → הערות נפרדות
-    const segs = scanBrackets([{ text: line, paraIndex: tokens.length }]);
+    // חילוץ הערות [..] עם מחסנית; זוגות רצופים → הערות נפרדות; תוחמים מוגדרים (S4.5)
+    const segs = scanBrackets([{ text: line, paraIndex: tokens.length }], { open: fnOpen, close: fnClose });
     let cursor = 0;
     const parts = [];
     const notes = [];
     // בנייה לפי pairs משמאל לימין (outermost first)
     const outer = segs.pairs.filter(p => p.depth === 1).sort((a, b) => a.open - b.open); // חיצוניים בלבד (depth 1)
+    const openCh = fnEnabled ? fnOpen : '[';
+    const closeCh = fnEnabled ? fnClose : ']';
     for (const p of outer) {
       const before = line.slice(cursor, p.open).trim();
       if (before) parts.push({ kind: 'text', value: before });
-      const noteText = line.slice(p.open + 1, p.close).trim().replace(/ +/g, ATOMIC_SPACE);
+      const noteText = line.slice(p.open + openCh.length, p.close).trim().replace(/ +/g, ATOMIC_SPACE);
       notes.push(noteText);
       parts.push({ kind: 'note-ref', noteIndex: notes.length - 1 });
-      cursor = p.close + 1;
+      cursor = p.close + closeCh.length;
     }
     const tail = line.slice(cursor).trim();
     if (tail) parts.push({ kind: 'text', value: tail });
@@ -1690,13 +2087,16 @@ function tokenize(bodyLines) {
   return tokens;
 }
 
-/** CP1: hash של מולטיסט הטוקנים — עקרון שימור תוכן (BRZ-15). */
+/** CP1: hash של מולטיסט הטוקנים — עקרון שימור תוכן (BRZ-15).
+ * **S4.5 (ביקורת 03.11):** כותרת הוראת ההערות (endnote-class) נכנסת לחשיבון —
+ * היא טקסט שמופיע בפלט (כותרת עמודי ההערות); השמטתה איפשרה בעבר לתוכן
+ * שסווג בטעות כהוראה להיעלם בלי שה-hash יתריע. */
 function contentHash(tokens) {
   const stable = JSON.stringify(tokens.flatMap(t => {
     if (t.type === 'paragraph') return [['P', ...t.parts.map(p => p.kind === 'text' ? p.value : `⟦${t.notes[p.noteIndex]}⟧`), String(t.notes.length)]];
     if (t.type === 'heading') return [['H', String(t.level), t.text]];
     if (t.type === 'endnote') return [['EN', String(t.num || ''), t.text]];
-    if (t.type === 'endnote-class') return []; // directive — לא תוכן (D-40)
+    if (t.type === 'endnote-class') return [['ENH', t.title]]; // directive — כותרתו תוכן מוצג (S4.5)
     return [];
   }));
   return crypto.createHash('sha256').update(stable, 'utf8').digest('hex');
@@ -1748,10 +2148,33 @@ function matchCloser(text, i) {
  * paragraphs/columns/pages, and depth at every position. Unmatched closers and
  * openers are REPORTED, never auto-fixed (source-fidelity doctrine).
  *
+ * **S4.5 (03.11):** התוחמים מוגדרים — opts { open, close } (ברירת מחדל [ ]).
+ * הצורה העברית "]ם" נבדקת רק בתוחם ברירת המחדל; תוחם מותאם מותאם בדיוק
+ * (מחרוזת, בדרך כלל תו בודד). תוחם ריק ⇒ הזיהוי מבוטל (פסקאות טהורות).
+ *
  * @param {Array<{text:string, paraIndex:number}>} segments - text runs tagged with paragraph index
+ * @param {object} [opts] — { open: string, close: string }
  * @returns {{pairs:Array, unmatchedClosers:Array, unmatchedOpeners:Array, depthAt:(pos)=>number, scopeMap:Object}}
  */
-function scanBrackets(segments) {
+function scanBrackets(segments, opts = {}) {
+  const openTok = String(opts.open != null ? opts.open : '[').trim();
+  const closeTok = String(opts.close != null ? opts.close : ']').trim();
+  const useDefault = openTok === '[' && closeTok === ']';
+  const enabled = openTok.length > 0 && closeTok.length > 0;
+  /** תואם פותח במיקום i (מחרוזת מלאה). */
+  const matchOpen = (text, i) => {
+    if (!enabled) return 0;
+    if (text.startsWith(openTok, i)) return openTok.length;
+    return 0;
+  };
+  /** תואם סוגר במיקום i — {len, name} או null. בברירת המחדל: טבלת הצורות
+   * (כולל "]ם" העברי); בתוחם מותאם: התאמה מדויקת בלבד. */
+  const matchClose = (text, i) => {
+    if (!enabled) return null;
+    if (useDefault) return matchCloser(text, i);
+    if (text.startsWith(closeTok, i)) return { len: closeTok.length, name: 'custom' };
+    return null;
+  };
   const stack = [];
   const pairs = [];
   const unmatchedClosers = [];
@@ -1763,20 +2186,21 @@ function scanBrackets(segments) {
     const para = Number.isInteger(seg.paraIndex) ? seg.paraIndex : 0;
     let i = 0;
     while (i < text.length) {
-      const ch = text[i];
-      const gp = globalPos + i;
-      if (ch === '[') {
+      const openLen = matchOpen(text, i);
+      if (openLen > 0) {
+        const gp = globalPos + i;
         stack.push({ openPos: gp, para });
         depthMarks.push({ pos: gp, depth: stack.length });
-        i += 1;
+        i += openLen;
       } else {
-        const form = matchCloser(text, i);
+        const form = matchClose(text, i);
         if (!form) {
-          depthMarks.push({ pos: gp, depth: stack.length });
+          depthMarks.push({ pos: globalPos + i, depth: stack.length });
           i += 1;
         } else if (stack.length === 0) {
           // Doctrine: report, never silently repair. Extra chars of the closer
           // are still consumed so positions stay consistent for downstream mappers.
+          const gp = globalPos + i;
           unmatchedClosers.push({
             pos: gp,
             end: gp + form.len - 1,
@@ -1787,6 +2211,7 @@ function scanBrackets(segments) {
           depthMarks.push({ pos: gp, depth: 0 });
           i += form.len;
         } else {
+          const gp = globalPos + i;
           const o = stack.pop();
           pairs.push({
             open: o.openPos,
@@ -1825,7 +2250,8 @@ function scanBrackets(segments) {
     scopeMap: {
       totalPairs: pairs.length,
       crossParagraphCount: pairs.filter(p => p.crossParagraph).length,
-      hebrewClosers: pairs.filter(p => p.closerForm === 'hebrew-mem-sofit').length
+      hebrewClosers: pairs.filter(p => p.closerForm === 'hebrew-mem-sofit').length,
+      delimiters: enabled ? { open: openTok, close: closeTok } : null // S4.5: מה בפועל נסרק
     }
   };
 }
@@ -2447,7 +2873,9 @@ function badness(ratio) {
  * @returns {Array<{words:string[], widthPx:number, heightPx:number, isLast:boolean}>}
  */
 function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
-  const runts = opts.runtMinPct != null ? opts.runtMinPct : 50;
+  // **03.11 (ביקורת):** חיבור ההגדרה — runt-min-width-pct מגיע כ-runts מה-pipeline
+  // וכ-runtMinPct מקריאות ישירות; שניהם נקראים (בעבר רק runtMinPct נקרא וההגדרה לא השפיעה).
+  const runts = opts.runtMinPct != null ? opts.runtMinPct : (opts.runts != null ? opts.runts : 50);
   const items = buildItems(words, measure);
   const n = items.length;
   const cost = new Array(n + 1).fill(INF);
@@ -2742,7 +3170,13 @@ function applyDropWord(block, settings, api = {}) {
     widthPx,
     capTopAlign: Boolean(settings['first-word-align-cap-top']), // REQ-LB-05: cap-top ↔ body baseline, לא glyph baseline
     capHeightEm,                            // **S12:** מדד אמת ליישור (לא עוד קבוע 0.7)
-    fontSizePt: mode === 'drop' ? Math.round(settings['body-font-size-pt'] * 2) : settings['body-font-size-pt'],
+    // **S4.5 (03.11):** גודל וגופן המילה הראשונה — מהגדרות המקור (size-first-word=1.5,
+    // font-first-word). בעבר היה כפול 2 מוקשה; כעת ברירת המחדל הרישומית = 2 (המשכיות
+    // RED) והמיבוא מהמקור מציב 1.5. גופן ריק = גופן הגוף.
+    fontSizePt: mode === 'drop'
+      ? Math.round(settings['body-font-size-pt'] * (Number(settings['first-word-size-em']) || 2))
+      : settings['body-font-size-pt'],
+    fontFamily: settings['first-word-font'] || null, // null ⇒ גופן הגוף (ברירת המחדל של המקור: FrankReal)
     lineHeightPx: null                       // drop: יישור ע"י offset, לא גובה שורה — geometry-neutral
   };
 
@@ -3764,10 +4198,12 @@ function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
   const snapshot = page.columns.map(c => c.slice());
   let guard = 0;
+  let moves = 0; // **03.11 (ביקורת):** אמינות הדיווח — changed אמיתי רק אם הוזזה שורה
   while (pageImbalance(page) > maxDelta && guard++ < 500) {
     const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
     const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break;
+    if (!moveLineForward(page.columns, hi, lo)) break; // אין מהלך חוקי — עוצרים בלי לדווח על שינוי
+    moves++;
     // hard reject: אם נוצרה חריגת cap → rollback מלא
     const cap = page.template.contentBox.height;
     if (page.columns.some(c => usedHeight(c) > cap + 0.5)) {
@@ -3775,7 +4211,10 @@ function balancePage(page, maxDelta) {
       return { changed: false, before, after: before, rollback_reason: 'capacity' };
     }
   }
-  return { changed: true, before, after: pageImbalance(page) };
+  // **03.11 (ביקורת):** בעבר הוחזר changed:true גם כשהלולאה נעצרה בלי שורה אחת —
+  // דיווח מטעה של אבחון האיזון. כעת: שינוי אמיתי = הוזזה בפועל והפרש שהשתנה.
+  const after = pageImbalance(page);
+  return { changed: moves > 0 && after !== before, moves, before, after };
 }
 
 /**
@@ -5542,10 +5981,11 @@ const { buildPickerModel } = require('./theme-sets');
 /**
  * האם ערכת נושא פעילה (הופעלה דרך activateThemeSet או הוגדרה ידנית).
  * ברירת המחדל 'default' ⇒ אין עמודי שער — התנהגות שמרנית שלא משנה מסמכים קיימים.
+ * **03.11 (EXT-14):** גם בחירת עיצוב ספרייה (imud-shaar-main) מפעילה את השערים.
  */
 function themeActive(settings) {
   const id = settings['theme-set-id'];
-  return Boolean(id && id !== 'default') || Boolean(settings['shaar-main-image']);
+  return Boolean(id && id !== 'default') || Boolean(settings['shaar-main-image']) || Boolean(settings['imud-shaar-main']);
 }
 
 function makeShaarPage(type, settings, index) {
@@ -6546,12 +6986,12 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
 
         if (scope.signTop) {
           const y = titleTop - ornMargins.top - h; // בתוך האזור שהוזמן (F-08)
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-top', kindStyle: settings['h2-orn-top'], x: Math.round(cx - w / 2), y, w, h, marginGapTop: titleTop - (y + h) }, rejected, pi);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-top', kindStyle: settings['h2-orn-top'], x: Math.round(cx - w / 2), y, w, h, marginGapTop: titleTop - (y + h) }, rejected, pi, settings);
           planted.h2Top++;
         }
         if (scope.signBottom) {
           const y = titleBottom + ornMargins.bottom; // בתוך ההזמנה התחתונה
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-bottom', kindStyle: settings['h2-orn-bottom'], x: Math.round(cx - w / 2), y, w, h, marginGapBottom: y - titleBottom }, rejected, pi);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-bottom', kindStyle: settings['h2-orn-bottom'], x: Math.round(cx - w / 2), y, w, h, marginGapBottom: y - titleBottom }, rejected, pi, settings);
           planted.h2Bottom++;
         }
         if (scope.titleSide) {
@@ -6559,8 +6999,8 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
           const sideH = Math.min(h, Math.round(titleH));
           const lift = sideOrnamentLiftPx(fontPx);
           const gap = Math.round(fontPx * 0.35);
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-right', kindStyle: settings['h2-orn-side'], x: Math.round(colX + colW - titleW - gap - w), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi);
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-left', kindStyle: settings['h2-orn-side'], x: Math.round(colX + titleW + gap), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-right', kindStyle: settings['h2-orn-side'], x: Math.round(colX + colW - titleW - gap - w), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi, settings);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-left', kindStyle: settings['h2-orn-side'], x: Math.round(colX + titleW + gap), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi, settings);
           planted.h2Side += 2;
         }
       }
@@ -6582,8 +7022,8 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
           const lift = sideOrnamentLiftPx(fontPx);
           const yy = yTop + sideOrnamentOffsetY(lineH, sideH) + lift;
           const wSide = Math.round(fontPx * 1.2);
-          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-right', kindStyle: settings['h3-side-orn'], x: Math.round(colX + colW - wSide), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi);
-          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-left', kindStyle: settings['h3-side-orn'], x: Math.round(colX), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-right', kindStyle: settings['h3-side-orn'], x: Math.round(colX + colW - wSide), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-left', kindStyle: settings['h3-side-orn'], x: Math.round(colX), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
           planted.h3Side += 2;
         }
       }
@@ -6616,7 +7056,7 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
             counters.record(dec.rollbackKey);
             const y = tpl.contentBox.top + usedSoFar - Math.round((ln.heightPx || 0) / 2) - 1;
             const wDiv = Math.min(Math.round(colW * 0.5), Math.round(fontPx * 6));
-            pushOrnament(page, { kind: 'heading-divider', slot: `hdr-div-l${ln.level}`, kindStyle: 'thin', x: Math.round(colX + (colW - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX, rollbackKey: dec.rollbackKey }, rejected, pi);
+            pushOrnament(page, { kind: 'heading-divider', slot: `hdr-div-l${ln.level}`, kindStyle: 'thin', x: Math.round(colX + (colW - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX, rollbackKey: dec.rollbackKey }, rejected, pi, settings);
             planted.headingDivider++;
           } else if (dec.why !== 'disabled' && dec.why !== 'column-head-or-empty') {
             rejected.push({ page: pi, kind: 'heading-divider', why: dec.why });
@@ -6631,7 +7071,7 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
       if (dec.insert) {
         const wDiv = Math.round(tpl.columns[0].w * 0.4);
         const y = tpl.contentBox.bottom - Math.round(fontPx * 2);
-        pushOrnament(page, { kind: 'shaar-divider', slot: `shaar-div-${page.type}`, kindStyle: dec.style, x: Math.round(tpl.columns[0].x + (tpl.columns[0].w - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX }, rejected, pi);
+        pushOrnament(page, { kind: 'shaar-divider', slot: `shaar-div-${page.type}`, kindStyle: dec.style, x: Math.round(tpl.columns[0].x + (tpl.columns[0].w - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX }, rejected, pi, settings);
         planted.shaarDivider++;
       }
     }
@@ -6656,7 +7096,7 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
             kind: 'chapter-end-ornament', slot: 'chapter-end', kindStyle: settings['chapter-end-ornament'],
             x: Math.round(colX + (colW - fit.wPx) / 2), y: Math.round(tpl.contentBox.top + used + (budget - fit.hPx) / 2),
             w: fit.wPx, h: fit.hPx
-          }, rejected, pi);
+          }, rejected, pi, settings);
           planted.chapterEnd++;
         } else if (fit.reason !== 'kind-none' && fit.reason !== 'kind-unknown') {
           rejected.push({ page: pi, kind: 'chapter-end-ornament', why: fit.reason, budget: Math.round(budget) });
@@ -6684,14 +7124,30 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
   return { planted, rejected, counters, findings };
 }
 
+/** **03.11 (EXT-14):** הפניית תמונה לעיטור מסוג 'image' — מההגדרות לפי מיקום העיטור.
+ * הערך בהגדרות הוא הפניה מלאה 'imud:<collection>:<id>' (נבנה ע"י ה-UI בבחירת עיצוב);
+ * הרינדור פותר אותה דרך asset-registry. גישה מילולית לכל מפתח — סורק הצרכנים
+ * (S4.1.4) מוכיח שכל הגדרה באמת נקראת כאן. */
+function imageRefForOrnament(orn, settings) {
+  if (!orn || orn.kindStyle !== 'image' || !settings) return null;
+  const slot = String(orn.slot || '');
+  if (slot.startsWith('h2-top')) return settings['imud-orn-top'] || null;
+  if (slot.startsWith('h2-bottom')) return settings['imud-orn-bottom'] || null;
+  if (slot.startsWith('h2-side') || slot.startsWith('h3-side')) return settings['imud-orn-side'] || null;
+  if (slot.startsWith('chapter-end')) return settings['imud-chapter-end'] || null;
+  if (slot.startsWith('hdr-div') || slot.startsWith('shaar-div')) return settings['imud-divider'] || null;
+  return null;
+}
+
 /** הוספת rect עיטור עם אימות מקור־יחיד (F-09). */
-function pushOrnament(page, orn, rejected, pageIndex) {
+function pushOrnament(page, orn, rejected, pageIndex, settings) {
   const check = assertSingleSourceSizing(orn);
   if (!check.ok) {
     rejected.push({ page: pageIndex, kind: orn.kind, why: `single-source-violation:${check.reason}` });
     return;
   }
-  page.decorations.push({ ...orn, cssClass: `orn orn--${orn.kind} orn--${orn.kindStyle || 'plain'}` });
+  const image = imageRefForOrnament(orn, settings);
+  page.decorations.push({ ...orn, image, cssClass: `orn orn--${orn.kind} orn--${orn.kindStyle || 'plain'}` });
 }
 
 /**
@@ -7103,6 +7559,14 @@ __modules["src/ui/worker-protocol.js"] = function (require, module, exports) {
  *   ← {type:'progress', jobId, stage, pct, label, pageIndex?, totalPages?, estimatedTotal?}
  *   ← {type:'typeset-result', jobId, result}      // result = serializeTypesetResult()
  *   ← {type:'typeset-error', jobId, message, stack?}
+ *
+ * **03.11 — v1.1 (ייצוא בדפדפן דרך ה־Worker; המנוע הכבד חי רק שם):**
+ *   → {type:'register-font', jobId, name, bytes: ArrayBuffer}       // TTF למדידת גופן אמיתי
+ *   ← {type:'register-font-result', jobId, name, ok, error?, glyphCount?}
+ *   → {type:'export-request', jobId, kind:'pdf'|'zip', text, settings,
+ *       fontBytes?: ArrayBuffer|null, fontName?: string, extensions?: object|null}
+ *   ← {type:'export-result', jobId, kind, ok, error?, bytes?: Uint8Array, info?: object}
+ *   ← {type:'export-error', jobId, message}
  */
 
 const PROTOCOL_VERSION = 1;
@@ -7147,6 +7611,33 @@ function validateRequest(msg) {
   }
   if (msg.type === 'cancel') {
     if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    return true;
+  }
+  // **03.11 (v1.1):** רישום גופן למדידה (TTF bytes) — לפני עימוד במדידת גופן אמיתי
+  if (msg.type === 'register-font') {
+    if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    if (typeof msg.name !== 'string' || !msg.name) throw new Error('protocol: name required');
+    if (!(msg.bytes instanceof ArrayBuffer) && !(msg.bytes && msg.bytes.byteLength != null)) {
+      throw new Error('protocol: bytes (ArrayBuffer/TypedArray) required');
+    }
+    return true;
+  }
+  // **03.11 (v1.1):** רישום אוסף נכסי עיצוב (SVG מחוטא) ברישום שבמנוע — לרינדור עימוד/ייצוא
+  if (msg.type === 'register-assets') {
+    if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    if (typeof msg.collection !== 'string' || !msg.collection) throw new Error('protocol: collection required');
+    if (!Array.isArray(msg.items)) throw new Error('protocol: items array required');
+    return true;
+  }
+  // **03.11 (v1.1):** בקשת ייצוא PDF/ZIP — רץ ב־Worker (המנוע המלא + שימת Buffer בדפדפן)
+  if (msg.type === 'export-request') {
+    if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    if (msg.kind !== 'pdf' && msg.kind !== 'zip') throw new Error('protocol: kind must be pdf|zip');
+    if (typeof msg.text !== 'string') throw new Error('protocol: text must be string');
+    if (!msg.settings || typeof msg.settings !== 'object') throw new Error('protocol: settings required');
+    if (msg.fontBytes != null && !(msg.fontBytes instanceof ArrayBuffer) && !(msg.fontBytes && msg.fontBytes.byteLength != null)) {
+      throw new Error('protocol: fontBytes must be ArrayBuffer/TypedArray or null');
+    }
     return true;
   }
   throw new Error(`protocol: unknown message type ${msg && msg.type}`);
@@ -7272,6 +7763,2875 @@ function tally(findings) {
 }
 
 module.exports = { GEOM_KIND_NAMES, NON_FINDINGS, buildReport, tally };
+
+};
+__modules["src/engine/decoration/asset-registry.js"] = function (require, module, exports) {
+// src/engine/decoration/asset-registry.js — רישום נכסי עיצוב ופתרון הפניות (03.11, EXT-14)
+'use strict';
+
+/**
+ * רישום מרכזי של נכסי עיצוב (שערים/עיטורים/מפרידים — SVG + תיבות) ופתרון
+ * הפניות «imud:<collection>:<id>» ל-data-URI בטוח לשימוש כרקע/תמונה.
+ *
+ * **אבטחה:** כל SVG עובר חיטוי (svg-sanitize) בעת הרישום — לעולם לא נשמר כמו
+ * שהוא. רישום כפול של אותו מזהה — החדש מחליף (עדכון ספרייה); מזהים לא
+ * חוקיים נדחים ומדווחים — לא בשקט.
+ *
+ * **סביבת-אגנוסטיות:** אין DOM/פetch כאן — המודול טהור ונבדק גם ב-Node;
+ * הטעינה מהרשת חיה ב-UI (imud-library.js).
+ */
+
+const { sanitizeSvg } = require('./svg-sanitize');
+
+/** הרישום עצמו: collection → Map(id → item). */
+const collections = new Map();
+
+/** קידוד SVG כ-data-URI (UTF-8 percent-encoding — תואם url("...") ב-CSS). */
+function svgDataUri(svg) {
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(String(svg));
+}
+
+/** ולידציית שם אוסף/מזהה: [a-zA-Z0-9_-] בלבד — מונע הזרקת תווים להפניה. */
+function validToken(s) {
+  return typeof s === 'string' && /^[A-Za-z0-9_-]+$/.test(s);
+}
+
+/**
+ * רישום אוסף נכסים.
+ * @param {string} collection — שם האוסף (למשל 'shaar-main', 'orn-ud', 'divider')
+ * @param {Array<{id:string, name?:string, svg:string, box?:object}>} items
+ * @returns {{ok:boolean, registered:number, rejected:Array<{id:string, reason:string}>}}
+ */
+function registerAssets(collection, items) {
+  if (!validToken(collection)) return { ok: false, registered: 0, rejected: [{ id: String(collection), reason: 'bad-collection-name' }] };
+  if (!Array.isArray(items)) return { ok: false, registered: 0, rejected: [{ id: collection, reason: 'items-not-array' }] };
+  let map = collections.get(collection);
+  if (!map) { map = new Map(); collections.set(collection, map); }
+  const rejected = [];
+  let registered = 0;
+  for (const it of items) {
+    if (!it || !validToken(it.id)) { rejected.push({ id: it && String(it.id), reason: 'bad-id' }); continue; }
+    const clean = sanitizeSvg(String(it.svg || ''));
+    if (!clean.ok) { rejected.push({ id: it.id, reason: `svg-rejected:${clean.reason}` }); continue; }
+    map.set(it.id, {
+      id: it.id,
+      name: it.name || it.id,
+      svg: clean.svg,
+      dataUri: svgDataUri(clean.svg),
+      box: it.box || null
+    });
+    registered++;
+  }
+  return { ok: rejected.length === 0, registered, rejected };
+}
+
+/** מספר הנכסים הרשומים (לבדיקות ולתצוגה). */
+function assetCount() {
+  let n = 0;
+  for (const m of collections.values()) n += m.size;
+  return n;
+}
+
+/** רשימת פריטי אוסף (מזהה+שם+תיבה — בלי SVG, קל ל-UI). */
+function listCollection(collection) {
+  const map = collections.get(collection);
+  if (!map) return [];
+  return Array.from(map.values()).map((it) => ({ id: it.id, name: it.name, box: it.box }));
+}
+
+/**
+ * פתרון הפניה לפריט. פורמטים נתמכים:
+ *  - 'imud:<collection>:<id>' → פריט מהרישום
+ *  - כל ערך אחר → מוחזר כמו שהוא (URL/data-URI קיים — לא נוגעים)
+ * @returns {{resolved:boolean, uri:string|null, item:object|null}}
+ */
+function resolveAssetRef(ref) {
+  if (typeof ref !== 'string' || !ref.startsWith('imud:')) return { resolved: false, uri: ref || null, item: null };
+  const parts = ref.split(':');
+  if (parts.length !== 3) return { resolved: false, uri: null, item: null };
+  const [, col, id] = parts;
+  const map = collections.get(col);
+  const item = map && map.get(id);
+  if (!item) return { resolved: false, uri: null, item: null };
+  return { resolved: true, uri: item.dataUri, item };
+}
+
+/** האם הפניה היא הפניית imud (גם אם טרם נטענה — להודעות ברורות למשתמש). */
+function isImudRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('imud:');
+}
+
+/** ניקוי מלא (בדיקות/isolation). */
+function resetAssets() {
+  collections.clear();
+}
+
+module.exports = { registerAssets, resolveAssetRef, isImudRef, listCollection, assetCount, resetAssets, svgDataUri };
+
+};
+__modules["src/engine/decoration/svg-sanitize.js"] = function (require, module, exports) {
+// src/engine/decoration/svg-sanitize.js — SVG sanitizer + CSP hook (S8.1 task 10; full pass S13)
+'use strict';
+
+/**
+ * חיטוי SVG (Spec §9.5 "sanitized SVG"): רשימת־היתרים, לא רשימת־חסימות.
+ * נשללים: <script>, <foreignObject>, תגי אנימציה עם לולאות (set/animate עם begin=never/indefinite
+ * אינם סיכון גיאומטרי אך נשללים כאן בשל דטרמיניזם), מאפייני on*, javascript:, data:text/html,
+ * והפניות חיצוניות (href/xlink:href למקור שאינו מקומי).
+ *
+ * מדיניות zero-randomness/דטרמיניזם: הפלט קבוע לקלט נתון.
+ */
+
+/** תגים מותרים (רשימת־היתרים). */
+const ALLOWED_TAGS = new Set([
+  'svg', 'g', 'defs', 'title', 'desc', 'path', 'rect', 'circle', 'ellipse', 'line',
+  'polyline', 'polygon', 'text', 'tspan', 'linearGradient', 'radialGradient', 'stop',
+  'clipPath', 'mask', 'pattern', 'use', 'symbol', 'image', 'marker', 'style'
+]);
+
+/** מאפיינים מותרים כללית (קידומות גם ב־xlink:). */
+const ALLOWED_ATTRS = new Set([
+  'id', 'class', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
+  'width', 'height', 'transform', 'viewBox', 'fill', 'fill-opacity', 'fill-rule',
+  'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin',
+  'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'points', 'gradientUnits',
+  'gradientTransform', 'offset', 'stop-color', 'stop-opacity', 'clip-path',
+  'clip-rule', 'mask', 'clipPathUnits', 'patternUnits', 'preserveAspectRatio',
+  'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline',
+  'dx', 'dy', 'rotate', 'textLength', 'lengthAdjust', 'xmlns', 'xmlns:xlink',
+  'version', 'xml:space', 'style'
+]);
+
+/** @returns {{ok:boolean, svg:string, removed:string[], reason?:string}} */
+function sanitizeSvg(svgText) {
+  const src = String(svgText || '');
+  if (!src.trim()) return { ok: false, svg: '', removed: [], reason: 'empty' };
+  if (!/<svg[\s>]/i.test(src)) return { ok: false, svg: '', removed: [], reason: 'not-svg' };
+  const removed = [];
+  let out = src;
+
+  // 1) שלילת בלוקים מסוכנים תחילה (תגים שלמים עם תוכנם) — לפני כל פירוק
+  for (const tag of ['script', 'foreignobject', 'animate', 'animatetransform', 'animatemotion', 'set', 'handler', 'listener']) {
+    const re = new RegExp(`<${tag}(\\s[^>]*)?>[\\s\\S]*?<\\/${tag}\\s*>|<${tag}(\\s[^>]*)?\\/>`, 'gi');
+    out = out.replace(re, () => { removed.push(`tag:${tag}`); return ''; });
+  }
+
+  // 2) מעבר תג־תג: השמטת תגים שאינם ברשימת־ההיתרים (עם תוכנם ליחידים מסוכנים)
+  out = out.replace(/<\/?([a-zA-Z:][-a-zA-Z0-9:_]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (whole, tag) => {
+    const t = String(tag).toLowerCase();
+    if (ALLOWED_TAGS.has(t)) return whole;
+    removed.push(`tag:${t}`);
+    return '';
+  });
+
+  // 3) מאפיינים: on*, javascript:, והפניות חיצוניות
+  out = out.replace(/\s([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)')/g, (whole, name, _q, dq, sq) => {
+    const n = String(name).toLowerCase();
+    const val = String(dq != null ? dq : sq);
+    if (n.startsWith('on')) { removed.push(`attr:${n}`); return ''; }
+    if (!ALLOWED_ATTRS.has(n) && !n.startsWith('xlink:')) { removed.push(`attr:${n}`); return ''; }
+    const v = val.trim().toLowerCase();
+    if (v.includes('javascript:') || v.includes('data:text/html') || v.startsWith('vbscript:')) {
+      removed.push(`attr-url:${n}`);
+      return '';
+    }
+    // href/xlink:href: מותרים רק עצמים פנימיים (#id) — אין מקורות חיצוניים
+    if (n === 'href' || n === 'xlink:href') {
+      if (!val.trim().startsWith('#')) { removed.push(`ext-ref:${n}`); return ''; }
+    }
+    return whole;
+  });
+
+  // 4) בלוקי <style>: הסרת url(...) חיצוניים ו־expression()
+  out = out.replace(/<style([^>]*)>([\s\S]*?)<\/style\s*>/gi, (whole, attrs, css) => {
+    if (/url\(\s*['"]?\s*(https?:|file:|\/\/)/i.test(css) || /expression\s*\(/i.test(css)) {
+      removed.push('style:external-url');
+      return '<style></style>';
+    }
+    return whole;
+  });
+
+  if (!/<svg[\s>]/i.test(out)) return { ok: false, svg: '', removed, reason: 'svg-stripped' };
+  return { ok: true, svg: out, removed };
+}
+
+/**
+ * CSP hook (S13 ישלים): מסמך CSP מומלץ להטמעת שערי SVG חיצוניים.
+ * אין eval, אין מקורות חיצוניים; blob/data לתמונות בלבד.
+ */
+function svgCspDirective() {
+  return "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-src 'none'";
+}
+
+module.exports = { sanitizeSvg, svgCspDirective, ALLOWED_TAGS, ALLOWED_ATTRS };
+
+};
+__modules["src/engine/output/export-api.js"] = function (require, module, exports) {
+// src/engine/output/export-api.js — Export orchestrator: HTML standalone / PDF / ZIP bundle (S12.1, REQ-EXP-01..04)
+'use strict';
+
+/**
+ * מנהה הייצוא — נקודת הכניסה האחידה של שלושת הנתיבים:
+ *  - exportHtml(result, settings, doc): HTML עצמאי חד־קובץ (dir=rtl, @page, offline);
+ *  - exportPdf(text, settings, fontBytes): PDF עם טקסט אמיתי + סימניות + קישורי TOC
+ *    + סימני חיתוך. **מסלול מדידה עקבי:** העימוד לייצוא רץ עם measure-impl=font-metrics
+ *    והגופן המוטמע — שבירות השורות והרוחבים בפועל מאותו גופ�ן (מקור גיאומטריה יחיד);
+ *  - exportProjectZip / importProjectZip: חבילת פרויקט ZIP מובנית (JSON — לא תבניות מחרוזות).
+ *
+ * דטרמיניזם בכל הנתיבים: אין Date.now; סדר קבוע; ייצוא כפול ⇒ בתים זהים.
+ */
+
+// **D-65 הפרדת חבילות:** המודולים להלן בטוחים־דפדפן (אין fs/pipeline) ונאגדים
+// גם בחבילת ה־UI. הנתיבים הכבדים (PDF/ZIP מלאים — pipeline+גופן+בינארי) נטענים
+// בעצלתות עם סמן node-only באותה שורת הקריאה — הבאנדלר מדלג; הקריאות מוגנות ב־typeof Buffer.
+// (03.11: הסמן הוסר מהערה זו — תגובה שהכילה אותו מילולית הטעתה את הבאנדלר לדלג
+// גם על require רגיל ⇒ קריסת ייצוא בדפדפן. הזיהוי כעת קפדני: אותה שורה בלבד.)
+const getDefaultSettings = require('../core/settings-registry').getDefaultSettings;
+const { renderPage } = require('./dom-renderer');
+const { buildStandaloneHtml } = require('./html-export');
+const { PAGE_SIZES, MM_TO_PX } = require('../layout/page-templates');
+const { utf8Decode } = require('../import/zip-reader'); // פענוח UTF-8 סביבת-אגנוסטי (רשומות zip = Uint8Array)
+
+/** טעינה עצלה של נתיבי Node (מוגנת) — מחזירה null בסביבה בלי Buffer. */
+function nodeOnly(loader) {
+  if (typeof Buffer === 'undefined') return null; // דפדפן — הקריאה מלאכותית נמנעת מראש
+  return loader();
+}
+
+// ============ HTML עצמאי (REQ-EXP-02) ============
+
+/**
+ * ייצוא HTML עצמאי חד־קובץ. העמודים מרונדרים דרך dom-renderer (אותו מקור
+ * כמו התצוגה החיה) אל doc שסופק (document אמיתי בדפדפן / shim בבדיקות).
+ * @param {object} result — תוצאת typeset
+ * @param {object} settings — הגדרות ממוזגות
+ * @param {{createElement:Function}} doc — מפעל DOM
+ * @param {object} [meta] — {title}
+ */
+function exportHtml(result, settings, doc, meta = {}) {
+  // **זהות בתים עם הרינדור החי:** כל עמוד מוקרן דרך dom-renderer בדיוק כמו
+  // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
+  const pagesHtml = [];
+  for (const pg of result.pages) {
+    pagesHtml.push(renderPage(pg, settings, doc, result.metadata).outerHTML());
+  }
+  const sizeMm = pageMmOf(settings);
+  const pageRules = settings['export-html-page-rules'] !== false
+    ? `@page { size: ${round2mm(sizeMm.w)}mm ${round2mm(sizeMm.h)}mm; margin: 0 }\n`
+      + `.page{width:${Math.round(sizeMm.w * MM_TO_PX)}px;height:${Math.round(sizeMm.h * MM_TO_PX)}px}\n`
+    : '';
+  const html = buildStandaloneHtml(pagesHtml, settings, {
+    title: meta.title || (result.metadata && (result.metadata['ספר'] || result.metadata.title)) || 'ספר',
+    pageRules,
+    // **03.11:** הטמעת הגופנים בקובץ העצמאי (@font-face data-URI) — מסופק ע"י ה־UI
+    // מהספרייה (imud-library); ללא הגדרה — כמו קודם (fallback מערכת).
+    fontCss: meta.fontCss || ''
+  });
+  return html;
+}
+
+// ============ PDF (REQ-EXP-03) ============
+
+/**
+ * ייצוא PDF מלא: עימוד במדידת הגופן המוטמע → הקרנה → כתיבה.
+ * @param {string} text — מסמך המקור
+ * @param {object} settingsIn — הגדרות המשתמש
+ * @param {Buffer} fontBytes — קובץ TTF להטמעה (למשל DejaVu)
+ * @param {string} [fontName] — שם פרופיל (ברירת מחדל: body-font של ההגדרות)
+ * @returns {{ok:boolean, error?:string, bytes?:Buffer, result?:object, projected?:object, info?:object}}
+ */
+function exportPdf(text, settingsIn, fontBytes, fontName) {
+  if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' }; // דפדפן — נתיב Node בלבד (מתועד)
+  /* node-only */ const { typeset } = require('../core/pipeline');
+  /* node-only */ const { registerFont, unregisterFont } = require('../typography/measure-api');
+  /* node-only */ const { parseFont, glyphIdOf } = require('../typography/font-metrics');
+  /* node-only */ const { buildSubset, charInventory } = require('../typography/font-subset');
+  /* node-only */ const { projectDocument } = require('./geometry-projector');
+  /* node-only */ const { writePdf } = require('./pdf-writer');
+  const profileName = fontName || settingsIn['body-font'] || 'ToraExport';
+  const reg = registerFont(profileName, fontBytes);
+  if (!reg.ok) { unregisterFont(profileName); return { ok: false, error: `font:${reg.error}` }; }
+  try {
+    const font = reg.profile;
+    // **סדר הפעולות (תיקון שורש):** עימוד → הקרנה → מלאי מ**כל הטקסט שמצויר
+    // בפועל** (גוף+פסים+TOC+מרזב+גיליון+כותרות) → מצמום → כתיבה.
+    // בעבר נבנה המלאי מטקסט המקור בלבד — וגרשיים נגזרים (גיליון כ״ב, תוויות
+    // TOC) הושמטו בשקט מהגופן ⇒ אובדן תוכן בייצוא.
+    const settings = {
+      ...getDefaultSettings(), ...settingsIn,
+      'body-font': profileName,
+      'measure-impl': 'font-metrics'
+    };
+    const result = typeset(text, settings, { noRecommendations: true });
+    const projected = projectDocument(result, settings);
+    const drawnParts = [];
+    for (const pg of projected.pages) {
+      for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) for (const w of ln.words) drawnParts.push(w.text);
+      for (const fn of pg.footnotes) drawnParts.push(fn.marker || '', fn.text || '');
+      if (pg.folio && pg.folio.text) drawnParts.push(pg.folio.text);
+      if (pg.header) for (const s of pg.header.slots) drawnParts.push(s.text);
+    }
+    const inventory = charInventory(drawnParts.join(' '));
+    const subset = buildSubset(font, inventory);
+    if (!subset.ok) return { ok: false, error: `subset:${subset.error}` };
+
+    // סימניות: H1 → רמה 1; H2 → רמה 2 (עץ מכותרות המודל)
+    const outline = [];
+    const firstPageByToken = new Map();
+    result.pages.forEach((pg) => {
+      for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.columns.flat()]) {
+        const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
+        if (tok != null && !firstPageByToken.has(tok)) firstPageByToken.set(tok, pg.index);
+      }
+    });
+    for (const b of result.tokens) {
+      if (b.type !== 'heading' || (b.level !== 1 && b.level !== 2)) continue;
+      const pg = firstPageByToken.get(b.id);
+      if (pg == null) continue;
+      outline.push({ title: b.text, page: pg, level: b.level });
+    }
+
+    // קישורי TOC: שורות tocPages עם targetPage נפתר (S9). מיקום השורות — פריסת
+    // הרנדרר (toc-rows: top 70, שורה ~24px) — מלבן לחיץ לכל שורה/פריט קבוצה.
+    const tocLinks = [];
+    for (const tp of result.tocPages || []) {
+      let yi = 0;
+      for (const row of (tp.toc && tp.toc.rows) || []) {
+        if (row.kind === 'group') {
+          let xi = 0;
+          for (const it of row.items || []) {
+            if (it.targetPage != null) tocLinks.push({ page: tp.index, x: 18 + xi, y: 70 + yi * 24, w: 60, h: 22, targetPage: it.targetPage });
+            xi += 80;
+          }
+        } else if (row.targetPage != null) {
+          tocLinks.push({ page: tp.index, x: 18, y: 70 + yi * 24, w: 700, h: 22, targetPage: row.targetPage });
+        }
+        yi++;
+      }
+    }
+
+    const pageSizeMm = pageMmOf(settings);
+    const fontForWriter = {
+      subsetBytes: subset.bytes,
+      widthsUnits: subset.widthsUnits,
+      unitsPerEm: subset.unitsPerEm,
+      cidOf: (ch) => {
+        const gNew = glyphIdOf(parseSubsetCache(subset), ch); // gid בתת־הגופן
+        return gNew;
+      },
+      charToGidEntries: () => [...subsetNewCmap(subset).entries()]
+    };
+    const bytes = writePdf({
+      pages: projected.pages,
+      pageSizeMm,
+      font: fontForWriter,
+      settings,
+      outline,
+      tocLinks
+    });
+    return {
+      ok: true, bytes, result, projected,
+      info: {
+        pages: result.pages.length,
+        glyphs: subset.kept,
+        fontBytes: subset.bytes.length,
+        outline: outline.length,
+        tocLinks: tocLinks.length,
+        layoutHash: result.layoutHash,
+        // **03.11 (חיזוק ביקורת):** נתוני היעדים בפועל — לבדיקת אמת שכל
+        // סימנייה/קישור מצביע לעמוד הנכון (לא רק מספרם).
+        outlineItems: outline,
+        tocLinkTargets: tocLinks.map(l => l.targetPage),
+        tocLinkPages: tocLinks.map(l => l.page)
+      }
+    };
+  } finally {
+    unregisterFont(profileName);
+  }
+}
+
+/** קריאת תת־הגופן (פעם אחת) למיפוי תו→gid חדש — ה־cidOf/charToGidEntries של הכותב. */
+const _subsetCache = new WeakMap();
+function parseSubsetCache(subset) {
+  if (!_subsetCache.has(subset)) {
+    /* node-only */ const { parseFont } = require('../typography/font-metrics');
+    _subsetCache.set(subset, parseFont(subset.bytes).font);
+  }
+  return _subsetCache.get(subset);
+}
+function subsetNewCmap(subset) {
+  const f = parseSubsetCache(subset);
+  const out = new Map();
+  for (const [cp, g] of f.charToGlyph) out.set(String.fromCodePoint(cp), g);
+  return out;
+}
+
+// ============ חבילת פרויקט ZIP (REQ-EXP-04) ============
+
+/**
+ * ייצוא חבילת פרויקט: מסמך + הגדרות (עם settings_version) + הרחבות + תבנית ערכה.
+ * כל החלקים JSON מובנה — אפס תבניות מחרוזות (שיעור regex-replacement).
+ * @returns {Buffer} — ZIP
+ */
+function exportProjectZip(text, settings, extras = {}) {
+  if (typeof Buffer === 'undefined') return Buffer.alloc(0); // דפדפן — נתיב Node בלבד (מתועד)
+  /* node-only */ const { buildZip } = require('./zip-writer');
+  /* node-only */ const { exportProject } = require('./project-io');
+  /* node-only */ const { exportExtensions } = require('../extensions/extensions-io');
+  const settingsJson = exportProject(null, cleanSettings(settings), { timestamp: null });
+  const extensionsJson = (extras.extensions != null)
+    ? exportExtensions(extras.extensions)
+    : exportExtensions({ styles: [], pages: [], images: [] });
+  const themeJson = JSON.stringify(extras.theme || { 'theme-set-id': settings['theme-set-id'] || 'default' }, null, 2);
+  const manifest = JSON.stringify({
+    format: 'tora-typesetter-project-zip',
+    format_version: 1,
+    parts: ['document.txt', 'settings.json', 'extensions.json', 'theme.json'],
+    settings_version: 2
+  }, null, 2);
+  return buildZip([
+    { name: 'manifest.json', data: manifest },
+    { name: 'document.txt', data: String(text || '') },
+    { name: 'settings.json', data: settingsJson },
+    { name: 'extensions.json', data: extensionsJson },
+    { name: 'theme.json', data: themeJson }
+  ]);
+}
+
+/**
+ * ייבוא חבילת פרויקט.
+ * @returns {{ok:boolean, error?:string, text?:string, settings?:object, extensions?:object, theme?:object, unknownKeys?:Array, issues?:Array}}
+ */
+function importProjectZip(bytes) {
+  if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' };
+  /* node-only */ const { readZip } = require('../import/zip-reader');
+  /* node-only */ const { importProject } = require('./project-io');
+  const zip = readZip(bytes);
+  if (!zip.ok) return { ok: false, error: `zip:${zip.error}` };
+  const entry = (name) => zip.entries.find(e => e.name === name);
+  const manifestE = entry('manifest.json');
+  const docE = entry('document.txt');
+  const setE = entry('settings.json');
+  if (!manifestE || !docE || !setE) return { ok: false, error: 'missing-parts' };
+  let manifest;
+  try { manifest = JSON.parse(utf8Decode(manifestE.data)); } catch (e) { return { ok: false, error: `manifest:${e.message}` }; }
+  if (manifest.format !== 'tora-typesetter-project-zip') return { ok: false, error: 'unknown-format' };
+  const proj = importProject(utf8Decode(setE.data));
+  let extensions = null;
+  const extE = entry('extensions.json');
+  if (extE) {
+    /* node-only */ const { importExtensions } = require('../extensions/extensions-io');
+    const res = importExtensions(utf8Decode(extE.data));
+    extensions = res; // כולל ok/errors — מדווח, לא שותק
+  }
+  let theme = null;
+  const themeE = entry('theme.json');
+  if (themeE) { try { theme = JSON.parse(utf8Decode(themeE.data)); } catch (e) { return { ok: false, error: `theme:${e.message}` }; } }
+  return {
+    ok: true,
+    text: utf8Decode(docE.data),
+    settings: proj.settings,
+    extensions, theme,
+    unknownKeys: proj.unknownKeys,
+    issues: proj.issues
+  };
+}
+
+// ============ עזרים ============
+
+function pageMmOf(settings) {
+  const px = PAGE_SIZES[settings['page-size']] || PAGE_SIZES.A4;
+  return { w: px.w / MM_TO_PX, h: px.h / MM_TO_PX }; // px → מ״מ (אותו גורם)
+}
+function round2mm(v) { return Math.round(v * 100) / 100; }
+
+/** הגדרות נקיות לייצוא: מפתחות פנימיים (מקווקוות) מוסרים — נכסי זמן־ריצה. */
+function cleanSettings(settings) {
+  const out = {};
+  for (const [k, v] of Object.entries(settings || {})) {
+    if (k.startsWith('_')) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+module.exports = {
+  exportHtml, exportPdf, exportProjectZip, importProjectZip, pageMmOf
+};
+
+};
+__modules["src/engine/output/dom-renderer.js"] = function (require, module, exports) {
+// src/engine/output/dom-renderer.js — DOM render (browser) + PUA scrub invariant (REQ-PAR-05, BRZ-13)
+'use strict';
+
+/**
+ * רנדור עמודים ל‑DOM. כללי יסוד:
+ * - U+E000/U+E101 חייבים להיעלם מה‑DOM הסופי (scrub לפני render; נשמרים רק לשלב המדידה).
+ * - כיווניות RTL מלאה; no !important על inline של עיטורים (F-09 — מקור שליטה יחיד).
+ * - מיפוי סוג עמוד → מחלקת CSS: regular/shaar/preface/sign-open/endnotes/toc/filler.
+ *
+ * **עדכוני סגירת S7:**
+ *  - סמני הערות מ‑notes/markers (מקור אחיד — P1-3); מקטעי פיצול הערה ארוכה
+ *    מסומנים class fn--continuation עם תוספת "(המשך)".
+ *  - background-opacity ⇒ rgba() אמיתי (בעבר נכתב לתכונת CSS בלתי קיימת — P0-5).
+ *  - paren-style-scale ⇒ מילים בתוך סוגריים ב‑span.w--paren (D-42).
+ *  - column-divider-style ⇒ חוט מפריד בין הטורים, גובה Math.min−8px (overlay — geometry-neutral).
+ *  - עמודי הערות: כותרת + רשימת הערות (S7.1.1).
+ *  - הערות צד: מיקום מוחלט לפי yTop/x מה‑placement (S7.1.2).
+ */
+
+const PT_CLASS = {
+  'regular': 'page page--regular',
+  'shaar-main': 'page page--shaar page--shaar-main',
+  'shaar-sub': 'page page--shaar page--shaar-sub',
+  'shaar-back': 'page page--shaar page--shaar-back',
+  'preface': 'page page--preface',
+  'sign-open': 'page page--sign-open',
+  'h3-spread': 'page page--h3-spread',
+  'endnotes': 'page page--endnotes',
+  'toc-general': 'page page--toc page--toc-general',
+  'toc-detail': 'page page--toc page--toc-detail',
+  'custom': 'page page--custom',
+  'filler': 'page page--filler'
+};
+
+const ATOMIC_SPACE = '\uE000';
+const PAREN_MARK = '\uE101';
+
+/** scrub חובה: אף תו PUA פנימי לא יוצא החוצה (BRZ-13 / S2.2). */
+function scrubPUAText(s) {
+  // BRZ-13: כל תווי ה‑PUA הפנימיים (E000 רווח אטומי, E101 סוגריים, E102 תג סמן) — נאספים לפני רנדר
+  return String(s).split(ATOMIC_SPACE).join(' ').split(PAREN_MARK).join('').split('\uE102').join('');
+}
+
+/** rgba() אמיתי מ‑background-color + background-opacity (תיקון P0-5). */
+function bgRgba(color, opacity) {
+  const hex = String(color || '#ffffff');
+  const m = hex.match(/^#([0-9a-f]{6})$/i);
+  const op = Number.isFinite(opacity) ? Math.max(0, Math.min(1, opacity)) : 1;
+  if (!m) return hex; // שם־צבע/תבנית אחרת — כמו שהוא
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${op})`;
+}
+
+/**
+ * S7 — צריכת footnote-marker-style (enum) דרך מקור אחיד: notes/markers.
+ * (בעבר היה כאן ממיר מקומי שני — אי־עקביות מספור, P1-3.)
+ */
+const { markerFor } = require('../notes/markers');
+const { planDecorations } = require('../decoration/page-decorations');
+const { resolveShaarBox } = require('../decoration/shaar-boxes');
+const { columnDividerHeightPx } = require('../decoration/ornament-fit');
+const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
+const { MM_TO_PX } = require('../layout/page-templates');
+const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
+
+/** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
+function lastLineClass(ln, settings) {
+  if (!ln.isLast) return '';
+  const mode = settings['body-last-line-align'] || 'center';
+  if (mode === 'right') return ' line--last-right';
+  if (mode === 'stretch') return ' line--last-stretch';
+  return ' line--last-center';
+}
+
+function renderLine(ln, doc, settings = {}) {
+  const el = doc.createElement('div');
+  el.className = 'line' + (ln.isLast ? ' line--last' + lastLineClass(ln, settings) : '');
+  el.setAttribute('dir', 'rtl');
+  if (ln.aqStretch && ln.aqStretch !== 1) {
+    el.style.wordSpacing = `${(ln.aqStretch - 1) * 4}px`;
+  }
+  // **S8 (F-08):** הזמנת עיטורי H2 בתוך תיבת השורה — הטקסט יורד/עולה ב־padding;
+  // הגובה כבר תוקצב בפריסה, הרנדור רק מצייר בתוך התיבה (מקור יחיד — F-09).
+  if (ln.h2OrnPadTop) el.style.paddingTop = `${ln.h2OrnPadTop}px`;
+  if (ln.h2OrnPadBottom) el.style.paddingBottom = `${ln.h2OrnPadBottom}px`;
+  // **S11 (REQ-PAR-06):** הזמנת עיטורים מקושרים של סגנון מותאם — אותו דפוס (F-08).
+  if (ln.csOrnPadTop) el.style.paddingTop = `${ln.csOrnPadTop}px`;
+  if (ln.csOrnPadBottom) el.style.paddingBottom = `${ln.csOrnPadBottom}px`;
+  // **S11 (REQ-PAR-06):** סגנון ברמת הבלוק — class + סגנון מובנה + מונה גלוי בשורה הראשונה.
+  if (ln.customStyle) {
+    el.className += ' custom-style';
+    el.dataset.style = ln.customStyle.id || '';
+    applyCustomStyleSpec(el, ln.customStyle.styleSpec, doc);
+    if (ln.csCounterMark) {
+      const cm = doc.createElement('span');
+      cm.className = 'cs-counter';
+      cm.textContent = ln.csCounterMark;
+      prependChild(el, cm);
+    }
+  }
+  // **D-42:** מילים בתוך סוגריים — span.w--paren עם font-size בסקאלה (geometry-neutral).
+  // מילים רגילות — span.w אחיד (מיצג גם ב‑DOM אמיתי וגם ב‑shim של הבדיקות).
+  // **S11:** טווחי inline מסגנון מותאך — span.w--custom עם data-style (גודל מוחל כבר במדידה).
+  const parenScale = Number(settings['paren-style-scale']) || 1;
+  const words = (ln.words || []).map(w => scrubPUAText(w.replace(/\u00A0/g, '\u00A0')));
+  const spans = ln.parenSpans || [];
+  const customs = ln.customSpans || [];
+  if ((spans.length && parenScale !== 1) || customs.length) {
+    for (let i = 0; i < words.length; i++) {
+      const span = doc.createElement('span');
+      const cIdx = customs.findIndex(c => c.wi === i);
+      if (cIdx >= 0) {
+        span.className = 'w w--custom';
+        span.dataset.style = customs[cIdx].styleId;
+      } else if (spans.includes(i)) {
+        span.className = 'w w--paren';
+        span.style.fontSize = `${Math.round(parenScale * 100)}%`;
+      } else {
+        span.className = 'w';
+      }
+      span.textContent = words[i];
+      el.appendChild(span);
+    }
+  } else {
+    el.textContent = words.join(' ');
+  }
+  const tok = ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId);
+  if (tok) el.dataset.token = tok;
+  return el;
+}
+
+/** **S11:** הכנסת ילד ראשון — insertBefore כשיש; fallback ל־unshift (תאימות ל־shims של הבדיקות). */
+function prependChild(el, node) {
+  if (typeof el.insertBefore === 'function') el.insertBefore(node, el.firstChild || null);
+  else { (el.children || (el.children = [])).unshift(node); node.parentNode = el; }
+}
+
+/** **S11 (REQ-PAR-06):** החלת סגנון מותאם על יסוד DOM — מקור יחיד לכל מוצרי הדגל. */
+function applyCustomStyleSpec(el, spec, doc) {
+  void doc;
+  if (!spec || typeof spec !== 'object') return;
+  if (spec.fontSizePt) el.style.fontSize = `${spec.fontSizePt}pt`;
+  if (spec.bold) el.style.fontWeight = '700';
+  if (spec.italic) el.style.fontStyle = 'italic';
+  if (spec.color) el.style.color = spec.color;
+  if (spec.background) el.style.background = spec.background;
+  if (spec.border) el.style.borderRight = `3px solid ${typeof spec.border === 'string' ? spec.border : '#1a1a1a'}`;
+  if (spec.indentEm) { el.style.paddingRight = `${spec.indentEm}em`; el.style.marginRight = `${spec.indentEm}em`; }
+  if (spec.align) el.style.textAlign = spec.align === 'stretch' ? 'justify' : spec.align;
+  if (spec.letterSpacingEm) el.style.letterSpacing = `${spec.letterSpacingEm}em`;
+  if (spec.textTransform === 'small-caps') el.style.fontVariant = 'small-caps';
+}
+
+function renderFootnoteArea(page, settings, doc) {
+  if (!settings['footnotes-enabled'] || !page.footnotes.length) return null;
+  const area = doc.createElement('div');
+  area.className = `footnotes footnotes--${settings['fn-layout-mode']}`;
+  if (settings['footnote-separator-rule'] !== 'none') {
+    const rule = doc.createElement('div');
+    rule.className = `fn-rule fn-rule--${settings['footnote-separator-rule']}`;
+    area.appendChild(rule);
+  }
+  // סמן אחיד (notes/markers) + סימון המשך למקטעי פיצול (S7.1.3 long-note policy)
+  for (const n of page.footnotes) {
+    const marker = n.marker || markerFor(Number.isInteger(n.docIndex) ? n.docIndex : (n.markerNum || 1), settings['footnote-marker-style']);
+    const el = doc.createElement('div');
+    const cont = n.isContinuation || n.mode === 'split-rest';
+    el.className = 'footnote' + (cont ? ' fn--continuation' : '') + (n.customStyle ? ' footnote--custom' : '');
+    if (n.customStyle) el.dataset.style = n.customStyle;
+    el.dir = 'rtl';
+    el.textContent = `${cont ? '(המשך) ' : ''}${marker}\u200F ${scrubPUAText(n.text || n)}`;
+    area.appendChild(el);
+  }
+  return area;
+}
+
+/** **S9 (D-61):** גיליון עמוד — מקור יחיד לכל סוגי העמודים (בעבר 4 העתקים).
+ * מסגרות CSS (circle/square) מרונדרות כ‑badge עם מחלקה; הטקסטואליות כבר בתוך התצוגה. */
+function renderFolio(page, settings, doc) {
+  if (!page.folioDisplay || settings['page-num-position'] === 'none') return null;
+  const folio = doc.createElement('footer');
+  folio.className = `folio folio--${settings['page-num-position']} folio--frame-${settings['page-num-frame']}`;
+  if (isCssFrame(settings['page-num-frame'])) {
+    const badge = doc.createElement('span');
+    badge.className = `page-num-badge page-num-frame-${settings['page-num-frame'] === 'circle' ? 'circle' : 'box'}`;
+    badge.textContent = page.folioDisplay;
+    folio.appendChild(badge);
+  } else {
+    folio.textContent = page.folioDisplay;
+  }
+  return folio;
+}
+
+function renderHeader(header, doc) {
+  if (!header) return null;
+  const el = doc.createElement('div');
+  el.className = `running-head head--sep-${header.separator}`;
+  el.dir = 'rtl';
+  // **S9 (D-61):** צורה חדשה {slots} עם עצמאות מלאה לכל סלוט (מקור/יישור/גופן/גודל/רוחב);
+  // תאימות לאחור לצורה הישנה ({right,center,left}) לבדיקות ≤S8.
+  const slots = header.slots || { right: header.right, center: header.center, left: header.left };
+  for (const pos of ['right', 'center', 'left']) {
+    const s = slots[pos];
+    if (!s) continue;
+    const slot = doc.createElement('span');
+    slot.className = `head-slot head-slot--${pos} align-${s.align}`;
+    slot.style.width = `${s.widthPct}%`;
+    if (s.font) slot.style.fontFamily = s.font;
+    if (s.sizePt) slot.style.fontSize = `${Math.round(s.sizePt * (96 / 72) * 100) / 100}px`;
+    slot.textContent = scrubPUAText(s.text || '');
+    el.appendChild(slot);
+  }
+  return el;
+}
+
+/** **S9 (REQ-HDR-05):** תוכן עמוד תוכן־עניינים — שורות עם נקודות מובילות, תווית
+ * גיליון בפורמט המספור, וקישורי עוגן לחיצים (#page‑N; יעדי PDF ייבנו ב‑S12). */
+function renderTocPageContent(page, doc) {
+  const els = [];
+  const t = page.toc || {};
+  if (t.title) {
+    const el = doc.createElement('h2');
+    el.className = 'toc-page-title';
+    el.dir = 'rtl';
+    el.textContent = scrubPUAText(t.title);
+    els.push(el);
+  }
+  const wrap = doc.createElement('div');
+  wrap.className = 'toc-rows';
+  wrap.dir = 'rtl';
+  for (const r of (t.rows || [])) {
+    if (r.kind === 'group') {
+      // קבוצה (inline רצוף): "כותרת – עמוד | כותרת – עמוד" בשורה אחת (IMUD grp-item/grp-sep)
+      const g = doc.createElement('div');
+      g.className = `toc-row toc-row--group toc-lvl-${r.items[0] ? r.items[0].level : 1}`;
+      for (const it of r.items) {
+        const a = doc.createElement('a');
+        a.className = `toc-item toc-lvl-${it.level}`;
+        if (it.targetPage != null) a.setAttribute('href', `#page-${it.targetPage}`);
+        a.setAttribute('data-anchor', it.anchorId || '');
+        const txt = doc.createElement('span'); txt.className = 'grp-title';
+        txt.textContent = scrubPUAText(it.text);
+        const lab = doc.createElement('span'); lab.className = 'grp-page';
+        lab.textContent = it.label || '';
+        a.appendChild(txt); a.appendChild(lab);
+        g.appendChild(a);
+      }
+      wrap.appendChild(g);
+    } else {
+      const a = doc.createElement('a');
+      a.className = `toc-row toc-lvl-${r.level}` + (r.inline ? ' toc-row--inline' : '');
+      if (r.targetPage != null) a.setAttribute('href', `#page-${r.targetPage}`);
+      a.setAttribute('data-anchor', r.anchorId || '');
+      if (r.rowNum != null) {
+        const n = doc.createElement('span'); n.className = 'toc-num'; n.textContent = String(r.rowNum);
+        a.appendChild(n);
+      }
+      const title = doc.createElement('span');
+      title.className = 'toc-title';
+      title.textContent = scrubPUAText(r.wrapped && r.wrapped.length ? r.wrapped.join(' ') : r.text);
+      const dots = doc.createElement('span'); dots.className = 'toc-dots';
+      const label = doc.createElement('span'); label.className = 'toc-label';
+      label.textContent = r.label || '';
+      a.appendChild(title); a.appendChild(dots); a.appendChild(label);
+      wrap.appendChild(a);
+    }
+  }
+  els.push(wrap);
+  return els;
+}
+
+/** חוט מפריד בין טורים (overlay; גובה Math.min −8px — כלל V4; geometry-neutral).
+ * גובה החישוב מקור יחיד: ornament-fit.columnDividerHeightPx (F-09 — לא עותק מקומי). */
+function renderColumnDivider(page, settings, doc) {
+  const style = settings['column-divider-style'];
+  if (!style || style === 'none' || page.columns.length < 2) return null;
+  const used = page.columns.map(col => col.reduce((s, ln) => s + (ln.heightPx || 0), 0));
+  const h = columnDividerHeightPx(used);
+  if (h <= 0) return null;
+  const el = doc.createElement('div');
+  el.className = `col-divider col-divider--${style}`;
+  const c0 = page.template.columns[0], c1 = page.template.columns[1];
+  el.style.left = `${Math.round(c1.x + c1.w + (page.template.gutter || 0) / 2)}px`;
+  el.style.top = `${page.template.contentBox.top}px`;
+  el.style.height = `${h}px`;
+  return el;
+}
+
+/**
+ * **S8 (FWD-1):** פס כותרת חוצה־טורים — שורות הכותרת שנמדדו ברוחב מלא,
+ * מרונדרות בפס עליון חוצה־טורים מעל שני הטורים.
+ */
+function renderSpanningBand(page, settings, doc) {
+  if (!page.spanning || !page.spanning.lines.length) return null;
+  const band = doc.createElement('div');
+  band.className = 'spanning-band';
+  band.dir = 'rtl';
+  // **S11 (REQ-PAR-06):** פס callout מסגנון מותאם — class + סגנון מובנה (full-width).
+  if (page.spanning.customStyle) {
+    band.className += ' custom-style';
+    band.dataset.style = page.spanning.customStyle.id || '';
+    applyCustomStyleSpec(band, page.spanning.customStyle.styleSpec, doc);
+    if (page.spanning.customStyle.counterMark) {
+      const cm = doc.createElement('span');
+      cm.className = 'cs-counter';
+      cm.textContent = page.spanning.customStyle.counterMark;
+      prependChild(band, cm);
+    }
+  }
+  const spanTop = page.template.contentBox.top;
+  band.style.top = `${spanTop}px`;
+  band.style.height = `${page.spanning.heightPx}px`;
+  const left = Math.min(...page.template.columns.map(c => c.x));
+  const right = Math.max(...page.template.columns.map(c => c.x + c.w));
+  band.style.left = `${Math.round(left)}px`;
+  band.style.width = `${Math.round(right - left)}px`;
+  for (const ln of page.spanning.lines) band.appendChild(renderLine(ln, doc, settings));
+  return band;
+}
+
+/**
+ * **S8 (REQ-ORN-01..04):** כל העיטורים נציירים מה־rect שחושב בפאס העיטורים
+ * (ornament-plan) — הרנדרר לא קובע ממדים משלו (F-09: מקור שליטה יחיד).
+ */
+function renderDecorations(page, doc) {
+  const els = [];
+  for (const d of (page.decorations || [])) {
+    const el = doc.createElement('div');
+    el.className = d.cssClass || 'orn';
+    el.dataset.slot = d.slot || '';
+    el.dataset.kindStyle = d.kindStyle || '';
+    el.style.left = `${Math.round(d.x)}px`;
+    el.style.top = `${Math.round(d.y)}px`;
+    el.style.width = `${Math.round(d.w)}px`;
+    el.style.height = `${Math.round(d.h)}px`;
+    // **03.11 (EXT-14):** עיטור מסוג 'image' — רקע מההפניה הפתורה (asset-registry)
+    if (d.image) {
+      const uri = assetUri(d.image);
+      if (uri) {
+        el.style.backgroundImage = `url("${uri}")`;
+        el.style.backgroundSize = '100% 100%';
+        el.style.backgroundRepeat = 'no-repeat';
+      }
+    }
+    els.push(el);
+  }
+  return els;
+}
+
+/** **03.11 (EXT-14):** פתרון נכס — הפניות imud: מתורגמות ל-data-URI מהרישום
+ * (asset-registry); ערכים אחרים (URL/data-URI קיים) עוברים כמו שהם. */
+function assetUri(ref) {
+  if (!ref) return null;
+  const r = resolveAssetRef(ref);
+  return r.uri || null;
+}
+
+/**
+ * **S8 (REQ-ORN-05/08):** רקע עמוד + תיבות שער לפי התוכנית שחושבה (page-decorations)
+ * — רקע לפי מחלקת העמוד עם inset במ״מ; תיבת טקסט של שער ראשי לפי box פתור.
+ * **03.11 (EXT-14):** שלושת השערים (ראשי/משנה/אחורי) — עיצוב ה־SVG במסך מלא +
+ * תיבת כותרת מה-box של העיצוב (רישום נכסים) או מההגדרות.
+ */
+function renderPageBackgroundAndShaar(page, settings, doc, metadata) {
+  const els = [];
+  const plan = planDecorations(page, settings);
+  const inset = plan.background ? plan.background.insetPx : 0;
+  if (plan.background && plan.background.image) {
+    const el = doc.createElement('div');
+    el.className = 'deco deco--page-background';
+    el.style.backgroundImage = `url("${assetUri(plan.background.image) || plan.background.image}")`;
+    el.style.inset = `${inset}px`;
+    els.push(el);
+  }
+  if (plan.background && plan.background.texture) {
+    const el = doc.createElement('div');
+    el.className = 'deco deco--page-texture';
+    el.style.backgroundImage = `url("${assetUri(plan.background.texture) || plan.background.texture}")`;
+    els.push(el);
+  }
+  // עזר: שער במסך מלא מהפניה פתורה + תיבת כותרת לפי box מהעיצוב (אם נרשם)
+  const fullShaar = (slotName, cssClass, boxClass) => {
+    const slot = plan.slots.find(s => s.slot === slotName && s.asset);
+    if (!slot) return;
+    const resolved = resolveAssetRef(slot.asset);
+    const uri = resolved.uri || slot.asset;
+    const bg = doc.createElement('div');
+    bg.className = cssClass;
+    bg.style.backgroundImage = `url("${uri}")`;
+    bg.style.inset = '0';
+    els.push(bg);
+    // תיבת כותרת — מה-box של העיצוב ברישום (מ״מ) או מההגדרות; בלי box מהעיצוב —
+    // ה-fallback המסורתי של resolveShaarBox (REQ-ORN-05: התיבה תמיד נבנית על שער עם תמונה)
+    const designBox = resolved.item && resolved.item.box ? resolved.item.box : null;
+    const boxRef = designBox || settings['shaar-main-box'] || null;
+    {
+      const { box } = resolveShaarBox('main', settings['theme-set-id'] || 'default', { box: boxRef }, null, { top: 40, bottom: 40, right: 30, left: 30 });
+      const tb = doc.createElement('div');
+      tb.className = boxClass;
+      tb.dir = 'rtl';
+      tb.style.top = `${Math.round(box.top * MM_TO_PX)}px`;
+      tb.style.bottom = `${Math.round(box.bottom * MM_TO_PX)}px`;
+      tb.style.left = `${Math.round(box.left * MM_TO_PX)}px`;
+      tb.style.right = `${Math.round(box.right * MM_TO_PX)}px`;
+      const bookName = (settings['imud-book-title'] || (metadata && (metadata['שם הספר'] || metadata['ספר'] || metadata['title']))) || ''; // S4.5: גם המזהה הארוך + על
+      const topic = (settings['imud-book-subtitle'] || (metadata && (metadata['נושא מפורט'] || metadata['נושא']))) || ''; // 03.11: כותרת־משנה מוגדרת
+      tb.textContent = [bookName, topic].filter(Boolean).join(' · ');
+      els.push(tb);
+    }
+  };
+  fullShaar('shaar-main', 'deco deco--shaar-main', 'shaar-main-box');
+  fullShaar('shaar-sub', 'deco deco--shaar-sub', 'shaar-sub-box');
+  fullShaar('shaar-back-frame', 'deco deco--shaar-back', 'shaar-back-box');
+  return els;
+}
+
+/**
+ * **S8 (PT-09):** עמוד מותאם — תוכן קבוע/תיבות/תמונות במיקומים שהוגדרו (מ״מ→פיקסלים).
+ */
+function renderCustomPageContent(page, doc) {
+  const els = [];
+  if (!page.custom) return els;
+  for (const b of (page.custom.boxes || [])) {
+    const el = doc.createElement('div');
+    el.className = 'custom-box';
+    el.dir = 'rtl';
+    el.style.left = `${b.x}px`; el.style.top = `${b.y}px`;
+    el.style.width = `${b.w}px`; el.style.height = `${b.h}px`;
+    el.textContent = scrubPUAText(b.text || '');
+    els.push(el);
+  }
+  for (const im of (page.custom.images || [])) {
+    const el = doc.createElement('div');
+    el.className = 'custom-image';
+    el.style.left = `${im.x}px`; el.style.top = `${im.y}px`;
+    el.style.width = `${im.w}px`; el.style.height = `${im.h}px`;
+    el.style.backgroundImage = `url("${im.src}")`;
+    els.push(el);
+  }
+  return els;
+}
+
+/**
+ * רנדור עמוד שלם. @param {object} page - תוצר dp-planner + header + numbersByIndex
+ */
+function renderPage(page, settings, doc, header) {
+  if (!page.template) {
+    // עמודי הערות שלא חוברו לרצף המספור — תבנית ברירת מחדל חוקית (A4) במקום קריסה
+    page.template = { width: 794, height: 1123, columns: [], margins: { top: 40, bottom: 40, side: 60, outer: 60 }, contentBox: { top: 40, bottom: 1080, height: 1040 }, gutter: 0, counts: false, numbered: false, hasRunningHead: false };
+  }
+  const root = doc.createElement('article');
+  root.className = PT_CLASS[page.type] || 'page';
+  root.dataset.pageIndex = String(page.index);
+  // **S9 (REQ-HDR-05):** עוגן עמוד — יעד לקישורי תוכן־העניינים הלחיצים (#page-N)
+  root.setAttribute('id', `page-${page.index}`);
+  if (page.template.width != null) root.style.width = `${page.template.width}px`;
+  if (page.template.height != null) root.style.height = `${page.template.height}px`;
+  root.dir = 'rtl';
+
+  // key: background-color / background-opacity — rgba אמיתי (P0-5)
+  const bg = settings['background-color'];
+  const bgOp = settings['background-opacity'];
+  if (bg && bg !== '#ffffff') root.style.backgroundColor = bgRgba(bg, bgOp != null ? bgOp : 1);
+  else if (Number.isFinite(bgOp) && bgOp < 1) root.style.backgroundColor = bgRgba('#ffffff', bgOp);
+
+  // **עמודי הערות (S7.1.1):** כותרת + רשימת הערות; אין כותרת עליונה/טורי גוף
+  if (page.type === 'endnotes') {
+    if (page.heading) {
+      const h = doc.createElement('h2');
+      h.className = 'endnote-title';
+      h.dir = 'rtl';
+      h.textContent = scrubPUAText(page.heading);
+      root.appendChild(h);
+    }
+    const list = doc.createElement('div');
+    list.className = 'endnote-list';
+    for (const n of page.notes || []) {
+      const el = doc.createElement('div');
+      el.className = 'endnote-note';
+      el.dir = 'rtl';
+      el.textContent = `${n.marker || ''}\u200F ${scrubPUAText(n.text || '')}`;
+      list.appendChild(el);
+    }
+    root.appendChild(list);
+    const folioEn = renderFolio(page, settings, doc);
+    if (folioEn) root.appendChild(folioEn);
+    return root;
+  }
+
+  // **S8 (REQ-ORN-05/08):** רקעים/ערכות/תיבות שער — שכבות תשתית לפני התוכן
+  for (const el of renderPageBackgroundAndShaar(page, settings, doc, page._metadata)) root.appendChild(el);
+
+  // **S9 (REQ-HDR-05):** עמודי תוכן־עניינים — שורות + נקודות + עוגנים; אין טורי גוף
+  if (page.type === 'toc-general' || page.type === 'toc-detail') {
+    for (const el of renderTocPageContent(page, doc)) root.appendChild(el);
+    const folioToc = renderFolio(page, settings, doc);
+    if (folioToc) root.appendChild(folioToc);
+    return root;
+  }
+
+  // **S8 (PT-09):** עמוד מותאם — תוכן קבוע; אין טורים/כותרת עליונה
+  if (page.type === 'custom') {
+    for (const el of renderCustomPageContent(page, doc)) root.appendChild(el);
+    const folioC = renderFolio(page, settings, doc);
+    if (folioC) root.appendChild(folioC);
+    return root;
+  }
+
+  const h = renderHeader(header, doc);
+  if (h) root.appendChild(h);
+
+  // **S8 (FWD-1):** פס כותרת חוצה־טורים מעל הטורים (H2 full-width)
+  const band = renderSpanningBand(page, settings, doc);
+  if (band) root.appendChild(band);
+
+  const colsWrap = doc.createElement('div');
+  colsWrap.className = 'columns';
+  const spanOffset = page.spanning ? page.spanning.heightPx : 0; // הטורים מתחילים מתחת לפס
+  page.columns.forEach((colLines, ci) => {
+    const colEl = doc.createElement('section');
+    colEl.className = 'column';
+    colEl.style.left = `${page.template.columns[ci] ? page.template.columns[ci].x : 0}px`;
+    colEl.style.width = `${page.template.columns[ci] ? page.template.columns[ci].w : 'auto'}px`;
+    colEl.style.top = `${page.template.contentBox.top + spanOffset}px`;
+    colEl.style.height = `${Math.max(0, page.template.contentBox.height - spanOffset)}px`;
+    for (const ln of colLines) colEl.appendChild(renderLine(ln, doc, settings));
+    colsWrap.appendChild(colEl);
+  });
+  root.appendChild(colsWrap);
+
+  // חוט מפריד בין טורים (overlay — אחרי הטורים, לא מזיז שום דבר)
+  const divider = renderColumnDivider(page, settings, doc);
+  if (divider) root.appendChild(divider);
+
+  const fn = renderFootnoteArea(page, settings, doc);
+  if (fn) root.appendChild(fn);
+
+  const folioMain = renderFolio(page, settings, doc);
+  if (folioMain) root.appendChild(folioMain);
+
+  // **S8 (REQ-ORN-01..04):** עיטורים — ציור מה־rectים בלבד (F-09 מקור יחיד)
+  for (const el of renderDecorations(page, doc)) root.appendChild(el);
+
+  // הערות צד: מיקום מוחלט לפי ה‑placement (S7.1.2) — anchor לפסקה המארחת
+  for (const sn of page.sideNotes || []) {
+    const el = doc.createElement('aside');
+    el.className = 'side-note' + (sn.isCustomStyle ? ' side-note--custom' : '');
+    if (sn.isCustomStyle) el.dataset.style = sn.isCustomStyle;
+    el.dataset.anchor = sn.anchorToken || '';
+    el.dir = 'rtl';
+    if (sn.yTop != null) el.style.top = `${Math.round(sn.yTop)}px`;
+    if (sn.x != null) {
+      el.style.left = `${Math.round(sn.x)}px`;
+      el.style.right = 'auto';
+    }
+    if (sn.colWidth) el.style.width = `${sn.colWidth}px`;
+    el.textContent = (sn.counterMark ? `${sn.counterMark} ` : '') + scrubPUAText(sn.text);
+    root.appendChild(el);
+  }
+  return root;
+}
+
+module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent, applyCustomStyleSpec };
+
+};
+__modules["src/engine/decoration/page-decorations.js"] = function (require, module, exports) {
+// src/engine/decoration/page-decorations.js — Theme/shaar/background box placement (S6, REQ-ORN-06/08, PT-03)
+'use strict';
+
+/**
+ * מקום יחיד שבו מלוי עיטורי־דף נקבע: ערכת נושא, שערים (ראשי/משנה/אחורי),
+ * ורקעים לפי סוג דף. אין פיצול ל‑"shaar boxes" נפרד — מנגנון אחד, צרכן אחד.
+ *
+ * עקרונות נגד באגי העבר (מ‑Gold/Green/Orange):
+ * - D-11: אין הצטברות עיטורים; כל תבנית מקבלת מקום אחד בלבד לכל מלוי.
+ * - F-09: אין !important; השליטה רק דרך מחלקות + inline שנכתב מכאן.
+ * - PT-03: ארבעת מקטעי shaar_back הם עצמאיים — כל אחד נכבה בנפרד.
+ *
+ * **S8 (REQ-ORN-08):** פאנל רקעים מוזג לתוך פאנל נושאים — 3 סוגי עמודים
+ * (רגיל / פתיחת הקדמה / פתיחת סימן); color/texture/image + opacity; insets במ"מ.
+ */
+
+/** 4 המקטעים העצמאיים של שער אחורי (PT-03). */
+const SHAAR_BACK_SEGMENTS = ['frame', 'title-box', 'body-box', 'footer-ornament'];
+
+/** 3 סוגי העמודים לרקעים (REQ-ORN-08). */
+const BACKGROUND_PAGE_CLASSES = ['regular', 'preface-open', 'sign-open'];
+
+const { MM_TO_PX } = require('../layout/page-templates');
+
+/** תנאי התאמת סוג־עמוד למחלקת רקע. */
+function backgroundClassForPage(page) {
+  if (page.type === 'preface' && page.chapterOpening) return 'preface-open';
+  if (page.type === 'sign-open') return 'sign-open';
+  return 'regular';
+}
+
+/**
+ * החלטת רקע לפי מחלקת העמוד (REQ-ORN-08): הרקע שהוגדר למחלקה שאליה
+ * העמוד שייך בלבד. inset במ"מ מומר לפיקסלים כאן — מקור יחיד.
+ * @returns {{image:string|null, texture:string|null, insetPx:number}|null}
+ */
+function planBackground(page, settings) {
+  const cls = backgroundClassForPage(page);
+  const target = settings['background-page-type'] || 'regular';
+  if (cls !== target) return null; // הרקע שייך למחלקה אחרת
+  const image = settings['background-image'] || null;
+  const texture = settings['background-texture'] || null;
+  if (!image && !texture) return null;
+  const insetMm = Math.max(0, Number(settings['background-inset-mm']) || 0);
+  return { image, texture, insetPx: Math.round(insetMm * MM_TO_PX) };
+}
+
+/**
+ * החלטת מלוי לעימוד דף — פונקציה טהורה (ללא DOM), דטרמיניסטית.
+ * @param {object} page - { type: 'regular'|'shaar-main'|'shaar-sub'|'shaar-back'|... , index }
+ * @param {object} settings - registry defaults+user
+ * @returns {{ slots: Array<{slot:string, asset:string|null, cssClass:string}>, themeSetId:string, background:object|null }}
+ */
+function planDecorations(page, settings) {
+  const themeSetId = settings['theme-set-id'] || 'default';
+  const slots = [];
+
+  // **S4.5/EXT-14 (03.11):** הפניות עיצובי IMUD — מזהי הספרייה גוברים על השדות
+  // הישנים (הפניה imud:<collection>:<id> נפתרת ברינדור דרך asset-registry).
+  // צריכה מפורשת כאן — גם ערכת נושא נחשבת פעילה כשנבחר עיצוב ספרייה.
+  const imudMain = settings['imud-shaar-main'] || '';
+  const imudSub = settings['imud-shaar-sub'] || '';
+  const imudBack = settings['imud-shaar-back'] || '';
+
+  const push = (slot, asset, modifier) => {
+    // הגנה D-11: slot תפוס כבר → לא מוסיפים שוב
+    if (slots.some(s => s.slot === slot)) return;
+    slots.push({
+      slot,
+      asset: asset || null,
+      cssClass: `deco deco--${slot}${modifier ? ` ${modifier}` : ''}${asset ? '' : ' deco--empty'}`
+    });
+  };
+
+  switch (page.type) {
+    case 'shaar-main': {
+      const img = imudMain || settings['shaar-main-image'];
+      push('shaar-main', img, 'deco--themed');
+      break;
+    }
+    case 'shaar-sub': {
+      push('shaar-sub', imudSub || settings['shaar-sub-image'] || null, 'deco--themed');
+      break;
+    }
+    case 'shaar-back': {
+      // PT-03: אם הכבה ראשית — אף מקטע לא מוצב; אחרת 4 מקטעים עצמאיים.
+      // **03.11 (EXT-14):** מקטע המסגרת מקבל את תמונת השער האחורי (עיצוב IMUD) —
+      // שאר המקטעים נשארים ריקים (ממולאים ע"י העיצוב עצמו, לא בנפרד).
+      if (settings['shaar-back-enabled'] !== false) {
+        const backImg = imudBack || settings['shaar-back-image'] || null;
+        for (const seg of SHAAR_BACK_SEGMENTS) push(`shaar-back-${seg}`, seg === 'frame' ? backImg : null, 'deco--segment');
+      }
+      break;
+    }
+    default: {
+      // regular / preface / sign-open …: רקע לפי מחלקת העמוד (REQ-ORN-08)
+      const bg = planBackground(page, settings);
+      if (bg && bg.image) push('page-background', bg.image, 'deco--background');
+      if (bg && bg.texture) push('page-texture', bg.texture, 'deco--texture');
+      break;
+    }
+  }
+
+  return { slots, themeSetId, background: planBackground(page, settings) };
+}
+
+/**
+ * החלת התוכנית על דם־DOM (אלמנט השורש של הדף). נקי: מוחק קודם, מציב פעם אחת.
+ * @param {object} rootEl - article.page
+ * @param {object} doc - document
+ * @param {Array} slots - מתוצר planDecorations
+ */
+function applyDecorationSlots(rootEl, doc, slots) {
+  // ניקוי מקומי — מונע כפילויות בין ריצות (rollback-aware)
+  for (const old of Array.from(rootEl.querySelectorAll('.deco'))) old.remove();
+  for (const s of slots) {
+    if (!s.asset) continue; // deco--empty נשמר לתיעוד בלבד, לא יוצר node
+    const el = doc.createElement('div');
+    el.className = s.cssClass;
+    el.dataset.slot = s.slot;
+    el.style.backgroundImage = `url("${s.asset}")`;
+    rootEl.appendChild(el);
+  }
+}
+
+module.exports = {
+  planDecorations, applyDecorationSlots, planBackground, backgroundClassForPage,
+  SHAAR_BACK_SEGMENTS, BACKGROUND_PAGE_CLASSES
+};
+
+};
+__modules["src/engine/decoration/shaar-boxes.js"] = function (require, module, exports) {
+// src/engine/decoration/shaar-boxes.js — Shaar text-box geometry: drag/resize/persist/export (REQ-ORN-05)
+'use strict';
+
+/**
+ * תיבות טקסט של שערים (PT-01/02/03): גרירה + שינוי גודל + שמירה לפי מזהה שער
+ * + הטמעת `box` בייצוא JSON (V4) — עגול־שלם: ייצוא → טעינה מחדש ⇒ מיקומים זהים.
+ *
+ * **לקחי עבר שננעלו כאן:**
+ * - שמירה לפי **מזהה שער פרטני** ולא לפי סוג (בגרסה מוקדמת הוחל מיקום אחד על כל
+ *   השערים מהסוג — Handoff §2.13).
+ * - סדר קדימויות לפתרון מיקום: (1) שדה `box` מוטמע ב־JSON, (2) מיקום שמור בסשן,
+ *   (3) ברירת מחדל — בדיוק כסדר של V4.
+ * - מיקום במ"מ (שלם) — דטרמיניסטי בעיגול־שלם; אין נקודה־צפה מתפזרת בין ריצות.
+ */
+
+/**
+ * פתרון מיקום תיבה לפי סדר הקדימויות של V4 (§2.13).
+ * @param {string} type - 'main' | 'sub' | 'back'
+ * @param {string} shaarId - מזהה שער פרטני (ייחודי — theme-sets.uniqueShaarId)
+ * @param {object} item - פריט השער (עשוי להכיל box מוטמע)
+ * @param {object} savedPositions - { [type]: { [shaarId]: box } } מיקומים שמורים
+ * @param {object} dfltBox - ברירת מחדל {top,bottom,right,left} במ"מ
+ * @returns {{box:object, source:'json'|'saved'|'default'}}
+ */
+function resolveShaarBox(type, shaarId, item, savedPositions, dfltBox) {
+  if (item && item.box && isValidBox(item.box)) return { box: normalizeBox(item.box), source: 'json' };
+  const saved = savedPositions && savedPositions[type] && savedPositions[type][shaarId];
+  if (saved && isValidBox(saved)) return { box: normalizeBox(saved), source: 'saved' };
+  return { box: normalizeBox(dfltBox || { top: 40, bottom: 40, right: 30, left: 30 }), source: 'default' };
+}
+
+/** תקינות תיבה: ארבעה שוליים מספריים אי־שליליים. */
+function isValidBox(b) {
+  return Boolean(b) && ['top', 'bottom', 'right', 'left'].every(k => Number.isFinite(Number(b[k])) && Number(b[k]) >= 0);
+}
+
+/** נרמול למ"מ שלמים — דטרמיניזם של עיגול־שלם בעיגול־חוזר. */
+function normalizeBox(b) {
+  return {
+    top: Math.round(Number(b.top)), bottom: Math.round(Number(b.bottom)),
+    right: Math.round(Number(b.right)), left: Math.round(Number(b.left))
+  };
+}
+
+/**
+ * הצמדה לגבולות העמוד (גרירה/שינוי גודל לא יוצאים מהדף).
+ * @param {object} box - {top,bottom,right,left} במ"מ
+ * @param {number} pageWmm, pageHmm - ממדי העמוד במ"מ
+ */
+function clampShaarBox(box, pageWmm, pageHmm) {
+  const b = normalizeBox(box);
+  const maxInsetX = Math.max(0, Math.floor(pageWmm / 2) - 5); // תיבה שומרת רוחב מינימלי 10mm
+  const maxInsetY = Math.max(0, Math.floor(pageHmm / 2) - 5);
+  b.top = Math.min(Math.max(0, b.top), maxInsetY);      // לא שלילי ולא מעבר לחצי
+  b.bottom = Math.min(Math.max(0, b.bottom), maxInsetY);
+  b.right = Math.min(Math.max(0, b.right), maxInsetX);
+  b.left = Math.min(Math.max(0, b.left), maxInsetX);
+  return b;
+}
+
+/**
+ * גרירה: הזזת כל ארבעת השוליים בהפרש (תיבה שומרת על גודלה).
+ * שמירה לפי (type, shaarId) — מזהה פרטני (לקח V4: לא לפי סוג!).
+ * @returns {object} savedPositions חדש (לא מוטציה במקום — רולבק־סייפ)
+ */
+function moveShaarBox(savedPositions, type, shaarId, dxMm, dyMm, pageWmm, pageHmm) {
+  const next = cloneSaved(savedPositions);
+  const cur = (next[type] && next[type][shaarId]) || { top: 40, bottom: 40, right: 30, left: 30 };
+  next[type] = next[type] || {};
+  next[type][shaarId] = clampShaarBox({
+    top: cur.top + dyMm, bottom: cur.bottom - dyMm,
+    right: cur.right - dxMm, left: cur.left + dxMm
+  }, pageWmm, pageHmm);
+  return next;
+}
+
+/**
+ * שינוי גודל דרך ידית (8 ידיות V4): n/s/e/w/ne/nw/se/sw.
+ * @returns {object} savedPositions חדש
+ */
+function resizeShaarBox(savedPositions, type, shaarId, handle, dxMm, dyMm, pageWmm, pageHmm) {
+  const next = cloneSaved(savedPositions);
+  const cur = (next[type] && next[type][shaarId]) || { top: 40, bottom: 40, right: 30, left: 30 };
+  const b = { ...cur };
+  if (handle.includes('n')) b.top += dyMm;
+  if (handle.includes('s')) b.bottom -= dyMm;
+  if (handle.includes('w')) b.left += dxMm;   // RTL: left גדל כשגוררים שמאלה→ימין? — כיוון לפי ציר X החיובי
+  if (handle.includes('e')) b.right -= dxMm;
+  next[type] = next[type] || {};
+  next[type][shaarId] = clampShaarBox(b, pageWmm, pageHmm);
+  return next;
+}
+
+function cloneSaved(savedPositions) {
+  const out = {};
+  for (const [t, byId] of Object.entries(savedPositions || {})) {
+    out[t] = {};
+    for (const [id, box] of Object.entries(byId || {})) out[t][id] = normalizeBox(box);
+  }
+  return out;
+}
+
+/**
+ * ייצוא פריטי שער עם `box` מוטמע (exportShaarJSONWithPositions — פורט V4):
+ * המיקום ששרד בסשן נחרת בקובץ ⇒ עיגול־שלם טעינה→הזזה→ייצוא→טעינה ⇒ מיקומים זהים.
+ * אין אקראיות (מדיניות zero-randomness): id נגזר דטרמיניסטית מאינדקס+שם.
+ */
+function exportShaarItemsWithPositions(items, savedPositions) {
+  return (items || []).map((it, i) => {
+    const id = it.id || `shaar-${i}-${String(it.name || 'anon').replace(/\s+/g, '-').slice(0, 24)}`;
+    const type = it.type || it.role || 'main';
+    const saved = savedPositions && savedPositions[type] && savedPositions[type][id];
+    return { ...it, id, box: normalizeBox(saved || it.box || { top: 40, bottom: 40, right: 30, left: 30 }) };
+  });
+}
+
+/** השוואת תיבות בודדות (עיגול־שלם) או מפות מיקומים {id: box} — בדיקת שער S8.2. */
+function boxPositionsIdentical(a, b) {
+  const isSingle = (x) => x && Number.isFinite(Number(x.top)) && Number.isFinite(Number(x.left));
+  if (isSingle(a) || isSingle(b)) {
+    if (!isSingle(a) || !isSingle(b)) return false;
+    const x = normalizeBox(a), y = normalizeBox(b);
+    return x.top === y.top && x.bottom === y.bottom && x.right === y.right && x.left === y.left;
+  }
+  const keys = Object.keys(a || {}).sort();
+  const keysB = Object.keys(b || {}).sort();
+  if (keys.join(',') !== keysB.join(',')) return false;
+  for (const k of keys) {
+    const x = normalizeBox(a[k]), y = normalizeBox(b[k]);
+    if (x.top !== y.top || x.bottom !== y.bottom || x.right !== y.right || x.left !== y.left) return false;
+  }
+  return true;
+}
+
+module.exports = {
+  resolveShaarBox, isValidBox, normalizeBox, clampShaarBox, moveShaarBox, resizeShaarBox,
+  exportShaarItemsWithPositions, boxPositionsIdentical
+};
+
+};
+__modules["src/engine/output/html-export.js"] = function (require, module, exports) {
+// src/engine/output/html-export.js — Standalone HTML export + offline guard (REQ-EXP, Orange exit-7 doctrine)
+'use strict';
+
+/**
+ * ייצוא HTML עצמאי: CSS מוטמע, ללא תלות רשת. offline-guard: כל הפניה חיצונית → דחייה (exit 7 במנוע CLI).
+ * סימוני page-break (⏎) אינם מיוצאים לעולם (F-01).
+ */
+
+const OFFLINE_PATTERNS = [
+  /https?:\/\/(?!localhost)/i,
+  /@import\s+url\(/i,
+  /<link[^>]+href=["']https?:/i,
+  /<script[^>]+src=["']https?:/i
+];
+
+/** בדיקת offline-guard על מחרוזת HTML; זורק עם פירוט אם נמצאה בקשה חיצונית. */
+function assertOfflineSafe(html) {
+  const hits = [];
+  for (const re of OFFLINE_PATTERNS) {
+    const m = html.match(re);
+    if (m) hits.push({ pattern: re.source, sample: html.slice(Math.max(0, m.index - 20), m.index + 60) });
+  }
+  if (hits.length) {
+    const err = new Error(`offline-guard: external references found (${hits.length})`);
+    err.code = 'ERR_OFFLINE_GUARD';
+    err.exitCode = 7; // Orange doctrine
+    err.hits = hits;
+    throw err;
+  }
+}
+
+const BASE_CSS = `
+html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',serif;direction:rtl}
+.book{display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 0}
+.page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
+.columns{position:absolute;top:0;left:0;right:0;bottom:0}
+.column{position:absolute;top:0;bottom:0}
+.line{white-space:normal;text-align:right}
+.line--last{text-align:center}
+.running-head{display:flex;width:100%}
+.head--sep-gray{border-bottom:1px solid #999}
+.head--sep-black{border-bottom:1.5px solid #000}
+.footnotes{position:absolute;bottom:8px;left:12px;right:12px;border-top:1px solid transparent;font-size:.8em}
+.footnotes--continuous{border-top:none}
+.fn-rule--regular{border-top:1px solid #000;height:0}
+.fn-rule--circles{border-top:3px dotted #000;height:0}
+.fn-rule--sparkle{border-top:2px dashed #6b6b6b;height:0}
+.fn-rule--star{border-top:3px double #4a4a4a;height:0}
+.fn-rule--diamond{border-top:2px solid #000;height:0;transform:scaleX(.6)}
+.fn--continuation{color:#555;font-style:italic}
+.folio{position:absolute;bottom:4px;width:100%;text-align:center}
+.folio--outer-left{left:8px;width:auto;text-align:left}
+.folio--outer-right{right:8px;width:auto;text-align:right}
+.folio--top{bottom:auto;top:4px}
+.folio--in-header{bottom:auto;top:6px}
+.page-num-badge{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;line-height:1}
+.page-num-frame-circle{border:1.2px solid #333;border-radius:50%;min-width:22px;height:22px;padding:1px}
+.page-num-frame-box{border:1.2px solid #333;border-radius:3px;min-width:22px;height:20px;padding:1px 4px}
+.side-note{position:absolute;font-size:.75em;max-height:60%;overflow:hidden}
+.col-divider{position:absolute;width:0;border-left:1px solid #999}
+.col-divider--thin{border-left:1px solid #999}
+.col-divider--dashed{border-left:1px dashed #999}
+.col-divider--double{border-left:3px double #999}
+.w--paren{color:#333}
+.endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
+.endnote-list{font-size:.85em;padding:0 12px}
+.endnote-note{margin:2px 0}
+.toc-page-title{font-size:16pt;font-weight:700;margin:12px 18px 18px;text-align:center}
+.toc-rows{position:absolute;top:70px;left:18px;right:18px;bottom:30px}
+.toc-row{display:flex;align-items:baseline;text-decoration:none;color:inherit;gap:6px;margin:2px 0}
+.toc-row .toc-dots{flex:1;border-bottom:1px dotted #000;min-width:24px;margin:0 6px 4px}
+.toc-row .toc-label{min-width:30px;text-align:left}
+.toc-row .toc-num{min-width:20px;color:#444}
+.toc-lvl-1{font-size:12pt;font-weight:700}
+.toc-lvl-2{font-size:11pt}
+.toc-lvl-3{font-size:10.5pt;margin-right:16px}
+.toc-lvl-4{font-size:10.5pt;margin-right:32px}
+.toc-lvl-5{font-size:10.5pt;margin-right:48px}
+.toc-lvl-6{font-size:10.5pt;margin-right:64px}
+.toc-lvl-7{font-size:8.8pt;margin-right:80px;font-style:italic}
+.toc-row--group{flex-wrap:wrap}
+.toc-row--group .toc-item{display:inline-flex;gap:4px;text-decoration:none;color:inherit}
+.toc-row--group .toc-item .grp-page{color:#333}
+.toc-row--group .toc-item + .toc-item::before{content:'|';margin:0 6px;color:#777}
+`;
+
+/** בניית מסמך HTML עצמאי מעמודי ה‑DOM שכבר רוכמו (string-level; עובד גם Node-side). */
+function buildStandaloneHtml(pagesHtml, settings, meta = {}) {
+  const title = meta.title || settings['book-name'] || 'ספר';
+  // **S12 (REQ-EXP-02):** כללי @page מרישום גדלי העמוד — הדפסה מדויקת מהקובץ העצמאי (אין רשת)
+  const pageRules = meta.pageRules || '';
+  // **03.11:** @font-face מוטמעים (data-URI) — מסופקים מה-UI; עוברים את offline-guard (אין http)
+  const fontCss = meta.fontCss || '';
+  const html = `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>${escapeHtml(title)}</title>
+<style>${pageRules}${fontCss}${BASE_CSS}</style>
+</head>
+<body>
+<main class="book">${pagesHtml.join('\n')}</main>
+</body>
+</html>`;
+  if (settings['offline-guard']) assertOfflineSafe(html);
+  return html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+module.exports = { buildStandaloneHtml, assertOfflineSafe, BASE_CSS };
+
+};
+__modules["src/engine/import/zip-reader.js"] = function (require, module, exports) {
+// src/engine/import/zip-reader.js — קורא ZIP ללא תלות חיצונית (S11.1-3, DOCX import)
+'use strict';
+
+/**
+ * קורא ZIP מינימלי לייבוא DOCX: פורמט STORE(0) + DEFLATE(8).
+ * **סביבת-אגנוסטית (תיקון 03.11 — "Buffer is not defined" בדפדפן):** אין כל
+ * שימוש ב-Buffer/שיטותיו — Uint8Array טהור + פונקציות עזר פרטיות (u16le/u32le/
+ * utf8Decode). עובד זהה ב-Node (Buffer הוא sub-class של Uint8Array) ובדפדפן.
+ * node:zlib (מובנה, לא תלות חיצונית) משמש כשקיים; אחרת המנפח הטהור להלן.
+ * **אבטחה (S13 pass):**
+ *  - path traversal: שמות רשומות עם ../ או / אבסולוטי או בריחת תחילית — נדחים
+ *    ברשימה (denied) ולא נפתחים לעולם;
+ *  - החזרת רשומות מנורמלות בלבד (שמות יחסיים נקיים);
+ *  - אין eval; אין כתיבה לדיסק — הכל בזיכרון.
+ */
+
+// ---------- עזרי בתים ללא Buffer (זהה לפלט readUInt16LE/readUInt32LE) ----------
+function u16le(b, o) { return b[o] | (b[o + 1] << 8); }
+function u32le(b, o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0; }
+function u8sub(b, s, e) { return b.subarray ? b.subarray(s, e) : b.slice(s, e); }
+
+/** פענוח UTF-8 טהור (TextDecoder כשקיים — אחרת מימוש ידני; תואם Buffer.toString('utf8')). */
+function utf8Decode(bytes) {
+  if (typeof TextDecoder !== 'undefined') return new TextDecoder('utf-8').decode(bytes);
+  let s = '';
+  for (let i = 0; i < bytes.length;) {
+    const c = bytes[i];
+    if (c < 0x80) { s += String.fromCharCode(c); i++; }
+    else if (c < 0xe0) { s += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; }
+    else if (c < 0xf0) { s += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; }
+    else {
+      const cp = ((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+      const off = cp - 0x10000;
+      s += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+      i += 4;
+    }
+  }
+  return s;
+}
+
+const zlib = (() => {
+  try { return require('zlib'); } catch (e) { return null; } // בדפדפן אין zlib — מנפח טהור
+})();
+
+// =====================================================================
+// מנפח raw-DEFLATE טהור (BTYPE 00/01/10) — גיבוי לסביבות בלי zlib (דפדפן).
+// אותו פלט כמו zlib.inflateRawSync; מבחן השקילות בבדיקות S11 (both-paths).
+// =====================================================================
+class BitReader {
+  constructor(buf, startByte) {
+    this.buf = buf; this.pos = startByte << 3; this.bit = 0; // מספרי ביט מוחלטים
+  }
+  read(count) {
+    let v = 0;
+    for (let i = 0; i < count; i++) {
+      const byteIdx = this.pos >> 3;
+      if (byteIdx >= this.buf.length) throw new Error('deflate: out-of-input');
+      const bit = (this.buf[byteIdx] >> (this.pos & 7)) & 1;
+      v |= bit << i;
+      this.pos++;
+    }
+    return v;
+  }
+  alignByte() { this.pos = (this.pos + 7) & ~7; }
+}
+
+function buildHuffman(lengths) {
+  // קודי canonical Huffman לפי טבלאות אורך (DEFLATE spec 3.2.2)
+  const maxLen = 15;
+  const counts = new Array(maxLen + 1).fill(0);
+  for (const l of lengths) counts[l]++;
+  counts[0] = 0;
+  const next = new Array(maxLen + 2).fill(0);
+  let code = 0;
+  for (let b = 1; b <= maxLen; b++) { code = (code + counts[b - 1]) << 1; next[b] = code; }
+  const map = new Map();
+  for (let sym = 0; sym < lengths.length; sym++) {
+    const l = lengths[sym];
+    if (l === 0) continue;
+    const c = next[l]++;
+    map.set((c << 4) | l, sym); // מפתח: code<<4|len — פענוח לפי סדר עולה
+  }
+  return { map, counts, lengths };
+}
+
+function decodeSymbol(br, huff) {
+  // קריאה ביט־ביט־ביט ובניית קוד — ללא טבלה הפוכה (פשוט ונכון; קלטים קטנים)
+  let code = 0, len = 0;
+  for (;;) {
+    code = (code << 1) | br.read(1);
+    len++;
+    if (len > 15) throw new Error('deflate: bad-code');
+    const sym = huff.map.get((code << 4) | len);
+    if (sym !== undefined) return sym;
+  }
+}
+
+const LEN_BASE = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+const LEN_EXTRA = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+const DIST_BASE = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+const DIST_EXTRA = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+
+function fixedLitHuff() {
+  const lengths = [];
+  for (let i = 0; i < 144; i++) lengths.push(8);
+  for (let i = 144; i < 256; i++) lengths.push(9);
+  for (let i = 256; i < 280; i++) lengths.push(7);
+  for (let i = 280; i < 288; i++) lengths.push(8);
+  return buildHuffman(lengths);
+}
+function fixedDistHuff() { return buildHuffman(new Array(30).fill(5)); }
+
+/** מנפח raw DEFLATE טהור. הפלט כולו במערך אחד עד הסוף (backref ≤32K תקין תמיד). @returns {Uint8Array} */
+function inflateRawPure(buf, startByte = 0, expectedSize = -1) {
+  const br = new BitReader(buf, startByte);
+  const out = [];
+  const pushByte = (b) => { out.push(b); };
+
+  for (;;) {
+    const final = br.read(1);
+    const btype = br.read(2);
+    if (btype === 0) {
+      br.alignByte();
+      const lenPos = br.pos >> 3;
+      if (lenPos + 4 > buf.length) throw new Error('deflate: stored-header-oob');
+      const len = buf[lenPos] | (buf[lenPos + 1] << 8);
+      const nlen = buf[lenPos + 2] | (buf[lenPos + 3] << 8);
+      if ((len ^ 0xFFFF) !== nlen) throw new Error('deflate: stored-nlen-mismatch');
+      const dataStart = lenPos + 4;
+      if (dataStart + len > buf.length) throw new Error('deflate: stored-oob');
+      for (let i = 0; i < len; i++) pushByte(buf[dataStart + i]);
+      br.pos = (dataStart + len) << 3;
+    } else if (btype === 1 || btype === 2) {
+      let litHuff, distHuff;
+      if (btype === 1) {
+        litHuff = fixedLitHuff(); distHuff = fixedDistHuff();
+      } else {
+        const hlit = br.read(5) + 257;
+        const hdist = br.read(5) + 1;
+        const hclen = br.read(4) + 4;
+        const ORDER = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+        const clLengths = new Array(19).fill(0);
+        for (let i = 0; i < hclen; i++) clLengths[ORDER[i]] = br.read(3);
+        const clHuff = buildHuffman(clLengths);
+        const lengths = [];
+        let prev = 0;
+        const total = hlit + hdist;
+        while (lengths.length < total) {
+          const sym = decodeSymbol(br, clHuff);
+          if (sym < 16) { lengths.push(sym); prev = sym; }
+          else if (sym === 16) { const rep = 3 + br.read(2); for (let i = 0; i < rep && lengths.length < total; i++) lengths.push(prev); }
+          else if (sym === 17) { const rep = 3 + br.read(3); for (let i = 0; i < rep && lengths.length < total; i++) lengths.push(0); prev = 0; }
+          else { const rep = 11 + br.read(7); for (let i = 0; i < rep && lengths.length < total; i++) lengths.push(0); prev = 0; }
+        }
+        litHuff = buildHuffman(lengths.slice(0, hlit));
+        distHuff = buildHuffman(lengths.slice(hlit));
+      }
+      // פענוח סמלים (LZ77: backref עד 32K לאחור — תקין תמיד במערך היחיד)
+      for (;;) {
+        const sym = decodeSymbol(br, litHuff);
+        if (sym < 256) {
+          pushByte(sym);
+        } else if (sym === 256) {
+          break;
+        } else {
+          const li = sym - 257;
+          if (li >= LEN_BASE.length) throw new Error('deflate: bad-length-symbol');
+          const len = LEN_BASE[li] + (LEN_EXTRA[li] ? br.read(LEN_EXTRA[li]) : 0);
+          const dsym = decodeSymbol(br, distHuff);
+          if (dsym >= DIST_BASE.length) throw new Error('deflate: bad-dist-symbol');
+          const dist = DIST_BASE[dsym] + (DIST_EXTRA[dsym] ? br.read(DIST_EXTRA[dsym]) : 0);
+          if (dist > out.length) throw new Error('deflate: dist-too-far');
+          const srcPos = out.length - dist;
+          for (let i = 0; i < len; i++) pushByte(out[srcPos + i]);
+        }
+      }
+    } else {
+      throw new Error('deflate: bad-btype');
+    }
+    if (final) break;
+    if (expectedSize >= 0 && out.length >= expectedSize) break;
+  }
+  return Uint8Array.from(out);
+}
+
+/** מנפח: zlib אם קיים (Node), אחרת המנפח הטהור (דפדפן). @returns {Uint8Array} */
+function inflateRaw(data) {
+  if (zlib) {
+    const out = zlib.inflateRawSync(data); // Node: מחזיר Buffer (Uint8Array) — זהה פונקציונלית
+    return out;
+  }
+  return inflateRawPure(data, 0, -1);
+}
+
+/** CRC32 של ZIP — לאימות שלמות רשומות (optional check; לא חוסם). */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/** נורמליזציה + מדיניות שמות: רק נתיבים יחסיים פנימיים. */
+function safeName(raw) {
+  const name = String(raw || '').replace(/\\/g, '/');
+  if (!name || name.endsWith('/')) return null;      // תיקייה
+  if (name.startsWith('/')) return null;              // אבסולוטי
+  const parts = name.split('/');
+  if (parts.some(p => p === '..')) return null;       // traversal
+  if (/^[a-zA-Z]:/.test(name)) return null;           // כונן
+  if (/[<>:"|?*\u0000]/.test(name)) return null;      // תווים אסורים
+  return name;
+}
+
+/**
+ * פתיחת ארכיון ZIP מזיכרון — **ללא Buffer** (דפדפן ו-Node כאחד; תיקון 03.11).
+ * @param {Buffer|Uint8Array} bytes
+ * @returns {{ok:boolean, entries:Array<{name:string, data:Uint8Array, method:number, size:number}>, denied:Array<string>, error:string|null}}
+ */
+function readZip(bytes) {
+  const buf = bytes; // Buffer (Node) הוא Uint8Array — אינדוקסציה זהה; שום דבר לא נדרש כאן
+  const denied = [];
+  const entries = [];
+  // מציאת EOCD (End Of Central Directory) — מהסוף, חתימה 0x06054b50
+  let eocd = -1;
+  const minLen = 22;
+  for (let i = buf.length - minLen; i >= Math.max(0, buf.length - minLen - 65536); i--) {
+    if (u32le(buf, i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) return { ok: false, entries: [], denied: [], error: 'not-a-zip' };
+  const totalEntries = u16le(buf, eocd + 10);
+  const cdOffset = u32le(buf, eocd + 16);
+
+  let p = cdOffset;
+  for (let n = 0; n < totalEntries; n++) {
+    if (p + 46 > buf.length || u32le(buf, p) !== 0x02014b50) {
+      return { ok: false, entries, denied, error: `bad-central-directory@${n}` };
+    }
+    const method = u16le(buf, p + 10);
+    const compSize = u32le(buf, p + 20);
+    const nameLen = u16le(buf, p + 28);
+    const extraLen = u16le(buf, p + 30);
+    const commentLen = u16le(buf, p + 32);
+    const localOffset = u32le(buf, p + 42);
+    const rawName = utf8Decode(u8sub(buf, p + 46, p + 46 + nameLen));
+    const name = safeName(rawName);
+    if (name == null) { denied.push(rawName); p += 46 + nameLen + extraLen + commentLen; continue; }
+
+    // קריאת ה-local header והנתונים
+    if (localOffset + 30 > buf.length || u32le(buf, localOffset) !== 0x04034b50) {
+      return { ok: false, entries, denied, error: `bad-local-header:${name}` };
+    }
+    const lhNameLen = u16le(buf, localOffset + 26);
+    const lhExtraLen = u16le(buf, localOffset + 28);
+    const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
+    const raw = u8sub(buf, dataStart, dataStart + compSize);
+    let data;
+    try {
+      if (method === 0) data = Uint8Array.from(raw);
+      else if (method === 8) data = inflateRaw(raw);
+      else return { ok: false, entries, denied, error: `unsupported-method:${method}:${name}` };
+    } catch (e) {
+      return { ok: false, entries, denied, error: `inflate-failed:${name}` };
+    }
+    entries.push({ name, data, method, size: data.length });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return { ok: true, entries, denied, error: null };
+}
+
+/** אימות CRC של רשומה (best-effort; מחזיר בוליאני). */
+function verifyCrc(entry) {
+  return crc32(entry.data) === entry.storedCrc;
+}
+
+module.exports = { readZip, safeName, crc32, verifyCrc, inflateRaw, inflateRawPure, utf8Decode };
+
+};
+__modules["src/engine/typography/font-subset.js"] = function (require, module, exports) {
+// src/engine/typography/font-subset.js — TrueType subsetting for exports (S12.1-8, REQ-EXP)
+'use strict';
+
+/**
+ * מצמום גופן לגליפים שבשימוש בלבד — תקציב גודל לייצוא (PDF/HTML).
+ * שומר: head/hhea/maxp/hmtx/cmap/glyf/loca/OS/2 (+cvt/fpgm/prep כשיש — רמזים).
+ * לוקח מהפרנסר (font-metrics) את המיפויים; בונה גופן חדש עצמאי תקני.
+ *
+ * **בדיקת tofu (0 סימנים חסרים):** הפרנסר עצמו משמש בודק — קריאה חוזרת
+ * של התת־גופן חייבת למפות כל תו מבוקש לגליף בעל קווי מתאר לא־ריקים.
+ */
+
+const fm = require('./font-metrics');
+
+function u16(v) { return [(v >> 8) & 0xFF, v & 0xFF]; }
+function s16v(v) { return u16(v < 0 ? v + 0x10000 : v); }
+function u32v(v) { return [(v >>> 24) & 0xFF, (v >>> 16) & 0xFF, (v >>> 8) & 0xFF, v & 0xFF]; }
+function str4(s) { return [s.charCodeAt(0), s.charCodeAt(1), s.charCodeAt(2), s.charCodeAt(3)]; }
+function rdU16(b, o) { return (b[o] << 8) | b[o + 1]; }
+function rdS16(b, o) { const v = rdU16(b, o); return v >= 0x8000 ? v - 0x10000 : v; }
+function rdU32(b, o) { return ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0; }
+
+/**
+ * בניית תת־גופן.
+ * @param {object} font — תוצר parseFont().font
+ * @param {Array<string>} chars — התווים הנדרשים (כולל רווח)
+ * @returns {{ok:boolean, error?:string, bytes?:Buffer, kept:number, dropped:number, widthsUnits?:Map}}
+ */
+function buildSubset(font, chars) {
+  if (!font || !font.bytes) return { ok: false, error: 'no-font' };
+  const b = font.bytes;
+
+  // 1) קבוצת הגליפים: .notdef + כל גליף ממופה מהתווים המבוקשים
+  const gidSet = new Set([0]);
+  const charsKept = [];
+  for (const ch of chars || []) {
+    const g = fm.glyphIdOf(font, ch);
+    if (g !== 0) { gidSet.add(g); charsKept.push(ch); }
+  }
+  const gids = [...gidSet].sort((a, c) => a - c);
+  const gidToNew = new Map(gids.map((g, i) => [g, i])); // ישן → חדש
+
+  // 2) glyf/loca מקוריים — העתקת קווי מתאר כמו שהם
+  const locFormat = font.indexToLocFormat;
+  const locaOff = font.tables.loca ? font.tables.loca.offset : null;
+  const glyfOff = font.tables.glyf ? font.tables.glyf.offset : null;
+  if (locaOff == null || glyfOff == null) return { ok: false, error: 'no-glyf-loca' };
+  const glyphLen = (g) => {
+    const s = locFormat === 0 ? rdU16(b, locaOff + g * 2) * 2 : rdU32(b, locaOff + g * 4);
+    const e = locFormat === 0 ? rdU16(b, locaOff + (g + 1) * 2) * 2 : rdU32(b, locaOff + (g + 1) * 4);
+    return e - s;
+  };
+  const glyphBytes = (g) => {
+    const s = locFormat === 0 ? rdU16(b, locaOff + g * 2) * 2 : rdU32(b, locaOff + g * 4);
+    return b.slice(glyfOff + s, glyfOff + s + glyphLen(g));
+  };
+
+  // תת־glyf: מרווחים לפי קווי מתאר; loca קצר (÷2) אם אפשר, אחרת ארוך
+  const newGlyphs = gids.map(g => glyphBytes(g));
+  const glyfParts = [];
+  const newLoca = [0];
+  let acc = 0;
+  for (const g of newGlyphs) {
+    glyfParts.push(g);
+    acc += g.length;
+    if (acc & 3) { const pad = 4 - (acc & 3); glyfParts.push(Buffer.alloc(pad)); acc += pad; }
+    newLoca.push(acc);
+  }
+  const newGlyf = Buffer.concat(glyfParts);
+  const useShortLoca = newLoca.every(v => v <= 0xFFFF * 2) && newGlyf.length <= 0x1FFFE;
+  const newLocaBytes = [];
+  for (const v of newLoca) {
+    if (useShortLoca) newLocaBytes.push(...u16(Math.round(v / 2)));
+    else newLocaBytes.push(...u32v(v));
+  }
+
+  // 3) hmtx חדש (numberOfHMetrics = מספר הגליפים החדש)
+  const oldHm = font.tables.hmtx.offset;
+  const oldLSB = (g) => {
+    if (g < font.numberOfHMetrics) return rdS16(b, oldHm + g * 4 + 2);
+    return rdS16(b, oldHm + font.numberOfHMetrics * 4 + (g - font.numberOfHMetrics) * 2);
+  };
+  const newHmtx = [];
+  const widthsUnits = new Map(); // gid חדש → advance units (ל־W ב־PDF)
+  for (const g of gids) {
+    const ng = gidToNew.get(g);
+    const adv = font.advanceUnits[g] || 0;
+    newHmtx.push(...u16(adv), ...s16v(oldLSB(g)));
+    widthsUnits.set(ng, adv);
+  }
+
+  // 4) cmap חדש — fmt4 על התווים שנשמרו (מקודpoints → gid חדש)
+  const kept = charsKept.map(ch => ({ cp: ch.codePointAt(0), ng: gidToNew.get(fm.glyphIdOf(font, ch)) }))
+    .sort((a, c) => a.cp - c.cp);
+  const segs = [];
+  let run = null;
+  for (const k of kept) {
+    if (run && k.cp === run.end + 1 && k.ng === run.ngEnd + 1) { run.end = k.cp; run.ngEnd = k.ng; }
+    else { if (run) segs.push(run); run = { start: k.cp, end: k.cp, ngStart: k.ng, ngEnd: k.ng }; }
+  }
+  if (run) segs.push(run);
+  const segCount = segs.length + 1; // + reserved 0xFFFF
+  const sub4Len = 16 + segCount * 8;
+  const pow2 = Math.pow(2, Math.floor(Math.log2(segCount)));
+  const sub4 = [
+    ...u16(4), ...u16(sub4Len), ...u16(0), ...u16(segCount * 2),
+    ...u16(2 * pow2), ...u16(Math.floor(Math.log2(segCount))), ...u16(segCount * 2 - 2 * pow2),
+    ...segs.map(s => u16(s.end)).flat(), ...u16(0xFFFF), ...u16(0),
+    ...segs.map(s => u16(s.start)).flat(), ...u16(0xFFFF),
+    ...segs.map(s => s16v(s.ngStart - s.start)).flat(), ...s16v(1),
+    ...new Array(segCount).fill(0).flatMap(() => u16(0))
+  ];
+  const newCmap = [...u16(0), ...u16(1), ...u16(3), ...u16(1), ...u32v(12), ...sub4];
+
+  // 5) head העתקה (indexToLocFormat מותאם) + hhea/maxp/OS/2 מקור (numberOfHMetrics מותאם)
+  const head = Buffer.from(b.slice(font.tables.head.offset, font.tables.head.offset + font.tables.head.length));
+  head[50] = 0; head[51] = useShortLoca ? 0 : 1;
+  const hhea = Buffer.from(b.slice(font.tables.hhea.offset, font.tables.hhea.offset + font.tables.hhea.length));
+  hhea[34] = (gids.length >> 8) & 0xFF; hhea[35] = gids.length & 0xFF;
+  const maxp = Buffer.from(b.slice(font.tables.maxp.offset, font.tables.maxp.offset + font.tables.maxp.length));
+  maxp[4] = (gids.length >> 8) & 0xFF; maxp[5] = gids.length & 0xFF;
+  const os2 = font.tables['OS/2'] ? Buffer.from(b.slice(font.tables['OS/2'].offset, font.tables['OS/2'].offset + font.tables['OS/2'].length)) : null;
+  const name = font.tables.name ? Buffer.from(b.slice(font.tables.name.offset, font.tables.name.offset + font.tables.name.length)) : null;
+  const post = font.tables.post ? Buffer.from(b.slice(font.tables.post.offset, font.tables.post.offset + font.tables.post.length)) : null;
+  // רמזים (hinting) — מועתקים כמו שהם (תקינות רינדור בגדלים קטנים)
+  const cvt = font.tables.cvt ? Buffer.from(b.slice(font.tables.cvt.offset, font.tables.cvt.offset + font.tables.cvt.length)) : null;
+  const fpgm = font.tables.fpgm ? Buffer.from(b.slice(font.tables.fpgm.offset, font.tables.fpgm.offset + font.tables.fpgm.length)) : null;
+  const prep = font.tables.prep ? Buffer.from(b.slice(font.tables.prep.offset, font.tables.prep.offset + font.tables.prep.length)) : null;
+
+  // 6) הרכבה
+  const tables = [
+    ...(os2 ? [['OS/2', os2]] : []),
+    ['cmap', Buffer.from(newCmap)],
+    ...(cvt ? [['cvt ', cvt]] : []),
+    ...(fpgm ? [['fpgm', fpgm]] : []),
+    ['glyf', newGlyf],
+    ['head', head],
+    ['hhea', hhea],
+    ['hmtx', Buffer.from(newHmtx)],
+    ['loca', Buffer.from(newLocaBytes)],
+    ['maxp', maxp],
+    ...(name ? [['name', name]] : []),
+    ...(post ? [['post', post]] : []),
+    ...(prep ? [['prep', prep]] : [])
+  ];
+  const n = tables.length;
+  let off = 12 + n * 16;
+  const entries = tables.map(([t, data]) => {
+    const e = { t, offset: off, length: data.length, data };
+    off += data.length;
+    if (off & 3) off += 4 - (off & 3);
+    return e;
+  });
+  const out = [];
+  out.push(...u32v(0x00010000), ...u16(n), ...u16(16 * n), ...u16(0), ...u16(0));
+  for (const e of entries) out.push(...str4(e.t), ...u32v(0), ...u32v(e.offset), ...u32v(e.length));
+  for (const e of entries) {
+    // **D-83:** טבלת גופן (glyf/cmap) עשויה לחרוג ממגבלת הארגומנטים של V8 (~125K)
+    // בספרים גדולים — הזרקה בלולאה בלבד (אותו תיקון כמו בבדיקת שימור התוכן).
+    for (let i = 0; i < e.data.length; i++) out.push(e.data[i]);
+    while (out.length & 3) out.push(0);
+  }
+  const bytes = Buffer.from(out);
+
+  // 7) **בדיקת tofu עצמית:** הפרנסר קורא את התוצר; כל תו מבוקש ממופה; קווי מתאר לא ריקים
+  const back = fm.parseFont(bytes);
+  if (!back.ok) return { ok: false, error: `subset-reparse-failed:${back.error}` };
+  const loca2 = back.font.indexToLocFormat === 0
+    ? (g) => rdU16(bytes, back.font.tables.loca.offset + g * 2) * 2
+    : (g) => rdU32(bytes, back.font.tables.loca.offset + g * 4);
+  for (const ch of chars || []) {
+    const g = fm.glyphIdOf(back.font, ch);
+    if (g === 0) return { ok: false, error: `tofu:${ch.codePointAt(0).toString(16)}` };
+    const advNew = fm.advanceUnitsOf(back.font, ch);
+    // **tofu = לא ממופה או (ריק מקווי־מתאר וגם חסר רוחב).** רווח וכיוצא בו —
+    // גליף ריק חוקי עם advance חיובי (אין לו קווי מתאר מטבעו); לא tofu.
+    const len = loca2(g + 1) - loca2(g);
+    if (len <= 0 && advNew === 0) return { ok: false, error: `tofu-empty:${ch.codePointAt(0).toString(16)}` };
+    const advOld = fm.advanceUnitsOf(font, ch);
+    if (advOld !== advNew) return { ok: false, error: `width-drift:${ch.codePointAt(0).toString(16)}:${advNew}!=${advOld}` };
+  }
+
+  return {
+    ok: true, bytes,
+    kept: gids.length,
+    dropped: font.numGlyphs - gids.length,
+    widthsUnits,
+    unitsPerEm: font.unitsPerEm,
+    mappedChars: charsKept.length
+  };
+}
+
+/**
+ * מלאי התווים של טקסט (למצמום) — ייחודיים, כולל רווח תמיד.
+ * סמנים פנימיים (PUA) ותווי בקרה (C0/DEL) מוסרים — לעולם לא נצייר גליף
+ * עבורם (שורות מוצבות מפורש; BRZ-13).
+ */
+function charInventory(text) {
+  const set = new Set([' ']);
+  for (const ch of String(text || '')) {
+    const c = ch.codePointAt(0);
+    if (c >= 0xE000 && c <= 0xF8FF) continue; // PUA — פנימי
+    if (c < 0x20 || c === 0x7F) continue;     // בקרה — לא גליף
+    set.add(ch);
+  }
+  return [...set];
+}
+
+module.exports = { buildSubset, charInventory };
+
+};
+__modules["src/engine/output/geometry-projector.js"] = function (require, module, exports) {
+// src/engine/output/geometry-projector.js — CP5 model → explicit geometry (S12.1-1, REQ-EXP-01)
+'use strict';
+
+/**
+ * **מקור גיאומטריה יחיד:** הרנדרר החי (DOM) ממקם שורות בזרימת CSS; הפרויקטור
+ * מחשב את אותן מיקומים **מפורש** ממודל CP5 (pages/lines/heightPx/columns) —
+ * כך שההדפסה (PDF) והייצוא מקרינים מאותו מקור בלבד (הורג את מחלקת
+ * live≠export של כל הגרסאות הקודמות).
+ *
+ * חוזה מיקום (תואם dom-renderer): טור = תיבה absolute מ־template.columns;
+ * שורות נערמות מ־contentBox.top + spanOffset; גובה שורה = ln.heightPx.
+ * מילים: RTL — יישור לפי המחלקות (right לשורה רגילה; שורה אחרונה לפי
+ * body-last-line-align; קריעה/AQ ברווחים). PUA נאסף לפני הפלט (BRZ-13).
+ */
+
+const { scrubPUAText } = require('./dom-renderer');
+const { MeasureAPI } = require('../typography/measure-api');
+
+/** גודל גופן של שורה לפי סוגה (מקור: מפתחות heading-N-size-pt של הרישום). */
+function lineFontSizePt(ln, settings) {
+  if (ln.kind === 'heading') {
+    const s = settings[`heading-${ln.level}-size-pt`];
+    return s || settings['body-font-size-pt'];
+  }
+  return settings['body-font-size-pt'];
+}
+
+/**
+ * הקרנת עמוד בודד לגיאומטריה מפורשת.
+ * @param {object} page — עמוד CP5
+ * @param {object} settings — הגדרות ממוזגות
+ * @param {MeasureAPI} [api] — מדידה (נבנה אם לא הוזרק)
+ * @returns {{width, height, contentBox, lines:Array, footnotes, folio, header, spanning}}
+ */
+function projectPage(page, settings, api) {
+  const measure = api || new MeasureAPI(settings, 'table');
+  const tpl = page.template;
+  const spanOffset = page.spanning ? page.spanning.heightPx : 0;
+
+  const out = {
+    width: tpl.width,
+    height: tpl.height,
+    contentBox: { ...tpl.contentBox },
+    columns: tpl.columns.map(c => ({ ...c })),
+    lines: [],        // {x, y, w, h, words:[{text,x,w}], align, kind, level, isLast}
+    footnotes: [],    // {y, marker, text}
+    folio: null,      // {y, text}
+    header: null,     // {y, parts}
+    spanning: null
+  };
+
+  // פס חוצה־טורים — שורותיו ברוחב הפס (מעל הטורים)
+  if (page.spanning && page.spanning.lines.length) {
+    const left = Math.min(...tpl.columns.map(c => c.x));
+    const right = Math.max(...tpl.columns.map(c => c.x + c.w));
+    const band = { x: left, y: tpl.contentBox.top, w: right - left, h: page.spanning.heightPx, lines: [] };
+    let y = tpl.contentBox.top;
+    for (const ln of page.spanning.lines) {
+      band.lines.push(projectLine(ln, band.x, y, band.w, settings, measure, 'right'));
+      y += ln.heightPx || 0;
+    }
+    out.spanning = band;
+  }
+
+  // **S12 (REQ-EXP-03):** עמודי תוכן־העניינים — שורות בפריסת הרנדרר
+  // (toc-rows: top 70, שורה ~24px) — כותרת השורה מימין, התווית משמאל.
+  // מצויר גם ב־PDF וגם נכלל בחילוץ הטקסט — עמוד TOC לא ריק.
+  if (page.type === 'toc-general' || page.type === 'toc-detail') {
+    const rows = (page.toc && page.toc.rows) || [];
+    let yi = 0;
+    const rowH = 24;
+    for (const row of rows) {
+      const y = 70 + yi * rowH;
+      if (row.kind === 'group') {
+        let xi = 0;
+        for (const it of row.items || []) {
+          const text = [it.text, it.label || ''].filter(Boolean).join(' ');
+          out.lines.push(fakeLine(text, 18 + xi, y, 60, rowH, settings, measure));
+          xi += 80;
+        }
+      } else {
+        const text = [row.text, row.label || ''].filter(Boolean).join(' ');
+        out.lines.push(fakeLine(text, 18, y, tpl.width - 36, rowH, settings, measure));
+      }
+      yi++;
+    }
+  }
+
+  // טורים ושורות הגוף
+  page.columns.forEach((colLines, ci) => {
+    const col = tpl.columns[ci] || { x: 0, w: 0 };
+    let y = tpl.contentBox.top + spanOffset;
+    for (const ln of colLines) {
+      out.lines.push(projectLine(ln, col.x, y, col.w, settings, measure, lastAlignOf(ln, settings)));
+      y += ln.heightPx || 0;
+    }
+  });
+
+  // מרזב הערות — מגובה שמור מטה (fnReservedHeightPx) בתחתית תיבת התוכן
+  if (page.footnotes && page.footnotes.length) {
+    const fnSize = settings['body-font-size-pt'] * 0.8;
+    const lh = Math.round(fnSize * (96 / 72) * 1.2);
+    let y = tpl.contentBox.bottom - page.fnReservedHeightPx;
+    for (const n of page.footnotes) {
+      out.footnotes.push({ y, x: colLeftOf(tpl), w: colWidthOf(tpl), marker: scrubPUAText(String(n.marker || '')), text: scrubPUAText(String(n.text || '')), h: lh });
+      y += lh;
+    }
+  }
+
+  // גיליון
+  if (page.folioDisplay) {
+    // **D-81:** מיקום/רוחב מהמקור היחיד (הקרן, מדידה 10pt) — הכותב וה-ink-bbox צורכים אותו.
+    const ft = scrubPUAText(String(page.folioDisplay));
+    const fw = Math.max(1, Math.round(measure.measureTextWidth(ft, 10)));
+    out.folio = { y: tpl.contentBox.bottom + 2, x: Math.round((tpl.width - fw) / 2), w: fw, sizePt: 10, text: ft };
+  }
+
+  // כותרת עליונה — סלוטים חיים (right/center/left) עם טקסט מפורש (D-61)
+  if (page.header && page.header.slots) {
+    const slots = ['right', 'center', 'left']
+      .map(pos => ({ pos, ...page.header.slots[pos] }))
+      .filter(s => s && s.text);
+    if (slots.length) {
+      // **D-81:** סלוט כותרת עליונה — מיקום/רוחב מפורשים מהמקור היחיד (9pt):
+      // הכותב, הכותב החי ותיבת הדיו צורכים את אותם מספרים — לא עוד נוסחאות מקומיות.
+      out.header = {
+        y: Math.max(0, tpl.contentBox.top - 18),
+        slots: slots.map(s => {
+          const t = scrubPUAText(String(s.text || ''));
+          const w = Math.max(1, Math.round(measure.measureTextWidth(t, 9)));
+          const x = s.pos === 'right' ? tpl.width - 60 - w : s.pos === 'center' ? Math.round((tpl.width - w) / 2) : 60;
+          return { pos: s.pos, align: s.align, text: t, x, w, sizePt: 9 };
+        })
+      };
+    }
+  }
+
+  // **S12 (parity):** בסיסי שורות/מרזב/גיליון/כותרת — מודל תיבת שורה אחיד
+  attachBaselines(out, settings, measure);
+
+  return out;
+}
+
+function colLeftOf(tpl) { return Math.min(...tpl.columns.map(c => c.x)); }
+function colWidthOf(tpl) {
+  const left = Math.min(...tpl.columns.map(c => c.x));
+  const right = Math.max(...tpl.columns.map(c => c.x + c.w));
+  return right - left;
+}
+
+/** יישור שורה אחרונה לפי ההגדרה (ברירת מחדל center — תואם BASE_CSS). */
+function lastAlignOf(ln, settings) {
+  if (!ln.isLast) return 'justify';
+  const mode = settings['body-last-line-align'] || 'center';
+  return mode === 'stretch' ? 'justify' : mode; // stretch בשורה אחרונה = יישור מלא כמו רגילה
+}
+
+/**
+ * הקרנת שורה בודדת: מילים עם מיקומי x מפורשים (RTL — מימין לשמאל).
+ * @param {string} align — 'justify' | 'right' | 'center'
+ */
+function projectLine(ln, colX, y, colW, settings, measure, align) {
+  const sizePt = lineFontSizePt(ln, settings);
+  const words = (ln.words || []).map(w => scrubPUAText(String(w).replace(/\u00A0/g, ' '))).filter(Boolean);
+  const spaceW = measure.measureTextWidth(' ', sizePt, 0);
+  const widths = words.map(w => measure.measureTextWidth(w, sizePt));
+  const sumW = widths.reduce((s, w) => s + w, 0);
+  const gaps = Math.max(0, words.length - 1);
+
+  // רוחב רווחים: שורת יישור מלאה מפרשת לרוחב הטור (לפחות רווח בסיס);
+  // שורה אחרונה — רווח בסיס. AQ stretch מיושם במרווח (הקירוב של המנוע ב־CSS wordSpacing).
+  let gapW = spaceW;
+  if (align === 'justify' && gaps > 0 && sumW + gaps * spaceW < colW) {
+    gapW = (colW - sumW) / gaps;
+  }
+  if (ln.aqStretch && ln.aqStretch !== 1 && align !== 'justify') {
+    gapW = spaceW * ln.aqStretch;
+  }
+
+  const lineW = sumW + gaps * gapW;
+  let xRight; // הקצה הימני של השורה
+  if (align === 'center') xRight = colX + (colW + lineW) / 2;
+  else if (align === 'right') xRight = colX + colW;
+  else xRight = colX + colW; // justify: מילה ראשונה נצמדת לימין, האחרונה לשמאל
+
+  const wordPos = [];
+  let cursor = xRight;
+  for (let i = 0; i < words.length; i++) {
+    cursor -= widths[i];
+    wordPos.push({ text: words[i], x: cursor, w: widths[i] });
+    cursor -= gapW;
+  }
+
+  return {
+    x: colX, y, w: colW, h: ln.heightPx || 0,
+    words: wordPos, align, kind: ln.kind || 'paragraph',
+    level: ln.level, isLast: !!ln.isLast, sizePt,
+    tokenId: ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId),
+    // **S12 (parity):** קו בסיס לפי מודל תיבת השורה של CSS —
+    // half-leading + ascent (מפרופיל הגופן/מכויל) — אותו חוזה ל־PDF ולרסטר.
+    baselineY: null
+  };
+}
+
+/** השלמת baselineY לכל שורות העמוד (לאחר ההקרנה) — מקור מדידה אחד. */
+function attachBaselines(page, settings, measure) {
+  const ascent = measure.ascentEm(), descent = measure.descentEm();
+  for (const ln of [...(page.spanning ? page.spanning.lines : []), ...page.lines]) {
+    const sizePx = ln.sizePt * (96 / 72);
+    const contentH = (ascent + descent) * sizePx;
+    const halfLeading = (ln.h - contentH) / 2;
+    ln.baselineY = ln.y + Math.max(0, halfLeading) + ascent * sizePx;
+    ln.ascentPx = ascent * sizePx;
+    ln.descentPx = descent * sizePx;
+  }
+  if (page.footnotes) {
+    for (const fn of page.footnotes) { fn.baselineY = fn.y + ascent * 11 * (96 / 72); }
+  }
+  if (page.folio) page.folio.baselineY = page.folio.y + 10;
+  if (page.header) page.header.baselineY = page.header.y + 10;
+}
+
+/** שורה מלאכותית (TOC/עזר) — מילה אחת מימין לשמאל; מיקום מפורש. */
+function fakeLine(text, x, y, w, h, settings, measure) {
+  const sizePt = 12;
+  const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));
+  const widths = words.map(w2 => measure.measureTextWidth(w2, sizePt, 0));
+  const gapW = measure.measureTextWidth(' ', sizePt, 0);
+  let cursor = x + w;
+  const wordPos = [];
+  for (let i = 0; i < words.length; i++) {
+    cursor -= widths[i];
+    wordPos.push({ text: words[i], x: cursor, w: widths[i] });
+    cursor -= gapW;
+  }
+  return { x, y, w, h, words: wordPos, align: 'right', kind: 'toc-row', level: null, isLast: false, sizePt, baselineY: null, tokenId: null };
+}
+
+/**
+ * הקרנת מסמך שלם (כל העמודים) + תיבת דיו (ink bbox) לכל עמוד —
+ * לבדיקת ה־parity (raster מול מודל).
+ */
+function projectDocument(result, settings, api) {
+  const pages = result.pages.map(p => projectPage(p, settings, api));
+  const ascent = (api || new MeasureAPI(settings, 'table')).ascentEm();
+  const descent = (api || new MeasureAPI(settings, 'table')).descentEm();
+  const inkBounds = pages.map(pg => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const acc = (x, y, w, h) => {
+      if (x < minX) minX = x; if (x + w > maxX) maxX = x + w;
+      if (y < minY) minY = y; if (y + h > maxY) maxY = y + h;
+    };
+    for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+      for (const w of ln.words) {
+        if (!w.text.trim()) continue;
+        const sizePx = ln.sizePt * (96 / 72);
+        // דיו צמוד לגליפים: בסיס − (ascent×0.93) עד בסיס + descent; צדדים — תיבת המילה
+        acc(w.x, ln.baselineY - ascent * sizePx * 0.93, w.w, (ascent * 0.93 + descent) * sizePx);
+      }
+    }
+    for (const fn of pg.footnotes) if ((fn.marker + fn.text).trim()) acc(fn.x, fn.baselineY - 9, fn.w, 14);
+    // **D-81:** כל טקסט מצויר נכנס לתיבת הדיו — גם גיליון וגם סלוטי כותרת עליונה,
+    // במיקום/רוחב של המקור היחיד (הקרן). בעבר הכותרת לא נצברה כלל ⇒ המודל היה
+    // צר מהרסטר בעמודים עם כותרת — פער שנחשף בחיזוק בדיקת הקבלה (S13, 03.11).
+    if (pg.folio && pg.folio.text) {
+      const w = pg.folio.w != null ? pg.folio.w : Math.max(20, pg.folio.text.length * 6);
+      const x = pg.folio.x != null ? pg.folio.x : (pg.width - w) / 2;
+      const by = pg.folio.baselineY != null ? pg.folio.baselineY : pg.folio.y + 10;
+      acc(x, by - 10, w, 16);
+    }
+    if (pg.header) {
+      for (const s of pg.header.slots || []) {
+        if (!s.text || !s.text.trim()) continue;
+        const w = s.w != null ? s.w : s.text.length * 5.5;
+        const x = s.x != null ? s.x : (s.pos === 'right' ? pg.width - 60 - w : s.pos === 'center' ? (pg.width - w) / 2 : 60);
+        const by = pg.header.baselineY != null ? pg.header.baselineY : pg.header.y + 10;
+        acc(x, by - 10, w, 15);
+      }
+    }
+    if (minX === Infinity) return null;
+    return { minX, minY, maxX, maxY };
+  });
+  return { pages, inkBounds, layoutHash: result.layoutHash };
+}
+
+module.exports = { projectPage, projectLine, projectDocument, lineFontSizePt, attachBaselines };
+
+};
+__modules["src/engine/output/pdf-writer.js"] = function (require, module, exports) {
+// src/engine/output/pdf-writer.js — Pure-JS PDF 1.4 writer (S12.1-3, REQ-EXP-03)
+'use strict';
+
+/**
+ * כותב PDF מהקרנת הגיאומטריה (geometry-projector — מקור יחיד) + תת־גופן
+ * TrueType מוטמע (CIDFontType2 + ToUnicode — טקסט אמיתי נבחר/מופק).
+ *
+ * יכולות (חוזה S12.1-3):
+ *  - MediaBox/TrimBox/BleedBox מרישום גדלי העמוד (מ״מ→pt) + export-bleed-mm;
+ *  - סימני חיתוך (pdf-crop-marks) — קווים מחוץ לתבנית החיתוך ב־4 פינות;
+ *  - עץ סימניות (Outlines) ממודל הכותרות — H1 רמה 1, H2 רמה 2 תחתיו;
+ *  - יעדי קישור לחיצים משורות ה־TOC (Link/GoTo → עמוד הכותרת);
+ *  - טקסט אמיתי לכל מילה (BT/Tf/Td/Tj) — RTL מוצב מפורש;
+ *  - דטרמיניזם: אין תאריך/מזהים אקראיים; סדר אובייקטים קבוע; ייצוא כפול ⇒ בתים זהים.
+ *
+ * עצמאי לחלוטין — אפס תלות חיצונית (אותה דוקטרינה כמו zip-writer/xml-lite).
+ * מוכן גם לצינור הדפסת Chromium: ה־HTML העצמאי (html-export) כולל את אותם
+ * כללי @page; ה־PDF הכתוב כאן הוא המסלול המנועי המלא (סימניות+קישורים).
+ */
+
+const PX_TO_PT = 72 / 96;
+const MM_TO_PT = 72 / 25.4;
+
+/** כתיבת מסמך PDF — אוסף אובייקטים ומרכיב xref מדויק. */
+class PdfBuilder {
+  constructor() {
+    this.objects = new Map(); // id → Buffer (האובייקט בלבד, בלי "N 0 obj")
+    this.nextId = 1;
+  }
+  reserve() { return this.nextId++; }
+  put(id, content) {
+    this.objects.set(id, Buffer.isBuffer(content) ? content : Buffer.from(content, 'latin1'));
+    return id;
+  }
+  add(content) { return this.put(this.reserve(), content); }
+  build() {
+    const parts = [Buffer.from('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n', 'latin1')];
+    let pos = parts[0].length;
+    const offsets = new Map();
+    const maxId = Math.max(0, ...this.objects.keys());
+    for (let id = 1; id <= maxId; id++) {
+      if (!this.objects.has(id)) continue;
+      const head = Buffer.from(`${id} 0 obj\n`, 'latin1');
+      const body = this.objects.get(id);
+      const tail = Buffer.from('\nendobj\n', 'latin1');
+      offsets.set(id, pos);
+      pos += head.length + body.length + tail.length;
+      parts.push(head, body, tail);
+    }
+    const xrefPos = pos;
+    let xref = `xref\n0 ${maxId + 1}\n0000000000 65535 f \n`;
+    for (let id = 1; id <= maxId; id++) {
+      if (offsets.has(id)) xref += `${String(offsets.get(id)).padStart(10, '0')} 00000 n \n`;
+      else xref += `0000000000 65535 f \n`;
+    }
+    parts.push(Buffer.from(xref, 'latin1'));
+    parts.push(Buffer.from(`trailer\n<< /Size ${maxId + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`, 'latin1'));
+    return Buffer.concat(parts);
+  }
+}
+
+function escapePdfText(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+function round2(v) { return Math.round(v * 100) / 100; }
+
+/** **כותרת סימנייה עברית:** מחרוזת טקסט PDF לא־לטינית ⇒ UTF-16BE עם BOM
+ * כמחרוזת הקסדצימלית (חוזה PDF 1.4 §3.8.4) — קוראים מציגים עברית תקינה. */
+function pdfTitleHex(s) {
+  let out = 'FEFF';
+  for (const ch of String(s)) {
+    const cp = ch.codePointAt(0);
+    if (cp > 0xFFFF) {
+      const v = cp - 0x10000;
+      const hi = 0xD800 + (v >> 10), lo = 0xDC00 + (v & 0x3FF);
+      out += hi.toString(16).padStart(4, '0') + lo.toString(16).padStart(4, '0');
+    } else {
+      out += cp.toString(16).padStart(4, '0');
+    }
+  }
+  return `<${out.toUpperCase()}>`;
+}
+
+/** מחרוזת CID הקסדצימלית לטקסט (Identity-H: 2 בתים לגליף).
+ * **RTL:** PDF מתקדם שמאלה מ־Td; לכן התווים נפלטים בסדר **ויזואלי**
+ * (התו הלוגי האחרון ראשון = השמאלי ביותר) — המילה מרונדרת נכון לקורא עברי. */
+function cidHex(text, font) {
+  const chars = [...String(text)].filter(ch => {
+    const cp = ch.codePointAt(0);
+    return cp >= 0x20 && cp !== 0x7F;
+  });
+  let out = '';
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const g = font.cidOf(chars[i]);
+    if (g === 0) continue;
+    out += g.toString(16).padStart(4, '0');
+  }
+  return out;
+}
+
+/** ToUnicode CMap — מיפוי gid → Unicode (חילוץ טקסט אמיתי ב־pdftotext). */
+function buildToUnicode(font) {
+  const lines = [
+    '/CIDInit /ProcSet findresource begin',
+    '12 dict begin',
+    'begincmap',
+    '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def',
+    '/CMapName /Adobe-Identity-UCS def',
+    '/CMapType 2 def',
+    '1 begincodespacerange',
+    '<0000> <FFFF>',
+    'endcodespacerange'
+  ];
+  const entries = [];
+  for (const [ch, gid] of font.charToGidEntries()) {
+    if (gid === 0) continue;
+    entries.push(`<${gid.toString(16).padStart(4, '0')}> <${ch.codePointAt(0).toString(16).padStart(4, '0')}>`);
+  }
+  for (let i = 0; i < entries.length; i += 100) {
+    const chunk = entries.slice(i, i + 100);
+    lines.push(`${chunk.length} beginbfchar`, ...chunk, 'endbfchar');
+  }
+  lines.push('endcmap', 'CMapName currentdict /CMap defineresource pop', 'end', 'end');
+  return lines.join('\n');
+}
+
+/**
+ * כתיבת מסמך PDF שלם.
+ * @param {object} opts
+ * @param {Array} opts.pages — תוצר projectPage() לכל עמוד
+ * @param {{w:number,h:number}} opts.pageSizeMm — גודל עמוד במ״מ (מרישום גדלי העמוד)
+ * @param {object} opts.font — {subsetBytes, widthsUnits:Map(gid→units), unitsPerEm, cidOf:(ch)=>gid, charToGidEntries:()=>[ch,gid][]}
+ * @param {object} opts.settings — pdf-crop-marks, export-bleed-mm
+ * @param {Array} [opts.outline] — [{title, page, level}] — סימניות מכותרות
+ * @param {Array} [opts.tocLinks] — [{page, x, y, w, h, targetPage}] — קישורי TOC (px מהמקרן)
+ * @returns {Buffer}
+ */
+function writePdf(opts) {
+  const { pages, pageSizeMm, font, settings, outline, tocLinks } = opts;
+  const pdf = new PdfBuilder();
+
+  const wPt = pageSizeMm.w * MM_TO_PT;
+  const hPt = pageSizeMm.h * MM_TO_PT;
+  const bleedPt = (Number(settings['export-bleed-mm']) || 0) * MM_TO_PT;
+  const cropMarks = settings['pdf-crop-marks'] === true;
+  const pageCount = pages.length;
+
+  // ---- הקצאת מזהים דטרמיניסטית מראש ----
+  // מפת מזהים קבוע: 1 קטלוג, 2 דפים, 3 Type0, 4 CIDFont, 5 FontDescriptor,
+  // 6 FontFile2 (stream), 7 ToUnicode (stream), 8 Outlines; 9 שמור; 10+ דינמי.
+  const ID = {
+    catalog: 1, pages: 2, type0: 3, cidFont: 4, fontDescriptor: 5, fontFile: 6, toUnicode: 7, outlines: 8
+  };
+  pdf.nextId = 10;
+  const pageIds = pages.map(() => pdf.reserve());
+  const contentIds = pages.map(() => pdf.reserve());
+  const linkIds = new Map(); // pageIndex → [ids]
+  for (const link of tocLinks || []) {
+    if (!linkIds.has(link.page)) linkIds.set(link.page, []);
+    linkIds.get(link.page).push(pdf.reserve());
+  }
+  const outlineItems = (outline || []).map(o => ({ ...o, id: pdf.reserve() }));
+
+  // ---- עץ הסימניות: היררכיה לפי level ----
+  const stack = [];
+  const roots = [];
+  for (const it of outlineItems) {
+    while (stack.length && stack[stack.length - 1].level >= it.level) stack.pop();
+    it.parent = stack.length ? stack[stack.length - 1] : null;
+    it.children = [];
+    if (!it.parent) roots.push(it); else it.parent.children.push(it);
+    stack.push(it);
+  }
+  const flatOrder = [];
+  const walk = (list) => { for (const x of list) { flatOrder.push(x); walk(x.children); } };
+  walk(roots);
+  for (const list of [roots, ...flatOrder.filter(f => f.children.length).map(f => f.children)]) {
+    for (let i = 0; i < list.length; i++) { list[i].prev = list[i - 1] || null; list[i].next = list[i + 1] || null; }
+  }
+
+  // ---- תוכן לכל עמוד (content streams) ----
+  const contents = pages.map((pg) => {
+    const ops = [];
+    const emitWord = (text, xPx, yPx, sizePt) => {
+      const gidHex = cidHex(text, font);
+      if (!gidHex) return;
+      ops.push(`BT /F1 ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
+    };
+    const emitLines = (lines) => {
+      for (const ln of lines) {
+        // **S12 (parity):** בסיס השורה מהמקרן (מודל תיבת שורה CSS — half-leading+ascent)
+        const baselineY = ln.baselineY != null ? ln.baselineY : ln.y + ln.h - ln.sizePt * (96 / 72) * 0.78;
+        for (const w of ln.words) emitWord(w.text, w.x, baselineY, ln.sizePt);
+      }
+    };
+    if (pg.spanning) emitLines(pg.spanning.lines);
+    emitLines(pg.lines);
+    // מרזב הערות — סמן + מילות ההערה (מימין לשמאל); בסיס מהמקרן
+    for (const fn of pg.footnotes) {
+      const fs = 11;
+      const baseY = fn.baselineY != null ? fn.baselineY : fn.y + 9;
+      let x = fn.x + fn.w - 4;
+      if (fn.marker) { emitWord(fn.marker, x - 14, baseY, fs); x -= 18; }
+      let cx = x;
+      for (const w of fn.text.split(/\s+/).filter(Boolean)) {
+        cx -= 8.2;
+        emitWord(w, cx, baseY, fs);
+      }
+    }
+    // גיליון — מקור יחיד (D-81): מיקום/רוחב מהקרן; נפילה לנוסחה הישנה רק אם חסר
+    if (pg.folio && pg.folio.text) {
+      const fw = pg.folio.w != null ? pg.folio.w : pg.folio.text.length * 6;
+      const fx = pg.folio.x != null ? pg.folio.x : pg.width / 2 - fw / 2;
+      const fy = pg.folio.baselineY != null ? pg.folio.baselineY : pg.folio.y + 10;
+      emitWord(pg.folio.text, fx, fy, 10);
+    }
+    // כותרת עליונה — סלוטים לפי מיקום פיזי מהקרן (D-81); נפילה מתועדת לנוסחה הישנה
+    if (pg.header) {
+      for (const s of pg.header.slots) {
+        const sw = s.w != null ? s.w : s.text.length * 5.5;
+        const x = s.x != null ? s.x : (s.pos === 'right' ? pg.width - 60 - sw : s.pos === 'center' ? (pg.width - sw) / 2 : 60);
+        const y = pg.header.baselineY != null ? pg.header.baselineY : pg.header.y + 10;
+        emitWord(s.text, x, y, s.sizePt || 9);
+      }
+    }
+    // סימני חיתוך (חוץ ל־TrimBox; אורך 5מ״מ)
+    if (cropMarks) {
+      const m = 5 * MM_TO_PT;
+      ops.push('0.6 w 0 G');
+      ops.push(`0 ${round2(hPt - m)} m ${round2(m)} ${round2(hPt - m)} l S`);
+      ops.push(`${round2(m)} ${round2(hPt - m)} m ${round2(m)} ${round2(hPt)} l S`);
+      ops.push(`${round2(wPt - m)} ${round2(hPt - m)} m ${round2(wPt)} ${round2(hPt - m)} l S`);
+      ops.push(`${round2(wPt)} ${round2(hPt - m)} m ${round2(wPt)} ${round2(hPt)} l S`);
+      ops.push(`0 ${round2(m)} m ${round2(m)} ${round2(m)} l S`);
+      ops.push(`${round2(m)} ${round2(m)} m ${round2(m)} 0 l S`);
+      ops.push(`${round2(wPt - m)} ${round2(m)} m ${round2(wPt)} ${round2(m)} l S`);
+      ops.push(`${round2(wPt)} ${round2(m)} m ${round2(wPt)} 0 l S`);
+    }
+    return Buffer.from(ops.join('\n'), 'latin1');
+  });
+
+  // ---- הרכבה: קטלוג, דפים, גופן ----
+  const catalogKids = pageIds.map(id => `${id} 0 R`).join(' ');
+  const outlinesRef = (outlineItems.length) ? ` /Outlines ${ID.outlines} 0 R /PageMode /UseOutlines` : '';
+  pdf.put(ID.catalog, `<< /Type /Catalog /Pages ${ID.pages} 0 R${outlinesRef} >>`);
+  pdf.put(ID.pages, `<< /Type /Pages /Count ${pageCount} /Kids [${catalogKids}] >>`);
+
+  // W: לפי חוזה PDF — צורה 1: `c [w1 w2 … wn]` (רצף רוחבים בסוגריים); יחידות פר 1000
+  const wArray = [];
+  let run = null;
+  let prevGid = -10;
+  for (const g of [...font.widthsUnits.keys()].sort((a, b) => a - b)) {
+    const wv = Math.round((font.widthsUnits.get(g) / font.unitsPerEm) * 1000);
+    if (g === prevGid + 1 && run) run.push(wv);
+    else { if (run) wArray.push(run); run = [g, wv]; }
+    prevGid = g;
+  }
+  if (run) wArray.push(run);
+  const wStr = wArray.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+
+  pdf.put(ID.type0, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraBook /Encoding /Identity-H /DescendantFonts [${ID.cidFont} 0 R] /ToUnicode ${ID.toUnicode} 0 R >>`);
+  pdf.put(ID.cidFont, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraBook /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptor} 0 R /DW 1000 /W [${wStr}] >>`);
+  pdf.put(ID.fontDescriptor, `<< /Type /FontDescriptor /FontName /ToraBook /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 ${ID.fontFile} 0 R >>`);
+  const ffStream = Buffer.concat([
+    Buffer.from(`<< /Length ${font.subsetBytes.length} /Length1 ${font.subsetBytes.length} >>\nstream\n`, 'latin1'),
+    font.subsetBytes,
+    Buffer.from('\nendstream', 'latin1')
+  ]);
+  pdf.put(ID.fontFile, ffStream); // 5
+  const toUni = buildToUnicode(font);
+  pdf.put(ID.toUnicode, `<< /Length ${toUni.length} >>\nstream\n${toUni}\nendstream`); // 6
+
+  // ---- עמודים ----
+  const mediabox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
+  const bleedbox = `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`;
+  pages.forEach((pg, i) => {
+    const annots = linkIds.get(i) || [];
+    const annotsStr = annots.length ? ` /Annots [${annots.map(id => `${id} 0 R`).join(' ')}]` : '';
+    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << /Font << /F1 ${ID.type0} 0 R >> >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
+    pdf.put(contentIds[i], Buffer.concat([
+      Buffer.from(`<< /Length ${contents[i].length} >>\nstream\n`, 'latin1'),
+      contents[i],
+      Buffer.from('\nendstream', 'latin1')
+    ]));
+  });
+
+  // ---- קישורי TOC ----
+  let linkCursor = 0;
+  for (const link of tocLinks || []) {
+    const id = linkIds.get(link.page)[0] ? null : null;
+    void id;
+  }
+  // סדר הקצאת הקישורים: לפי סדר tocLinks (אותו סדר בשמור המזהים)
+  {
+    const perPage = new Map();
+    for (const link of tocLinks || []) {
+      if (!perPage.has(link.page)) perPage.set(link.page, []);
+      perPage.get(link.page).push(link);
+    }
+    for (const [pgIdx, links] of perPage) {
+      const ids = linkIds.get(pgIdx);
+      links.forEach((link, j) => {
+        const x1 = link.x * PX_TO_PT, y1 = hPt - (link.y + link.h) * PX_TO_PT;
+        const x2 = (link.x + link.w) * PX_TO_PT, y2 = hPt - link.y * PX_TO_PT;
+        pdf.put(ids[j], `<< /Type /Annot /Subtype /Link /Rect [${round2(x1)} ${round2(y1)} ${round2(x2)} ${round2(y2)}] /Border [0 0 0] /Dest [${pageIds[link.targetPage]} 0 R /XYZ null null null] >>`);
+      });
+    }
+    void linkCursor;
+  }
+
+  // ---- סימניות ----
+  if (outlineItems.length) {
+    pdf.put(ID.outlines, `<< /Type /Outlines /First ${roots[0].id} 0 R /Last ${roots[roots.length - 1].id} 0 R /Count ${flatOrder.length} >>`);
+    for (const it of flatOrder) {
+      const parts = [
+        '<< /Title ' + pdfTitleHex(it.title),
+        `/Parent ${it.parent ? it.parent.id : ID.outlines} 0 R`,
+        `/Dest [${pageIds[it.page]} 0 R /XYZ null null null]`,
+        `/Count ${it.children.length}`
+      ];
+      if (it.prev) parts.push(`/Prev ${it.prev.id} 0 R`);
+      if (it.next) parts.push(`/Next ${it.next.id} 0 R`);
+      if (it.children.length) parts.push(`/First ${it.children[0].id} 0 R /Last ${it.children[it.children.length - 1].id} 0 R`);
+      pdf.put(it.id, parts.join(' ') + ' >>');
+    }
+  } else {
+    pdf.put(ID.outlines, `<< /Type /Outlines /Count 0 >>`);
+  }
+
+  return pdf.build();
+}
+
+module.exports = { writePdf, PdfBuilder, PX_TO_PT, MM_TO_PT };
+
+};
+__modules["src/engine/output/zip-writer.js"] = function (require, module, exports) {
+// src/engine/output/zip-writer.js — כותב ZIP דטרמיניסטי (S12.1-4; שימוש גם ב־S11 לבדיקות DOCX)
+'use strict';
+
+/**
+ * ZIP בשיטת STORE בלבד — **בתים זהים בין יצוא לייצוא** (modulo timestamps normalized):
+ * חותמות זמן קבועות (DOS 1980-01-01 = 0x0021), אין מקורות אקראיים, סדר רשומות
+ * קבוע. **אריזה מובנית (structured templating):** הרשומות מסופקות כרשימת
+ * {name, data} — לא החלפות regex על מחרוזת (תקלת packer של Yellow נמנעת מראש).
+ *
+ * שמות: אימות safeName (עקבי עם zip-reader) — רשומה בלתי־חוקית זורקת מיד
+ * (לא מושתקת): אין path traversal בחבילות שלנו.
+ */
+
+const { crc32, safeName } = require('../import/zip-reader');
+
+const FIXED_DOS_TIME = 0x0021; // 00:00:00? — 1980-01-01 תקני: date=0x0021 (ינואר 1, 1980)
+const FIXED_DOS_DATE = 0x0021;
+
+/** רשומת ZIP בודדת (local header + data). */
+function localEntry(name, data) {
+  const nameBuf = Buffer.from(name, 'utf8');
+  const crc = crc32(data);
+  const head = Buffer.alloc(30);
+  head.writeUInt32LE(0x04034b50, 0);   // signature
+  head.writeUInt16LE(20, 4);           // version needed
+  head.writeUInt16LE(0, 6);            // flags
+  head.writeUInt16LE(0, 8);            // method: STORE
+  head.writeUInt16LE(FIXED_DOS_TIME, 10);
+  head.writeUInt16LE(FIXED_DOS_DATE, 12);
+  head.writeUInt32LE(crc >>> 0, 14);
+  head.writeUInt32LE(data.length, 18); // comp size == size (STORE)
+  head.writeUInt32LE(data.length, 22);
+  head.writeUInt16LE(nameBuf.length, 26);
+  head.writeUInt16LE(0, 28);           // extra len
+  return Buffer.concat([head, nameBuf, data]);
+}
+
+/** רשומת central-directory בודדת. */
+function centralEntry(name, data, localOffset) {
+  const nameBuf = Buffer.from(name, 'utf8');
+  const crc = crc32(data);
+  const head = Buffer.alloc(46);
+  head.writeUInt32LE(0x02014b50, 0);
+  head.writeUInt16LE(20, 4);           // version made by
+  head.writeUInt16LE(20, 6);           // version needed
+  head.writeUInt16LE(0, 8);            // flags
+  head.writeUInt16LE(0, 10);           // method STORE
+  head.writeUInt16LE(FIXED_DOS_TIME, 12);
+  head.writeUInt16LE(FIXED_DOS_DATE, 14);
+  head.writeUInt32LE(crc >>> 0, 16);
+  head.writeUInt32LE(data.length, 20);
+  head.writeUInt32LE(data.length, 24);
+  head.writeUInt16LE(nameBuf.length, 28);
+  head.writeUInt16LE(0, 30);           // extra
+  head.writeUInt16LE(0, 32);           // comment
+  head.writeUInt16LE(0, 34);           // disk start
+  head.writeUInt16LE(0, 36);           // internal attrs
+  head.writeUInt32LE(0, 38);           // external attrs
+  head.writeUInt32LE(localOffset, 42);
+  return Buffer.concat([head, nameBuf]);
+}
+
+/**
+ * בניית ארכיון מרשימת רשומות.
+ * @param {Array<{name:string, data:Buffer|string}>} entries
+ * @returns {Buffer}
+ */
+function buildZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  const seen = new Set();
+  for (const e of entries || []) {
+    const name = safeName(e.name);
+    if (name == null) throw new Error(`zip-writer: illegal entry name: ${JSON.stringify(e.name)}`);
+    if (seen.has(name)) throw new Error(`zip-writer: duplicate entry name: ${name}`);
+    seen.add(name);
+    const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data), 'utf8');
+    const l = localEntry(name, data);
+    locals.push(l);
+    centrals.push(centralEntry(name, data, offset));
+    offset += l.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);            // disk
+  eocd.writeUInt16LE(0, 6);            // cd disk
+  eocd.writeUInt16LE(centrals.length, 8);
+  eocd.writeUInt16LE(centrals.length, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(offset, 16);      // cd offset
+  eocd.writeUInt16LE(0, 20);           // comment len
+  return Buffer.concat([...locals, cd, eocd]);
+}
+
+module.exports = { buildZip };
+
+};
+__modules["src/engine/output/project-io.js"] = function (require, module, exports) {
+// src/engine/output/project-io.js — Project JSON export/import with settings_version + migrations (S4.1.2, S12)
+'use strict';
+
+const { getDefaultSettings, registry, derivePlacementFlags } = require('../core/settings-registry');
+
+/**
+ * מיפויי נדידה v1→v2: כינויים ישנים מכל 5 הריפואים → מפתח canonical.
+ * ערכים לא־ידועים נשמרים (font-picker preserve-missing-value — IMUD port).
+ */
+const MIGRATIONS = [
+  { version: 2, renames: {
+    'pageNumFormat': 'page-num-format',
+    'pageNumFrame': 'page-num-frame',
+    'pageNumPosition': 'page-num-position',
+    'initialPageNumber': 'page-num-initial-value',
+    'bodyFontSize': 'body-font-size-pt',
+    'lineHeight': 'body-line-height',
+    'colWidthPct': 'grid-col-width-pct',
+    'marginSidePct': 'grid-margin-side-pct',
+    'gutterPct': 'grid-gutter-pct',
+    'balanceChapterEnd': 'balance-chapter-end',
+    'tocLevel1Show': 'toc-level-1-show',
+    'avoid-runt-word': 'runt-min-width-pct' // פנטום Yellow/Green → מנגנון אמיתי כאן
+  } }
+];
+
+function migrate(raw) {
+  let s = { ...raw };
+  const from = Number(s.settings_version || 1);
+  for (const m of MIGRATIONS) {
+    if (m.version > from) {
+      for (const [oldK, newK] of Object.entries(m.renames)) {
+        if (oldK in s && !(newK in s)) { s[newK] = s[oldK]; delete s[oldK]; }
+      }
+      s.settings_version = m.version;
+    }
+  }
+  if (!s.settings_version) s.settings_version = 2;
+  return s;
+}
+
+/** איחוד עם defaults; אי‑התאמות מדווחות ולא משמיטות (audit deltas attributable). */
+function mergeWithDefaults(migrated) {
+  const defs = getDefaultSettings();
+  // derivePlacementFlags **אחרי** האיחוד — mode הוא מקור־האמת; דגלים שהומרו מקובץ
+  // v1 ישן (ללא mode) נגזרים שוב כך שלעולם לא ייווצר מצב סותר מאובדן הערות (BRZ-15).
+  const merged = derivePlacementFlags({ ...defs, ...migrated, settings_version: 2 });
+  const unknownKeys = Object.keys(migrated).filter(k => !(k in defs));
+  const issues = [];
+  for (const r of registry) {
+    const v = merged[r.id];
+    if (r.type === 'enum' && r.enum && !r.enum.includes(v)) issues.push({ key: r.id, value: v, reason: 'not-in-enum', kept: true });
+    if (r.type === 'number' && ((r.min != null && v < r.min) || (r.max != null && v > r.max))) issues.push({ key: r.id, value: v, reason: 'out-of-range', kept: true });
+  }
+  return { merged, unknownKeys, issues };
+}
+
+function exportProject(pagesData, settings, meta) {
+  return JSON.stringify({
+    format: 'tora-typesetter-project',
+    format_version: 1,
+    engine: 'red-unified',
+    exported_at: (meta && meta.timestamp) || null, // דטרמיניסטי: אין Date() אוטומטי בליטה
+    settings,
+    meta: meta || {},
+    pages: pagesData
+  }, null, 2);
+}
+
+function importProject(json) {
+  const raw = typeof json === 'string' ? JSON.parse(json) : json;
+  if (raw.format !== 'tora-typesetter-project') throw new Error('unknown project format');
+  const migrated = migrate(raw.settings || {});
+  const { merged, unknownKeys, issues } = mergeWithDefaults(migrated);
+  return { settings: merged, pages: raw.pages || [], meta: raw.meta || {}, unknownKeys, issues };
+}
+
+module.exports = { migrate, mergeWithDefaults, exportProject, importProject, MIGRATIONS };
+
+};
+__modules["src/engine/extensions/extensions-io.js"] = function (require, module, exports) {
+// src/engine/extensions/extensions-io.js — חבילת הרחבות: export/import/share (S11.1-1, §8.3)
+'use strict';
+
+/**
+ * חבילת הרחבות = סגנונות מותאמים + עמודים מותאמים + תמונות מוטמעות.
+ * §8.3 "import/export/share של הכל":
+ *  - export: JSON דטרמיניסטי (מפתחות ממוינים, אין חותמת זמן) — export פעמיים ⇒ בתים זהים.
+ *  - import: אימות מלא + הודעות עבריות מאובחנות (parseCustomStyles/parseCustomPageTypes/validateImages);
+ *    אין השלכה בשקט — כל דחייה מדווחת; הקובץ אינו נטען חלקית (all-or-nothing).
+ *  - share: אותו פורמט (החבילה עצמה היא השיתוף) + סיכום קריא לאדם (summary).
+ */
+
+const { parseCustomStyles, validateImages } = require('./style-schema');
+const { parseCustomPageTypes } = require('../decoration/custom-pages');
+
+const FORMAT = 'tora-typesetter-extensions';
+const VERSION = 1;
+
+/** **S11 (§8.3):** תוויות מיקום עבריות לאדם — התקציר קריא בלי מזהי מנוע. */
+const POSITION_LABELS = {
+  'before-shaar-main': 'לפני השער הראשי',
+  'after-shaar-main': 'אחרי השער הראשי',
+  'before-part': 'לפני חלק',
+  'after-part': 'אחרי חלק',
+  'end': 'בסוף המסמך'
+};
+
+/** ייצוא דטרמיניסטי — מפתחות ממוינים, אין תאריך. */
+function exportExtensions(bundle) {
+  const payload = {
+    format: FORMAT,
+    format_version: VERSION,
+    styles: (bundle && bundle.styles) || [],
+    pages: (bundle && bundle.pages) || [],
+    images: (bundle && bundle.images) || []
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * ייבוא ואימות חבילה. all-or-nothing: רק אם zero errors.
+ * מבנה קלט: או חבילה מלאה {format: tora-typesetter-extensions, styles, pages, images},
+ * או רשימה חשופה — {styles:[...]} / [styles] (רק סגנונות; עמודים/תמונות ריקים).
+ * format שגוי במפורש ⇒ דחייה «פורמט לא נתמך» (חוק 14).
+ * @returns {{ok:boolean, styles:Array, pages:Array, images:Array, errors:Array, summary:string}}
+ */
+function importExtensions(json) {
+  let raw;
+  const errors = [];
+  try {
+    raw = typeof json === 'string' ? JSON.parse(json) : json;
+  } catch (e) {
+    return { ok: false, styles: [], pages: [], images: [], errors: [{ code: 'unparseable-json', path: '$', styleId: null, message: `קובץ ההרחבות אינו JSON תקין — ${e.message}.` }], summary: 'ייבוא נכשל: הקובץ אינו JSON תקין.' };
+  }
+  if (raw == null || typeof raw !== 'object') {
+    return { ok: false, styles: [], pages: [], images: [], errors: [{ code: 'bad-shape', path: '$', styleId: null, message: 'קובץ ההרחבות חייב להיות אובייקט או מערך.' }], summary: 'ייבוא נכשל: מבנה שגוי.' };
+  }
+  if (raw.format != null && raw.format !== FORMAT) {
+    return { ok: false, styles: [], pages: [], images: [], errors: [{ code: 'bad-format', path: '$.format', styleId: null, message: `פורמט לא נתמך — צפוי «${FORMAT}» (קיבל ${JSON.stringify(raw.format)}). הקובץ לא נטען.` }], summary: 'ייבוא נכשל: פורמט לא נתמך.' };
+  }
+  // רשימה חשופה: [styles] או {styles:[...]} — ללא format/ללא pages/images
+  const bare = Array.isArray(raw) || (raw.format == null && !('pages' in raw) && !('images' in raw));
+  const stylesInput = bare ? raw : (raw.styles || []);
+  const pagesInput = bare ? [] : (raw.pages || []);
+  const imagesInput = bare ? [] : (raw.images || []);
+
+  const stylesRes = parseCustomStyles(stylesInput);
+  errors.push(...stylesRes.errors);
+  const pagesRes = parseCustomPageTypes(JSON.stringify({ pages: pagesInput }));
+  errors.push(...pagesRes.errors.map(e => ({ code: `custom-pages:${e}`, path: 'pages', styleId: null, message: `עמוד מותאם נדחה — ${e}.` })));
+  const imagesRes = validateImages(imagesInput);
+  errors.push(...imagesRes.errors);
+
+  if (errors.length) {
+    return { ok: false, styles: [], pages: [], images: [], errors, summary: `ייבוא נכשל: ${errors.length} שגיאות אימות (הקובץ לא נטען).` };
+  }
+  return {
+    ok: true,
+    styles: stylesRes.styles,
+    pages: pagesRes.pages,
+    images: imagesRes.images,
+    errors: [],
+    summary: `ההרחבות נטענו: ${stylesRes.styles.length} סגנונות, ${pagesRes.pages.length} עמודים מותאמים, ${imagesRes.images.length} תמונות.`
+  };
+}
+
+/**
+ * שיתוף: סיכום קריא לאדם של חבילה קיימת (מוצג למשתמש לפני/אחרי ייבוא).
+ * דטרמיניסטי; ללא פרטים מזהים.
+ */
+function shareSummary(bundle) {
+  if (!bundle) return 'חבילה ריקה.';
+  const styles = bundle.styles || [];
+  const pages = bundle.pages || [];
+  const images = bundle.images || [];
+  const lines = [
+    `חבילת הרחבות (${FORMAT} v${VERSION})`,
+    `סגנונות (${styles.length}):` + (styles.length ? styles.map(s => ` «${s.name}» [${s.layoutMode}]`).join(';') : ' אין'),
+    `עמודים מותאמים (${pages.length}):` + (pages.length ? pages.map(p => {
+      const pos = p.position || { at: 'end' };
+      const label = POSITION_LABELS[pos.at] || pos.at;
+      const part = pos.at === 'before-part' || pos.at === 'after-part' ? ` ${pos.part || '?'}` : '';
+      return ` «${p.name || p.id}» ${label}${part}${p.counted ? '' : ' (לא נספר)'}`;
+    }).join(';') : ' אין'),
+    `תמונות (${images.length}):` + (images.length ? images.map(im => ` «${im.id}» ${im.w}×${im.h}מ״מ`).join(';') : ' אין')
+  ];
+  return lines.join('\n');
+}
+
+module.exports = { FORMAT, VERSION, exportExtensions, importExtensions, shareSummary };
 
 };
 

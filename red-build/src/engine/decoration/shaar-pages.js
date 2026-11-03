@@ -22,10 +22,11 @@ const { buildPickerModel } = require('./theme-sets');
 /**
  * האם ערכת נושא פעילה (הופעלה דרך activateThemeSet או הוגדרה ידנית).
  * ברירת המחדל 'default' ⇒ אין עמודי שער — התנהגות שמרנית שלא משנה מסמכים קיימים.
+ * **03.11 (EXT-14):** גם בחירת עיצוב ספרייה (imud-shaar-main) מפעילה את השערים.
  */
 function themeActive(settings) {
   const id = settings['theme-set-id'];
-  return Boolean(id && id !== 'default') || Boolean(settings['shaar-main-image']);
+  return Boolean(id && id !== 'default') || Boolean(settings['shaar-main-image']) || Boolean(settings['imud-shaar-main']);
 }
 
 function makeShaarPage(type, settings, index) {

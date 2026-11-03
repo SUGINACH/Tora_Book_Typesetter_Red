@@ -1,5 +1,37 @@
 # WORKLOG.md — יומן עבודה לפי שלב · Tora Book Typesetter Red
-> כלל: כל שלב מתועד עם מה נעשה, ראיות ובדיקות. עדכון אחרון: 02.11.2026.
+> כלל: כל שלב מתועד עם מה נעשה, ראיות ובדיקות. עדכון אחרון: 03.11.2026 (שלב S4.5 + תיקוני דפדפן).
+
+## 03.11.2026 (ב') — S4.5 תאימות מקור + הטמעת נכסים + תיקוני דפדפן (ביקורת חיצונית, סקירות 1–2)
+
+### א. תיקוני קריסה ב-Pages (דיווח משתמש)
+- **ייבוא DOCX** (`Buffer is not defined`): zip-reader נכתב מחדש כסביבת-אגנוסטי — Uint8Array טהור + utf8Decode; docx-import/export-api עברו ל-utf8Decode. בדיקת S11 מוכיחה קלט Uint8Array טהור ≡ Buffer.
+- **ייצוא HTML** (`unresolved require ../core/settings-registry`): הבאנדלר זיהה סמן node-only גם מתוך **תגובה** שהכילה אותו מילולית מעל require רגיל ⇒ settings-registry לא נאגד. הזיהוי כעת קפדני: אותה שורה לפני ה-require בלבד.
+- **ייצוא PDF/ZIP בדפדפן**: שימת Buffer מלאה (from/alloc/concat/isBuffer/byteLength + קריאה/כתיבה LE/BE + toString utf8/latin1/hex/base64) מוזרקת לחבילות (ב-Node ה-Buffer האמיתי עומד); פרוטוקול Worker v1.1 — export-request/register-font/register-assets; חבילת ה-Worker מקבלת גם את הנתיבים הכבדים (skipNodeOnly=false) וה-UI מייצא דרך המנוע. הורדת קבצים בפועל (Blob) חוברה.
+
+### ב. S4.5-א/ב/ג — מזהי הטקסט של המקור (סקירה 2)
+- **מטא-נתונים מלאים**: שם הספר/נושא מפורט/פרטי מהדורא/שם המחבר/מקום ושנת הוצאה/שמירת זכויות/פרטי הוצאה לאור/פרטי קשר/פרטים נוספים זוהו בפתיח. טקסט ברירת המחדל האמיתי של IMUD הוא fixture מחייב (בעבר שם הספר- לא זוהה ⇒ כל המטא ירד לגוף).
+- **הערת סיום = תוכן (היפוך D-40)**: הקידומת (יחיד) מגדירה הערה; הוראת כותרת עמודי-ההערות — צורת רבים «הערות סיום -» בלבד (מניעת התנגשות). contentHash כולל כותרות הוראות — שום טקסט לא נעלם בשקט.
+- **מזהים מוגדרים**: en-line-prefix / fn-delim-open / fn-delim-close ברישום; ריק = ביטול מפורש. תוחמים מותאמים עוברים דרך כל השרשרת (lexer→tokenizer→scanner).
+
+### ג. S4.5-ד — מיפוי 264 מפתחות default_settings (טבלת disposition)
+- `legacy-settings-map.js`: לכל מפתח מקור — mapped (46) / merged (20) / ui-state (186) / removed מנומק+הפניית מעקב (12: EXT-15..19). בדיקת הגירה 5/5 על הקובץ האמיתי: 100% disposition, ערכי המקור מוחלים (size-body=12, line-height=1.34, auto-dh=false, first-word 1.5em/FrankReal...), round-trip מלא מול mergeWithDefaults, המנוע רץ תחת הגדרות המקור.
+- מפתחות חדשים ברישום: first-word-size-em (היה כפול 2 מוקשה), first-word-font, en-line-prefix, fn-delim-open/close.
+
+### ד. הטמעת נכסי IMUD (EXT-14 — חלק מרכזי)
+- **עיצובים**: 7 קובצי JSON (shaar_main/sub/back, ornaments_ud/lr, section_dividers, header_ornaments) הוטמעו ב-`ui/assets/imud/`; asset-registry במנוע עם חיטוי SVG + הפניות `imud:<collection>:<id>`; רישום דו-צדדי (UI+Worker); רינדור שלושת השערים + עיטורי תמונה + תיבות שער מה-box של העיצוב.
+- **פונטים**: 439 פונטי העדיפות הומרו WOFF2→TTF (62MB, 0 כשלים, `tools/convert_imud_fonts.py`) והוטמעו; קטלוג חי בבוררי הגופנים; טעינה חיה = FontFace לתצוגה + registerFont במנוע (מדידה) + הבתים לייצוא PDF; @font-face data-URI בייצוא HTML.
+- **ברירות המקור**: כפתור «החל ברירות מחדל מקוריות» בפאנל הבורר (ייבוא מלא דרך טבלת ה-disposition). favicon.ico הוטמע.
+- מפתחות imud-shaar-main/sub/back, imud-orn-top/bottom/side, imud-chapter-end, imud-divider, imud-book-title/subtitle ברישום עם צרכנים אמיתיים (סורקי S4.1.4 ירוקים).
+
+### ה. חיזוקי בדיקות (ביקורת 1)
+- **יעדי PDF בפועל** (pdf-targets 4/4): פירוק הקובץ (Kids/Annots/Outlines) — כל סימנייה מצביעה לעמוד שבו הכותרת מופיעה בפועל (אימות חילוץ Poppler לכל עמוד); קישורי TOC — רצף היעדים בקובץ שווה למודל; **סדר מילים** בחילוץ נשמר (סמנים מושתלים בסדר מכוון).
+- **אמינות איזון**: balancePage מדווח changed רק אם הוזזה שורה בפועל (בעבר true גם בעצירה ללא הזזה) + מונה moves.
+- **חיבור runt**: runt-min-width-pct משפיע כעת בפועל על העונש ב-KP (בעבר נשלח כ-runts ונקרא כ-runtMinPct — ההגדרה לא הופיעה).
+
+### ו. נעילת קאנון מחדש
+- 93dfbd3e (שרשרת: 75b8c605 גרידי → 7ccad899 החייאת KP → 93dfbd3e S4.5) — הפענוח השתנה מהותית (סמנטיקת הערות, מטא, שם ספר בכותרות).
+
+### נותר פתוח (אמת, לא הצהרות): EXT-4 (ציור עיטורים בפועל ב-PDF/סוגי kindStyle ב-DOM), EXT-8 (איזון גלובאלי), EXT-13 (איחוד מדידה live↔PDF, פער 1,021/1,000), EXT-9 (גופנים תורניים בקבלה), EXT-10 (עמוד-עמוד משתמש), EXT-15..19 (מהמיפוי), AQ אנכי (מתיחה אופקית בפועל — פער מתועד), פונקציית העלות של KP (RAGGED_END_STRETCH_FACTOR=10 משטח badness). **326 בדיקות ירוקות.**
 
 ## 02.11.2026 — סגירת S7 ("סגירת כל הקצוות עד להשלמת S7 כולו")
 

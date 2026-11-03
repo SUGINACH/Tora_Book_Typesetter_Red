@@ -40,10 +40,33 @@ function matchCloser(text, i) {
  * paragraphs/columns/pages, and depth at every position. Unmatched closers and
  * openers are REPORTED, never auto-fixed (source-fidelity doctrine).
  *
+ * **S4.5 (03.11):** התוחמים מוגדרים — opts { open, close } (ברירת מחדל [ ]).
+ * הצורה העברית "]ם" נבדקת רק בתוחם ברירת המחדל; תוחם מותאם מותאם בדיוק
+ * (מחרוזת, בדרך כלל תו בודד). תוחם ריק ⇒ הזיהוי מבוטל (פסקאות טהורות).
+ *
  * @param {Array<{text:string, paraIndex:number}>} segments - text runs tagged with paragraph index
+ * @param {object} [opts] — { open: string, close: string }
  * @returns {{pairs:Array, unmatchedClosers:Array, unmatchedOpeners:Array, depthAt:(pos)=>number, scopeMap:Object}}
  */
-function scanBrackets(segments) {
+function scanBrackets(segments, opts = {}) {
+  const openTok = String(opts.open != null ? opts.open : '[').trim();
+  const closeTok = String(opts.close != null ? opts.close : ']').trim();
+  const useDefault = openTok === '[' && closeTok === ']';
+  const enabled = openTok.length > 0 && closeTok.length > 0;
+  /** תואם פותח במיקום i (מחרוזת מלאה). */
+  const matchOpen = (text, i) => {
+    if (!enabled) return 0;
+    if (text.startsWith(openTok, i)) return openTok.length;
+    return 0;
+  };
+  /** תואם סוגר במיקום i — {len, name} או null. בברירת המחדל: טבלת הצורות
+   * (כולל "]ם" העברי); בתוחם מותאם: התאמה מדויקת בלבד. */
+  const matchClose = (text, i) => {
+    if (!enabled) return null;
+    if (useDefault) return matchCloser(text, i);
+    if (text.startsWith(closeTok, i)) return { len: closeTok.length, name: 'custom' };
+    return null;
+  };
   const stack = [];
   const pairs = [];
   const unmatchedClosers = [];
@@ -55,20 +78,21 @@ function scanBrackets(segments) {
     const para = Number.isInteger(seg.paraIndex) ? seg.paraIndex : 0;
     let i = 0;
     while (i < text.length) {
-      const ch = text[i];
-      const gp = globalPos + i;
-      if (ch === '[') {
+      const openLen = matchOpen(text, i);
+      if (openLen > 0) {
+        const gp = globalPos + i;
         stack.push({ openPos: gp, para });
         depthMarks.push({ pos: gp, depth: stack.length });
-        i += 1;
+        i += openLen;
       } else {
-        const form = matchCloser(text, i);
+        const form = matchClose(text, i);
         if (!form) {
-          depthMarks.push({ pos: gp, depth: stack.length });
+          depthMarks.push({ pos: globalPos + i, depth: stack.length });
           i += 1;
         } else if (stack.length === 0) {
           // Doctrine: report, never silently repair. Extra chars of the closer
           // are still consumed so positions stay consistent for downstream mappers.
+          const gp = globalPos + i;
           unmatchedClosers.push({
             pos: gp,
             end: gp + form.len - 1,
@@ -79,6 +103,7 @@ function scanBrackets(segments) {
           depthMarks.push({ pos: gp, depth: 0 });
           i += form.len;
         } else {
+          const gp = globalPos + i;
           const o = stack.pop();
           pairs.push({
             open: o.openPos,
@@ -117,7 +142,8 @@ function scanBrackets(segments) {
     scopeMap: {
       totalPairs: pairs.length,
       crossParagraphCount: pairs.filter(p => p.crossParagraph).length,
-      hebrewClosers: pairs.filter(p => p.closerForm === 'hebrew-mem-sofit').length
+      hebrewClosers: pairs.filter(p => p.closerForm === 'hebrew-mem-sofit').length,
+      delimiters: enabled ? { open: openTok, close: closeTok } : null // S4.5: מה בפועל נסרק
     }
   };
 }

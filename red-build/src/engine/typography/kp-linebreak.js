@@ -61,7 +61,9 @@ function badness(ratio) {
  * @returns {Array<{words:string[], widthPx:number, heightPx:number, isLast:boolean}>}
  */
 function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
-  const runts = opts.runtMinPct != null ? opts.runtMinPct : 50;
+  // **03.11 (ביקורת):** חיבור ההגדרה — runt-min-width-pct מגיע כ-runts מה-pipeline
+  // וכ-runtMinPct מקריאות ישירות; שניהם נקראים (בעבר רק runtMinPct נקרא וההגדרה לא השפיעה).
+  const runts = opts.runtMinPct != null ? opts.runtMinPct : (opts.runts != null ? opts.runts : 50);
   const items = buildItems(words, measure);
   const n = items.length;
   const cost = new Array(n + 1).fill(INF);

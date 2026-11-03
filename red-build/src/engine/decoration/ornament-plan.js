@@ -120,12 +120,12 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
 
         if (scope.signTop) {
           const y = titleTop - ornMargins.top - h; // בתוך האזור שהוזמן (F-08)
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-top', kindStyle: settings['h2-orn-top'], x: Math.round(cx - w / 2), y, w, h, marginGapTop: titleTop - (y + h) }, rejected, pi);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-top', kindStyle: settings['h2-orn-top'], x: Math.round(cx - w / 2), y, w, h, marginGapTop: titleTop - (y + h) }, rejected, pi, settings);
           planted.h2Top++;
         }
         if (scope.signBottom) {
           const y = titleBottom + ornMargins.bottom; // בתוך ההזמנה התחתונה
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-bottom', kindStyle: settings['h2-orn-bottom'], x: Math.round(cx - w / 2), y, w, h, marginGapBottom: y - titleBottom }, rejected, pi);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-bottom', kindStyle: settings['h2-orn-bottom'], x: Math.round(cx - w / 2), y, w, h, marginGapBottom: y - titleBottom }, rejected, pi, settings);
           planted.h2Bottom++;
         }
         if (scope.titleSide) {
@@ -133,8 +133,8 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
           const sideH = Math.min(h, Math.round(titleH));
           const lift = sideOrnamentLiftPx(fontPx);
           const gap = Math.round(fontPx * 0.35);
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-right', kindStyle: settings['h2-orn-side'], x: Math.round(colX + colW - titleW - gap - w), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi);
-          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-left', kindStyle: settings['h2-orn-side'], x: Math.round(colX + titleW + gap), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-right', kindStyle: settings['h2-orn-side'], x: Math.round(colX + colW - titleW - gap - w), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi, settings);
+          pushOrnament(page, { kind: 'h2-ornament', slot: 'h2-side-left', kindStyle: settings['h2-orn-side'], x: Math.round(colX + titleW + gap), y: titleTop + sideOrnamentOffsetY(titleH, sideH) + lift, w, h: sideH }, rejected, pi, settings);
           planted.h2Side += 2;
         }
       }
@@ -156,8 +156,8 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
           const lift = sideOrnamentLiftPx(fontPx);
           const yy = yTop + sideOrnamentOffsetY(lineH, sideH) + lift;
           const wSide = Math.round(fontPx * 1.2);
-          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-right', kindStyle: settings['h3-side-orn'], x: Math.round(colX + colW - wSide), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi);
-          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-left', kindStyle: settings['h3-side-orn'], x: Math.round(colX), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-right', kindStyle: settings['h3-side-orn'], x: Math.round(colX + colW - wSide), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-left', kindStyle: settings['h3-side-orn'], x: Math.round(colX), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
           planted.h3Side += 2;
         }
       }
@@ -190,7 +190,7 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
             counters.record(dec.rollbackKey);
             const y = tpl.contentBox.top + usedSoFar - Math.round((ln.heightPx || 0) / 2) - 1;
             const wDiv = Math.min(Math.round(colW * 0.5), Math.round(fontPx * 6));
-            pushOrnament(page, { kind: 'heading-divider', slot: `hdr-div-l${ln.level}`, kindStyle: 'thin', x: Math.round(colX + (colW - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX, rollbackKey: dec.rollbackKey }, rejected, pi);
+            pushOrnament(page, { kind: 'heading-divider', slot: `hdr-div-l${ln.level}`, kindStyle: 'thin', x: Math.round(colX + (colW - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX, rollbackKey: dec.rollbackKey }, rejected, pi, settings);
             planted.headingDivider++;
           } else if (dec.why !== 'disabled' && dec.why !== 'column-head-or-empty') {
             rejected.push({ page: pi, kind: 'heading-divider', why: dec.why });
@@ -205,7 +205,7 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
       if (dec.insert) {
         const wDiv = Math.round(tpl.columns[0].w * 0.4);
         const y = tpl.contentBox.bottom - Math.round(fontPx * 2);
-        pushOrnament(page, { kind: 'shaar-divider', slot: `shaar-div-${page.type}`, kindStyle: dec.style, x: Math.round(tpl.columns[0].x + (tpl.columns[0].w - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX }, rejected, pi);
+        pushOrnament(page, { kind: 'shaar-divider', slot: `shaar-div-${page.type}`, kindStyle: dec.style, x: Math.round(tpl.columns[0].x + (tpl.columns[0].w - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX }, rejected, pi, settings);
         planted.shaarDivider++;
       }
     }
@@ -230,7 +230,7 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
             kind: 'chapter-end-ornament', slot: 'chapter-end', kindStyle: settings['chapter-end-ornament'],
             x: Math.round(colX + (colW - fit.wPx) / 2), y: Math.round(tpl.contentBox.top + used + (budget - fit.hPx) / 2),
             w: fit.wPx, h: fit.hPx
-          }, rejected, pi);
+          }, rejected, pi, settings);
           planted.chapterEnd++;
         } else if (fit.reason !== 'kind-none' && fit.reason !== 'kind-unknown') {
           rejected.push({ page: pi, kind: 'chapter-end-ornament', why: fit.reason, budget: Math.round(budget) });
@@ -258,14 +258,30 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
   return { planted, rejected, counters, findings };
 }
 
+/** **03.11 (EXT-14):** הפניית תמונה לעיטור מסוג 'image' — מההגדרות לפי מיקום העיטור.
+ * הערך בהגדרות הוא הפניה מלאה 'imud:<collection>:<id>' (נבנה ע"י ה-UI בבחירת עיצוב);
+ * הרינדור פותר אותה דרך asset-registry. גישה מילולית לכל מפתח — סורק הצרכנים
+ * (S4.1.4) מוכיח שכל הגדרה באמת נקראת כאן. */
+function imageRefForOrnament(orn, settings) {
+  if (!orn || orn.kindStyle !== 'image' || !settings) return null;
+  const slot = String(orn.slot || '');
+  if (slot.startsWith('h2-top')) return settings['imud-orn-top'] || null;
+  if (slot.startsWith('h2-bottom')) return settings['imud-orn-bottom'] || null;
+  if (slot.startsWith('h2-side') || slot.startsWith('h3-side')) return settings['imud-orn-side'] || null;
+  if (slot.startsWith('chapter-end')) return settings['imud-chapter-end'] || null;
+  if (slot.startsWith('hdr-div') || slot.startsWith('shaar-div')) return settings['imud-divider'] || null;
+  return null;
+}
+
 /** הוספת rect עיטור עם אימות מקור־יחיד (F-09). */
-function pushOrnament(page, orn, rejected, pageIndex) {
+function pushOrnament(page, orn, rejected, pageIndex, settings) {
   const check = assertSingleSourceSizing(orn);
   if (!check.ok) {
     rejected.push({ page: pageIndex, kind: orn.kind, why: `single-source-violation:${check.reason}` });
     return;
   }
-  page.decorations.push({ ...orn, cssClass: `orn orn--${orn.kind} orn--${orn.kindStyle || 'plain'}` });
+  const image = imageRefForOrnament(orn, settings);
+  page.decorations.push({ ...orn, image, cssClass: `orn orn--${orn.kind} orn--${orn.kindStyle || 'plain'}` });
 }
 
 /**

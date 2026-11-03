@@ -2,13 +2,41 @@
 'use strict';
 
 /**
- * קורא ZIP מינימלי לייבוא DOCX: פורמט STORE(0) + DEFLATE(8) (node:zlib — מובנה,
- * לא תלות חיצונית). **אבטחה (S13 pass):**
+ * קורא ZIP מינימלי לייבוא DOCX: פורמט STORE(0) + DEFLATE(8).
+ * **סביבת-אגנוסטית (תיקון 03.11 — "Buffer is not defined" בדפדפן):** אין כל
+ * שימוש ב-Buffer/שיטותיו — Uint8Array טהור + פונקציות עזר פרטיות (u16le/u32le/
+ * utf8Decode). עובד זהה ב-Node (Buffer הוא sub-class של Uint8Array) ובדפדפן.
+ * node:zlib (מובנה, לא תלות חיצונית) משמש כשקיים; אחרת המנפח הטהור להלן.
+ * **אבטחה (S13 pass):**
  *  - path traversal: שמות רשומות עם ../ או / אבסולוטי או בריחת תחילית — נדחים
  *    ברשימה (denied) ולא נפתחים לעולם;
  *  - החזרת רשומות מנורמלות בלבד (שמות יחסיים נקיים);
  *  - אין eval; אין כתיבה לדיסק — הכל בזיכרון.
  */
+
+// ---------- עזרי בתים ללא Buffer (זהה לפלט readUInt16LE/readUInt32LE) ----------
+function u16le(b, o) { return b[o] | (b[o + 1] << 8); }
+function u32le(b, o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0; }
+function u8sub(b, s, e) { return b.subarray ? b.subarray(s, e) : b.slice(s, e); }
+
+/** פענוח UTF-8 טהור (TextDecoder כשקיים — אחרת מימוש ידני; תואם Buffer.toString('utf8')). */
+function utf8Decode(bytes) {
+  if (typeof TextDecoder !== 'undefined') return new TextDecoder('utf-8').decode(bytes);
+  let s = '';
+  for (let i = 0; i < bytes.length;) {
+    const c = bytes[i];
+    if (c < 0x80) { s += String.fromCharCode(c); i++; }
+    else if (c < 0xe0) { s += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; }
+    else if (c < 0xf0) { s += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; }
+    else {
+      const cp = ((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+      const off = cp - 0x10000;
+      s += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+      i += 4;
+    }
+  }
+  return s;
+}
 
 const zlib = (() => {
   try { return require('zlib'); } catch (e) { return null; } // בדפדפן אין zlib — מנפח טהור
@@ -82,7 +110,7 @@ function fixedLitHuff() {
 }
 function fixedDistHuff() { return buildHuffman(new Array(30).fill(5)); }
 
-/** מנפח raw DEFLATE טהור. הפלט כולו במערך אחד עד הסוף (backref ≤32K תקין תמיד). @returns {Buffer} */
+/** מנפח raw DEFLATE טהור. הפלט כולו במערך אחד עד הסוף (backref ≤32K תקין תמיד). @returns {Uint8Array} */
 function inflateRawPure(buf, startByte = 0, expectedSize = -1) {
   const br = new BitReader(buf, startByte);
   const out = [];
@@ -152,12 +180,15 @@ function inflateRawPure(buf, startByte = 0, expectedSize = -1) {
     if (final) break;
     if (expectedSize >= 0 && out.length >= expectedSize) break;
   }
-  return Buffer.from(out);
+  return Uint8Array.from(out);
 }
 
-/** מנפח: zlib אם קיים (Node), אחרת המנפח הטהור (דפדפן). */
+/** מנפח: zlib אם קיים (Node), אחרת המנפח הטהור (דפדפן). @returns {Uint8Array} */
 function inflateRaw(data) {
-  if (zlib) return zlib.inflateRawSync(data);
+  if (zlib) {
+    const out = zlib.inflateRawSync(data); // Node: מחזיר Buffer (Uint8Array) — זהה פונקציונלית
+    return out;
+  }
   return inflateRawPure(data, 0, -1);
 }
 
@@ -190,50 +221,50 @@ function safeName(raw) {
 }
 
 /**
- * פתיחת ארכיון ZIP מזיכרון.
+ * פתיחת ארכיון ZIP מזיכרון — **ללא Buffer** (דפדפן ו-Node כאחד; תיקון 03.11).
  * @param {Buffer|Uint8Array} bytes
- * @returns {{ok:boolean, entries:Array<{name:string, data:Buffer, method:number, size:number}>, denied:Array<string>, error:string|null}}
+ * @returns {{ok:boolean, entries:Array<{name:string, data:Uint8Array, method:number, size:number}>, denied:Array<string>, error:string|null}}
  */
 function readZip(bytes) {
-  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  const buf = bytes; // Buffer (Node) הוא Uint8Array — אינדוקסציה זהה; שום דבר לא נדרש כאן
   const denied = [];
   const entries = [];
   // מציאת EOCD (End Of Central Directory) — מהסוף, חתימה 0x06054b50
   let eocd = -1;
   const minLen = 22;
   for (let i = buf.length - minLen; i >= Math.max(0, buf.length - minLen - 65536); i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    if (u32le(buf, i) === 0x06054b50) { eocd = i; break; }
   }
   if (eocd < 0) return { ok: false, entries: [], denied: [], error: 'not-a-zip' };
-  const totalEntries = buf.readUInt16LE(eocd + 10);
-  const cdOffset = buf.readUInt32LE(eocd + 16);
+  const totalEntries = u16le(buf, eocd + 10);
+  const cdOffset = u32le(buf, eocd + 16);
 
   let p = cdOffset;
   for (let n = 0; n < totalEntries; n++) {
-    if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) {
+    if (p + 46 > buf.length || u32le(buf, p) !== 0x02014b50) {
       return { ok: false, entries, denied, error: `bad-central-directory@${n}` };
     }
-    const method = buf.readUInt16LE(p + 10);
-    const compSize = buf.readUInt32LE(p + 20);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const extraLen = buf.readUInt16LE(p + 30);
-    const commentLen = buf.readUInt16LE(p + 32);
-    const localOffset = buf.readUInt32LE(p + 42);
-    const rawName = buf.slice(p + 46, p + 46 + nameLen).toString('utf8');
+    const method = u16le(buf, p + 10);
+    const compSize = u32le(buf, p + 20);
+    const nameLen = u16le(buf, p + 28);
+    const extraLen = u16le(buf, p + 30);
+    const commentLen = u16le(buf, p + 32);
+    const localOffset = u32le(buf, p + 42);
+    const rawName = utf8Decode(u8sub(buf, p + 46, p + 46 + nameLen));
     const name = safeName(rawName);
     if (name == null) { denied.push(rawName); p += 46 + nameLen + extraLen + commentLen; continue; }
 
     // קריאת ה-local header והנתונים
-    if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50) {
+    if (localOffset + 30 > buf.length || u32le(buf, localOffset) !== 0x04034b50) {
       return { ok: false, entries, denied, error: `bad-local-header:${name}` };
     }
-    const lhNameLen = buf.readUInt16LE(localOffset + 26);
-    const lhExtraLen = buf.readUInt16LE(localOffset + 28);
+    const lhNameLen = u16le(buf, localOffset + 26);
+    const lhExtraLen = u16le(buf, localOffset + 28);
     const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
-    const raw = buf.slice(dataStart, dataStart + compSize);
+    const raw = u8sub(buf, dataStart, dataStart + compSize);
     let data;
     try {
-      if (method === 0) data = Buffer.from(raw);
+      if (method === 0) data = Uint8Array.from(raw);
       else if (method === 8) data = inflateRaw(raw);
       else return { ok: false, entries, denied, error: `unsupported-method:${method}:${name}` };
     } catch (e) {
@@ -250,4 +281,4 @@ function verifyCrc(entry) {
   return crc32(entry.data) === entry.storedCrc;
 }
 
-module.exports = { readZip, safeName, crc32, verifyCrc, inflateRaw, inflateRawPure };
+module.exports = { readZip, safeName, crc32, verifyCrc, inflateRaw, inflateRawPure, utf8Decode };

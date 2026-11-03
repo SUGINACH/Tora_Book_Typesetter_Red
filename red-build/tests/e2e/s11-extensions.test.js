@@ -15,7 +15,7 @@ const { parseCustomStyles, validateImages } = require('../../src/engine/extensio
 const { exportExtensions, importExtensions, shareSummary, FORMAT } = require('../../src/engine/extensions/extensions-io');
 const { matchBlockStyle, matchInlineStyles, CustomStyleCounters, matchTriggerSpec } = require('../../src/engine/extensions/apply-styles');
 const { importDocx, convert, headingLevelOf } = require('../../src/engine/import/docx-import');
-const { readZip, safeName, inflateRaw, inflateRawPure } = require('../../src/engine/import/zip-reader');
+const { readZip, safeName, inflateRaw, inflateRawPure, utf8Decode } = require('../../src/engine/import/zip-reader');
 const { parseXml } = require('../../src/engine/import/xml-lite');
 const { buildZip } = require('../../src/engine/output/zip-writer');
 const { computeEditingRecommendations, qualifyingFindings } = require('../../src/engine/audit/editing-recommendations');
@@ -489,13 +489,22 @@ describe('S11.2 שער 3 — DOCX: roundtrip diff=0; הערות וורד→סו�
     eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(1, 8); eocd.writeUInt16LE(1, 10);
     eocd.writeUInt32LE(centralPart.length, 12); eocd.writeUInt32LE(localPart.length, 16);
     const zip = Buffer.concat([localPart, centralPart, eocd]);
+    // **03.11 תיקון דפדפן:** readZip מחזיר Uint8Array (ללא Buffer) — הפענוח דרך utf8Decode.
+    // מוודאים גם שזה עובד כשמועבר Uint8Array טהור (הקלט שמגיע מהדפדפן בפועל).
     const read = readZip(zip);
     assert(read.ok, 'קריאת DEFLATE: ' + read.error);
-    assertEq(read.entries[0].data.toString('utf8'), docXml, 'הפלט זהה למקור');
+    assertEq(utf8Decode(read.entries[0].data), docXml, 'הפלט זהה למקור');
     assertEq(read.entries[0].name, 'word/document.xml', 'השם נשמר');
-    // המנפח הטהור מול zlib — אותם בתים:
-    assertEq(inflateRawPure(deflated).toString('utf8'), zlib.inflateRawSync(deflated).toString('utf8'), 'pure ≡ zlib');
-    assertEq(inflateRaw(deflated).toString('utf8'), docXml, 'inflateRaw (בחירה אוטומטית)');
+    const readU8 = readZip(new Uint8Array(zip)); // קלט Uint8Array טהור — נתיב הדפדפן
+    assert(readU8.ok && utf8Decode(readU8.entries[0].data) === docXml, 'קלט Uint8Array טהור ≡ Buffer');
+    // המנפח הטהור מול zlib — אותם בתים (השוואת בתים מלאה, לא מחרוזות):
+    const pure = inflateRawPure(deflated);
+    const z = zlib.inflateRawSync(deflated);
+    assertEq(pure.length, z.length, 'pure ≡ zlib (אורך)');
+    let same = true;
+    for (let i = 0; i < pure.length; i++) if (pure[i] !== z[i]) { same = false; break; }
+    assert(same, 'pure ≡ zlib (ביט לביט)');
+    assertEq(utf8Decode(inflateRaw(deflated)), docXml, 'inflateRaw (בחירה אוטומטית)');
   });
 
   it('path traversal: שמות רשומות בלתי־חוקיים נדחים; buildZip מסרב לכתוב כאלה', () => {

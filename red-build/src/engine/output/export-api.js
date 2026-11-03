@@ -14,11 +14,14 @@
 
 // **D-65 הפרדת חבילות:** המודולים להלן בטוחים־דפדפן (אין fs/pipeline) ונאגדים
 // גם בחבילת ה־UI. הנתיבים הכבדים (PDF/ZIP מלאים — pipeline+גופן+בינארי) נטענים
-// בעצלתות עם סמן /* node-only */ — הבאנדלר מדלג; הקריאות מוגנות ב־typeof Buffer.
+// בעצלתות עם סמן node-only באותה שורת הקריאה — הבאנדלר מדלג; הקריאות מוגנות ב־typeof Buffer.
+// (03.11: הסמן הוסר מהערה זו — תגובה שהכילה אותו מילולית הטעתה את הבאנדלר לדלג
+// גם על require רגיל ⇒ קריסת ייצוא בדפדפן. הזיהוי כעת קפדני: אותה שורה בלבד.)
 const getDefaultSettings = require('../core/settings-registry').getDefaultSettings;
 const { renderPage } = require('./dom-renderer');
 const { buildStandaloneHtml } = require('./html-export');
 const { PAGE_SIZES, MM_TO_PX } = require('../layout/page-templates');
+const { utf8Decode } = require('../import/zip-reader'); // פענוח UTF-8 סביבת-אגנוסטי (רשומות zip = Uint8Array)
 
 /** טעינה עצלה של נתיבי Node (מוגנת) — מחזירה null בסביבה בלי Buffer. */
 function nodeOnly(loader) {
@@ -50,7 +53,10 @@ function exportHtml(result, settings, doc, meta = {}) {
     : '';
   const html = buildStandaloneHtml(pagesHtml, settings, {
     title: meta.title || (result.metadata && (result.metadata['ספר'] || result.metadata.title)) || 'ספר',
-    pageRules
+    pageRules,
+    // **03.11:** הטמעת הגופנים בקובץ העצמאי (@font-face data-URI) — מסופק ע"י ה־UI
+    // מהספרייה (imud-library); ללא הגדרה — כמו קודם (fallback מערכת).
+    fontCss: meta.fontCss || ''
   });
   return html;
 }
@@ -162,7 +168,12 @@ function exportPdf(text, settingsIn, fontBytes, fontName) {
         fontBytes: subset.bytes.length,
         outline: outline.length,
         tocLinks: tocLinks.length,
-        layoutHash: result.layoutHash
+        layoutHash: result.layoutHash,
+        // **03.11 (חיזוק ביקורת):** נתוני היעדים בפועל — לבדיקת אמת שכל
+        // סימנייה/קישור מצביע לעמוד הנכון (לא רק מספרם).
+        outlineItems: outline,
+        tocLinkTargets: tocLinks.map(l => l.targetPage),
+        tocLinkPages: tocLinks.map(l => l.page)
       }
     };
   } finally {
@@ -234,22 +245,22 @@ function importProjectZip(bytes) {
   const setE = entry('settings.json');
   if (!manifestE || !docE || !setE) return { ok: false, error: 'missing-parts' };
   let manifest;
-  try { manifest = JSON.parse(manifestE.data.toString('utf8')); } catch (e) { return { ok: false, error: `manifest:${e.message}` }; }
+  try { manifest = JSON.parse(utf8Decode(manifestE.data)); } catch (e) { return { ok: false, error: `manifest:${e.message}` }; }
   if (manifest.format !== 'tora-typesetter-project-zip') return { ok: false, error: 'unknown-format' };
-  const proj = importProject(setE.data.toString('utf8'));
+  const proj = importProject(utf8Decode(setE.data));
   let extensions = null;
   const extE = entry('extensions.json');
   if (extE) {
     /* node-only */ const { importExtensions } = require('../extensions/extensions-io');
-    const res = importExtensions(extE.data.toString('utf8'));
+    const res = importExtensions(utf8Decode(extE.data));
     extensions = res; // כולל ok/errors — מדווח, לא שותק
   }
   let theme = null;
   const themeE = entry('theme.json');
-  if (themeE) { try { theme = JSON.parse(themeE.data.toString('utf8')); } catch (e) { return { ok: false, error: `theme:${e.message}` }; } }
+  if (themeE) { try { theme = JSON.parse(utf8Decode(themeE.data)); } catch (e) { return { ok: false, error: `theme:${e.message}` }; } }
   return {
     ok: true,
-    text: docE.data.toString('utf8'),
+    text: utf8Decode(docE.data),
     settings: proj.settings,
     extensions, theme,
     unknownKeys: proj.unknownKeys,

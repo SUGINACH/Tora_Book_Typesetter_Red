@@ -19,13 +19,18 @@ const BUNDLES = [
     name: 'worker',
     entry: 'src/ui/engine-worker-main.js',
     out: 'ui/engine-worker.bundle.js',
-    exclude: [] // למנוע אין החרגות — כל המודולים נדרשים
+    exclude: [], // למנוע אין החרגות — כל המודולים נדרשים
+    // **03.11 (ייצוא PDF/ZIP בדפדפן):** בחבילת ה־Worker נאגדים גם הנתיבים הכבדים
+    // שסומנו node-only — הם אינם נכנסים לחבילת ה־UI בלבד. בלי זה, require העצל
+    // של export-api היה נכשל בזמן ריצה (unresolved) גם ב־Worker.
+    skipNodeOnly: false
   },
   {
     name: 'app',
     entry: 'src/ui/browser-entry.js',
     out: 'ui/app.bundle.js',
-    exclude: ['src/ui/inline-transport.js'] // דפדפן: Worker אמיתי; ה-inline היה גורר את המנוע
+    exclude: ['src/ui/inline-transport.js'], // דפדפן: Worker אמיתי; ה-inline היה גורר את המנוע
+    skipNodeOnly: true // הנתיבים הכבדים (PDF/ZIP מלאים) — ב־Worker בלבד (D-65)
   }
 ];
 
@@ -110,6 +115,205 @@ var __crypto = (function () {
 })();
 `;
 
+// ---------- שימת Buffer לדפדפן (03.11 — ייצוא PDF/ZIP ב-Worker + ייבוא DOCX) ----------
+// תת-קבוצה נאמנה של Node Buffer: from/alloc/allocUnsafe/concat/isBuffer/byteLength +
+// קריאה/כתיבה של UInt/Int 8/16/32 ב-LE/BE + toString(utf8/latin1/binary/hex/base64/ascii)
+// + slice/subarray/equals/indexOf/fill. מימוש על Uint8Array — ללא תלות חיצונית.
+// ב-Node החבילות נטענות עם Buffer האמיתי (globalThis.Buffer קיים ⇒ השימה לא מופעלת).
+const BUFFER_SHIM = `
+var __RealBuffer = (typeof globalThis !== 'undefined' && globalThis.Buffer && globalThis.Buffer.from) ? globalThis.Buffer : null;
+var Buffer = __RealBuffer || (function () {
+  'use strict';
+  function utf8BytesOf(str) {
+    var out = [];
+    for (var i = 0; i < str.length;) {
+      var c = str.codePointAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      i += c > 0xffff ? 2 : 1;
+    }
+    return out;
+  }
+  function decodeUtf8(bytes, start, end) {
+    var s = '';
+    for (var i = start; i < end;) {
+      var c = bytes[i];
+      if (c < 0x80) { s += String.fromCharCode(c); i++; }
+      else if (c < 0xe0) { s += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; }
+      else if (c < 0xf0) { s += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; }
+      else {
+        var cp = ((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+        var off = cp - 0x10000;
+        s += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+        i += 4;
+      }
+    }
+    return s;
+  }
+  function hexToBytes(h) {
+    var out = [];
+    if (h.length % 2) h = '0' + h;
+    for (var i = 0; i < h.length; i += 2) out.push(parseInt(h.slice(i, i + 2), 16) || 0);
+    return out;
+  }
+  var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64ToBytes(s) {
+    s = String(s).replace(/[^A-Za-z0-9+\\/]=*$/g, '').replace(/=+$/, '');
+    var out = [], bits = 0, acc = 0;
+    for (var i = 0; i < s.length; i++) {
+      var v = B64.indexOf(s[i]);
+      if (v < 0) continue;
+      acc = (acc << 6) | v; bits += 6;
+      if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); }
+    }
+    return out;
+  }
+  function bytesToB64(b, start, end) {
+    var s = '';
+    for (var i = start; i < end; i += 3) {
+      var n = (b[i] << 16) | ((b[i + 1] || 0) << 8) | (b[i + 2] || 0);
+      s += B64[(n >> 18) & 63] + B64[(n >> 12) & 63];
+      s += (i + 1 < end) ? B64[(n >> 6) & 63] : '=';
+      s += (i + 2 < end) ? B64[n & 63] : '=';
+    }
+    return s;
+  }
+  function Buf(arg, enc) {
+    var u8;
+    if (typeof arg === 'number') { u8 = new Uint8Array(arg); }
+    else if (arg instanceof Uint8Array) { u8 = new Uint8Array(arg); } // העתקה (כמו Node)
+    else if (arg instanceof ArrayBuffer) { u8 = new Uint8Array(arg); }
+    else if (arg && arg.buffer instanceof ArrayBuffer) { u8 = new Uint8Array(arg.buffer, arg.byteOffset, arg.length); }
+    else if (typeof arg === 'string') {
+      var enc_ = String(enc || 'utf8').toLowerCase();
+      var bytes = enc_ === 'latin1' || enc_ === 'binary'
+        ? (function () { var a = []; for (var i = 0; i < arg.length; i++) a.push(arg.charCodeAt(i) & 0xff); return a; })()
+        : enc_ === 'hex' ? hexToBytes(arg)
+        : enc_ === 'base64' ? b64ToBytes(arg)
+        : enc_ === 'ascii' ? (function () { var a = []; for (var i = 0; i < arg.length; i++) a.push(arg.charCodeAt(i) & 0x7f); return a; })()
+        : utf8BytesOf(arg);
+      u8 = new Uint8Array(bytes);
+    } else if (arg && typeof arg.length === 'number') {
+      u8 = new Uint8Array(arg);
+    } else {
+      throw new TypeError('Buffer: invalid argument');
+    }
+    Object.setPrototypeOf(u8, Buf.prototype);
+    return u8;
+  }
+  Buf.prototype = Object.create(Uint8Array.prototype);
+  Buf.prototype.constructor = Buf;
+  Buf.prototype.toString = function (enc, start, end) {
+    var e = String(enc || 'utf8').toLowerCase();
+    var s = Math.max(0, start | 0), n = this.length;
+    var t = Math.min(n, end == null ? n : (end | 0));
+    if (e === 'latin1' || e === 'binary') { var o = ''; for (var i = s; i < t; i++) o += String.fromCharCode(this[i]); return o; }
+    if (e === 'ascii') { var a = ''; for (var j = s; j < t; j++) a += String.fromCharCode(this[j] & 0x7f); return a; }
+    if (e === 'hex') { var h = ''; for (var k = s; k < t; k++) h += (this[k] < 16 ? '0' : '') + this[k].toString(16); return h; }
+    if (e === 'base64') return bytesToB64(this, s, t);
+    return decodeUtf8(this, s, t); // utf8 (ברירת מחדל)
+  };
+  Buf.prototype.slice = function (start, end) {
+    var s = start == null ? 0 : (start < 0 ? Math.max(0, this.length + start) : start);
+    var e = end == null ? this.length : (end < 0 ? this.length + end : end);
+    var u = new Uint8Array(this.buffer, this.byteOffset + s, Math.max(0, Math.min(this.length, e) - s));
+    Object.setPrototypeOf(u, Buf.prototype);
+    return u;
+  };
+  Buf.prototype.subarray = Buf.prototype.slice;
+  Buf.prototype.equals = function (o) {
+    if (!o || o.length !== this.length) return false;
+    for (var i = 0; i < this.length; i++) if (this[i] !== o[i]) return false;
+    return true;
+  };
+  Buf.prototype.fill = function (v) {
+    var b = (typeof v === 'number') ? (v & 0xff) : (typeof v === 'string' && v.length ? v.charCodeAt(0) & 0xff : 0);
+    for (var i = 0; i < this.length; i++) this[i] = b;
+    return this;
+  };
+  Buf.prototype.indexOf = function (v, byteOffset) {
+    var from = byteOffset | 0;
+    if (typeof v === 'string') { // תמיכה מינימלית בתו בודד/מחרוזת קצרה
+      for (var i = from; i <= this.length - v.length; i++) {
+        var ok = true;
+        for (var j = 0; j < v.length; j++) if (this[i + j] !== (v.charCodeAt(j) & 0xff)) { ok = false; break; }
+        if (ok) return i;
+      }
+      return -1;
+    }
+    var needle = (v instanceof Uint8Array) ? v : Buf.from(v);
+    for (var p = from; p <= this.length - needle.length; p++) {
+      var m = true;
+      for (var q = 0; q < needle.length; q++) if (this[p + q] !== needle[q]) { m = false; break; }
+      if (m) return p;
+    }
+    return -1;
+  };
+  function mkRead(name, size, be, signed) {
+    Buf.prototype[name] = function (off) {
+      var v = 0;
+      if (be) { for (var i = 0; i < size; i++) v = (v << 8) | this[off + i]; }
+      else { for (var j = size - 1; j >= 0; j--) v = (v << 8) | this[off + j]; }
+      if (signed && v >= (1 << (size * 8 - 1))) v -= (1 << (size * 8));
+      return v;
+    };
+  }
+  function mkWrite(name, size, be) {
+    Buf.prototype[name] = function (v, off) {
+      v = (v | 0) & ((size === 1 ? 0xff : size === 2 ? 0xffff : 0xffffffff));
+      if (be) { for (var i = size - 1; i >= 0; i--) { this[off + i] = v & 0xff; v = Math.floor(v / 256); } }
+      else { for (var j = 0; j < size; j++) { this[off + j] = v & 0xff; v = Math.floor(v / 256); } }
+      return off + size;
+    };
+  }
+  mkRead('readUInt8', 1, false, false); mkRead('readUInt16LE', 2, false, false); mkRead('readUInt16BE', 2, true, false);
+  mkRead('readUInt32LE', 4, false, false); mkRead('readUInt32BE', 4, true, false);
+  mkRead('readInt8', 1, false, true); mkRead('readInt16LE', 2, false, true); mkRead('readInt16BE', 2, true, true);
+  mkRead('readInt32LE', 4, false, true); mkRead('readInt32BE', 4, true, true);
+  mkWrite('writeUInt8', 1, false); mkWrite('writeUInt16LE', 2, false); mkWrite('writeUInt16BE', 2, true);
+  mkWrite('writeUInt32LE', 4, false); mkWrite('writeUInt32BE', 4, true);
+  mkWrite('writeInt8', 1, false); mkWrite('writeInt16LE', 2, false); mkWrite('writeInt16BE', 2, true);
+  mkWrite('writeInt32LE', 4, false); mkWrite('writeInt32BE', 4, true);
+  Buf.from = function (arg, enc, off, len) {
+    if (typeof arg === 'string') return new Buf(arg, enc);
+    if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) {
+      if (arg instanceof Uint8Array && (off != null || len != null)) {
+        var s = off | 0, e = len == null ? arg.length : s + len;
+        var cp = new Uint8Array(arg.subarray(s, e));
+        Object.setPrototypeOf(cp, Buf.prototype);
+        return cp;
+      }
+      return new Buf(arg);
+    }
+    if (arg && typeof arg.length === 'number') return new Buf(arg);
+    throw new TypeError('Buffer.from: invalid argument');
+  };
+  Buf.alloc = function (size, fill) { var b = new Buf(size); if (fill != null) b.fill(fill); return b; };
+  Buf.allocUnsafe = Buf.alloc;
+  Buf.isBuffer = function (x) { return x instanceof Uint8Array && Object.getPrototypeOf(x) === Buf.prototype || x instanceof Buf; };
+  Buf.byteLength = function (s, enc) {
+    if (s instanceof Uint8Array || s instanceof ArrayBuffer) return s.byteLength != null ? s.byteLength : s.length;
+    var e = String(enc || 'utf8').toLowerCase();
+    var str = String(s);
+    if (e === 'latin1' || e === 'binary' || e === 'ascii') return str.length;
+    if (e === 'hex') return Math.ceil(str.length / 2);
+    if (e === 'base64') return b64ToBytes(str).length;
+    return utf8BytesOf(str).length;
+  };
+  Buf.concat = function (list) {
+    var total = 0;
+    for (var i = 0; i < list.length; i++) total += list[i].length;
+    var u = new Uint8Array(total), p = 0;
+    for (var j = 0; j < list.length; j++) { u.set(list[j], p); p += list[j].length; }
+    Object.setPrototypeOf(u, Buf.prototype);
+    return u;
+  };
+  return Buf;
+})();
+`;
+
 function resolveRel(fromAbs, name) {
   const base = path.dirname(fromAbs);
   let p = path.resolve(base, name);
@@ -118,8 +322,21 @@ function resolveRel(fromAbs, name) {
   return null;
 }
 
+/** **תיקון 03.11 ("unresolved require ../core/settings-registry"):** זיהוי סמן
+ * node-only רק כשהוא מופיע **באותה שורה, לפני ה-require עצמו** (תחילית שורת קוד).
+ * בעבר נבדק "שורה קודמת + שורה נוכחית מכילות את הסמן בכל מקום" — ותגובה שהזכירה
+ * מילולית את הסמן מעל require רגיל גרמה לדילוג שקט (settings-registry לא נאגד
+ * ⇒ קריסת ייצוא HTML בדפדפן). כאן: הסמן חייב להיות בקטע השורה שלפני מיקום
+ * ה-require — קונבנציה חד-משמעית שלא נפרצת ע"י תגובות. */
+const NODE_ONLY_RE = /\/\*\s*node-only\s*\*\//;
+function isNodeOnlyRequire(src, matchIndex) {
+  const lineStart = src.lastIndexOf('\n', matchIndex) + 1;
+  const before = src.slice(lineStart, matchIndex);
+  return NODE_ONLY_RE.test(before);
+}
+
 /** איסוף מודולים מנקודת כניסה. מחזיר Map<relPath, src> (מחריגים מוחלפים בסטאב). */
-function collectBundle(entryRel, excludeSet) {
+function collectBundle(entryRel, excludeSet, skipNodeOnly) {
   const modules = new Map(); // rel → src (excluded → stub)
   function walk(absFile) {
     const rel = path.relative(RED, absFile).split(path.sep).join('/');
@@ -131,16 +348,15 @@ function collectBundle(entryRel, excludeSet) {
     const src = fs.readFileSync(absFile, 'utf8');
     modules.set(rel, src);
     const re = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
-    const lines = src.split('\n');
     let m;
     while ((m = re.exec(src)) !== null) {
       const name = m[1];
       // **S12 (D-65 הפרדה):** require מסומן /* node-only */ — נתיב Node בלבד
       // (PDF/ZIP מלאים); לא נאגד בחבילת דפדפן. הקריאה מוגנת בזמן ריצה
       // (typeof Buffer) — בדפדפן הודעה מפורשת, לא כשל שקט.
-      const lineNo = src.slice(0, m.index).split('\n').length - 1;
-      const lineBefore = (lines[lineNo - 1] || '') + (lines[lineNo] || '');
-      if (/\/\*\s*node-only\s*\*\//.test(lineBefore)) continue;
+      // **03.11:** ההחרגה חלה על חבילת ה־UI בלבד (skipNodeOnly) — ב־Worker
+      // המנוע המלא חייב להיות זמין לייצוא PDF/ZIP.
+      if (skipNodeOnly && isNodeOnlyRequire(src, m.index)) continue;
       if (name === 'crypto') continue; // שימה חיצונית — מסופקת בזמן ריצה
       if (name === 'zlib') continue;  // **S11:** builtin של Node בלבד — בדפדפן require('zlib')→null
                                      // ואז zip-reader נופל למנפח הטהור (inflateRawPure) — אותו פלט
@@ -156,7 +372,8 @@ function collectBundle(entryRel, excludeSet) {
 
 function buildOne(cfg) {
   const excludeSet = new Set(cfg.exclude);
-  const modules = collectBundle(cfg.entry, excludeSet);
+  const skipNodeOnly = cfg.skipNodeOnly !== false; // ברירת מחדל אחורה-תואמת: החרגה (חבילת UI)
+  const modules = collectBundle(cfg.entry, excludeSet, skipNodeOnly);
   const entryRel = cfg.entry;
 
   let modulesOut = '';
@@ -164,14 +381,11 @@ function buildOne(cfg) {
   for (const [rel, src] of modules) {
     modulesOut += `__modules[${JSON.stringify(rel)}] = function (require, module, exports) {\n${src}\n};\n`;
     const re = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
-    const lines2 = src.split('\n');
     let m;
     while ((m = re.exec(src)) !== null) {
       if (m[1] === 'crypto' || !m[1].startsWith('.')) continue;
-      // **S12:** node-only — לא נאגד; לא נרשם במפת הנתיבים (הקריאה מוגנת בזמן ריצה)
-      const ln = src.slice(0, m.index).split('\n').length - 1;
-      const around = (lines2[ln - 1] || '') + (lines2[ln] || '');
-      if (/\/\*\s*node-only\s*\*\//.test(around)) continue;
+      // **S12:** node-only — לא נאגד בחבילת UI; לא נרשם במפת הנתיבים שלה (הקריאה מוגנת בזמן ריצה)
+      if (skipNodeOnly && isNodeOnlyRequire(src, m.index)) continue;
       const absFrom = path.join(RED, rel);
       const target = path.relative(RED, resolveRel(absFrom, m[1])).split(path.sep).join('/');
       pathEntries.push(`  ${JSON.stringify(`${rel}|${m[1]}`)}: ${JSON.stringify(target)}`);
@@ -183,6 +397,7 @@ function buildOne(cfg) {
 // מודולים: ${modules.size} · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 ${SHA256_SHIM}
+${BUFFER_SHIM}
 var __modules = {};
 var __cache = {};
 function __require(from, name) {

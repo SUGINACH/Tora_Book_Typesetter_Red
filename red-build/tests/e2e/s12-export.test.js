@@ -506,14 +506,14 @@ describe('S12.2 שער 5 — חבילת פרויקט ZIP (REQ-EXP-04): מבנה,
 
   it('החבילה מכילה את כל החלקים; manifest מובנה (JSON — לא תבניות מחרוזות)', () => {
     const bytes = exportProjectZip(CORPUS, settings, {});
-    const { readZip } = require('../../src/engine/import/zip-reader');
+    const { readZip, utf8Decode } = require('../../src/engine/import/zip-reader');
     const zip = readZip(bytes);
     assert(zip.ok, 'קריאה עצמית: ' + zip.error);
     const names = zip.entries.map(e => e.name);
     for (const part of ['manifest.json', 'document.txt', 'settings.json', 'extensions.json', 'theme.json']) {
       assert(names.includes(part), `חלק חסר: ${part}`);
     }
-    const manifest = JSON.parse(zip.entries.find(e => e.name === 'manifest.json').data.toString('utf8'));
+    const manifest = JSON.parse(utf8Decode(zip.entries.find(e => e.name === 'manifest.json').data));
     assertEq(manifest.format, 'tora-typesetter-project-zip');
     assertEq(manifest.settings_version, 2);
   });

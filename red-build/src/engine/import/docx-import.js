@@ -11,7 +11,7 @@
  * {ok:false, reason, message} והקובץ אינו נטען.
  */
 
-const { readZip } = require('./zip-reader');
+const { readZip, utf8Decode } = require('./zip-reader');
 const { parseXml } = require('./xml-lite');
 
 /** מיפוי סגנונות Word → רמות כותרת של המנוע. */
@@ -194,7 +194,7 @@ function importDocx(bytes, fileName) {
     return { ok: false, text: '', stats: {}, message: `פורמט לא נתמך: «${name}» אינו מסמך Word (חסר word/document.xml). הקובץ לא נטען.` };
   }
   const fn = zip.entries.find(e => e.name === 'word/footnotes.xml');
-  const res = convert(doc.data.toString('utf8'), fn ? fn.data.toString('utf8') : null);
+  const res = convert(utf8Decode(doc.data), fn ? utf8Decode(fn.data) : null);
   if (!res.ok) {
     if (res.error === 'not-wordml') {
       return { ok: false, text: '', stats: {}, message: `פורמט לא נתמך: «${name}» אינו מסמך Word תקין (document.xml אינו WordML). הקובץ לא נטען.` };

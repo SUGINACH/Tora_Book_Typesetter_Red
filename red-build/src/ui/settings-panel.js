@@ -12,6 +12,10 @@
 
 const { BINDINGS, PANELS } = require('./bindings.generated');
 
+/** גופני בסיס (לפני טעינת הקטלוג) — preserve-missing-value (IMUD port). */
+const KNOWN_FONTS = ['Frank Ruhl Libre', 'David HB', 'David', 'Narkisim', 'Nachlieli', 'Alef', 'Rubin'];
+let fontCatalogFamilies = null; // **03.11:** קטלוג 439 הפונטים של IMUD (ברגע שנטען)
+
 /** בניית בקרה אחת לפי סוג ההגדרה. מחזיר את אלמנט הבקרה (בלי שורת התווית). */
 function buildControl(doc, b, value, onChange) {
   let el;
@@ -47,10 +51,11 @@ function buildControl(doc, b, value, onChange) {
     el.value = String(value || '#ffffff');
     el.addEventListener('change', () => onChange(el.value));
   } else if (b.type === 'font') {
-    // font-picker preserve-missing-value (IMUD port): ערך שאינו ברשימה נשמר כאפשרות
-    const KNOWN_FONTS = ['Frank Ruhl Libre', 'David HB', 'David', 'Narkisim', 'Nachlieli', 'Alef', 'Rubin'];
+    // font-picker preserve-missing-value (IMUD port): ערך שאינו ברשימה נשמר כאפשרות.
+    // **03.11:** כשקטלוג IMUD נטען — 439 המשפחות מופיעות בכל בוררי הגופנים.
+    const families = fontCatalogFamilies || KNOWN_FONTS;
     el = doc.createElement('select');
-    const opts = KNOWN_FONTS.includes(value) ? KNOWN_FONTS : [String(value), ...KNOWN_FONTS];
+    const opts = families.includes(value) ? families : [String(value), ...families];
     for (const f of opts) {
       const o = doc.createElement('option');
       o.setAttribute('value', f);
@@ -137,23 +142,29 @@ function buildSettingsTab(doc, opts) {
     body.setAttribute('aria-label', p.label);
 
     if (p.kind === 'action') {
-      // פאנלי־פעולה (Z2): בונה ערכות נושא / ייבוא תוספים — כניסות לזרימות ייעודיות
+      // פאנלי־פעולה (Z2): בורר עיצובים (BUILDER) / ייבוא תוספים (IMPORTS)
+      // **03.11 (EXT-14):** הבורר פונקציונלי — עיצובי שערים ועיטורים מספריית IMUD
+      // + כפתור ברירות המחדל המקוריות (default_settings.json מלא 264 מפתחות).
       const info = doc.createElement('p');
       info.className = 'action-info';
       info.textContent = p.key === 'BUILDER'
-        ? 'בונה ערכות הנושא (SVG) — עריכת שערים, רקעים ותיבות טקסט בכלי ויזואלי. הערכות השמורות מופיעות בפאנל «ערכות נושא, שערים ורקעים».'
+        ? 'ספריית הפרויקט המקורי — שערים, עיטורים ומפרידים מעוצבים, וברירות המחדל המקוריות. הבחירה נשמרת כהפניית imud: ומופעלת בעימוד.'
         : 'ייבוא תוספים — עמודים מותאמים, סגנונות טקסט ותמונות (JSON). מנוע ההרחבות המלא נבנה ב־S11; הכניסה נעולה בהתאם.';
       body.appendChild(info);
-      const act = doc.createElement('button');
-      act.type = 'button'; act.className = 'btn';
-      act.textContent = p.key === 'BUILDER' ? '🛠 פתח את הבונה' : '📦 פתח את הייבוא';
-      act.disabled = p.key === 'IMPORTS'; // S11 — UI stub guarded (REQ-UI-04 דפוס זהה)
-      act.setAttribute('aria-label', p.label);
-      act.addEventListener('click', () => {
-        if (p.key === 'BUILDER' && opts.onOpenBuilder) opts.onOpenBuilder();
-        if (p.key === 'IMPORTS' && opts.onOpenImports) opts.onOpenImports();
-      });
-      body.appendChild(act);
+      if (p.key === 'BUILDER' && opts.imudLibrary) {
+        body.appendChild(buildImudPicker(doc, opts));
+      } else {
+        const act = doc.createElement('button');
+        act.type = 'button'; act.className = 'btn';
+        act.textContent = p.key === 'BUILDER' ? '🛠 פתח את הבונה' : '📦 פתח את הייבוא';
+        act.disabled = p.key === 'IMPORTS' || p.key === 'BUILDER'; // בורר IMUD חי לעיל; ייבוא — מוזרק חיצונית
+        act.setAttribute('aria-label', p.label);
+        act.addEventListener('click', () => {
+          if (p.key === 'BUILDER' && opts.onOpenBuilder) opts.onOpenBuilder();
+          if (p.key === 'IMPORTS' && opts.onOpenImports) opts.onOpenImports();
+        });
+        body.appendChild(act);
+      }
     } else {
       for (const b of items) {
         const settings = getSettings();
@@ -234,9 +245,118 @@ function buildSettingsTab(doc, opts) {
     }
   }
 
+  /** **03.11 (EXT-14):** עדכון קטלוג הפונטים (439 משפחות IMUD) — בוררי הגופנים
+   * נבנים מחדש עם הקטלוג המלא, בשימור הערך הנוכחי. */
+  function refreshFontCatalog(families) {
+    if (!Array.isArray(families) || !families.length) return;
+    fontCatalogFamilies = families.slice();
+    const settings = getSettings();
+    for (const fr of fieldRows) {
+      const b = BINDINGS.find(x => x.id === fr.id);
+      if (!b || b.type !== 'font') continue;
+      const old = fr.row.querySelector('.ctl');
+      if (!old) continue;
+      const fresh = buildControl(doc, b, settings[fr.id], (v) => opts.onSettingChanged(b.id, v));
+      fresh.setAttribute('id', `ctl-${b.control}`);
+      old.parentNode.replaceChild(fresh, old);
+    }
+  }
+
   root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־12 פאנלים` }));
 
-  return { root, refreshValues, searchInput: search, getSearchHits: () => searchHits };
+  return { root, refreshValues, refreshFontCatalog, searchInput: search, getSearchHits: () => searchHits };
+}
+
+/** **03.11 (EXT-14):** בורר עיצובי IMUD — שערים/עיטורים/מפרידים + ברירות המקור.
+ * בחירה ⇒ רישום העיצוב בשני הצדדים (UI+Worker) ואז onSettingChanged עם ההפניה
+ * המלאה. הפעלת מצב תמונה לעיטורים אוטומטית (h2-orn-*=image). */
+function buildImudPicker(doc, opts) {
+  const wrap = doc.createElement('div');
+  wrap.className = 'imud-picker';
+  const note = doc.createElement('div');
+  note.className = 'action-info';
+  note.textContent = 'טוען את רשימות העיצוב מהספרייה המוטמעת…';
+  wrap.appendChild(note);
+
+  const PICKS = [
+    { label: 'שער ראשי', collection: 'shaar-main', setting: 'imud-shaar-main' },
+    { label: 'שער משנה', collection: 'shaar-sub', setting: 'imud-shaar-sub' },
+    { label: 'שער אחורי', collection: 'shaar-back', setting: 'imud-shaar-back' },
+    { label: 'עיטור עליון (H2)', collection: 'orn-ud', setting: 'imud-orn-top', imageMode: 'h2-orn-top' },
+    { label: 'עיטור תחתון (H2)', collection: 'orn-ud', setting: 'imud-orn-bottom', imageMode: 'h2-orn-bottom' },
+    { label: 'עיטור צדדי', collection: 'orn-lr', setting: 'imud-orn-side' },
+    { label: 'עיטור סיום פרק', collection: 'orn-ud', setting: 'imud-chapter-end', imageMode: 'chapter-end-ornament' },
+    { label: 'מפריד מעוצב', collection: 'divider', setting: 'imud-divider' }
+  ];
+
+  const selects = [];
+  for (const pick of PICKS) {
+    const row = doc.createElement('div');
+    row.className = 'field-row';
+    const lbl = doc.createElement('label');
+    lbl.className = 'field-label';
+    lbl.textContent = pick.label;
+    const sel = doc.createElement('select');
+    sel.className = 'ctl';
+    sel.setAttribute('aria-label', pick.label);
+    sel.appendChild(Object.assign(doc.createElement('option'), { textContent: '— ללא —', value: '' }));
+    sel.addEventListener('change', async () => {
+      const id = sel.value;
+      if (!id) { opts.onSettingChanged(pick.setting, ''); return; }
+      try {
+        const ref = await opts.imudLibrary.ensureDesign(pick.collection, id);
+        if (!ref) throw new Error('העיצוב לא נמצא בספרייה');
+        if (pick.imageMode) opts.onSettingChanged(pick.imageMode, 'image');
+        opts.onSettingChanged(pick.setting, ref);
+      } catch (e) {
+        sel.value = '';
+        if (opts.onNotice) opts.onNotice('בחירת העיצוב נכשלה: ' + (e && e.message ? e.message : e));
+      }
+    });
+    row.appendChild(lbl); row.appendChild(sel);
+    wrap.appendChild(row);
+    selects.push({ pick, sel });
+  }
+
+  // כפתור ברירות המחדל המקוריות — ייבוא 264 המפתחות דרך טבלת ה-disposition
+  const defaultsBtn = doc.createElement('button');
+  defaultsBtn.type = 'button'; defaultsBtn.className = 'btn';
+  defaultsBtn.textContent = '📖 החל ברירות מחדל מקוריות (IMUD)';
+  defaultsBtn.setAttribute('aria-label', 'החלת ברירות המחדל של הפרויקט המקורי');
+  defaultsBtn.addEventListener('click', async () => {
+    try {
+      const { settings, report } = await opts.imudLibrary.loadLegacyDefaults();
+      if (opts.onApplyLegacyDefaults) opts.onApplyLegacyDefaults(settings);
+      if (opts.onNotice) opts.onNotice(`ברירות המקור הוחלו — ${report.mapped} הגדרות מופו, ${report.merged} אוחדו, ${report.removed} במעקב מתועד.`);
+    } catch (e) {
+      if (opts.onNotice) opts.onNotice('טעינת ברירות המקור נכשלה: ' + (e && e.message ? e.message : e));
+    }
+  });
+  wrap.appendChild(defaultsBtn);
+
+  // טעינת רשימות העיצובים (עצלה — לפי אוסף)
+  (async () => {
+    try {
+      const byCollection = new Map();
+      for (const { pick, sel } of selects) {
+        if (!byCollection.has(pick.collection)) {
+          byCollection.set(pick.collection, await opts.imudLibrary.listDesigns(pick.collection));
+        }
+        const items = byCollection.get(pick.collection);
+        for (const it of items) {
+          const o = doc.createElement('option');
+          o.setAttribute('value', it.id);
+          o.textContent = `${it.name} (${it.id})`;
+          sel.appendChild(o);
+        }
+      }
+      note.textContent = `${selects.length} בוררי עיצוב מהספרייה המוטמעת.`;
+    } catch (e) {
+      note.textContent = 'ספריית העיצובים לא נטענה: ' + (e && e.message ? e.message : e);
+    }
+  })();
+
+  return wrap;
 }
 
 module.exports = { buildSettingsTab, BINDINGS, PANELS };

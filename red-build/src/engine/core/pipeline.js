@@ -125,8 +125,15 @@ function typeset(rawText, settingsIn, env = {}) {
   settings._tokenTexts = new Map();
 
   // ---- CP1: parse ----
-  const { metadata, bodyLines } = lexDocument(rawText);
-  const tokens = tokenize(bodyLines);
+  // **S4.5 (03.11):** מזהי הטקסט מוגדרים — קידומת הערת סיום ותוחמי הערות מגיעים
+  // מההגדרות (ברירת מחדל = המקור: 'הערת סיום -', '[', ']'). ערך ריק מבטל זיהוי.
+  const parseOpts = {
+    endnotePrefix: settings['en-line-prefix'],
+    fnOpen: settings['fn-delim-open'],
+    fnClose: settings['fn-delim-close']
+  };
+  const { metadata, bodyLines } = lexDocument(rawText, parseOpts);
+  const tokens = tokenize(bodyLines, parseOpts);
   for (const t of tokens) {
     const rawLine = String(t.raw != null ? t.raw : (t.text != null ? t.text : ''));
     settings._tokenTexts.set(t.id, {
@@ -140,7 +147,7 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- scope-map (S2.1.3: BEFORE measuring) ----
   const segments = tokens.filter(t => t.type === 'paragraph').map((t, i) => ({ text: t.raw, paraIndex: i }));
-  const scope = scanBrackets(segments);
+  const scope = scanBrackets(segments, { open: parseOpts.fnOpen, close: parseOpts.fnClose });
   eventLog.emit('scope-map', 'cp2-scope', { pairs: scope.pairs.length, crossParagraph: scope.scopeMap.crossParagraphCount, unmatchedClosers: scope.unmatchedClosers.length });
   prog('scope-map', 10, 'מיפוי סוגריים והערות', { pairs: scope.pairs.length });
 
@@ -693,7 +700,9 @@ function typeset(rawText, settingsIn, env = {}) {
   }
 
   // ---- headers ----
-  const bookName = metadata['ספר'] || metadata['title'] || '';
+  // **S4.5:** שם הספר — גם המזהה הארוך של המקור (שם הספר) וגם הקצר (ספר) ו-title;
+  // וכיסוי הגדרת-על של השער (imud-book-title) גוברת על כולם (החלטה מפורשת של המשתמש).
+  const bookName = settings['imud-book-title'] || metadata['שם הספר'] || metadata['ספר'] || metadata['title'] || '';
   const { trimEdgePunctuation } = require('../decoration/headers-builder');
   // **FWD-1:** הפס חוצה־טורים נסרק גם הוא — כותרת H2 חיה שם עכשיו (S8)
   const pageLines = (pg) => [

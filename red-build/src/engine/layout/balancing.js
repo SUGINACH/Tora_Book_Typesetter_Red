@@ -27,10 +27,12 @@ function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
   const snapshot = page.columns.map(c => c.slice());
   let guard = 0;
+  let moves = 0; // **03.11 (ביקורת):** אמינות הדיווח — changed אמיתי רק אם הוזזה שורה
   while (pageImbalance(page) > maxDelta && guard++ < 500) {
     const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
     const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break;
+    if (!moveLineForward(page.columns, hi, lo)) break; // אין מהלך חוקי — עוצרים בלי לדווח על שינוי
+    moves++;
     // hard reject: אם נוצרה חריגת cap → rollback מלא
     const cap = page.template.contentBox.height;
     if (page.columns.some(c => usedHeight(c) > cap + 0.5)) {
@@ -38,7 +40,10 @@ function balancePage(page, maxDelta) {
       return { changed: false, before, after: before, rollback_reason: 'capacity' };
     }
   }
-  return { changed: true, before, after: pageImbalance(page) };
+  // **03.11 (ביקורת):** בעבר הוחזר changed:true גם כשהלולאה נעצרה בלי שורה אחת —
+  // דיווח מטעה של אבחון האיזון. כעת: שינוי אמיתי = הוזזה בפועל והפרש שהשתנה.
+  const after = pageImbalance(page);
+  return { changed: moves > 0 && after !== before, moves, before, after };
 }
 
 /**

@@ -37,6 +37,33 @@ describe('REQ-PAR-01 metadata only in preamble', () => {
     const { metadata } = lexDocument(doc);
     assertEq(Object.keys(metadata).length, 0);
   });
+
+  // **S4.5 (ביקורת 03.11, סקירה 2):** טקסט ברירת המחדל האמיתי של IMUD_TORANI (app.js)
+  // כ-fixture מחייב — בעבר שם הספר - לא זוהה, הפתיח נסגר, וכל שורות המטא ירדו לגוף.
+  it('S4.5: טקסט ברירת המחדל המקורי — כל ששת שדות המטא מזוהים (fixture אמיתי)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'imud_default_text.txt'), 'utf8');
+    const { metadata, bodyLines } = lexDocument(src);
+    assertEq(metadata['שם הספר'], 'ספר מלכי המלוכה', 'שם הספר (המזהה הארוך)');
+    assertEq(metadata['נושא'], 'ביאורים וחידושים עמוקים על מסכתות הש"ס');
+    assertEq(metadata['נושא מפורט'], 'בירור שיטות הראשונים והאחרונים ובירורי הלכות למעשה');
+    assertEq(metadata['פרטי מהדורא'], 'מהדורה שניה ומורחבת בסייעתא דשמיא');
+    assertEq(metadata['שם המחבר'], 'הצעיר ידידיה בר אבא הלוי');
+    assertEq(metadata['מקום ושנת הוצאה'], 'ירושלים עיה"ק תובב"א שנת ה\'תשפ"ו');
+    // שום שורת מטא לא דלפה לגוף:
+    for (const key of ['שם הספר', 'נושא מפורט', 'פרטי מהדורא', 'שם המחבר', 'מקום ושנת הוצאה']) {
+      assert(!bodyLines.some(l => l.trim().startsWith(key)), `השורה של ${key} לא בגוף`);
+    }
+    // H0–H7 מזוהים; הערת הסיום הרגילה = תוכן; הערת השוליים בתוחמים
+    const tokens = tokenize(bodyLines.filter(l => l.trim()));
+    const levels = tokens.filter(t => t.type === 'heading').map(t => t.level).sort();
+    for (const lv of [0, 1, 2, 3, 4, 5, 7]) assert(levels.includes(lv), `כותרת ${lv} מזוהה`);
+    const en = tokens.find(t => t.type === 'endnote' && /מורחבת המרוכזת/.test(t.text || ''));
+    assert(en, 'הערת סיום רגילה נשמרת כתוכן (הסמנטיקה המקורית)');
+    const para = tokens.find(t => t.type === 'paragraph' && t.notes && t.notes.length);
+    assert(para && /הערת שוליים בתחתית/.test(para.notes[0].split('\uE000').join(' ')), 'הערת שוליים בתוחמים נחלצה');
+  });
 });
 
 describe('REQ-PAR-02 balanced bracket scanner', () => {
@@ -86,12 +113,43 @@ describe('REQ-PAR-03 block tokenizer', () => {
   });
 
   it('endnote prefix (no number) tokenized as class directive (D-40, תיקון P1-5)', () => {
-    // בעבר פוענחה כהערת תוכן פיקטיבית והופיעה כשורה זרה בגוף. כעת: הוראה
-    // המגדירה את כותרת עמודי ההערות של החלק — לא תוכן (directives ≠ content).
+    // **S4.5 (תיקון 03.11 — הפיכת D-40):** הסמנטיקה המקורית הוחזרה — שורה
+    // המתחילה בקידומת (יחיד: «הערת סיום -») היא **תוכן הערה**, לא הוראה.
+    // בעבר סווגה כהוראת כותרת ⇒ הטקסט נעלם מהפלט ומ-contentHash בשקט.
     const tokens = tokenize(['הערת סיום - הערה מסדר סוף']);
-    assertEq(tokens[0].type, 'endnote-class');
-    assertEq(tokens[0].title, 'הערה מסדר סוף');
-    assertEq(tokens[0].text, undefined);
+    assertEq(tokens[0].type, 'endnote', 'singular prefix line = endnote CONTENT');
+    assertEq(tokens[0].text, 'הערה מסדר סוף');
+    assertEq(tokens[0].title, undefined);
+  });
+
+  it('S4.5: plural «הערות סיום - …» is the class directive (no collision with content)', () => {
+    const tokens = tokenize(['הערות סיום - הערות החלק הראשון']);
+    assertEq(tokens[0].type, 'endnote-class', 'plural form = directive');
+    assertEq(tokens[0].title, 'הערות החלק הראשון');
+    // וה-hash כולל את כותרת ההוראה — שום טקסט לא נעלם בשקט (S4.5)
+    const h1 = contentHash(tokens);
+    const h2 = contentHash([{ ...tokens[0], title: 'כותרת אחרת' }]);
+    assert(h1 !== h2, 'contentHash responds to directive title');
+  });
+
+  it('S4.5: configurable identifiers — prefix and delimiters from opts', () => {
+    // קידומת מותאמת: «הערה - » (הברירה של chat-v20.3) — והקידומת הרגילה כבר לא פועלת
+    const a = tokenize(['הערה - תוכן ההערה שלי'], { endnotePrefix: 'הערה -' });
+    assertEq(a[0].type, 'endnote');
+    assertEq(a[0].text, 'תוכן ההערה שלי');
+    const b = tokenize(['הערת סיום - זו כבר לא הערה אלא פסקה'], { endnotePrefix: 'הערה -' });
+    assertEq(b[0].type, 'paragraph', 'old prefix no longer special when overridden');
+    // קידומת ריקה מבטלת זיהוי לגמרי
+    const c = tokenize(['הערת סיום - טקסט רגיל לחלוטין'], { endnotePrefix: '' });
+    assertEq(c[0].type, 'paragraph', 'empty prefix disables detection');
+    // תוחמים מותאמים: ( ) במקום [ ]
+    const d = tokenize(['טקסט (הערה בתוחמים מותאמים) המשך'], { fnOpen: '(', fnClose: ')' });
+    assertEq(d[0].notes.length, 1);
+    assertEq(d[0].notes[0].split('\uE000').join(' '), 'הערה בתוחמים מותאמים');
+    // תוחם ריק מבטל הערות שוליים
+    const e = tokenize(['טקסט [שלא יפורש כהערה] המשך'], { fnOpen: '', fnClose: '' });
+    assertEq(e[0].notes.length, 0);
+    assert(e[0].parts.some(p => p.kind === 'text' && /\[/.test(p.value)), 'brackets stay as plain text');
   });
 
   it('numbered endnote (D-40): num stripped from text, kept as anchor', () => {

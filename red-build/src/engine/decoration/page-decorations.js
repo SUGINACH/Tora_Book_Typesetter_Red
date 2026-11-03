@@ -55,6 +55,13 @@ function planDecorations(page, settings) {
   const themeSetId = settings['theme-set-id'] || 'default';
   const slots = [];
 
+  // **S4.5/EXT-14 (03.11):** הפניות עיצובי IMUD — מזהי הספרייה גוברים על השדות
+  // הישנים (הפניה imud:<collection>:<id> נפתרת ברינדור דרך asset-registry).
+  // צריכה מפורשת כאן — גם ערכת נושא נחשבת פעילה כשנבחר עיצוב ספרייה.
+  const imudMain = settings['imud-shaar-main'] || '';
+  const imudSub = settings['imud-shaar-sub'] || '';
+  const imudBack = settings['imud-shaar-back'] || '';
+
   const push = (slot, asset, modifier) => {
     // הגנה D-11: slot תפוס כבר → לא מוסיפים שוב
     if (slots.some(s => s.slot === slot)) return;
@@ -67,18 +74,21 @@ function planDecorations(page, settings) {
 
   switch (page.type) {
     case 'shaar-main': {
-      const img = settings['shaar-main-image'];
+      const img = imudMain || settings['shaar-main-image'];
       push('shaar-main', img, 'deco--themed');
       break;
     }
     case 'shaar-sub': {
-      push('shaar-sub', settings['shaar-sub-image'] || null, 'deco--themed');
+      push('shaar-sub', imudSub || settings['shaar-sub-image'] || null, 'deco--themed');
       break;
     }
     case 'shaar-back': {
-      // PT-03: אם הכבה ראשית — אף מקטע לא מוצב; אחרת 4 מקטעים עצמאיים
+      // PT-03: אם הכבה ראשית — אף מקטע לא מוצב; אחרת 4 מקטעים עצמאיים.
+      // **03.11 (EXT-14):** מקטע המסגרת מקבל את תמונת השער האחורי (עיצוב IMUD) —
+      // שאר המקטעים נשארים ריקים (ממולאים ע"י העיצוב עצמו, לא בנפרד).
       if (settings['shaar-back-enabled'] !== false) {
-        for (const seg of SHAAR_BACK_SEGMENTS) push(`shaar-back-${seg}`, null, 'deco--segment');
+        const backImg = imudBack || settings['shaar-back-image'] || null;
+        for (const seg of SHAAR_BACK_SEGMENTS) push(`shaar-back-${seg}`, seg === 'frame' ? backImg : null, 'deco--segment');
       }
       break;
     }

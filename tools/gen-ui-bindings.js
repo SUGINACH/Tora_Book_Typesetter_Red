@@ -78,7 +78,15 @@ const L = {
   'background-inset-mm': 'שקיעת רקע מהשוליים (מ״מ)',
   // ADVANCED
   'trace-verbosity': 'רמת תיעוד מסלול (trace)', 'diagnostics-enabled': 'אבחון מופעל',
-  'offline-guard': 'שומר נתק־מהרשת (exit 7)', 'debounce-light-change-ms': 'השהיית שינויים קלים (ms)'
+  'offline-guard': 'שומר נתק־מהרשת (exit 7)', 'debounce-light-change-ms': 'השהיית שינויים קלים (ms)',
+  // **S4.5/EXT-14 (03.11):** נכסי IMUD + מזהי טקסט מוגדרים
+  'imud-shaar-main': 'עיצוב שער ראשי (ספריית IMUD)', 'imud-shaar-sub': 'עיצוב שער משנה (ספריית IMUD)',
+  'imud-shaar-back': 'עיצוב שער אחורי (ספריית IMUD)', 'imud-orn-top': 'עיטור עליון H2 (IMUD)',
+  'imud-orn-bottom': 'עיטור תחתון H2 (IMUD)', 'imud-orn-side': 'עיטור צדדי (IMUD)',
+  'imud-chapter-end': 'עיטור סיום פרק (IMUD)', 'imud-divider': 'מפריד מעוצב (IMUD)',
+  'imud-book-title': 'כותרת הספר בשער (עקיפה)', 'imud-book-subtitle': 'כותרת־משנה בשער',
+  'en-line-prefix': 'קידומת הערת סיום (ריק = ביטול)', 'fn-delim-open': 'תוחם פתיחת הערת שוליים',
+  'fn-delim-close': 'תוחם סגירת הערת שוליים'
 };
 
 // משפחות שיטתיות — תוויות מיוצרות

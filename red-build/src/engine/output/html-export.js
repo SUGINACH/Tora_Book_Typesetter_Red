@@ -89,12 +89,14 @@ function buildStandaloneHtml(pagesHtml, settings, meta = {}) {
   const title = meta.title || settings['book-name'] || 'ספר';
   // **S12 (REQ-EXP-02):** כללי @page מרישום גדלי העמוד — הדפסה מדויקת מהקובץ העצמאי (אין רשת)
   const pageRules = meta.pageRules || '';
+  // **03.11:** @font-face מוטמעים (data-URI) — מסופקים מה-UI; עוברים את offline-guard (אין http)
+  const fontCss = meta.fontCss || '';
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8"/>
 <title>${escapeHtml(title)}</title>
-<style>${pageRules}${BASE_CSS}</style>
+<style>${pageRules}${fontCss}${BASE_CSS}</style>
 </head>
 <body>
 <main class="book">${pagesHtml.join('\n')}</main>

@@ -111,7 +111,7 @@
   "lineBands": {
     "page": 3,
     "rasterBands": 38,
-    "modelLines": 37,
+    "modelLines": 38,
     "maxOffsetPx": 3
   },
   "worstBboxPx": 4.34

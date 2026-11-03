@@ -70,7 +70,16 @@ function createApp(doc, opts = {}) {
     onSaveTemplate: () => opts.onSaveTemplate && opts.onSaveTemplate(saveTemplateJson()),
     onLoadTemplate: () => opts.onLoadTemplate && opts.onLoadTemplate(),
     onOpenBuilder: () => opts.onOpenBuilder && opts.onOpenBuilder(),
-    onOpenImports: () => opts.onOpenImports && opts.onOpenImports()
+    onOpenImports: () => opts.onOpenImports && opts.onOpenImports(),
+    // **03.11 (EXT-14):** ספריית IMUD — בוררי עיצובים + ברירות המקור + הודעות
+    imudLibrary: opts.imudLibrary || null,
+    onNotice: (msg) => status.setNotice(msg),
+    onApplyLegacyDefaults: (imported) => {
+      // החלה מלאה של ברירות המקור (מיזוג על ההגדרות) + ריענון + עימוד מפורש
+      Object.assign(settings, imported);
+      settingsPanel.refreshValues();
+      onExplicitRetypeset();
+    }
   });
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
@@ -224,6 +233,14 @@ function createApp(doc, opts = {}) {
 
   function onSettingChanged(key, value) {
     settings[key] = value;
+    // **03.11 (EXT-14):** בחירת גופן מהספרייה — טעינה חיה (FontFace לתצוגה +
+    // registerFont במנוע למדידת font-metrics ולייצוא PDF). כישלון טעינה אינו
+    // חוסם: המערכת נופלת לגופן המערכת (מתועד בהודעה).
+    if (/-(font)$/.test(key) && value && opts.imudLibrary) {
+      opts.imudLibrary.loadFont(value).then((buf) => {
+        if (!buf) status.setNotice(`הגופן «${value}» אינו בספרייה המוטמעת — נעשה שימוש בגופן חלופי.`);
+      }).catch(() => { /* כבר דווח בהודעה */ });
+    }
     if (classifyChange(key) === 'light') scheduleLightRefresh();
     else markHeavyDirty();
   }
@@ -293,21 +310,58 @@ function createApp(doc, opts = {}) {
 
   /** בקשת ייצוא — קריאה בלבד (F-06: אין עימוד/אין שינוי מצב); הפלט דרך opts.onExportFile
    * (בדפדפן: הורדה; בבדיקות: בדיקת הבתים). PDF דורש גופן מוטמע — opts.embeddedFont (בתים)
-   * או נפילה מתועדת להודעה (ללא גופן אין טקסט אמיתי — לא מזייפים). */
+   * או נתיב הדפדפן: opts.remoteExport + opts.getExportFont (TTF לפי שם משפחה, אסינכרוני)
+   * ⇒ הייצוא הכבד רץ ב־Worker (03.11). */
+  async function runRemotePdfExport() {
+    try {
+      const font = await opts.getExportFont(settings['body-font']);
+      if (!font || !font.bytes) {
+        status.setNotice('ייצוא PDF דורש גופן TTF — לגופן שנבחר לא נמצא קובץ מוטמע. נא לבחור גופן מהסט המוטמע או לטעון TTF.');
+        return { ok: false, reason: 'no-embedded-font' };
+      }
+      const res = await engine.requestExport({ kind: 'pdf', text, settings, fontBytes: font.bytes, fontName: font.name });
+      if (opts.onExportFile) opts.onExportFile('pdf', res.bytes, 'book.pdf');
+      status.setNotice(`יוצא PDF — ${res.info && res.info.pages ? res.info.pages : '?'} עמודים, ${res.info && res.info.outline ? res.info.outline : 0} סימניות, טקסט נבחר.`);
+      return { ok: true, kind: 'pdf', data: res.bytes, info: res.info };
+    } catch (e) {
+      status.setNotice('ייצוא PDF נכשל: ' + (e && e.message ? e.message : String(e)));
+      return { ok: false, error: String(e && e.message || e) };
+    }
+  }
+
+  async function runRemoteZipExport() {
+    try {
+      const res = await engine.requestExport({ kind: 'zip', text, settings, extensions: extensions.getBundle ? extensions.getBundle() : null });
+      if (opts.onExportFile) opts.onExportFile('zip', res.bytes, 'book-project.zip');
+      status.setNotice('יוצאה חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות+ערכה).');
+      return { ok: true, kind: 'zip', data: res.bytes };
+    } catch (e) {
+      status.setNotice('ייצוא ZIP נכשל: ' + (e && e.message ? e.message : String(e)));
+      return { ok: false, error: String(e && e.message || e) };
+    }
+  }
+
   function onExportRequest(kind) {
     if (!result) { status.setNotice('אין תוצאה לייצוא — העמוד עוד לא בוצע.'); return null; }
     const { exportHtml, exportPdf, exportProjectZip } = require('../engine/output/export-api');
     try {
       if (kind === 'html') {
-        const html = exportHtml(result, settings, doc, { title: (result.metadata && result.metadata['ספר']) || 'ספר' });
+        const fontCss = (typeof opts.getExportFontCss === 'function' && opts.getExportFontCss()) || '';
+        const html = exportHtml(result, settings, doc, { title: (result.metadata && result.metadata['ספר']) || 'ספר', fontCss });
         if (opts.onExportFile) opts.onExportFile('html', html, 'book.html');
         status.setNotice('יוצא HTML עצמאי (חד־קובץ, offline).');
         return { ok: true, kind, data: html };
       }
       if (kind === 'pdf') {
+        // **נתיב הדפדפן (03.11):** המנוע הכבד חי ב־Worker — הייצוא שם עם TTF שנשלף לפי הגופן.
+        if (opts.remoteExport && typeof opts.getExportFont === 'function') {
+          status.setNotice('מייצא PDF במנוע (Worker)…');
+          runRemotePdfExport(); // fire-and-forget — ההורדה וההודעות בסיום
+          return { ok: true, kind, pending: true };
+        }
         if (typeof Buffer === 'undefined') {
-          // סביבת דפדפן בלי מודול בואפרות — נתיב ה־PDF דורש Buffer; הודעה מפורשת (לא כשל שקט)
-          status.setNotice('ייצוא PDF זמין בסביבת ההרצה המלאה (Node); בדפדפן השתמשו בייצוא HTML העצמאי והדפיסו ממנו.');
+          // סביבה ללא מודול בואפרים וללא נתיב מרוחק — הודעה מפורשת (לא כשל שקט)
+          status.setNotice('ייצוא PDF דורש גופן מוטמע או נתיב Worker — השתמשו בייצוא ה־HTML העצמאי.');
           return { ok: false, reason: 'no-buffer-in-browser' };
         }
         if (!opts.embeddedFont) {
@@ -321,6 +375,12 @@ function createApp(doc, opts = {}) {
         return { ok: true, kind, data: res.bytes, info: res.info };
       }
       if (kind === 'zip') {
+        // **נתיב הדפדפן (03.11):** חבילת הפרויקט נבנית ב־Worker (zip-writer חי שם)
+        if (opts.remoteExport) {
+          status.setNotice('מייצא חבילת ZIP במנוע (Worker)…');
+          runRemoteZipExport();
+          return { ok: true, kind, pending: true };
+        }
         const bytes = exportProjectZip(text, settings, {
           extensions: extensions.getBundle ? extensions.getBundle() : null
         });
@@ -439,6 +499,8 @@ function createApp(doc, opts = {}) {
     scheduleLightRefresh, activateFinding, saveTemplateJson, loadTemplateJson, buildDebugJson,
     importDocxFile, applyRecommendation, // **S11:** ייבוא DOCX + החלת המלצות
     exportRequest: onExportRequest, // **S12:** ייצוא (html/pdf/zip) — קריאה בלבד
+    refreshFontCatalog: (families) => settingsPanel.refreshFontCatalog && settingsPanel.refreshFontCatalog(families), // **03.11**
+    imudLibrary: opts.imudLibrary || null, // **03.11:** ספריית IMUD לניפוי/הרחבות
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),

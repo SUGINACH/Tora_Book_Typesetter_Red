@@ -12,6 +12,14 @@
  *   ← {type:'progress', jobId, stage, pct, label, pageIndex?, totalPages?, estimatedTotal?}
  *   ← {type:'typeset-result', jobId, result}      // result = serializeTypesetResult()
  *   ← {type:'typeset-error', jobId, message, stack?}
+ *
+ * **03.11 — v1.1 (ייצוא בדפדפן דרך ה־Worker; המנוע הכבד חי רק שם):**
+ *   → {type:'register-font', jobId, name, bytes: ArrayBuffer}       // TTF למדידת גופן אמיתי
+ *   ← {type:'register-font-result', jobId, name, ok, error?, glyphCount?}
+ *   → {type:'export-request', jobId, kind:'pdf'|'zip', text, settings,
+ *       fontBytes?: ArrayBuffer|null, fontName?: string, extensions?: object|null}
+ *   ← {type:'export-result', jobId, kind, ok, error?, bytes?: Uint8Array, info?: object}
+ *   ← {type:'export-error', jobId, message}
  */
 
 const PROTOCOL_VERSION = 1;
@@ -56,6 +64,33 @@ function validateRequest(msg) {
   }
   if (msg.type === 'cancel') {
     if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    return true;
+  }
+  // **03.11 (v1.1):** רישום גופן למדידה (TTF bytes) — לפני עימוד במדידת גופן אמיתי
+  if (msg.type === 'register-font') {
+    if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    if (typeof msg.name !== 'string' || !msg.name) throw new Error('protocol: name required');
+    if (!(msg.bytes instanceof ArrayBuffer) && !(msg.bytes && msg.bytes.byteLength != null)) {
+      throw new Error('protocol: bytes (ArrayBuffer/TypedArray) required');
+    }
+    return true;
+  }
+  // **03.11 (v1.1):** רישום אוסף נכסי עיצוב (SVG מחוטא) ברישום שבמנוע — לרינדור עימוד/ייצוא
+  if (msg.type === 'register-assets') {
+    if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    if (typeof msg.collection !== 'string' || !msg.collection) throw new Error('protocol: collection required');
+    if (!Array.isArray(msg.items)) throw new Error('protocol: items array required');
+    return true;
+  }
+  // **03.11 (v1.1):** בקשת ייצוא PDF/ZIP — רץ ב־Worker (המנוע המלא + שימת Buffer בדפדפן)
+  if (msg.type === 'export-request') {
+    if (typeof msg.jobId !== 'string' || !msg.jobId) throw new Error('protocol: jobId required');
+    if (msg.kind !== 'pdf' && msg.kind !== 'zip') throw new Error('protocol: kind must be pdf|zip');
+    if (typeof msg.text !== 'string') throw new Error('protocol: text must be string');
+    if (!msg.settings || typeof msg.settings !== 'object') throw new Error('protocol: settings required');
+    if (msg.fontBytes != null && !(msg.fontBytes instanceof ArrayBuffer) && !(msg.fontBytes && msg.fontBytes.byteLength != null)) {
+      throw new Error('protocol: fontBytes must be ArrayBuffer/TypedArray or null');
+    }
     return true;
   }
   throw new Error(`protocol: unknown message type ${msg && msg.type}`);
