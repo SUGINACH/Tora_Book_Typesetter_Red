@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 43 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 47 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -81,6 +81,199 @@ var __crypto = (function () {
   };
 })();
 
+
+var __RealBuffer = (typeof globalThis !== 'undefined' && globalThis.Buffer && globalThis.Buffer.from) ? globalThis.Buffer : null;
+var Buffer = __RealBuffer || (function () {
+  'use strict';
+  function utf8BytesOf(str) {
+    var out = [];
+    for (var i = 0; i < str.length;) {
+      var c = str.codePointAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      i += c > 0xffff ? 2 : 1;
+    }
+    return out;
+  }
+  function decodeUtf8(bytes, start, end) {
+    var s = '';
+    for (var i = start; i < end;) {
+      var c = bytes[i];
+      if (c < 0x80) { s += String.fromCharCode(c); i++; }
+      else if (c < 0xe0) { s += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; }
+      else if (c < 0xf0) { s += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; }
+      else {
+        var cp = ((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+        var off = cp - 0x10000;
+        s += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+        i += 4;
+      }
+    }
+    return s;
+  }
+  function hexToBytes(h) {
+    var out = [];
+    if (h.length % 2) h = '0' + h;
+    for (var i = 0; i < h.length; i += 2) out.push(parseInt(h.slice(i, i + 2), 16) || 0);
+    return out;
+  }
+  var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64ToBytes(s) {
+    s = String(s).replace(/[^A-Za-z0-9+\/]=*$/g, '').replace(/=+$/, '');
+    var out = [], bits = 0, acc = 0;
+    for (var i = 0; i < s.length; i++) {
+      var v = B64.indexOf(s[i]);
+      if (v < 0) continue;
+      acc = (acc << 6) | v; bits += 6;
+      if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); }
+    }
+    return out;
+  }
+  function bytesToB64(b, start, end) {
+    var s = '';
+    for (var i = start; i < end; i += 3) {
+      var n = (b[i] << 16) | ((b[i + 1] || 0) << 8) | (b[i + 2] || 0);
+      s += B64[(n >> 18) & 63] + B64[(n >> 12) & 63];
+      s += (i + 1 < end) ? B64[(n >> 6) & 63] : '=';
+      s += (i + 2 < end) ? B64[n & 63] : '=';
+    }
+    return s;
+  }
+  function Buf(arg, enc) {
+    var u8;
+    if (typeof arg === 'number') { u8 = new Uint8Array(arg); }
+    else if (arg instanceof Uint8Array) { u8 = new Uint8Array(arg); } // העתקה (כמו Node)
+    else if (arg instanceof ArrayBuffer) { u8 = new Uint8Array(arg); }
+    else if (arg && arg.buffer instanceof ArrayBuffer) { u8 = new Uint8Array(arg.buffer, arg.byteOffset, arg.length); }
+    else if (typeof arg === 'string') {
+      var enc_ = String(enc || 'utf8').toLowerCase();
+      var bytes = enc_ === 'latin1' || enc_ === 'binary'
+        ? (function () { var a = []; for (var i = 0; i < arg.length; i++) a.push(arg.charCodeAt(i) & 0xff); return a; })()
+        : enc_ === 'hex' ? hexToBytes(arg)
+        : enc_ === 'base64' ? b64ToBytes(arg)
+        : enc_ === 'ascii' ? (function () { var a = []; for (var i = 0; i < arg.length; i++) a.push(arg.charCodeAt(i) & 0x7f); return a; })()
+        : utf8BytesOf(arg);
+      u8 = new Uint8Array(bytes);
+    } else if (arg && typeof arg.length === 'number') {
+      u8 = new Uint8Array(arg);
+    } else {
+      throw new TypeError('Buffer: invalid argument');
+    }
+    Object.setPrototypeOf(u8, Buf.prototype);
+    return u8;
+  }
+  Buf.prototype = Object.create(Uint8Array.prototype);
+  Buf.prototype.constructor = Buf;
+  Buf.prototype.toString = function (enc, start, end) {
+    var e = String(enc || 'utf8').toLowerCase();
+    var s = Math.max(0, start | 0), n = this.length;
+    var t = Math.min(n, end == null ? n : (end | 0));
+    if (e === 'latin1' || e === 'binary') { var o = ''; for (var i = s; i < t; i++) o += String.fromCharCode(this[i]); return o; }
+    if (e === 'ascii') { var a = ''; for (var j = s; j < t; j++) a += String.fromCharCode(this[j] & 0x7f); return a; }
+    if (e === 'hex') { var h = ''; for (var k = s; k < t; k++) h += (this[k] < 16 ? '0' : '') + this[k].toString(16); return h; }
+    if (e === 'base64') return bytesToB64(this, s, t);
+    return decodeUtf8(this, s, t); // utf8 (ברירת מחדל)
+  };
+  Buf.prototype.slice = function (start, end) {
+    var s = start == null ? 0 : (start < 0 ? Math.max(0, this.length + start) : start);
+    var e = end == null ? this.length : (end < 0 ? this.length + end : end);
+    var u = new Uint8Array(this.buffer, this.byteOffset + s, Math.max(0, Math.min(this.length, e) - s));
+    Object.setPrototypeOf(u, Buf.prototype);
+    return u;
+  };
+  Buf.prototype.subarray = Buf.prototype.slice;
+  Buf.prototype.equals = function (o) {
+    if (!o || o.length !== this.length) return false;
+    for (var i = 0; i < this.length; i++) if (this[i] !== o[i]) return false;
+    return true;
+  };
+  Buf.prototype.fill = function (v) {
+    var b = (typeof v === 'number') ? (v & 0xff) : (typeof v === 'string' && v.length ? v.charCodeAt(0) & 0xff : 0);
+    for (var i = 0; i < this.length; i++) this[i] = b;
+    return this;
+  };
+  Buf.prototype.indexOf = function (v, byteOffset) {
+    var from = byteOffset | 0;
+    if (typeof v === 'string') { // תמיכה מינימלית בתו בודד/מחרוזת קצרה
+      for (var i = from; i <= this.length - v.length; i++) {
+        var ok = true;
+        for (var j = 0; j < v.length; j++) if (this[i + j] !== (v.charCodeAt(j) & 0xff)) { ok = false; break; }
+        if (ok) return i;
+      }
+      return -1;
+    }
+    var needle = (v instanceof Uint8Array) ? v : Buf.from(v);
+    for (var p = from; p <= this.length - needle.length; p++) {
+      var m = true;
+      for (var q = 0; q < needle.length; q++) if (this[p + q] !== needle[q]) { m = false; break; }
+      if (m) return p;
+    }
+    return -1;
+  };
+  function mkRead(name, size, be, signed) {
+    Buf.prototype[name] = function (off) {
+      var v = 0;
+      if (be) { for (var i = 0; i < size; i++) v = (v << 8) | this[off + i]; }
+      else { for (var j = size - 1; j >= 0; j--) v = (v << 8) | this[off + j]; }
+      if (signed && v >= (1 << (size * 8 - 1))) v -= (1 << (size * 8));
+      return v;
+    };
+  }
+  function mkWrite(name, size, be) {
+    Buf.prototype[name] = function (v, off) {
+      v = (v | 0) & ((size === 1 ? 0xff : size === 2 ? 0xffff : 0xffffffff));
+      if (be) { for (var i = size - 1; i >= 0; i--) { this[off + i] = v & 0xff; v = Math.floor(v / 256); } }
+      else { for (var j = 0; j < size; j++) { this[off + j] = v & 0xff; v = Math.floor(v / 256); } }
+      return off + size;
+    };
+  }
+  mkRead('readUInt8', 1, false, false); mkRead('readUInt16LE', 2, false, false); mkRead('readUInt16BE', 2, true, false);
+  mkRead('readUInt32LE', 4, false, false); mkRead('readUInt32BE', 4, true, false);
+  mkRead('readInt8', 1, false, true); mkRead('readInt16LE', 2, false, true); mkRead('readInt16BE', 2, true, true);
+  mkRead('readInt32LE', 4, false, true); mkRead('readInt32BE', 4, true, true);
+  mkWrite('writeUInt8', 1, false); mkWrite('writeUInt16LE', 2, false); mkWrite('writeUInt16BE', 2, true);
+  mkWrite('writeUInt32LE', 4, false); mkWrite('writeUInt32BE', 4, true);
+  mkWrite('writeInt8', 1, false); mkWrite('writeInt16LE', 2, false); mkWrite('writeInt16BE', 2, true);
+  mkWrite('writeInt32LE', 4, false); mkWrite('writeInt32BE', 4, true);
+  Buf.from = function (arg, enc, off, len) {
+    if (typeof arg === 'string') return new Buf(arg, enc);
+    if (arg instanceof Uint8Array || arg instanceof ArrayBuffer) {
+      if (arg instanceof Uint8Array && (off != null || len != null)) {
+        var s = off | 0, e = len == null ? arg.length : s + len;
+        var cp = new Uint8Array(arg.subarray(s, e));
+        Object.setPrototypeOf(cp, Buf.prototype);
+        return cp;
+      }
+      return new Buf(arg);
+    }
+    if (arg && typeof arg.length === 'number') return new Buf(arg);
+    throw new TypeError('Buffer.from: invalid argument');
+  };
+  Buf.alloc = function (size, fill) { var b = new Buf(size); if (fill != null) b.fill(fill); return b; };
+  Buf.allocUnsafe = Buf.alloc;
+  Buf.isBuffer = function (x) { return x instanceof Uint8Array && Object.getPrototypeOf(x) === Buf.prototype || x instanceof Buf; };
+  Buf.byteLength = function (s, enc) {
+    if (s instanceof Uint8Array || s instanceof ArrayBuffer) return s.byteLength != null ? s.byteLength : s.length;
+    var e = String(enc || 'utf8').toLowerCase();
+    var str = String(s);
+    if (e === 'latin1' || e === 'binary' || e === 'ascii') return str.length;
+    if (e === 'hex') return Math.ceil(str.length / 2);
+    if (e === 'base64') return b64ToBytes(str).length;
+    return utf8BytesOf(str).length;
+  };
+  Buf.concat = function (list) {
+    var total = 0;
+    for (var i = 0; i < list.length; i++) total += list[i].length;
+    var u = new Uint8Array(total), p = 0;
+    for (var j = 0; j < list.length; j++) { u.set(list[j], p); p += list[j].length; }
+    Object.setPrototypeOf(u, Buf.prototype);
+    return u;
+  };
+  return Buf;
+})();
+
 var __modules = {};
 var __cache = {};
 function __require(from, name) {
@@ -101,6 +294,8 @@ function __resolve(from, name) {
 var __paths = {
   "src/ui/browser-entry.js|./app-shell": "src/ui/app-shell.js",
   "src/ui/browser-entry.js|./worker-client": "src/ui/worker-client.js",
+  "src/ui/browser-entry.js|./worker-client": "src/ui/worker-client.js",
+  "src/ui/browser-entry.js|./imud-library": "src/ui/imud-library.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|../engine/output/project-io": "src/engine/output/project-io.js",
   "src/ui/app-shell.js|./status-strip": "src/ui/status-strip.js",
@@ -130,9 +325,11 @@ var __paths = {
   "src/engine/output/dom-renderer.js|../decoration/page-decorations": "src/engine/decoration/page-decorations.js",
   "src/engine/output/dom-renderer.js|../decoration/shaar-boxes": "src/engine/decoration/shaar-boxes.js",
   "src/engine/output/dom-renderer.js|../decoration/ornament-fit": "src/engine/decoration/ornament-fit.js",
+  "src/engine/output/dom-renderer.js|../decoration/asset-registry": "src/engine/decoration/asset-registry.js",
   "src/engine/output/dom-renderer.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/output/dom-renderer.js|../decoration/folio": "src/engine/decoration/folio.js",
   "src/engine/decoration/page-decorations.js|../layout/page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/decoration/asset-registry.js|./svg-sanitize": "src/engine/decoration/svg-sanitize.js",
   "src/ui/testing-tab.js|../audit/report-schema": "src/audit/report-schema.js",
   "src/ui/testing-tab.js|../engine/core/ledger": "src/engine/core/ledger.js",
   "src/audit/report-schema.js|../engine/layout/dp-planner": "src/engine/layout/dp-planner.js",
@@ -151,9 +348,14 @@ var __paths = {
   "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
   "src/ui/caret-map.js|../engine/parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
+  "src/engine/output/export-api.js|../core/settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/output/export-api.js|./dom-renderer": "src/engine/output/dom-renderer.js",
   "src/engine/output/export-api.js|./html-export": "src/engine/output/html-export.js",
-  "src/engine/output/export-api.js|../layout/page-templates": "src/engine/layout/page-templates.js"
+  "src/engine/output/export-api.js|../layout/page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/output/export-api.js|../import/zip-reader": "src/engine/import/zip-reader.js",
+  "src/ui/imud-library.js|../engine/decoration/asset-registry": "src/engine/decoration/asset-registry.js",
+  "src/ui/imud-library.js|../engine/core/legacy-settings-map": "src/engine/core/legacy-settings-map.js",
+  "src/ui/imud-library.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js"
 };
 __modules["src/ui/browser-entry.js"] = function (require, module, exports) {
 // src/ui/browser-entry.js — כניסת הדפדפן (מרוכז ל־ui/app.bundle.js ע"י הבונה)
@@ -167,9 +369,21 @@ __modules["src/ui/browser-entry.js"] = function (require, module, exports) {
 
 const { createApp } = require('./app-shell');
 const { workerTransport } = require('./worker-client');
+const { WorkerEngineClient } = require('./worker-client');
+const { createImudLibrary } = require('./imud-library');
 
 function downloadJson(name, json) {
   const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/** הורדת פלט בינארי (PDF/ZIP) מהייצוא ב-Worker. */
+function downloadBytes(name, bytes, mime) {
+  const blob = new Blob([bytes], { type: mime });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
@@ -210,9 +424,26 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   const worker = new Worker('engine-worker.bundle.js');
+  const engine = new WorkerEngineClient(workerTransport(worker));
+  // **03.11 (EXT-14):** ספריית נכסי IMUD — פונטים/עיצובים/ברירות מחדל מקוריות.
+  const imud = createImudLibrary(engine);
   const app = createApp(document, {
     transport: workerTransport(worker),
     fontStatus: (typeof document !== 'undefined' && document.fonts) ? 'loading' : 'ready',
+    // **03.11:** ייצוא PDF/ZIP במנוע ה־Worker + הורדה בפועל בדפדפן
+    remoteExport: true,
+    onExportFile: (kind, data, name) => {
+      if (kind === 'html') downloadText(name || 'book.html', data, 'text/html');
+      else if (kind === 'pdf') downloadBytes(name || 'book.pdf', data, 'application/pdf');
+      else if (kind === 'zip') downloadBytes(name || 'book-project.zip', data, 'application/zip');
+    },
+    getExportFont: async (family) => {
+      const buf = await imud.loadFont(family);
+      return buf ? { name: family, bytes: buf } : null;
+    },
+    getExportFontCss: () => imud.exportFontCss(),
+    // **03.11:** ספריית העיצובים — לפיקרים בפאנל הבורר
+    imudLibrary: imud,
     onRequestTxtImport: () => pickFile('.txt,text/plain', (text) => app.onDocumentAction('import-txt', text)),
     onRequestDocxImport: () => pickBinaryFile('.docx', (bytes, name) => app.importDocxFile(bytes, name)), // **S11**
     onRequestExtensionsImport: () => pickFile('.json,application/json', (json) => app.extensions.importFromText(json, 'הרחבות.json')), // **S11**
@@ -222,18 +453,30 @@ function boot() {
       try {
         app.loadTemplateJson(json);
       } catch (e) {
-        // §9.4: הודעה עברית ברורה בפעולה מפורשת — בלי חלונות שגיאה אוטומטיים
         alert('טעינת התבנית נכשלה: ' + (e && e.message ? e.message : e));
       }
     }),
     onDebugDownload: (json, pageIndex) => downloadJson(`page-debug-${pageIndex + 1}.json`, JSON.stringify(json, null, 2)),
-    onOpenBuilder: () => { /* בורר הערכות המלא (SVG builder) נבנה בהמשך — הכניסה מוגנת */ }
+    onOpenBuilder: () => { /* הבורר חי בפאנל ההגדרות (settings-panel) מאז 03.11 */ }
   });
   mount.appendChild(app.root);
+  // אחרי ההרכבה: קטלוג הפונטים מתעדכן בפיקרים ברגע שהספרייה נטענת (TDZ-safe)
+  imud.loadFontCatalog().then((families) => {
+    app.refreshFontCatalog && app.refreshFontCatalog(families);
+  }).catch(() => { /* ספרייה לא זמינה (למשל מקומי בלי assets) — ממשק בסיסי */ });
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
   }
   if (typeof window !== 'undefined') window.__toraApp = app; // לניפוי ידני
+}
+
+function downloadText(name, text, mime) {
+  const blob = new Blob([text], { type: mime || 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -317,7 +560,16 @@ function createApp(doc, opts = {}) {
     onSaveTemplate: () => opts.onSaveTemplate && opts.onSaveTemplate(saveTemplateJson()),
     onLoadTemplate: () => opts.onLoadTemplate && opts.onLoadTemplate(),
     onOpenBuilder: () => opts.onOpenBuilder && opts.onOpenBuilder(),
-    onOpenImports: () => opts.onOpenImports && opts.onOpenImports()
+    onOpenImports: () => opts.onOpenImports && opts.onOpenImports(),
+    // **03.11 (EXT-14):** ספריית IMUD — בוררי עיצובים + ברירות המקור + הודעות
+    imudLibrary: opts.imudLibrary || null,
+    onNotice: (msg) => status.setNotice(msg),
+    onApplyLegacyDefaults: (imported) => {
+      // החלה מלאה של ברירות המקור (מיזוג על ההגדרות) + ריענון + עימוד מפורש
+      Object.assign(settings, imported);
+      settingsPanel.refreshValues();
+      onExplicitRetypeset();
+    }
   });
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
@@ -471,6 +723,14 @@ function createApp(doc, opts = {}) {
 
   function onSettingChanged(key, value) {
     settings[key] = value;
+    // **03.11 (EXT-14):** בחירת גופן מהספרייה — טעינה חיה (FontFace לתצוגה +
+    // registerFont במנוע למדידת font-metrics ולייצוא PDF). כישלון טעינה אינו
+    // חוסם: המערכת נופלת לגופן המערכת (מתועד בהודעה).
+    if (/-(font)$/.test(key) && value && opts.imudLibrary) {
+      opts.imudLibrary.loadFont(value).then((buf) => {
+        if (!buf) status.setNotice(`הגופן «${value}» אינו בספרייה המוטמעת — נעשה שימוש בגופן חלופי.`);
+      }).catch(() => { /* כבר דווח בהודעה */ });
+    }
     if (classifyChange(key) === 'light') scheduleLightRefresh();
     else markHeavyDirty();
   }
@@ -540,21 +800,58 @@ function createApp(doc, opts = {}) {
 
   /** בקשת ייצוא — קריאה בלבד (F-06: אין עימוד/אין שינוי מצב); הפלט דרך opts.onExportFile
    * (בדפדפן: הורדה; בבדיקות: בדיקת הבתים). PDF דורש גופן מוטמע — opts.embeddedFont (בתים)
-   * או נפילה מתועדת להודעה (ללא גופן אין טקסט אמיתי — לא מזייפים). */
+   * או נתיב הדפדפן: opts.remoteExport + opts.getExportFont (TTF לפי שם משפחה, אסינכרוני)
+   * ⇒ הייצוא הכבד רץ ב־Worker (03.11). */
+  async function runRemotePdfExport() {
+    try {
+      const font = await opts.getExportFont(settings['body-font']);
+      if (!font || !font.bytes) {
+        status.setNotice('ייצוא PDF דורש גופן TTF — לגופן שנבחר לא נמצא קובץ מוטמע. נא לבחור גופן מהסט המוטמע או לטעון TTF.');
+        return { ok: false, reason: 'no-embedded-font' };
+      }
+      const res = await engine.requestExport({ kind: 'pdf', text, settings, fontBytes: font.bytes, fontName: font.name });
+      if (opts.onExportFile) opts.onExportFile('pdf', res.bytes, 'book.pdf');
+      status.setNotice(`יוצא PDF — ${res.info && res.info.pages ? res.info.pages : '?'} עמודים, ${res.info && res.info.outline ? res.info.outline : 0} סימניות, טקסט נבחר.`);
+      return { ok: true, kind: 'pdf', data: res.bytes, info: res.info };
+    } catch (e) {
+      status.setNotice('ייצוא PDF נכשל: ' + (e && e.message ? e.message : String(e)));
+      return { ok: false, error: String(e && e.message || e) };
+    }
+  }
+
+  async function runRemoteZipExport() {
+    try {
+      const res = await engine.requestExport({ kind: 'zip', text, settings, extensions: extensions.getBundle ? extensions.getBundle() : null });
+      if (opts.onExportFile) opts.onExportFile('zip', res.bytes, 'book-project.zip');
+      status.setNotice('יוצאה חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות+ערכה).');
+      return { ok: true, kind: 'zip', data: res.bytes };
+    } catch (e) {
+      status.setNotice('ייצוא ZIP נכשל: ' + (e && e.message ? e.message : String(e)));
+      return { ok: false, error: String(e && e.message || e) };
+    }
+  }
+
   function onExportRequest(kind) {
     if (!result) { status.setNotice('אין תוצאה לייצוא — העמוד עוד לא בוצע.'); return null; }
     const { exportHtml, exportPdf, exportProjectZip } = require('../engine/output/export-api');
     try {
       if (kind === 'html') {
-        const html = exportHtml(result, settings, doc, { title: (result.metadata && result.metadata['ספר']) || 'ספר' });
+        const fontCss = (typeof opts.getExportFontCss === 'function' && opts.getExportFontCss()) || '';
+        const html = exportHtml(result, settings, doc, { title: (result.metadata && result.metadata['ספר']) || 'ספר', fontCss });
         if (opts.onExportFile) opts.onExportFile('html', html, 'book.html');
         status.setNotice('יוצא HTML עצמאי (חד־קובץ, offline).');
         return { ok: true, kind, data: html };
       }
       if (kind === 'pdf') {
+        // **נתיב הדפדפן (03.11):** המנוע הכבד חי ב־Worker — הייצוא שם עם TTF שנשלף לפי הגופן.
+        if (opts.remoteExport && typeof opts.getExportFont === 'function') {
+          status.setNotice('מייצא PDF במנוע (Worker)…');
+          runRemotePdfExport(); // fire-and-forget — ההורדה וההודעות בסיום
+          return { ok: true, kind, pending: true };
+        }
         if (typeof Buffer === 'undefined') {
-          // סביבת דפדפן בלי מודול בואפרות — נתיב ה־PDF דורש Buffer; הודעה מפורשת (לא כשל שקט)
-          status.setNotice('ייצוא PDF זמין בסביבת ההרצה המלאה (Node); בדפדפן השתמשו בייצוא HTML העצמאי והדפיסו ממנו.');
+          // סביבה ללא מודול בואפרים וללא נתיב מרוחק — הודעה מפורשת (לא כשל שקט)
+          status.setNotice('ייצוא PDF דורש גופן מוטמע או נתיב Worker — השתמשו בייצוא ה־HTML העצמאי.');
           return { ok: false, reason: 'no-buffer-in-browser' };
         }
         if (!opts.embeddedFont) {
@@ -568,6 +865,12 @@ function createApp(doc, opts = {}) {
         return { ok: true, kind, data: res.bytes, info: res.info };
       }
       if (kind === 'zip') {
+        // **נתיב הדפדפן (03.11):** חבילת הפרויקט נבנית ב־Worker (zip-writer חי שם)
+        if (opts.remoteExport) {
+          status.setNotice('מייצא חבילת ZIP במנוע (Worker)…');
+          runRemoteZipExport();
+          return { ok: true, kind, pending: true };
+        }
         const bytes = exportProjectZip(text, settings, {
           extensions: extensions.getBundle ? extensions.getBundle() : null
         });
@@ -686,6 +989,8 @@ function createApp(doc, opts = {}) {
     scheduleLightRefresh, activateFinding, saveTemplateJson, loadTemplateJson, buildDebugJson,
     importDocxFile, applyRecommendation, // **S11:** ייבוא DOCX + החלת המלצות
     exportRequest: onExportRequest, // **S12:** ייצוא (html/pdf/zip) — קריאה בלבד
+    refreshFontCatalog: (families) => settingsPanel.refreshFontCatalog && settingsPanel.refreshFontCatalog(families), // **03.11**
+    imudLibrary: opts.imudLibrary || null, // **03.11:** ספריית IMUD לניפוי/הרחבות
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
@@ -760,6 +1065,8 @@ const registry = [
   K('first-word-length', 'number', 1, P.TYPO, 'sel-first-word-len', ['typography/dropword'], 'fx:fw-len', { enum: [1, 2] }),
   K('first-word-threshold-lines', 'number', 3, P.TYPO, 'rng-fw-threshold', ['typography/dropword'], 'fx:fw-threshold', { min: 2, max: 6 }),
   K('first-word-align-cap-top', 'bool', true, P.TYPO, 'chk-fw-cap-align', ['typography/dropword'], 'fx:fw-cap', { note: 'REQ-LB-05: קצה עליון לקו בסיס גוף — לא baseline' }),
+  K('first-word-size-em', 'number', 2, P.TYPO, 'rng-fw-size-em', ['typography/dropword'], 'fx:fw-size-em', { min: 1, max: 4, step: 0.1, note: 'S4.5: גודל המילה הראשונה ב-em (המקור: size-first-word=1.5; בעבר היה כפול 2 מוקשה)' }),
+  K('first-word-font', 'font', '', P.TYPO, 'sel-fw-font', ['typography/dropword'], 'fx:fw-font', { note: 'S4.5: גופן נפרד למילה הראשונה (המקור: font-first-word=FrankReal); ריק = גופן הגוף' }),
   K('dh-auto-detect', 'bool', true, P.TYPO, 'chk-dh-detect', ['parser/block-tokenizer'], 'fx:dh-detect', { note: 'דיבור המתחיל עד נקודה/מקף' }),
   K('dh-font', 'font', 'David HB', P.TYPO, 'sel-dh-font', ['typography/measure-api'], 'fx:dh-font'),
   K('body-last-line-align', 'enum', 'center', P.TYPO, 'sel-last-line-align', ['output/dom-renderer'], 'fx:last-line-align', { enum: ['center', 'right', 'stretch'], note: 'wiring מ‑Orange ✓' }),
@@ -881,6 +1188,26 @@ const registry = [
   K('background-image', 'string', '', P.THEMES, 'inp-bg-image', ['decoration/page-decorations'], 'fx:bg-image'),
   K('background-texture', 'string', '', P.THEMES, 'inp-bg-texture', ['decoration/page-decorations'], 'fx:bg-texture', { note: 'טקסטורה חוזרת (שכבת תשתית — פטורה מחפיפות באודיט)' }),
   K('background-inset-mm', 'number', 0, P.THEMES, 'rng-bg-inset', ['decoration/page-decorations'], 'fx:bg-inset', { min: 0, max: 30, note: 'שקיעת הרקע משולי העמוד במ״מ' }),
+
+  // ---- נכסי הפרויקט המקורי IMUD_TORANI (03.11, EXT-14 — הטמעה) ----
+  // הערכים הם הפניות 'imud:<collection>:<id>' — נפתרות בזמן רינדור דרך asset-registry.
+  // הפיקרים (בחירת עיצוב מהספרייה) חיים ב-UI (imud-decorations.js); המפתחות כאן
+  // משמרים את הבחירה בתבניות/חבילות פרויקט ומזרימים אותה למנוע.
+  K('imud-shaar-main', 'string', '', P.THEMES, 'inp-imud-shaar-main', ['decoration/page-decorations'], 'fx:imud-shaar-main', { note: 'עיצוב שער ראשי מספריית IMUD (הפניה imud:shaar-main:<id>) — מפעיל את עמודי השער' }),
+  K('imud-shaar-sub', 'string', '', P.THEMES, 'inp-imud-shaar-sub', ['decoration/page-decorations'], 'fx:imud-shaar-sub', { note: 'עיצוב שער משנה מספריית IMUD (imud:shaar-sub:<id>)' }),
+  K('imud-shaar-back', 'string', '', P.THEMES, 'inp-imud-shaar-back', ['decoration/page-decorations'], 'fx:imud-shaar-back', { note: 'עיצוב שער אחורי מספריית IMUD (imud:shaar-back:<id>)' }),
+  K('imud-orn-top', 'string', '', P.ORNAMENTS, 'inp-imud-orn-top', ['decoration/ornament-plan'], 'fx:imud-orn-top', { note: 'עיטור עליון לסימן H2 — עיצוב IMUD; דורש h2-orn-top=image' }),
+  K('imud-orn-bottom', 'string', '', P.ORNAMENTS, 'inp-imud-orn-bottom', ['decoration/ornament-plan'], 'fx:imud-orn-bottom', { note: 'עיטור תחתון לסימן H2 — עיצוב IMUD; דורש h2-orn-bottom=image' }),
+  K('imud-orn-side', 'string', '', P.ORNAMENTS, 'inp-imud-orn-side', ['decoration/ornament-plan'], 'fx:imud-orn-side', { note: 'עיטור צדדי (H2/H3) — עיצורי IMUD; דורש h2-orn-side/h3-side-orn=image' }),
+  K('imud-chapter-end', 'string', '', P.ORNAMENTS, 'inp-imud-chapter-end', ['decoration/ornament-plan'], 'fx:imud-chapter-end', { note: 'עיטור סיום־פרק — עיצוב IMUD; דורש chapter-end-ornament=image' }),
+  K('imud-divider', 'string', '', P.ORNAMENTS, 'inp-imud-divider', ['decoration/ornament-plan'], 'fx:imud-divider', { note: 'מפריד סעיפים מעוצב (323 עיצובים) — משמש מפרידי שער/כותרות במצב תמונה' }),
+  K('imud-book-title', 'string', '', P.THEMES, 'inp-imud-book-title', ['output/dom-renderer'], 'fx:imud-book-title', { note: 'כותרת הספר בשער (עקיפת מטא-נתוני המסמך אם הוגדר)' }),
+  K('imud-book-subtitle', 'string', '', P.THEMES, 'inp-imud-book-subtitle', ['output/dom-renderer'], 'fx:imud-book-subtitle', { note: 'כותרת־משנה בשער' }),
+
+  // ---- מזהי טקסט מוגדרים (S4.5 — chat-v20.3 היסטורי; ברירות מחדל = המקור) ----
+  K('en-line-prefix', 'string', 'הערת סיום -', P.NOTES, 'inp-en-line-prefix', ['parser/dfa-lexer', 'parser/block-tokenizer'], 'fx:en-prefix', { note: 'שורה המתחילה בקידומת ⇒ הערת סיום (הקידומת אינה מופיעה בפלט). ריק = ביטול הזיהוי. הוראת כותרת עמודי ההערות — רק בצורת הרבים «הערות סיום - כותרת»' }),
+  K('fn-delim-open', 'string', '[', P.NOTES, 'inp-fn-delim-open', ['parser/bracket-scanner', 'parser/block-tokenizer'], 'fx:fn-open', { note: 'תוחם פתיחת הערת שוליים; ריק = ביטול' }),
+  K('fn-delim-close', 'string', ']', P.NOTES, 'inp-fn-delim-close', ['parser/bracket-scanner', 'parser/block-tokenizer'], 'fx:fn-close', { note: 'תוחם סגירת הערת שוליים (בברירת המחדל נתמכת גם הצורה ]ם); ריק = ביטול' }),
 
   // ---- מתקדם/מנוע (ADVANCED) ----
   K('trace-verbosity', 'enum', 'standard', P.ADVANCED, 'sel-trace-verb', ['core/events', 'core/pipeline'], 'fx:trace-verb', { enum: ['off', 'minimal', 'standard', 'full'] }),
@@ -1420,6 +1747,10 @@ __modules["src/ui/settings-panel.js"] = function (require, module, exports) {
 
 const { BINDINGS, PANELS } = require('./bindings.generated');
 
+/** גופני בסיס (לפני טעינת הקטלוג) — preserve-missing-value (IMUD port). */
+const KNOWN_FONTS = ['Frank Ruhl Libre', 'David HB', 'David', 'Narkisim', 'Nachlieli', 'Alef', 'Rubin'];
+let fontCatalogFamilies = null; // **03.11:** קטלוג 439 הפונטים של IMUD (ברגע שנטען)
+
 /** בניית בקרה אחת לפי סוג ההגדרה. מחזיר את אלמנט הבקרה (בלי שורת התווית). */
 function buildControl(doc, b, value, onChange) {
   let el;
@@ -1455,10 +1786,11 @@ function buildControl(doc, b, value, onChange) {
     el.value = String(value || '#ffffff');
     el.addEventListener('change', () => onChange(el.value));
   } else if (b.type === 'font') {
-    // font-picker preserve-missing-value (IMUD port): ערך שאינו ברשימה נשמר כאפשרות
-    const KNOWN_FONTS = ['Frank Ruhl Libre', 'David HB', 'David', 'Narkisim', 'Nachlieli', 'Alef', 'Rubin'];
+    // font-picker preserve-missing-value (IMUD port): ערך שאינו ברשימה נשמר כאפשרות.
+    // **03.11:** כשקטלוג IMUD נטען — 439 המשפחות מופיעות בכל בוררי הגופנים.
+    const families = fontCatalogFamilies || KNOWN_FONTS;
     el = doc.createElement('select');
-    const opts = KNOWN_FONTS.includes(value) ? KNOWN_FONTS : [String(value), ...KNOWN_FONTS];
+    const opts = families.includes(value) ? families : [String(value), ...families];
     for (const f of opts) {
       const o = doc.createElement('option');
       o.setAttribute('value', f);
@@ -1545,23 +1877,29 @@ function buildSettingsTab(doc, opts) {
     body.setAttribute('aria-label', p.label);
 
     if (p.kind === 'action') {
-      // פאנלי־פעולה (Z2): בונה ערכות נושא / ייבוא תוספים — כניסות לזרימות ייעודיות
+      // פאנלי־פעולה (Z2): בורר עיצובים (BUILDER) / ייבוא תוספים (IMPORTS)
+      // **03.11 (EXT-14):** הבורר פונקציונלי — עיצובי שערים ועיטורים מספריית IMUD
+      // + כפתור ברירות המחדל המקוריות (default_settings.json מלא 264 מפתחות).
       const info = doc.createElement('p');
       info.className = 'action-info';
       info.textContent = p.key === 'BUILDER'
-        ? 'בונה ערכות הנושא (SVG) — עריכת שערים, רקעים ותיבות טקסט בכלי ויזואלי. הערכות השמורות מופיעות בפאנל «ערכות נושא, שערים ורקעים».'
+        ? 'ספריית הפרויקט המקורי — שערים, עיטורים ומפרידים מעוצבים, וברירות המחדל המקוריות. הבחירה נשמרת כהפניית imud: ומופעלת בעימוד.'
         : 'ייבוא תוספים — עמודים מותאמים, סגנונות טקסט ותמונות (JSON). מנוע ההרחבות המלא נבנה ב־S11; הכניסה נעולה בהתאם.';
       body.appendChild(info);
-      const act = doc.createElement('button');
-      act.type = 'button'; act.className = 'btn';
-      act.textContent = p.key === 'BUILDER' ? '🛠 פתח את הבונה' : '📦 פתח את הייבוא';
-      act.disabled = p.key === 'IMPORTS'; // S11 — UI stub guarded (REQ-UI-04 דפוס זהה)
-      act.setAttribute('aria-label', p.label);
-      act.addEventListener('click', () => {
-        if (p.key === 'BUILDER' && opts.onOpenBuilder) opts.onOpenBuilder();
-        if (p.key === 'IMPORTS' && opts.onOpenImports) opts.onOpenImports();
-      });
-      body.appendChild(act);
+      if (p.key === 'BUILDER' && opts.imudLibrary) {
+        body.appendChild(buildImudPicker(doc, opts));
+      } else {
+        const act = doc.createElement('button');
+        act.type = 'button'; act.className = 'btn';
+        act.textContent = p.key === 'BUILDER' ? '🛠 פתח את הבונה' : '📦 פתח את הייבוא';
+        act.disabled = p.key === 'IMPORTS' || p.key === 'BUILDER'; // בורר IMUD חי לעיל; ייבוא — מוזרק חיצונית
+        act.setAttribute('aria-label', p.label);
+        act.addEventListener('click', () => {
+          if (p.key === 'BUILDER' && opts.onOpenBuilder) opts.onOpenBuilder();
+          if (p.key === 'IMPORTS' && opts.onOpenImports) opts.onOpenImports();
+        });
+        body.appendChild(act);
+      }
     } else {
       for (const b of items) {
         const settings = getSettings();
@@ -1642,9 +1980,118 @@ function buildSettingsTab(doc, opts) {
     }
   }
 
+  /** **03.11 (EXT-14):** עדכון קטלוג הפונטים (439 משפחות IMUD) — בוררי הגופנים
+   * נבנים מחדש עם הקטלוג המלא, בשימור הערך הנוכחי. */
+  function refreshFontCatalog(families) {
+    if (!Array.isArray(families) || !families.length) return;
+    fontCatalogFamilies = families.slice();
+    const settings = getSettings();
+    for (const fr of fieldRows) {
+      const b = BINDINGS.find(x => x.id === fr.id);
+      if (!b || b.type !== 'font') continue;
+      const old = fr.row.querySelector('.ctl');
+      if (!old) continue;
+      const fresh = buildControl(doc, b, settings[fr.id], (v) => opts.onSettingChanged(b.id, v));
+      fresh.setAttribute('id', `ctl-${b.control}`);
+      old.parentNode.replaceChild(fresh, old);
+    }
+  }
+
   root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־12 פאנלים` }));
 
-  return { root, refreshValues, searchInput: search, getSearchHits: () => searchHits };
+  return { root, refreshValues, refreshFontCatalog, searchInput: search, getSearchHits: () => searchHits };
+}
+
+/** **03.11 (EXT-14):** בורר עיצובי IMUD — שערים/עיטורים/מפרידים + ברירות המקור.
+ * בחירה ⇒ רישום העיצוב בשני הצדדים (UI+Worker) ואז onSettingChanged עם ההפניה
+ * המלאה. הפעלת מצב תמונה לעיטורים אוטומטית (h2-orn-*=image). */
+function buildImudPicker(doc, opts) {
+  const wrap = doc.createElement('div');
+  wrap.className = 'imud-picker';
+  const note = doc.createElement('div');
+  note.className = 'action-info';
+  note.textContent = 'טוען את רשימות העיצוב מהספרייה המוטמעת…';
+  wrap.appendChild(note);
+
+  const PICKS = [
+    { label: 'שער ראשי', collection: 'shaar-main', setting: 'imud-shaar-main' },
+    { label: 'שער משנה', collection: 'shaar-sub', setting: 'imud-shaar-sub' },
+    { label: 'שער אחורי', collection: 'shaar-back', setting: 'imud-shaar-back' },
+    { label: 'עיטור עליון (H2)', collection: 'orn-ud', setting: 'imud-orn-top', imageMode: 'h2-orn-top' },
+    { label: 'עיטור תחתון (H2)', collection: 'orn-ud', setting: 'imud-orn-bottom', imageMode: 'h2-orn-bottom' },
+    { label: 'עיטור צדדי', collection: 'orn-lr', setting: 'imud-orn-side' },
+    { label: 'עיטור סיום פרק', collection: 'orn-ud', setting: 'imud-chapter-end', imageMode: 'chapter-end-ornament' },
+    { label: 'מפריד מעוצב', collection: 'divider', setting: 'imud-divider' }
+  ];
+
+  const selects = [];
+  for (const pick of PICKS) {
+    const row = doc.createElement('div');
+    row.className = 'field-row';
+    const lbl = doc.createElement('label');
+    lbl.className = 'field-label';
+    lbl.textContent = pick.label;
+    const sel = doc.createElement('select');
+    sel.className = 'ctl';
+    sel.setAttribute('aria-label', pick.label);
+    sel.appendChild(Object.assign(doc.createElement('option'), { textContent: '— ללא —', value: '' }));
+    sel.addEventListener('change', async () => {
+      const id = sel.value;
+      if (!id) { opts.onSettingChanged(pick.setting, ''); return; }
+      try {
+        const ref = await opts.imudLibrary.ensureDesign(pick.collection, id);
+        if (!ref) throw new Error('העיצוב לא נמצא בספרייה');
+        if (pick.imageMode) opts.onSettingChanged(pick.imageMode, 'image');
+        opts.onSettingChanged(pick.setting, ref);
+      } catch (e) {
+        sel.value = '';
+        if (opts.onNotice) opts.onNotice('בחירת העיצוב נכשלה: ' + (e && e.message ? e.message : e));
+      }
+    });
+    row.appendChild(lbl); row.appendChild(sel);
+    wrap.appendChild(row);
+    selects.push({ pick, sel });
+  }
+
+  // כפתור ברירות המחדל המקוריות — ייבוא 264 המפתחות דרך טבלת ה-disposition
+  const defaultsBtn = doc.createElement('button');
+  defaultsBtn.type = 'button'; defaultsBtn.className = 'btn';
+  defaultsBtn.textContent = '📖 החל ברירות מחדל מקוריות (IMUD)';
+  defaultsBtn.setAttribute('aria-label', 'החלת ברירות המחדל של הפרויקט המקורי');
+  defaultsBtn.addEventListener('click', async () => {
+    try {
+      const { settings, report } = await opts.imudLibrary.loadLegacyDefaults();
+      if (opts.onApplyLegacyDefaults) opts.onApplyLegacyDefaults(settings);
+      if (opts.onNotice) opts.onNotice(`ברירות המקור הוחלו — ${report.mapped} הגדרות מופו, ${report.merged} אוחדו, ${report.removed} במעקב מתועד.`);
+    } catch (e) {
+      if (opts.onNotice) opts.onNotice('טעינת ברירות המקור נכשלה: ' + (e && e.message ? e.message : e));
+    }
+  });
+  wrap.appendChild(defaultsBtn);
+
+  // טעינת רשימות העיצובים (עצלה — לפי אוסף)
+  (async () => {
+    try {
+      const byCollection = new Map();
+      for (const { pick, sel } of selects) {
+        if (!byCollection.has(pick.collection)) {
+          byCollection.set(pick.collection, await opts.imudLibrary.listDesigns(pick.collection));
+        }
+        const items = byCollection.get(pick.collection);
+        for (const it of items) {
+          const o = doc.createElement('option');
+          o.setAttribute('value', it.id);
+          o.textContent = `${it.name} (${it.id})`;
+          sel.appendChild(o);
+        }
+      }
+      note.textContent = `${selects.length} בוררי עיצוב מהספרייה המוטמעת.`;
+    } catch (e) {
+      note.textContent = 'ספריית העיצובים לא נטענה: ' + (e && e.message ? e.message : e);
+    }
+  })();
+
+  return wrap;
 }
 
 module.exports = { buildSettingsTab, BINDINGS, PANELS };
@@ -2058,6 +2505,34 @@ const BINDINGS = [
     "max": null,
     "step": null,
     "note": "REQ-LB-05: קצה עליון לקו בסיס גוף — לא baseline"
+  },
+  {
+    "id": "first-word-size-em",
+    "control": "rng-fw-size-em",
+    "panel": "טיפוגרפיה וגוף הטקסט",
+    "panelKey": "TYPO",
+    "labelHe": "first-word-size-em",
+    "type": "number",
+    "def": 2,
+    "enum": null,
+    "min": 1,
+    "max": 4,
+    "step": 0.1,
+    "note": "S4.5: גודל המילה הראשונה ב-em (המקור: size-first-word=1.5; בעבר היה כפול 2 מוקשה)"
+  },
+  {
+    "id": "first-word-font",
+    "control": "sel-fw-font",
+    "panel": "טיפוגרפיה וגוף הטקסט",
+    "panelKey": "TYPO",
+    "labelHe": "first-word-font",
+    "type": "font",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "S4.5: גופן נפרד למילה הראשונה (המקור: font-first-word=FrankReal); ריק = גופן הגוף"
   },
   {
     "id": "dh-auto-detect",
@@ -4414,6 +4889,188 @@ const BINDINGS = [
     "note": "שקיעת הרקע משולי העמוד במ״מ"
   },
   {
+    "id": "imud-shaar-main",
+    "control": "inp-imud-shaar-main",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "עיצוב שער ראשי (ספריית IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיצוב שער ראשי מספריית IMUD (הפניה imud:shaar-main:<id>) — מפעיל את עמודי השער"
+  },
+  {
+    "id": "imud-shaar-sub",
+    "control": "inp-imud-shaar-sub",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "עיצוב שער משנה (ספריית IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיצוב שער משנה מספריית IMUD (imud:shaar-sub:<id>)"
+  },
+  {
+    "id": "imud-shaar-back",
+    "control": "inp-imud-shaar-back",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "עיצוב שער אחורי (ספריית IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיצוב שער אחורי מספריית IMUD (imud:shaar-back:<id>)"
+  },
+  {
+    "id": "imud-orn-top",
+    "control": "inp-imud-orn-top",
+    "panel": "עיטורים וגרפיקה",
+    "panelKey": "ORNAMENTS",
+    "labelHe": "עיטור עליון H2 (IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיטור עליון לסימן H2 — עיצוב IMUD; דורש h2-orn-top=image"
+  },
+  {
+    "id": "imud-orn-bottom",
+    "control": "inp-imud-orn-bottom",
+    "panel": "עיטורים וגרפיקה",
+    "panelKey": "ORNAMENTS",
+    "labelHe": "עיטור תחתון H2 (IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיטור תחתון לסימן H2 — עיצוב IMUD; דורש h2-orn-bottom=image"
+  },
+  {
+    "id": "imud-orn-side",
+    "control": "inp-imud-orn-side",
+    "panel": "עיטורים וגרפיקה",
+    "panelKey": "ORNAMENTS",
+    "labelHe": "עיטור צדדי (IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיטור צדדי (H2/H3) — עיצורי IMUD; דורש h2-orn-side/h3-side-orn=image"
+  },
+  {
+    "id": "imud-chapter-end",
+    "control": "inp-imud-chapter-end",
+    "panel": "עיטורים וגרפיקה",
+    "panelKey": "ORNAMENTS",
+    "labelHe": "עיטור סיום פרק (IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "עיטור סיום־פרק — עיצוב IMUD; דורש chapter-end-ornament=image"
+  },
+  {
+    "id": "imud-divider",
+    "control": "inp-imud-divider",
+    "panel": "עיטורים וגרפיקה",
+    "panelKey": "ORNAMENTS",
+    "labelHe": "מפריד מעוצב (IMUD)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מפריד סעיפים מעוצב (323 עיצובים) — משמש מפרידי שער/כותרות במצב תמונה"
+  },
+  {
+    "id": "imud-book-title",
+    "control": "inp-imud-book-title",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "כותרת הספר בשער (עקיפה)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "כותרת הספר בשער (עקיפת מטא-נתוני המסמך אם הוגדר)"
+  },
+  {
+    "id": "imud-book-subtitle",
+    "control": "inp-imud-book-subtitle",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "כותרת־משנה בשער",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "כותרת־משנה בשער"
+  },
+  {
+    "id": "en-line-prefix",
+    "control": "inp-en-line-prefix",
+    "panel": "הערות שוליים וסיום",
+    "panelKey": "NOTES",
+    "labelHe": "קידומת הערת סיום (ריק = ביטול)",
+    "type": "string",
+    "def": "הערת סיום -",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "שורה המתחילה בקידומת ⇒ הערת סיום (הקידומת אינה מופיעה בפלט). ריק = ביטול הזיהוי. הוראת כותרת עמודי ההערות — רק בצורת הרבים «הערות סיום - כותרת»"
+  },
+  {
+    "id": "fn-delim-open",
+    "control": "inp-fn-delim-open",
+    "panel": "הערות שוליים וסיום",
+    "panelKey": "NOTES",
+    "labelHe": "תוחם פתיחת הערת שוליים",
+    "type": "string",
+    "def": "[",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "תוחם פתיחת הערת שוליים; ריק = ביטול"
+  },
+  {
+    "id": "fn-delim-close",
+    "control": "inp-fn-delim-close",
+    "panel": "הערות שוליים וסיום",
+    "panelKey": "NOTES",
+    "labelHe": "תוחם סגירת הערת שוליים",
+    "type": "string",
+    "def": "]",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "תוחם סגירת הערת שוליים (בברירת המחדל נתמכת גם הצורה ]ם); ריק = ביטול"
+  },
+  {
     "id": "trace-verbosity",
     "control": "sel-trace-verb",
     "panel": "מתקדם/מנוע",
@@ -5391,7 +6048,7 @@ __modules["src/engine/import/docx-import.js"] = function (require, module, expor
  * {ok:false, reason, message} והקובץ אינו נטען.
  */
 
-const { readZip } = require('./zip-reader');
+const { readZip, utf8Decode } = require('./zip-reader');
 const { parseXml } = require('./xml-lite');
 
 /** מיפוי סגנונות Word → רמות כותרת של המנוע. */
@@ -5574,7 +6231,7 @@ function importDocx(bytes, fileName) {
     return { ok: false, text: '', stats: {}, message: `פורמט לא נתמך: «${name}» אינו מסמך Word (חסר word/document.xml). הקובץ לא נטען.` };
   }
   const fn = zip.entries.find(e => e.name === 'word/footnotes.xml');
-  const res = convert(doc.data.toString('utf8'), fn ? fn.data.toString('utf8') : null);
+  const res = convert(utf8Decode(doc.data), fn ? utf8Decode(fn.data) : null);
   if (!res.ok) {
     if (res.error === 'not-wordml') {
       return { ok: false, text: '', stats: {}, message: `פורמט לא נתמך: «${name}» אינו מסמך Word תקין (document.xml אינו WordML). הקובץ לא נטען.` };
@@ -5597,13 +6254,41 @@ __modules["src/engine/import/zip-reader.js"] = function (require, module, export
 'use strict';
 
 /**
- * קורא ZIP מינימלי לייבוא DOCX: פורמט STORE(0) + DEFLATE(8) (node:zlib — מובנה,
- * לא תלות חיצונית). **אבטחה (S13 pass):**
+ * קורא ZIP מינימלי לייבוא DOCX: פורמט STORE(0) + DEFLATE(8).
+ * **סביבת-אגנוסטית (תיקון 03.11 — "Buffer is not defined" בדפדפן):** אין כל
+ * שימוש ב-Buffer/שיטותיו — Uint8Array טהור + פונקציות עזר פרטיות (u16le/u32le/
+ * utf8Decode). עובד זהה ב-Node (Buffer הוא sub-class של Uint8Array) ובדפדפן.
+ * node:zlib (מובנה, לא תלות חיצונית) משמש כשקיים; אחרת המנפח הטהור להלן.
+ * **אבטחה (S13 pass):**
  *  - path traversal: שמות רשומות עם ../ או / אבסולוטי או בריחת תחילית — נדחים
  *    ברשימה (denied) ולא נפתחים לעולם;
  *  - החזרת רשומות מנורמלות בלבד (שמות יחסיים נקיים);
  *  - אין eval; אין כתיבה לדיסק — הכל בזיכרון.
  */
+
+// ---------- עזרי בתים ללא Buffer (זהה לפלט readUInt16LE/readUInt32LE) ----------
+function u16le(b, o) { return b[o] | (b[o + 1] << 8); }
+function u32le(b, o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0; }
+function u8sub(b, s, e) { return b.subarray ? b.subarray(s, e) : b.slice(s, e); }
+
+/** פענוח UTF-8 טהור (TextDecoder כשקיים — אחרת מימוש ידני; תואם Buffer.toString('utf8')). */
+function utf8Decode(bytes) {
+  if (typeof TextDecoder !== 'undefined') return new TextDecoder('utf-8').decode(bytes);
+  let s = '';
+  for (let i = 0; i < bytes.length;) {
+    const c = bytes[i];
+    if (c < 0x80) { s += String.fromCharCode(c); i++; }
+    else if (c < 0xe0) { s += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; }
+    else if (c < 0xf0) { s += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; }
+    else {
+      const cp = ((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+      const off = cp - 0x10000;
+      s += String.fromCharCode(0xd800 + (off >> 10), 0xdc00 + (off & 0x3ff));
+      i += 4;
+    }
+  }
+  return s;
+}
 
 const zlib = (() => {
   try { return require('zlib'); } catch (e) { return null; } // בדפדפן אין zlib — מנפח טהור
@@ -5677,7 +6362,7 @@ function fixedLitHuff() {
 }
 function fixedDistHuff() { return buildHuffman(new Array(30).fill(5)); }
 
-/** מנפח raw DEFLATE טהור. הפלט כולו במערך אחד עד הסוף (backref ≤32K תקין תמיד). @returns {Buffer} */
+/** מנפח raw DEFLATE טהור. הפלט כולו במערך אחד עד הסוף (backref ≤32K תקין תמיד). @returns {Uint8Array} */
 function inflateRawPure(buf, startByte = 0, expectedSize = -1) {
   const br = new BitReader(buf, startByte);
   const out = [];
@@ -5747,12 +6432,15 @@ function inflateRawPure(buf, startByte = 0, expectedSize = -1) {
     if (final) break;
     if (expectedSize >= 0 && out.length >= expectedSize) break;
   }
-  return Buffer.from(out);
+  return Uint8Array.from(out);
 }
 
-/** מנפח: zlib אם קיים (Node), אחרת המנפח הטהור (דפדפן). */
+/** מנפח: zlib אם קיים (Node), אחרת המנפח הטהור (דפדפן). @returns {Uint8Array} */
 function inflateRaw(data) {
-  if (zlib) return zlib.inflateRawSync(data);
+  if (zlib) {
+    const out = zlib.inflateRawSync(data); // Node: מחזיר Buffer (Uint8Array) — זהה פונקציונלית
+    return out;
+  }
   return inflateRawPure(data, 0, -1);
 }
 
@@ -5785,50 +6473,50 @@ function safeName(raw) {
 }
 
 /**
- * פתיחת ארכיון ZIP מזיכרון.
+ * פתיחת ארכיון ZIP מזיכרון — **ללא Buffer** (דפדפן ו-Node כאחד; תיקון 03.11).
  * @param {Buffer|Uint8Array} bytes
- * @returns {{ok:boolean, entries:Array<{name:string, data:Buffer, method:number, size:number}>, denied:Array<string>, error:string|null}}
+ * @returns {{ok:boolean, entries:Array<{name:string, data:Uint8Array, method:number, size:number}>, denied:Array<string>, error:string|null}}
  */
 function readZip(bytes) {
-  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  const buf = bytes; // Buffer (Node) הוא Uint8Array — אינדוקסציה זהה; שום דבר לא נדרש כאן
   const denied = [];
   const entries = [];
   // מציאת EOCD (End Of Central Directory) — מהסוף, חתימה 0x06054b50
   let eocd = -1;
   const minLen = 22;
   for (let i = buf.length - minLen; i >= Math.max(0, buf.length - minLen - 65536); i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    if (u32le(buf, i) === 0x06054b50) { eocd = i; break; }
   }
   if (eocd < 0) return { ok: false, entries: [], denied: [], error: 'not-a-zip' };
-  const totalEntries = buf.readUInt16LE(eocd + 10);
-  const cdOffset = buf.readUInt32LE(eocd + 16);
+  const totalEntries = u16le(buf, eocd + 10);
+  const cdOffset = u32le(buf, eocd + 16);
 
   let p = cdOffset;
   for (let n = 0; n < totalEntries; n++) {
-    if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) {
+    if (p + 46 > buf.length || u32le(buf, p) !== 0x02014b50) {
       return { ok: false, entries, denied, error: `bad-central-directory@${n}` };
     }
-    const method = buf.readUInt16LE(p + 10);
-    const compSize = buf.readUInt32LE(p + 20);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const extraLen = buf.readUInt16LE(p + 30);
-    const commentLen = buf.readUInt16LE(p + 32);
-    const localOffset = buf.readUInt32LE(p + 42);
-    const rawName = buf.slice(p + 46, p + 46 + nameLen).toString('utf8');
+    const method = u16le(buf, p + 10);
+    const compSize = u32le(buf, p + 20);
+    const nameLen = u16le(buf, p + 28);
+    const extraLen = u16le(buf, p + 30);
+    const commentLen = u16le(buf, p + 32);
+    const localOffset = u32le(buf, p + 42);
+    const rawName = utf8Decode(u8sub(buf, p + 46, p + 46 + nameLen));
     const name = safeName(rawName);
     if (name == null) { denied.push(rawName); p += 46 + nameLen + extraLen + commentLen; continue; }
 
     // קריאת ה-local header והנתונים
-    if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50) {
+    if (localOffset + 30 > buf.length || u32le(buf, localOffset) !== 0x04034b50) {
       return { ok: false, entries, denied, error: `bad-local-header:${name}` };
     }
-    const lhNameLen = buf.readUInt16LE(localOffset + 26);
-    const lhExtraLen = buf.readUInt16LE(localOffset + 28);
+    const lhNameLen = u16le(buf, localOffset + 26);
+    const lhExtraLen = u16le(buf, localOffset + 28);
     const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
-    const raw = buf.slice(dataStart, dataStart + compSize);
+    const raw = u8sub(buf, dataStart, dataStart + compSize);
     let data;
     try {
-      if (method === 0) data = Buffer.from(raw);
+      if (method === 0) data = Uint8Array.from(raw);
       else if (method === 8) data = inflateRaw(raw);
       else return { ok: false, entries, denied, error: `unsupported-method:${method}:${name}` };
     } catch (e) {
@@ -5845,7 +6533,7 @@ function verifyCrc(entry) {
   return crc32(entry.data) === entry.storedCrc;
 }
 
-module.exports = { readZip, safeName, crc32, verifyCrc, inflateRaw, inflateRawPure };
+module.exports = { readZip, safeName, crc32, verifyCrc, inflateRaw, inflateRawPure, utf8Decode };
 
 };
 __modules["src/engine/import/xml-lite.js"] = function (require, module, exports) {
@@ -6502,6 +7190,7 @@ const { markerFor } = require('../notes/markers');
 const { planDecorations } = require('../decoration/page-decorations');
 const { resolveShaarBox } = require('../decoration/shaar-boxes');
 const { columnDividerHeightPx } = require('../decoration/ornament-fit');
+const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
 
@@ -6775,14 +7464,33 @@ function renderDecorations(page, doc) {
     el.style.top = `${Math.round(d.y)}px`;
     el.style.width = `${Math.round(d.w)}px`;
     el.style.height = `${Math.round(d.h)}px`;
+    // **03.11 (EXT-14):** עיטור מסוג 'image' — רקע מההפניה הפתורה (asset-registry)
+    if (d.image) {
+      const uri = assetUri(d.image);
+      if (uri) {
+        el.style.backgroundImage = `url("${uri}")`;
+        el.style.backgroundSize = '100% 100%';
+        el.style.backgroundRepeat = 'no-repeat';
+      }
+    }
     els.push(el);
   }
   return els;
 }
 
+/** **03.11 (EXT-14):** פתרון נכס — הפניות imud: מתורגמות ל-data-URI מהרישום
+ * (asset-registry); ערכים אחרים (URL/data-URI קיים) עוברים כמו שהם. */
+function assetUri(ref) {
+  if (!ref) return null;
+  const r = resolveAssetRef(ref);
+  return r.uri || null;
+}
+
 /**
  * **S8 (REQ-ORN-05/08):** רקע עמוד + תיבות שער לפי התוכנית שחושבה (page-decorations)
  * — רקע לפי מחלקת העמוד עם inset במ״מ; תיבת טקסט של שער ראשי לפי box פתור.
+ * **03.11 (EXT-14):** שלושת השערים (ראשי/משנה/אחורי) — עיצוב ה־SVG במסך מלא +
+ * תיבת כותרת מה-box של העיצוב (רישום נכסים) או מההגדרות.
  */
 function renderPageBackgroundAndShaar(page, settings, doc, metadata) {
   const els = [];
@@ -6791,37 +7499,49 @@ function renderPageBackgroundAndShaar(page, settings, doc, metadata) {
   if (plan.background && plan.background.image) {
     const el = doc.createElement('div');
     el.className = 'deco deco--page-background';
-    el.style.backgroundImage = `url("${plan.background.image}")`;
+    el.style.backgroundImage = `url("${assetUri(plan.background.image) || plan.background.image}")`;
     el.style.inset = `${inset}px`;
     els.push(el);
   }
   if (plan.background && plan.background.texture) {
     const el = doc.createElement('div');
     el.className = 'deco deco--page-texture';
-    el.style.backgroundImage = `url("${plan.background.texture}")`;
+    el.style.backgroundImage = `url("${assetUri(plan.background.texture) || plan.background.texture}")`;
     els.push(el);
   }
-  // שער ראשי: תמונת הערכה כרקע + תיבת טקסט (שם הספר) לפי box פתור (REQ-ORN-05)
-  const mainSlot = plan.slots.find(s => s.slot === 'shaar-main' && s.asset);
-  if (mainSlot) {
+  // עזר: שער במסך מלא מהפניה פתורה + תיבת כותרת לפי box מהעיצוב (אם נרשם)
+  const fullShaar = (slotName, cssClass, boxClass) => {
+    const slot = plan.slots.find(s => s.slot === slotName && s.asset);
+    if (!slot) return;
+    const resolved = resolveAssetRef(slot.asset);
+    const uri = resolved.uri || slot.asset;
     const bg = doc.createElement('div');
-    bg.className = 'deco deco--shaar-main';
-    bg.style.backgroundImage = `url("${mainSlot.asset}")`;
+    bg.className = cssClass;
+    bg.style.backgroundImage = `url("${uri}")`;
     bg.style.inset = '0';
     els.push(bg);
-    const { box } = resolveShaarBox('main', settings['theme-set-id'] || 'default', { box: settings['shaar-main-box'] }, null, { top: 40, bottom: 40, right: 30, left: 30 });
-    const tb = doc.createElement('div');
-    tb.className = 'shaar-main-box';
-    tb.dir = 'rtl';
-    tb.style.top = `${Math.round(box.top * MM_TO_PX)}px`;
-    tb.style.bottom = `${Math.round(box.bottom * MM_TO_PX)}px`;
-    tb.style.left = `${Math.round(box.left * MM_TO_PX)}px`;
-    tb.style.right = `${Math.round(box.right * MM_TO_PX)}px`;
-    const bookName = (metadata && (metadata['ספר'] || metadata['title'])) || '';
-    const topic = (metadata && metadata['נושא']) || '';
-    tb.textContent = [bookName, topic].filter(Boolean).join(' · ');
-    els.push(tb);
-  }
+    // תיבת כותרת — מה-box של העיצוב ברישום (מ״מ) או מההגדרות; בלי box מהעיצוב —
+    // ה-fallback המסורתי של resolveShaarBox (REQ-ORN-05: התיבה תמיד נבנית על שער עם תמונה)
+    const designBox = resolved.item && resolved.item.box ? resolved.item.box : null;
+    const boxRef = designBox || settings['shaar-main-box'] || null;
+    {
+      const { box } = resolveShaarBox('main', settings['theme-set-id'] || 'default', { box: boxRef }, null, { top: 40, bottom: 40, right: 30, left: 30 });
+      const tb = doc.createElement('div');
+      tb.className = boxClass;
+      tb.dir = 'rtl';
+      tb.style.top = `${Math.round(box.top * MM_TO_PX)}px`;
+      tb.style.bottom = `${Math.round(box.bottom * MM_TO_PX)}px`;
+      tb.style.left = `${Math.round(box.left * MM_TO_PX)}px`;
+      tb.style.right = `${Math.round(box.right * MM_TO_PX)}px`;
+      const bookName = (settings['imud-book-title'] || (metadata && (metadata['שם הספר'] || metadata['ספר'] || metadata['title']))) || ''; // S4.5: גם המזהה הארוך + על
+      const topic = (settings['imud-book-subtitle'] || (metadata && (metadata['נושא מפורט'] || metadata['נושא']))) || ''; // 03.11: כותרת־משנה מוגדרת
+      tb.textContent = [bookName, topic].filter(Boolean).join(' · ');
+      els.push(tb);
+    }
+  };
+  fullShaar('shaar-main', 'deco deco--shaar-main', 'shaar-main-box');
+  fullShaar('shaar-sub', 'deco deco--shaar-sub', 'shaar-sub-box');
+  fullShaar('shaar-back-frame', 'deco deco--shaar-back', 'shaar-back-box');
   return els;
 }
 
@@ -7108,6 +7828,13 @@ function planDecorations(page, settings) {
   const themeSetId = settings['theme-set-id'] || 'default';
   const slots = [];
 
+  // **S4.5/EXT-14 (03.11):** הפניות עיצובי IMUD — מזהי הספרייה גוברים על השדות
+  // הישנים (הפניה imud:<collection>:<id> נפתרת ברינדור דרך asset-registry).
+  // צריכה מפורשת כאן — גם ערכת נושא נחשבת פעילה כשנבחר עיצוב ספרייה.
+  const imudMain = settings['imud-shaar-main'] || '';
+  const imudSub = settings['imud-shaar-sub'] || '';
+  const imudBack = settings['imud-shaar-back'] || '';
+
   const push = (slot, asset, modifier) => {
     // הגנה D-11: slot תפוס כבר → לא מוסיפים שוב
     if (slots.some(s => s.slot === slot)) return;
@@ -7120,18 +7847,21 @@ function planDecorations(page, settings) {
 
   switch (page.type) {
     case 'shaar-main': {
-      const img = settings['shaar-main-image'];
+      const img = imudMain || settings['shaar-main-image'];
       push('shaar-main', img, 'deco--themed');
       break;
     }
     case 'shaar-sub': {
-      push('shaar-sub', settings['shaar-sub-image'] || null, 'deco--themed');
+      push('shaar-sub', imudSub || settings['shaar-sub-image'] || null, 'deco--themed');
       break;
     }
     case 'shaar-back': {
-      // PT-03: אם הכבה ראשית — אף מקטע לא מוצב; אחרת 4 מקטעים עצמאיים
+      // PT-03: אם הכבה ראשית — אף מקטע לא מוצב; אחרת 4 מקטעים עצמאיים.
+      // **03.11 (EXT-14):** מקטע המסגרת מקבל את תמונת השער האחורי (עיצוב IMUD) —
+      // שאר המקטעים נשארים ריקים (ממולאים ע"י העיצוב עצמו, לא בנפרד).
       if (settings['shaar-back-enabled'] !== false) {
-        for (const seg of SHAAR_BACK_SEGMENTS) push(`shaar-back-${seg}`, null, 'deco--segment');
+        const backImg = imudBack || settings['shaar-back-image'] || null;
+        for (const seg of SHAAR_BACK_SEGMENTS) push(`shaar-back-${seg}`, seg === 'frame' ? backImg : null, 'deco--segment');
       }
       break;
     }
@@ -7489,6 +8219,207 @@ module.exports = {
   h2OrnamentReservedHeight,
   dividerInsertable, assertSingleSourceSizing, CHAPTER_END_KINDS, H2_ORN_W_EM, H2_ORN_H_EM
 };
+
+};
+__modules["src/engine/decoration/asset-registry.js"] = function (require, module, exports) {
+// src/engine/decoration/asset-registry.js — רישום נכסי עיצוב ופתרון הפניות (03.11, EXT-14)
+'use strict';
+
+/**
+ * רישום מרכזי של נכסי עיצוב (שערים/עיטורים/מפרידים — SVG + תיבות) ופתרון
+ * הפניות «imud:<collection>:<id>» ל-data-URI בטוח לשימוש כרקע/תמונה.
+ *
+ * **אבטחה:** כל SVG עובר חיטוי (svg-sanitize) בעת הרישום — לעולם לא נשמר כמו
+ * שהוא. רישום כפול של אותו מזהה — החדש מחליף (עדכון ספרייה); מזהים לא
+ * חוקיים נדחים ומדווחים — לא בשקט.
+ *
+ * **סביבת-אגנוסטיות:** אין DOM/פetch כאן — המודול טהור ונבדק גם ב-Node;
+ * הטעינה מהרשת חיה ב-UI (imud-library.js).
+ */
+
+const { sanitizeSvg } = require('./svg-sanitize');
+
+/** הרישום עצמו: collection → Map(id → item). */
+const collections = new Map();
+
+/** קידוד SVG כ-data-URI (UTF-8 percent-encoding — תואם url("...") ב-CSS). */
+function svgDataUri(svg) {
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(String(svg));
+}
+
+/** ולידציית שם אוסף/מזהה: [a-zA-Z0-9_-] בלבד — מונע הזרקת תווים להפניה. */
+function validToken(s) {
+  return typeof s === 'string' && /^[A-Za-z0-9_-]+$/.test(s);
+}
+
+/**
+ * רישום אוסף נכסים.
+ * @param {string} collection — שם האוסף (למשל 'shaar-main', 'orn-ud', 'divider')
+ * @param {Array<{id:string, name?:string, svg:string, box?:object}>} items
+ * @returns {{ok:boolean, registered:number, rejected:Array<{id:string, reason:string}>}}
+ */
+function registerAssets(collection, items) {
+  if (!validToken(collection)) return { ok: false, registered: 0, rejected: [{ id: String(collection), reason: 'bad-collection-name' }] };
+  if (!Array.isArray(items)) return { ok: false, registered: 0, rejected: [{ id: collection, reason: 'items-not-array' }] };
+  let map = collections.get(collection);
+  if (!map) { map = new Map(); collections.set(collection, map); }
+  const rejected = [];
+  let registered = 0;
+  for (const it of items) {
+    if (!it || !validToken(it.id)) { rejected.push({ id: it && String(it.id), reason: 'bad-id' }); continue; }
+    const clean = sanitizeSvg(String(it.svg || ''));
+    if (!clean.ok) { rejected.push({ id: it.id, reason: `svg-rejected:${clean.reason}` }); continue; }
+    map.set(it.id, {
+      id: it.id,
+      name: it.name || it.id,
+      svg: clean.svg,
+      dataUri: svgDataUri(clean.svg),
+      box: it.box || null
+    });
+    registered++;
+  }
+  return { ok: rejected.length === 0, registered, rejected };
+}
+
+/** מספר הנכסים הרשומים (לבדיקות ולתצוגה). */
+function assetCount() {
+  let n = 0;
+  for (const m of collections.values()) n += m.size;
+  return n;
+}
+
+/** רשימת פריטי אוסף (מזהה+שם+תיבה — בלי SVG, קל ל-UI). */
+function listCollection(collection) {
+  const map = collections.get(collection);
+  if (!map) return [];
+  return Array.from(map.values()).map((it) => ({ id: it.id, name: it.name, box: it.box }));
+}
+
+/**
+ * פתרון הפניה לפריט. פורמטים נתמכים:
+ *  - 'imud:<collection>:<id>' → פריט מהרישום
+ *  - כל ערך אחר → מוחזר כמו שהוא (URL/data-URI קיים — לא נוגעים)
+ * @returns {{resolved:boolean, uri:string|null, item:object|null}}
+ */
+function resolveAssetRef(ref) {
+  if (typeof ref !== 'string' || !ref.startsWith('imud:')) return { resolved: false, uri: ref || null, item: null };
+  const parts = ref.split(':');
+  if (parts.length !== 3) return { resolved: false, uri: null, item: null };
+  const [, col, id] = parts;
+  const map = collections.get(col);
+  const item = map && map.get(id);
+  if (!item) return { resolved: false, uri: null, item: null };
+  return { resolved: true, uri: item.dataUri, item };
+}
+
+/** האם הפניה היא הפניית imud (גם אם טרם נטענה — להודעות ברורות למשתמש). */
+function isImudRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('imud:');
+}
+
+/** ניקוי מלא (בדיקות/isolation). */
+function resetAssets() {
+  collections.clear();
+}
+
+module.exports = { registerAssets, resolveAssetRef, isImudRef, listCollection, assetCount, resetAssets, svgDataUri };
+
+};
+__modules["src/engine/decoration/svg-sanitize.js"] = function (require, module, exports) {
+// src/engine/decoration/svg-sanitize.js — SVG sanitizer + CSP hook (S8.1 task 10; full pass S13)
+'use strict';
+
+/**
+ * חיטוי SVG (Spec §9.5 "sanitized SVG"): רשימת־היתרים, לא רשימת־חסימות.
+ * נשללים: <script>, <foreignObject>, תגי אנימציה עם לולאות (set/animate עם begin=never/indefinite
+ * אינם סיכון גיאומטרי אך נשללים כאן בשל דטרמיניזם), מאפייני on*, javascript:, data:text/html,
+ * והפניות חיצוניות (href/xlink:href למקור שאינו מקומי).
+ *
+ * מדיניות zero-randomness/דטרמיניזם: הפלט קבוע לקלט נתון.
+ */
+
+/** תגים מותרים (רשימת־היתרים). */
+const ALLOWED_TAGS = new Set([
+  'svg', 'g', 'defs', 'title', 'desc', 'path', 'rect', 'circle', 'ellipse', 'line',
+  'polyline', 'polygon', 'text', 'tspan', 'linearGradient', 'radialGradient', 'stop',
+  'clipPath', 'mask', 'pattern', 'use', 'symbol', 'image', 'marker', 'style'
+]);
+
+/** מאפיינים מותרים כללית (קידומות גם ב־xlink:). */
+const ALLOWED_ATTRS = new Set([
+  'id', 'class', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
+  'width', 'height', 'transform', 'viewBox', 'fill', 'fill-opacity', 'fill-rule',
+  'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin',
+  'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'points', 'gradientUnits',
+  'gradientTransform', 'offset', 'stop-color', 'stop-opacity', 'clip-path',
+  'clip-rule', 'mask', 'clipPathUnits', 'patternUnits', 'preserveAspectRatio',
+  'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline',
+  'dx', 'dy', 'rotate', 'textLength', 'lengthAdjust', 'xmlns', 'xmlns:xlink',
+  'version', 'xml:space', 'style'
+]);
+
+/** @returns {{ok:boolean, svg:string, removed:string[], reason?:string}} */
+function sanitizeSvg(svgText) {
+  const src = String(svgText || '');
+  if (!src.trim()) return { ok: false, svg: '', removed: [], reason: 'empty' };
+  if (!/<svg[\s>]/i.test(src)) return { ok: false, svg: '', removed: [], reason: 'not-svg' };
+  const removed = [];
+  let out = src;
+
+  // 1) שלילת בלוקים מסוכנים תחילה (תגים שלמים עם תוכנם) — לפני כל פירוק
+  for (const tag of ['script', 'foreignobject', 'animate', 'animatetransform', 'animatemotion', 'set', 'handler', 'listener']) {
+    const re = new RegExp(`<${tag}(\\s[^>]*)?>[\\s\\S]*?<\\/${tag}\\s*>|<${tag}(\\s[^>]*)?\\/>`, 'gi');
+    out = out.replace(re, () => { removed.push(`tag:${tag}`); return ''; });
+  }
+
+  // 2) מעבר תג־תג: השמטת תגים שאינם ברשימת־ההיתרים (עם תוכנם ליחידים מסוכנים)
+  out = out.replace(/<\/?([a-zA-Z:][-a-zA-Z0-9:_]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (whole, tag) => {
+    const t = String(tag).toLowerCase();
+    if (ALLOWED_TAGS.has(t)) return whole;
+    removed.push(`tag:${t}`);
+    return '';
+  });
+
+  // 3) מאפיינים: on*, javascript:, והפניות חיצוניות
+  out = out.replace(/\s([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)')/g, (whole, name, _q, dq, sq) => {
+    const n = String(name).toLowerCase();
+    const val = String(dq != null ? dq : sq);
+    if (n.startsWith('on')) { removed.push(`attr:${n}`); return ''; }
+    if (!ALLOWED_ATTRS.has(n) && !n.startsWith('xlink:')) { removed.push(`attr:${n}`); return ''; }
+    const v = val.trim().toLowerCase();
+    if (v.includes('javascript:') || v.includes('data:text/html') || v.startsWith('vbscript:')) {
+      removed.push(`attr-url:${n}`);
+      return '';
+    }
+    // href/xlink:href: מותרים רק עצמים פנימיים (#id) — אין מקורות חיצוניים
+    if (n === 'href' || n === 'xlink:href') {
+      if (!val.trim().startsWith('#')) { removed.push(`ext-ref:${n}`); return ''; }
+    }
+    return whole;
+  });
+
+  // 4) בלוקי <style>: הסרת url(...) חיצוניים ו־expression()
+  out = out.replace(/<style([^>]*)>([\s\S]*?)<\/style\s*>/gi, (whole, attrs, css) => {
+    if (/url\(\s*['"]?\s*(https?:|file:|\/\/)/i.test(css) || /expression\s*\(/i.test(css)) {
+      removed.push('style:external-url');
+      return '<style></style>';
+    }
+    return whole;
+  });
+
+  if (!/<svg[\s>]/i.test(out)) return { ok: false, svg: '', removed, reason: 'svg-stripped' };
+  return { ok: true, svg: out, removed };
+}
+
+/**
+ * CSP hook (S13 ישלים): מסמך CSP מומלץ להטמעת שערי SVG חיצוניים.
+ * אין eval, אין מקורות חיצוניים; blob/data לתמונות בלבד.
+ */
+function svgCspDirective() {
+  return "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-src 'none'";
+}
+
+module.exports = { sanitizeSvg, svgCspDirective, ALLOWED_TAGS, ALLOWED_ATTRS };
 
 };
 __modules["src/ui/testing-tab.js"] = function (require, module, exports) {
@@ -8853,10 +9784,12 @@ function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
   const snapshot = page.columns.map(c => c.slice());
   let guard = 0;
+  let moves = 0; // **03.11 (ביקורת):** אמינות הדיווח — changed אמיתי רק אם הוזזה שורה
   while (pageImbalance(page) > maxDelta && guard++ < 500) {
     const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
     const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break;
+    if (!moveLineForward(page.columns, hi, lo)) break; // אין מהלך חוקי — עוצרים בלי לדווח על שינוי
+    moves++;
     // hard reject: אם נוצרה חריגת cap → rollback מלא
     const cap = page.template.contentBox.height;
     if (page.columns.some(c => usedHeight(c) > cap + 0.5)) {
@@ -8864,7 +9797,10 @@ function balancePage(page, maxDelta) {
       return { changed: false, before, after: before, rollback_reason: 'capacity' };
     }
   }
-  return { changed: true, before, after: pageImbalance(page) };
+  // **03.11 (ביקורת):** בעבר הוחזר changed:true גם כשהלולאה נעצרה בלי שורה אחת —
+  // דיווח מטעה של אבחון האיזון. כעת: שינוי אמיתי = הוזזה בפועל והפרש שהשתנה.
+  const after = pageImbalance(page);
+  return { changed: moves > 0 && after !== before, moves, before, after };
 }
 
 /**
@@ -9381,10 +10317,20 @@ class WorkerEngineClient {
     }
     this.transport = transport;
     this.activeJob = null;      // {jobId, resolve, reject, onProgress, cancelled}
+    this.pending = new Map();   // **03.11:** עבודות צד (ייצוא/רישום גופן) — מקבילות לעימוד
     transport.setHandler((m) => this._onMessage(m));
   }
 
   _onMessage(m) {
+    // **03.11:** הודעות עבודות צד — לפי מזהה במפת ההמתנה
+    if (m && m.jobId && this.pending.has(m.jobId)) {
+      const p = this.pending.get(m.jobId);
+      this.pending.delete(m.jobId);
+      if (m.type === 'export-error') p.reject(new Error(`export: ${m.message}`));
+      else if (m.type === 'export-result' && m.ok === false) p.reject(new Error(`export: ${m.error || 'failed'}`));
+      else p.resolve(m);
+      return;
+    }
     const job = this.activeJob;
     if (!job || !m || m.jobId !== job.jobId) return; // הודעה מעבודה ישנה/זרה — נזרקת
     if (m.type === 'progress') {
@@ -9400,6 +10346,36 @@ class WorkerEngineClient {
       this.activeJob = null;
       if (!job.cancelled) job.reject(new Error(`engine: ${m.message}`));
     }
+  }
+
+  /** רישום עבודת צד במפת ההמתנה. */
+  _newPendingJob(prefix) {
+    const jobId = `${prefix}-${Date.now().toString(36)}-${++jobSeq}`;
+    let resolve, reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    this.pending.set(jobId, { resolve, reject });
+    return { jobId, promise };
+  }
+
+  /** **03.11:** רישום גופן TTF במנוע (למדידת גופן אמיתי בעימוד הבא). */
+  registerFont({ name, bytes }) {
+    const { jobId, promise } = this._newPendingJob('font');
+    this.transport.post({ type: 'register-font', jobId, name, bytes });
+    return promise;
+  }
+
+  /** **03.11:** רישום אוסף נכסי עיצוב ברישום שבמנוע (שני הצדדים פותרים imud:...). */
+  registerAssets({ collection, items }) {
+    const { jobId, promise } = this._newPendingJob('assets');
+    this.transport.post({ type: 'register-assets', jobId, collection, items });
+    return promise;
+  }
+
+  /** **03.11:** בקשת ייצוא PDF/ZIP במנוע המלא שב־Worker. bytes חוזר כ-Uint8Array. */
+  requestExport({ kind, text, settings, fontBytes, fontName, extensions }) {
+    const { jobId, promise } = this._newPendingJob('export');
+    this.transport.post({ type: 'export-request', jobId, kind, text, settings, fontBytes: fontBytes || null, fontName: fontName || null, extensions: extensions || null });
+    return promise;
   }
 
   /**
@@ -9622,24 +10598,67 @@ module.exports = { buildCaretMap };
 
 };
 __modules["src/engine/parser/dfa-lexer.js"] = function (require, module, exports) {
-// src/engine/parser/dfa-lexer.js — Layer 1: metadata recognition ONLY in preamble (REQ-PAR-01)
+// src/engine/parser/dfa-lexer.js — Layer 1: metadata recognition ONLY in preamble (REQ-PAR-01, S4.5)
 'use strict';
 
+/**
+ * **S4.5 (ביקורת 03.11, סקירה 2):** מזהי הטקסט של הפרויקט המקורי — רשימה מלאה.
+ * המקור: default_settings.json + טקסט ברירת המחדל של IMUD_TORANI (app.js):
+ *   שם הספר - … / נושא - … / נושא מפורט - … / פרטי מהדורא - … / שם המחבר - … /
+ *   מקום ושנת הוצאה - … / שמירת זכויות - … / פרטי הוצאה לאור - … /
+ *   פרטי קשר - … / פרטים נוספים - …
+ * ולצדם המפתחות הקצרים שנתמכו תמיד (ספר, מחבר, מהדורא, מקום, שנה, מהדורה,
+ * editors, title). הפתיח נסגר רק בשורה ריקה/כותרת/הערת סיום — לא בשורת מטא־נתון.
+ */
+const METADATA_KEYS = [
+  // ארוכים (טקסט ברירת המחדל המקורי)
+  'שם הספר', 'נושא', 'נושא מפורט', 'פרטי מהדורא', 'שם המחבר', 'מקום ושנת הוצאה',
+  'שמירת זכויות', 'פרטי הוצאה לאור', 'פרטי קשר', 'פרטים נוספים',
+  // קצרים (תמיכה היסטורית)
+  'ספר', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'
+];
+
 const HEADING_RE = /^(כותרת\s*([0-7])|חלק\s+([א-ת]+)|הקדמה)\s*[-–—]\s*(.+)$/;
-// **D-40 (תיקון P1-5):** הבחנה בין הערה ממוספרת לבין הוראת כותרת־מחלקה.
-// ממוספרת:  `הערת סיום-1 - טקסט` / `הערת סיום 1 - טקסט`  (המספר = עוגן הסמן במקור)
-// מחלקה:    `הערת סיום - כותרת`                      (הגדרת כותרת עמודי ההערות של החלק)
-const ENDNOTE_PREFIX = /^הערת סיום\s*[-–—]/;
+
+/** ברירת המחדל ההיסטורית של קידומת הערת הסיום (en-line-prefix, default_settings.json). */
+const DEFAULT_ENDNOTE_PREFIX = 'הערת סיום -';
+
+/**
+ * **S4.5 (תיקון סיווג):** בניית ביטוי קידומת הערת סיום מהגדרת המשתמש.
+ * קלט ריק/רווחים ⇒ null (זיהוי מבוטל — שורות נשארות פסקאות; החלטה מפורשת
+ * של המשתמש, לא כשל שקט). הקידומת חייבת להסתיים במקף/מקף-ארוך/קו — אחרת
+ * מוסיפים את המקף בעצמנו (ערך ההגדרה "הערת סיום" שקול ל-"הערת סיום -").
+ */
+function compileEndnotePrefix(prefix) {
+  const p = String(prefix == null ? DEFAULT_ENDNOTE_PREFIX : prefix).trim();
+  if (!p) return null;
+  const withDash = /[-–—]$/.test(p) ? p : p + ' -';
+  const esc = withDash.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*').replace(/[-–—]/g, '[-–—]');
+  return new RegExp('^' + esc + '\\s*(.*)$');
+}
+
+/** **S4.5:** הוראת כותרת עמודי ההערות — צורת רבים בלבד («הערות סיום - כותרת»).
+ * הצורה הבסיסית של D-40 (/^הערת\s*סיום…/) התנגשה עם מזהה התוכן ההיסטורי
+ * («הערת סיום - טקסט» = הערה) וגרמה להיעלמות תוכן. רבים (העערות/הערות) = מקטע;
+ * יחיד (הערת) = תמיד תוכן. */
+const ENDNOTE_CLASS_RE = /^הערות\s*סיום\s*[-–—]\s*(.+)$/;
+
+/** ביטויי ברירת המחדל (תאימות לאחור לייבוא ישיר; tokenize מקבל opts ומזהה משם). */
+const ENDNOTE_PREFIX = compileEndnotePrefix(DEFAULT_ENDNOTE_PREFIX);
 const ENDNOTE_NUMBERED = /^הערת\s*סיום\s*[-–—]?\s*([0-9]{1,4})\s*[-–—]\s*(.+)$/;
-const ENDNOTE_CLASS = /^הערת\s*סיום\s*[-–—]\s*(.+)$/;
-const METADATA_KEYS = ['ספר', 'נושא', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'];
+const ENDNOTE_CLASS = ENDNOTE_CLASS_RE;
 
 /**
  * DFA states: PREAMBLE -> BODY. יציאה מ‑PREAMBLE: שורה ריקה או כותרת ראשונה.
  * שורה כמו `נושא - דין סוכה ישנה` באמצע המסמך נשארת פסקה (REQ-PAR-01 / לקח Z.ai).
+ * @param {string} rawText
+ * @param {object} [opts] — { endnotePrefix: string } (S4.5: מזהה מוגדר; '' = מבוטל)
  */
-function lexDocument(rawText) {
-  const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
+function lexDocument(rawText, opts = {}) {
+  const endnoteRe = opts.endnotePrefixRe instanceof RegExp
+    ? opts.endnotePrefixRe
+    : compileEndnotePrefix(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX);
+  const lines = String(rawText).replace(/\r\n?/g, '\n').split('\n');
   const state = { phase: 'PREAMBLE' };
   const metadata = {};
   const body = [];
@@ -9649,7 +10668,7 @@ function lexDocument(rawText) {
 
     if (state.phase === 'PREAMBLE') {
       if (trimmed === '') { state.phase = 'BODY'; continue; }
-      if (HEADING_RE.test(trimmed) || ENDNOTE_PREFIX.test(trimmed)) {
+      if (HEADING_RE.test(trimmed) || (endnoteRe && endnoteRe.test(trimmed)) || ENDNOTE_CLASS_RE.test(trimmed)) {
         state.phase = 'BODY'; body.push(line); continue;
       }
       const m = trimmed.split(/\s+[-–—]\s+/);
@@ -9667,7 +10686,10 @@ function lexDocument(rawText) {
   return { metadata, bodyLines: body };
 }
 
-module.exports = { lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS, METADATA_KEYS };
+module.exports = {
+  lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS,
+  ENDNOTE_CLASS_RE, METADATA_KEYS, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix
+};
 
 };
 __modules["src/ui/inline-transport.js"] = function (require, module, exports) {
@@ -9690,11 +10712,14 @@ __modules["src/engine/output/export-api.js"] = function (require, module, export
 
 // **D-65 הפרדת חבילות:** המודולים להלן בטוחים־דפדפן (אין fs/pipeline) ונאגדים
 // גם בחבילת ה־UI. הנתיבים הכבדים (PDF/ZIP מלאים — pipeline+גופן+בינארי) נטענים
-// בעצלתות עם סמן /* node-only */ — הבאנדלר מדלג; הקריאות מוגנות ב־typeof Buffer.
+// בעצלתות עם סמן node-only באותה שורת הקריאה — הבאנדלר מדלג; הקריאות מוגנות ב־typeof Buffer.
+// (03.11: הסמן הוסר מהערה זו — תגובה שהכילה אותו מילולית הטעתה את הבאנדלר לדלג
+// גם על require רגיל ⇒ קריסת ייצוא בדפדפן. הזיהוי כעת קפדני: אותה שורה בלבד.)
 const getDefaultSettings = require('../core/settings-registry').getDefaultSettings;
 const { renderPage } = require('./dom-renderer');
 const { buildStandaloneHtml } = require('./html-export');
 const { PAGE_SIZES, MM_TO_PX } = require('../layout/page-templates');
+const { utf8Decode } = require('../import/zip-reader'); // פענוח UTF-8 סביבת-אגנוסטי (רשומות zip = Uint8Array)
 
 /** טעינה עצלה של נתיבי Node (מוגנת) — מחזירה null בסביבה בלי Buffer. */
 function nodeOnly(loader) {
@@ -9726,7 +10751,10 @@ function exportHtml(result, settings, doc, meta = {}) {
     : '';
   const html = buildStandaloneHtml(pagesHtml, settings, {
     title: meta.title || (result.metadata && (result.metadata['ספר'] || result.metadata.title)) || 'ספר',
-    pageRules
+    pageRules,
+    // **03.11:** הטמעת הגופנים בקובץ העצמאי (@font-face data-URI) — מסופק ע"י ה־UI
+    // מהספרייה (imud-library); ללא הגדרה — כמו קודם (fallback מערכת).
+    fontCss: meta.fontCss || ''
   });
   return html;
 }
@@ -9838,7 +10866,12 @@ function exportPdf(text, settingsIn, fontBytes, fontName) {
         fontBytes: subset.bytes.length,
         outline: outline.length,
         tocLinks: tocLinks.length,
-        layoutHash: result.layoutHash
+        layoutHash: result.layoutHash,
+        // **03.11 (חיזוק ביקורת):** נתוני היעדים בפועל — לבדיקת אמת שכל
+        // סימנייה/קישור מצביע לעמוד הנכון (לא רק מספרם).
+        outlineItems: outline,
+        tocLinkTargets: tocLinks.map(l => l.targetPage),
+        tocLinkPages: tocLinks.map(l => l.page)
       }
     };
   } finally {
@@ -9910,22 +10943,22 @@ function importProjectZip(bytes) {
   const setE = entry('settings.json');
   if (!manifestE || !docE || !setE) return { ok: false, error: 'missing-parts' };
   let manifest;
-  try { manifest = JSON.parse(manifestE.data.toString('utf8')); } catch (e) { return { ok: false, error: `manifest:${e.message}` }; }
+  try { manifest = JSON.parse(utf8Decode(manifestE.data)); } catch (e) { return { ok: false, error: `manifest:${e.message}` }; }
   if (manifest.format !== 'tora-typesetter-project-zip') return { ok: false, error: 'unknown-format' };
-  const proj = importProject(setE.data.toString('utf8'));
+  const proj = importProject(utf8Decode(setE.data));
   let extensions = null;
   const extE = entry('extensions.json');
   if (extE) {
     /* node-only */ const { importExtensions } = require('../extensions/extensions-io');
-    const res = importExtensions(extE.data.toString('utf8'));
+    const res = importExtensions(utf8Decode(extE.data));
     extensions = res; // כולל ok/errors — מדווח, לא שותק
   }
   let theme = null;
   const themeE = entry('theme.json');
-  if (themeE) { try { theme = JSON.parse(themeE.data.toString('utf8')); } catch (e) { return { ok: false, error: `theme:${e.message}` }; } }
+  if (themeE) { try { theme = JSON.parse(utf8Decode(themeE.data)); } catch (e) { return { ok: false, error: `theme:${e.message}` }; } }
   return {
     ok: true,
-    text: docE.data.toString('utf8'),
+    text: utf8Decode(docE.data),
     settings: proj.settings,
     extensions, theme,
     unknownKeys: proj.unknownKeys,
@@ -10048,12 +11081,14 @@ function buildStandaloneHtml(pagesHtml, settings, meta = {}) {
   const title = meta.title || settings['book-name'] || 'ספר';
   // **S12 (REQ-EXP-02):** כללי @page מרישום גדלי העמוד — הדפסה מדויקת מהקובץ העצמאי (אין רשת)
   const pageRules = meta.pageRules || '';
+  // **03.11:** @font-face מוטמעים (data-URI) — מסופקים מה-UI; עוברים את offline-guard (אין http)
+  const fontCss = meta.fontCss || '';
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8"/>
 <title>${escapeHtml(title)}</title>
-<style>${pageRules}${BASE_CSS}</style>
+<style>${pageRules}${fontCss}${BASE_CSS}</style>
 </head>
 <body>
 <main class="book">${pagesHtml.join('\n')}</main>
@@ -10068,6 +11103,361 @@ function escapeHtml(s) {
 }
 
 module.exports = { buildStandaloneHtml, assertOfflineSafe, BASE_CSS };
+
+};
+__modules["src/ui/imud-library.js"] = function (require, module, exports) {
+// src/ui/imud-library.js — ספריית נכסי IMUD בדפדפן (03.11, EXT-14)
+'use strict';
+
+/**
+ * טעינה עצלה של נכסי הפרויקט המקורי המוטמעים (ui/assets/imud/):
+ *  - imud-fonts.json — קטלוג 439 פונטי העדיפות (הומרו ל-TTF)
+ *  - shaar_main/sub/back, ornaments_up_down/left_right, section_dividers,
+ *    header_ornaments — עיצובי SVG (חיטוי ברישום)
+ *  - default_settings.json — לחצן «ברירות המחדל המקוריות»
+ *
+ * רישום דו-צדדי: asset-registry חי גם בחבילת ה-UI (רינדור תצוגה) וגם ב-Worker
+ * (עימוד/ייצוא) — כל פריט נרשם בשניהם. פונטים: FontFace לתצוגה + registerFont
+ * ב-Worker (מדידת font-metrics) + הבתים נשמרים לייצוא PDF.
+ */
+
+const { registerAssets } = require('../engine/decoration/asset-registry');
+const { importImudSettings } = require('../engine/core/legacy-settings-map');
+const { getSettingDefs } = require('../engine/core/settings-registry');
+
+const BASE = 'assets/imud';
+const DESIGN_FILES = {
+  'shaar-main': 'shaar_main.json',
+  'shaar-sub': 'shaar_sub.json',
+  'shaar-back': 'shaar_back.json',
+  'orn-ud': 'ornaments_up_down.json',
+  'orn-lr': 'ornaments_left_right.json',
+  'divider': 'section_dividers.json',
+  'hdr-orn': 'header_ornaments.json'
+};
+
+function createImudLibrary(engine) {
+  const fontCatalog = { loaded: false, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set() };
+  const designs = new Map(); // collection → {loaded, items:[{id,name,box}]}
+  const appliedFontsReady = new Map(); // family → Promise<ArrayBuffer|null>
+
+  async function fetchJson(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error(`imud-library: ${path} → ${r.status}`);
+    return r.json();
+  }
+
+  /** קטלוג הפונטים (439 משפחות). @returns {Promise<string[]>} */
+  async function loadFontCatalog() {
+    if (fontCatalog.loaded) return fontCatalog.families;
+    const list = await fetchJson(`${BASE}/imud-fonts.json`);
+    fontCatalog.families = list.map(e => e.family);
+    for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
+    fontCatalog.loaded = true;
+    return fontCatalog.families;
+  }
+
+  /** טעינת פונט TTF: בתים ל-Worker (מדידה+ייצוא) + FontFace לתצוגה. @returns {Promise<ArrayBuffer|null>} */
+  async function loadFont(family) {
+    if (!fontCatalog.loaded) await loadFontCatalog();
+    const file = fontCatalog.byFamily.get(family);
+    if (!file) return null; // פונן מחוץ לספרייה — המערכת תיפול לגופן מערכת (מתועד)
+    if (appliedFontsReady.has(family)) return appliedFontsReady.get(family);
+    const p = (async () => {
+      const r = await fetch(`${BASE}/fonts/${file}`);
+      if (!r.ok) return null;
+      const buf = await r.arrayBuffer();
+      // בסיס 64 לייצוא HTML העצמאי (@font-face data-URI) — מחושב פעם אחת בטעינה
+      try {
+        const u8 = new Uint8Array(buf);
+        let bin = '';
+        const CH = 0x8000;
+        for (let i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+        fontCatalog.bytesB64.set(family, btoa(bin));
+      } catch (e) { /* אין btoa (סביבה חריגה) — הייצוא ידלג על ההטמעה */ }
+      // 1) Worker: מדידת גופן אמיתי (measure-impl=font-metrics) + ייצוא PDF
+      try {
+        await engine.registerFont({ name: family, bytes: buf.slice(0) });
+      } catch (e) { /* רישום נכשל — נמשיך ל-FontFace; הייצוא ידווח בבירור */ }
+      // 2) תצוגה: @font-face חי
+      if (!fontCatalog.faces.has(family) && typeof FontFace !== 'undefined') {
+        try {
+          const face = new FontFace(family, buf);
+          await face.load();
+          document.fonts.add(face);
+          fontCatalog.faces.add(family);
+        } catch (e) { /* פונט תצוגה נכשל — הייצוא עדיין תקין */ }
+      }
+      return buf;
+    })();
+    appliedFontsReady.set(family, p);
+    return p;
+  }
+
+  /** רשימת עיצובי אוסף (מזהה+שם) — טעינה עצלה של הקובץ. */
+  async function listDesigns(collection) {
+    const meta = designs.get(collection);
+    if (meta && meta.loaded) return meta.items;
+    const file = DESIGN_FILES[collection];
+    if (!file) return [];
+    const raw = await fetchJson(`${BASE}/${file}`);
+    const items = (raw || []).map(d => ({ id: d.id, name: d.name || d.id, box: d.box || null }));
+    designs.set(collection, { loaded: true, items, raw: new Map((raw || []).map(d => [d.id, d])) });
+    return items;
+  }
+
+  /** רישום פריט עיצוב בשני הצדדים (UI + Worker) והחזרת ההפניה המלאה. */
+  async function ensureDesign(collection, id) {
+    const meta = designs.get(collection);
+    if (meta && meta.raw && meta.raw.has(id) && meta.registered && meta.registered.has(id)) {
+      return `imud:${collection}:${id}`;
+    }
+    if (!meta || !meta.raw) await listDesigns(collection);
+    const m = designs.get(collection);
+    const item = m.raw && m.raw.get(id);
+    if (!item) return null;
+    // UI-side: רישום מקומי (התצוגה מרנדרת דרך dom-renderer)
+    const resUi = registerAssets(collection, [{ id: item.id, name: item.name, svg: item.svg, box: item.box }]);
+    if (!resUi.ok && resUi.registered === 0) throw new Error(`imud-library: design rejected (${resUi.rejected[0] && resUi.rejected[0].reason})`);
+    // Worker-side: העברת ה-SVG דרך הפרוטוקול (register-assets)
+    try {
+      await engine.registerAssets({ collection, items: [{ id: item.id, name: item.name, svg: item.svg, box: item.box }] });
+    } catch (e) { /* ה-Worker ידווח; התצוגה עדיין תקינה */ }
+    if (!m.registered) m.registered = new Set();
+    m.registered.add(id);
+    return `imud:${collection}:${id}`;
+  }
+
+  /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition. */
+  async function loadLegacyDefaults() {
+    const legacy = await fetchJson(`${BASE}/default_settings.json`);
+    const { settings, unmapped, report } = importImudSettings(legacy, new Set(getSettingDefs().map(r => r.id)));
+    return { settings, unmapped, report };
+  }
+
+  /** CSS של הפונטים שנטענו — להטמעה בייצוא HTML העצמאי (@font-face data-URI). */
+  function exportFontCss() {
+    let css = '';
+    for (const [family, b64] of fontCatalog.bytesB64) {
+      css += `@font-face{font-family:'${family}';src:url(data:font/ttf;base64,${b64}) format('truetype');font-display:swap}\n`;
+    }
+    return css;
+  }
+
+  return { loadFontCatalog, loadFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss };
+}
+
+module.exports = { createImudLibrary, DESIGN_FILES };
+
+};
+__modules["src/engine/core/legacy-settings-map.js"] = function (require, module, exports) {
+// src/engine/core/legacy-settings-map.js — S4.5-ד: מיפוי מלא של הגדרות IMUD_TORANI (03.11)
+'use strict';
+
+/**
+ * **רקע (ביקורת 03.11, סקירה 2):** תוכנית העבודה (S4) דרשה רישום־על של כל
+ * ההגדרות מכל הגרסאות והגירה ללא אובדן. בפועל נבנה רישום RED עקבי אך 264
+ * מפתחות default_settings.json של המקור לא קיבלו disposition מפורש. המודול
+ * הזה הוא טבלת האמת: **לכל מפתח מקור** — מיפוי למפתח RED (מלא/בטרנספורם),
+ * איחוד, מצב-UI (ללא אפקט מנועתי), או הסרה מנומקת (עם הפניית מעקב).
+ *
+ * עקרונות:
+ * - אין מפתח "לא מוכר" — הכל מקבל שורה; שער הקבלה: 100% disposition.
+ * - ערכי המקור מוחלים בעת ייבוא (importImudSettings); ברירות המחדל של RED
+ *   עצמן נשארות כהחלטות RED המתועדות — ההחלפה מפורשת והפיכה.
+ * - טרנספורמים מתועדים (יחידות/סמנטיקה), לא רק שמות.
+ */
+
+/** חילוץ משפחת הגופן הראשונה מערך CSS: "'Guttman Rashi', 'Frank Ruhl Libre', serif" ⇒ "Guttman Rashi". */
+function firstFamily(css) {
+  const m = String(css || '').match(/'([^']+)'/);
+  return m ? m[1] : String(css || '').split(',')[0].trim();
+}
+
+/** 22% (מגובה תיבת התוכן של A4 בפועל) ⇒ פיקסלים — יחידות המקור אחוז מגובה התוכן. */
+function pctToPx(v) { return Math.round(1040 * (parseFloat(v) / 100)); }
+
+/** סגנונות פתיחה של המקור ⇒ מצבי RED (headings-escort). */
+const OPEN_MODE_MAP = {
+  'new_page_1col': 'new-page',
+  'span_1col': 'full-width',
+  'inline_2col': 'regular',
+  'side_note': 'side-note',
+  'sub_shaar': 'new-page' // שער-משנה מובנה: show-shaar-sub נלווה ב-merge
+};
+
+/** עמדות עיצוב-מפריד של המקור ⇒ סגנונות RED. */
+const DIVIDER_MAP = { 'none': 'none', 'thin': 'thin', 'dashed': 'dashed', 'double': 'double', 'spear': 'thin' };
+
+/** מיקומי מספור של המקור ⇒ RED. */
+const NUMPOS_MAP = {
+  'bottom_center': 'bottom-center', 'bottom_outer': 'bottom-outer', 'bottom_left': 'bottom-left', 'bottom_right': 'bottom-right',
+  'top_center': 'top-center', 'top_outer': 'top-outer', 'in_header': 'in-header'
+};
+
+/**
+ * טבלת ה-disposition. kind:
+ *  - 'mapped'   → to (מפתח RED) + transform אופציונלי — ערך מוחל בייבוא
+ *  - 'merged'   → מוזג למפתח אחר/כמה מפתחות — מתועד ב-reason
+ *  - 'ui-state' → מצב פאנל של האפליקציה הישנה; נשמר כנתון, אין אפקט מנועתי
+ *  - 'removed'  → לא ב-RED; סיבה מנומקת + מזהה מעקב (ISSUE_REGISTRY)
+ */
+const DISPOSITIONS = {
+  // ============ טיפוגרפיה של הגוף ============
+  'font-body': { kind: 'mapped', to: 'body-font', transform: firstFamily, reason: 'משפחה ראשונה מרשימת ה-fallback של המקור' },
+  'size-body': { kind: 'mapped', to: 'body-font-size-pt', transform: parseFloat, reason: 'pt (המקור 12; RED 14 — ההפרש מתועד כהחלטת RED)' },
+  'line-height-body': { kind: 'mapped', to: 'body-line-height', transform: parseFloat },
+  'body-last-line-align': { kind: 'mapped', to: 'body-last-line-align' },
+
+  // ============ מילה ראשונה ============
+  'drop-word-mode': { kind: 'mapped', to: 'first-word-mode', transform: (v) => ({ 'window': 'drop', 'drop': 'drop', 'inline': 'inline', 'bold': 'bold', 'none': 'none' }[v] || 'drop'), reason: 'window ⇒ drop (אותו מנגנון חלון)' },
+  'drop-word-count': { kind: 'mapped', to: 'first-word-length', transform: parseInt },
+  'drop-word-min-lines': { kind: 'mapped', to: 'first-word-threshold-lines', transform: parseInt, reason: 'המקור 2; RED 3 — הייבוא משחזר את המקור' },
+  'font-first-word': { kind: 'mapped', to: 'first-word-font', transform: firstFamily, reason: 'S4.5: מפתח חדש ב-RED (היה חסר)' },
+  'size-first-word': { kind: 'mapped', to: 'first-word-size-em', transform: parseFloat, reason: 'S4.5: מפתח חדש ב-RED (היה כפול 2 מוקשה)' },
+
+  // ============ דיבור המתחיל ============
+  'auto-dh': { kind: 'mapped', to: 'dh-auto-detect', transform: (v) => v === true || v === 'true' },
+  'font-dh': { kind: 'mapped', to: 'dh-font', transform: firstFamily },
+
+  // ============ מצבי כותרות H0–H7 ============
+  'mode-h0': { kind: 'mapped', to: 'heading-0-mode', transform: (v) => OPEN_MODE_MAP[v] || 'full-width' },
+  'mode-h1': { kind: 'merged', to: 'heading-1-mode', transform: (v) => OPEN_MODE_MAP[v] || 'new-page', reason: 'sub_shaar ⇒ new-page + show-shaar-sub=true (השער המשנה מובנה ב-S8)' },
+  'mode-h2': { kind: 'mapped', to: 'heading-2-mode', transform: (v) => OPEN_MODE_MAP[v] || 'full-width' },
+  'mode-h3': { kind: 'mapped', to: 'heading-3-mode', transform: (v) => OPEN_MODE_MAP[v] || 'full-width' },
+  'mode-h4': { kind: 'mapped', to: 'heading-4-mode', transform: (v) => OPEN_MODE_MAP[v] || 'regular' },
+  'mode-h5': { kind: 'mapped', to: 'heading-5-mode', transform: (v) => OPEN_MODE_MAP[v] || 'regular' },
+  'mode-h6': { kind: 'mapped', to: 'heading-6-mode', transform: (v) => OPEN_MODE_MAP[v] || 'regular' },
+  'mode-h7': { kind: 'mapped', to: 'heading-7-mode', transform: (v) => OPEN_MODE_MAP[v] || 'side-note' },
+  'odd-h0': { kind: 'removed', reason: 'פתיחה בעמוד אי-זוגי לפי רמה — תכנון העמודים של RED מיישר פתיחות חלקים ל-recto אוטומטית; בקרה פר-רמה טרם נדרשה', issue: 'EXT-15' },
+  'odd-h1': { kind: 'removed', reason: 'פתיחת H1 בעמוד אי-זוגי — RED מיישר פתיחות חלקים ל-recto אוטומטית', issue: 'EXT-15' },
+  'odd-h2': { kind: 'removed', reason: 'פתיחת H2 בעמוד אי-זוגי — בקרה פר-רמה טרם נדרשה ב-RED', issue: 'EXT-15' },
+  'h2-auto-siman': { kind: 'removed', reason: 'מספור סימן אוטומטי (א-ב-ג בראשי סימנים) — מנגנון לא קיים ב-RED; נרשם כפער', issue: 'EXT-16' },
+  'h2-reset-siman': { kind: 'removed', reason: 'איפוס מונה סימנים לכל פרק — תלוי ב-EXT-16', issue: 'EXT-16' },
+  'h2-top-distance': { kind: 'mapped', to: 'h2-top-offset', transform: pctToPx, reason: '22% מגובה תיבת התוכן (1040px ב-A4 של RED) ⇒ פיקסלים' },
+
+  // ============ מזהי הערות (S4.5-ג — הוטמעו זה עתה) ============
+  'en-line-prefix': { kind: 'mapped', to: 'en-line-prefix' },
+  'fn-delim-open': { kind: 'mapped', to: 'fn-delim-open' },
+  'fn-delim-close': { kind: 'mapped', to: 'fn-delim-close' },
+
+  // ============ הערות שוליים ============
+  'fn-columns': { kind: 'mapped', to: 'footnote-columns', transform: parseInt },
+  'fn-layout-mode': { kind: 'mapped', to: 'fn-layout-mode' },
+  'fn-reset-mode': { kind: 'mapped', to: 'footnote-reset-policy' },
+  'fn-title-text': { kind: 'mapped', to: 'endnote-title-text' },
+  'note-numbering-style': { kind: 'mapped', to: 'footnote-marker-style', transform: (v) => ({ 'gematria': 'hebrew-geresh', 'hebrew': 'hebrew-geresh', 'decimal': 'decimal', 'asterisk': 'asterisk', 'parenthesis': 'parenthesis' }[v] || 'hebrew-geresh') },
+  'note-marker-type': { kind: 'merged', to: 'footnote-marker-style', reason: 'סוג הסמן (super) נגזר מהסגנון ב-RED; אין עילוי-נפרד נפרד' },
+  'note-marker-size': { kind: 'removed', reason: 'גודל סמן נפרד — RED מגזר מגודל הגוף; נרשם כפער', issue: 'EXT-17' },
+  'note-listing-num-size': { kind: 'removed', reason: 'כנ"ל — גודל מספור ברשימת ההערות', issue: 'EXT-17' },
+  'note-num-separator': { kind: 'removed', reason: 'מפריד בין מספר לטקסט בהערה — RED משתמש ברווח; נרשם כפער', issue: 'EXT-17' },
+  'note-rule-style': { kind: 'mapped', to: 'footnote-separator-rule', reason: 'star ⇒ star (enum זהה ב-RED)' },
+  'note-header-orn-r': { kind: 'removed', reason: 'עיטור בצד ימין של כותרת עמודי-ההערות — טרם ממומש ב-RED', issue: 'EXT-4' },
+  'note-header-orn-l': { kind: 'removed', reason: 'עיטור בצד שמאל של כותרת עמודי-ההערות — טרם ממומש ב-RED', issue: 'EXT-4' },
+
+  // ============ הגנות שורות ============
+  'avoid-orphans': { kind: 'merged', to: 'prevent-orphans-top', transform: (v) => v !== false, reason: 'RED מפריד יתומים עליונים/תחתונים בנפרד' },
+  'avoid-widows': { kind: 'merged', to: 'prevent-widows-top', transform: (v) => v !== false, reason: 'כנ"ל' },
+  'avoid-runt-word': { kind: 'mapped', to: 'runt-min-width-pct', transform: (v) => (v === false || v === 'false') ? 0 : 20, reason: 'בוליאני המקור ⇒ סף אחוז ב-RED (כבוי=0; דלוק=20%)' },
+
+  // ============ עיטורים ============
+  'h2-ornament-set': { kind: 'merged', to: 'h2-orn-top', transform: (v) => v !== 'none' ? v : 'none', reason: 'ערכת עיטורים כללית ⇒ העיטור העליון; ערכות IMUD דרך imud-orn-*' },
+  'h2-ornament-top-style': { kind: 'mapped', to: 'h2-orn-top' },
+  'h2-ornament-bottom-style': { kind: 'mapped', to: 'h2-orn-bottom' },
+  'h2-title-orn-mode': { kind: 'mapped', to: 'h2-orn-scope', transform: (v) => ({ 'sign': 'sign', 'title': 'title', 'both': 'both', 'none': 'both' }[v] || 'both') },
+  'h2-title-ornament-top-style': { kind: 'merged', to: 'h2-orn-top', reason: 'עיטור כותרת-הסימן — מוזג לעיטור הסימן (RED מאחד)' },
+  'h2-title-ornament-bottom-style': { kind: 'merged', to: 'h2-orn-bottom', reason: 'עיטור כותרת-הסימן התחתון — מוזג לעיטור הסימן ב-RED' },
+  'h2-title-ornament-r': { kind: 'mapped', to: 'h2-orn-side' },
+  'h2-title-ornament-l': { kind: 'merged', to: 'h2-orn-side', reason: 'RED מציב עיטור צד אחד לשני הצדדים' },
+  'h2-orn-fit-text': { kind: 'mapped', to: 'h2-orn-fit-to-text' },
+  'h3-ornament-set': { kind: 'merged', to: 'h3-side-orn', reason: 'ערכת H3 ⇒ עיטור הצד של H3' },
+  'h3-ornament-r': { kind: 'mapped', to: 'h3-side-orn' },
+  'h3-ornament-l': { kind: 'merged', to: 'h3-side-orn', reason: 'עיטור צד שמאל של H3 — RED מאחד לעיטור צד יחיד' },
+  'section-divider-style': { kind: 'merged', to: 'imud-divider', reason: 'מפרידי סעיפים מעוצבים — דרך ספריית IMUD (image) או heading-dividers-h3-h6; spear ⇒ עיצוב ספרייה' },
+  'heading-divider-h3': { kind: 'mapped', to: 'heading-dividers-h3-h6', transform: (v) => v !== 'none' },
+  'h2-orn-scope': { kind: 'mapped', to: 'h2-orn-scope' },
+  'col-divider-style': { kind: 'mapped', to: 'column-divider-style', transform: (v) => DIVIDER_MAP[v] || 'none' },
+
+  // ============ מספור ============
+  'page-num-position': { kind: 'mapped', to: 'page-num-position', transform: (v) => NUMPOS_MAP[v] || 'bottom-center' },
+  'page-num-format': { kind: 'mapped', to: 'page-num-format' },
+  'page-num-frame': { kind: 'mapped', to: 'page-num-frame' },
+  'page-num-start-idx': { kind: 'mapped', to: 'page-num-start-idx', transform: parseInt },
+  'page-num-initial-value': { kind: 'mapped', to: 'page-num-initial-value', transform: parseInt },
+  'main-shaar-count-numbering': { kind: 'merged', to: 'count-shaar-pages', reason: 'RED מונה עמודי שער גלובלית (count-shaar-pages); בקרה פר-סוג טרם נפרדה', issue: 'EXT-18' },
+  'main-shaar-show-number': { kind: 'merged', to: 'count-shaar-pages', reason: 'הצגת מספר בשער ראשי — בקרה פר-סוג במעקב', issue: 'EXT-18' },
+  'back-shaar-count-numbering': { kind: 'merged', to: 'count-shaar-pages', reason: 'מניית שער אחורי — RED מונה עמודי שער גלובלית', issue: 'EXT-18' },
+  'back-shaar-show-number': { kind: 'merged', to: 'count-shaar-pages', reason: 'הצגת מספר בשער אחורי — בקרה פר-סוג במעקב', issue: 'EXT-18' },
+  'sub-shaar-count-numbering': { kind: 'merged', to: 'count-shaar-pages', reason: 'מניית שער משנה — RED מונה עמודי שער גלובלית', issue: 'EXT-18' },
+  'sub-shaar-show-number': { kind: 'merged', to: 'count-shaar-pages', reason: 'הצגת מספר בשער משנה — בקרה פר-סוג במעקב', issue: 'EXT-18' },
+  'general-toc-count-numbering': { kind: 'mapped', to: 'general-toc-count-numbering' },
+  'general-toc-show-numbering': { kind: 'mapped', to: 'general-toc-show-numbering' },
+  'detailed-toc-count-numbering': { kind: 'mapped', to: 'detailed-toc-count-numbering' },
+  'detailed-toc-show-numbering': { kind: 'mapped', to: 'detailed-toc-show-numbering' },
+
+  // ============ שערים/ערכות נושא (בוררי האפליקציה הישנה) ============
+  'style-set-select': { kind: 'ui-state', reason: 'בורר סגנון כללי בפאנל הישן; ב-RED: תבניות/ערכות נושא' },
+  'active-theme-select': { kind: 'ui-state', reason: 'ערכת נושא פעילה — ב-RED: theme-set-id / imud-shaar-*' },
+
+  // ============ כותרות עליונות (25 מפתחות hdr-*) ============
+  'hdr-title-split': { kind: 'removed', reason: 'פיצול כותרת עליונה לשניים (ראש|שני) — RED מציג מקור אחד לכל מיקום; פיצול דינמי טרם ממומש', issue: 'EXT-19' },
+  'hdr-alternating': { kind: 'removed', reason: 'החלפה אוטומטית recto/verso — RED מגדיר recto/verso בנפרד (header-verso-*/header-recto-*) ולכן אין צורך במתג; נשמר במעקב לצורך קיצור', issue: 'EXT-19' }
+};
+
+/** כללי משפחה — מצבי UI של האפליקציה הישנה (נשמרים כנתונים, אין אפקט מנועתי). */
+const FAMILY_RULES = [
+  { re: /^f-/, kind: 'ui-state', reason: 'גודל/גופן רכיב בפאנל הישן — חלק מפונקציונליות שמומשה במפתחות RED המקבילים; השאר במעקב EXT-17' },
+  { re: /^s-/, kind: 'ui-state', reason: 'גודל/סגנון רכיב בפאנל הישן — מומש במפתחות RED המקבילים; השאר במעקב EXT-17' },
+  { re: /^data-/, kind: 'ui-state', reason: 'נתוני בורר עיצובים/תמונות באפליקציה הישנה — ב-RED: הפניות imud: בספריית הנכסים' },
+  { re: /^hdr-/, kind: 'ui-state', reason: 'קונפיגורציית כותרות עליונות בפאנל הישן — המנגנון ב-RED: header-recto/verso-*-source' },
+  { re: /^builder-/, kind: 'ui-state', reason: 'מצבי בורר העיצובים (assets picker) של האפליקציה הישנה' },
+  { re: /^dim-/, kind: 'ui-state', reason: 'ממדי עמוד בפאנל הישן — RED: page-size + grid-*' },
+  { re: /^aq-/, kind: 'ui-state', reason: 'מצבי AutoQuality בפאנל הישן — RED: משפחת aq-*' },
+  { re: /^inp-/, kind: 'ui-state', reason: 'שדות קלט בפאנל הישן (כותרות ספר וכו) — RED: imud-book-title/subtitle + מטא המסמך' },
+  { re: /^(cbg|data-cbg)-/, kind: 'ui-state', reason: 'רקעי עמודים לפי מחלקה — RED: background-page-type/image/texture (REQ-ORN-08)' },
+  { re: /^prop-/, kind: 'ui-state', reason: 'מאפייני עיצוב בבורר הישן' },
+  { re: /^page-/, kind: 'ui-state', reason: 'הגדרות עמוד בפאנל הישן' },
+  { re: /^(show|enable|select|main|back|sub|shaar|general|detailed|font|size|mode)-/, kind: 'ui-state', reason: 'מצבי UI של האפליקציה הישנה' },
+  { re: /^heading-divider-h[3-9]$/, kind: 'mapped', to: 'heading-dividers-h3-h6', transform: (v) => v !== 'none', reason: 'מפרידי כותרות H3–H6 — RED מפעיל/מכבה את המשפחה כולה' }
+];
+
+/** קבלת disposition למפתח — מפורש מהטבלה, או כלל משפחה. @returns {object|null} */
+function dispositionOf(oldKey) {
+  if (DISPOSITIONS[oldKey]) return DISPOSITIONS[oldKey];
+  for (const r of FAMILY_RULES) if (r.re.test(oldKey)) return { kind: r.kind, reason: r.reason };
+  return null;
+}
+
+/**
+ * ייבוא קובץ הגדרות IMUD (או תבנית משתמש ישנה) להגדרות RED.
+ * @param {object} legacy — אובייקט ההגדרות הישן (key→value)
+ * @param {object} [registryKeys] — Set/מערך מפתחות RED חוקיים (לסינון); אם לא — ללא סינון
+ * @returns {{settings:object, dispositions:object, unmapped:string[], report:{mapped:number,merged:number,uiState:number,removed:number}}}
+ */
+function importImudSettings(legacy, registryKeys) {
+  const settings = {};
+  const dispositions = {};
+  const unmapped = [];
+  const report = { mapped: 0, merged: 0, uiState: 0, removed: 0 };
+  const valid = registryKeys instanceof Set ? registryKeys : (Array.isArray(registryKeys) ? new Set(registryKeys) : null);
+  for (const [k, v] of Object.entries(legacy || {})) {
+    const d = dispositionOf(k);
+    if (!d) { unmapped.push(k); continue; }
+    dispositions[k] = d;
+    if ((d.kind === 'mapped' || d.kind === 'merged') && d.to) {
+      if (valid && !valid.has(d.to)) { unmapped.push(`${k}->${d.to}(!)`); continue; }
+      settings[d.to] = d.transform ? d.transform(v) : v;
+      report[d.kind]++;
+    } else {
+      report[d.kind === 'ui-state' ? 'uiState' : d.kind === 'removed' ? 'removed' : 'merged']++;
+    }
+  }
+  // מיזוג משלים: mode-h1=sub_shaar ⇒ שער משנה דלוק (הסמנטיקה המקורית)
+  if (legacy && legacy['mode-h1'] === 'sub_shaar') settings['show-shaar-sub'] = true;
+  return { settings, dispositions, unmapped, report };
+}
+
+module.exports = { DISPOSITIONS, dispositionOf, importImudSettings, firstFamily, pctToPx };
 
 };
 
