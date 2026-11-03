@@ -103,7 +103,13 @@ function projectLegacyPage(pg, settings, api) {
   pg.columns.forEach((colLines, ci) => {
     const col = ci === 0 ? col0 : COL_L;
     for (const ln of colLines) {
-      const baseY = baselineOf(ln.y, ln.heightPx, ln.sizePt, ascent);
+      // **S4.14 (יישור-עליון לכותרות inline — כמקור):** בייחוס גליפי הכותרת יושבים
+      // בראש השורה (עמ' 11: h5 גליפים ב-781.1 = ראש השורה 780.5 + 0.6px), והמרווח
+      // נשאר מתחת. מרכוז אנכי (baselineOf) הוריד את הגליפים 3.4px ותיבת 11.5pt
+      // חדרה למילת-החלון התלויה שמעליה (חפיפה 2.1px × 11 זוגות — H2 נכשל).
+      const baseY = ln.kind === 'heading'
+        ? ln.y + 0.6 + ascent * ln.sizePt * (96 / 72)
+        : baselineOf(ln.y, ln.heightPx, ln.sizePt, ascent);
       let words;
       if (ln.kind === 'heading') {
         // כותרת inline — מילים נפרדות (חילוץ לוגי, כמו בייחוס)
