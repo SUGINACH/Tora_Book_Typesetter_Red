@@ -586,9 +586,16 @@ function legacyTypeset(rawText, settings) {
         const mode = tok.type[0] === 'h' ? (HEADING_MODES[tok.level] || 'inline_2col') : 'inline_2col';
 
         if (mode === 'span_1col' && !pending) {
+          // **S4.12 (איזון לפני החלטת ה-span, כמו המקור):** בלוק שמולא חמדנית
+          // (טור ימני מלא, שמאלי חלקי) מנפח את blockBottom ופוסל span שהיה
+          // נכנס בקלות אחרי איזון — ההוכחה: עמוד עם 27/2 שורות שדחה span
+          // בעוד איזון (15/14) מוריד את blockBottom ב-250px. המקור מאזן את
+          // הבלוק בכל יציאה מלולאת המילוי לפני החלטת המשך/עצירה.
+          if (block && !isH0 && (block.cols[0].length || block.cols[1].length)) {
+            balanceBlock(block, colBottom() - block.yTop);
+          }
           const curY = block ? blockBottom() : top;
           if (colBottom() - curY < H3_SPAN_H + 6) break fillPage;
-          if (block && (block.cols[0].length || block.cols[1].length)) balanceBlock(block, colBottom() - block.yTop);
           stack.push({ type: 'span', text: tok.text, y: curY, h: H3_SPAN_H, tokenId: tok.id });
           openBlock(curY + H3_SPAN_H);
           ti++;
@@ -675,6 +682,25 @@ function legacyTypeset(rawText, settings) {
           }
           const anyContent = stack.length > 1 || block.cols[0].length > 0 || block.cols[1].length > 0;
           if (!anyContent) fit = 1; // התקדמות מאולצת — שורה אחת לפחות
+          else if (!isH0 && (block.cols[0].length || block.cols[1].length)) {
+            // **S4.12 (איזון-והמשך כמו המקור):** במקום לשבור את העמוד עם טור
+            // שמאלי חלקי (נצפה: 27/2 שורות בעמ' 11 מול 21/21 במקור — הפרש
+            // הניצול שגרם ל-56 עמודים מול 54) — מאזנים את הבלוק הנוכחי
+            // (שני הטורים באותו גובה, תקרה colBottom) ופותחים בלוק המשך
+            // מתחתיו, וממשיכים למלא עד גמר העמוד. המקור (typesetter.js v19)
+            // עושה זאת בלולאת ה-while החיצונית: מילוי → balanceColumns →
+            // remPageHeight -= max(rH,lH) → בלוק הבא. הפסקה שנחתכה ממשיכה
+            // בבלוק החדש דרך pending — אותו מנגנון מדויק.
+            balanceBlock(block, colBottom() - block.yTop);
+            const bottom = blockBottom();
+            // המשך רק אם נשאר מקום לשורה נוספת ויש תוכן — אחרת שוברים עמוד.
+            // (בלוק ריק + אין מקום ⇒ break — אין לולאה אינסופית.)
+            if (colBottom() - bottom >= GEO.LINE_H && ti < toks.length) {
+              openBlock(bottom); // openBlock מאתחל fill: 0 — המשך מילוי מהטור הימני
+              continue;
+            }
+            break fillPage;
+          }
           else break fillPage;
         }
 
@@ -732,7 +758,20 @@ function legacyTypeset(rawText, settings) {
           // הפסקה נחתכה — אם הטור השמאלי עוד פנוי, ממשיכים בו; אחרת עמוד הבא
           if (block.fill === 0 && !isH0 && block.cols[0].length > 0) {
             block.fill = 1;
-          } else {
+          } else if (!isH0 && (block.cols[0].length || block.cols[1].length)) {
+            // **S4.12 (איזון-והמשך כמו המקור):** חיתוך בטור השמאלי לא שובר
+            // עמוד עם טור חלקי — מאזנים את הבלוק ופותחים בלוק המשך מתחת,
+            // וההמשך של הפסקה (pending) ממשיך שם מהטור הימני. כמו לולאת
+            // ה-while של המקור: מילוי → balanceColumns → בלוק הבא באותו עמוד.
+            balanceBlock(block, colBottom() - block.yTop);
+            const bottom = blockBottom();
+            if (colBottom() - bottom >= GEO.LINE_H) {
+              openBlock(bottom);
+              continue;
+            }
+            break fillPage;
+          }
+          else {
             break fillPage;
           }
         }

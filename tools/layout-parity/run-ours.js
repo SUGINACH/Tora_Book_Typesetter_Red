@@ -172,7 +172,7 @@ function main() {
             x0: (box.x0 + GEO.COL_W - 60) * PX, x1: (box.x0 + GEO.COL_W) * PX,
             y0: ln.y * PX, y1: (ln.y + ln.heightPx) * PX,
             kind: 'body', textNoMarkers: ln.windowWords.join(' '),
-            justified: false, widthPx: 60,
+            justified: false, widthPx: 60, window: true,
             _ln: { ...ln, paraId: ln.paraId, isLast: false, words: ln.windowWords, markerIdx: [] }
           });
         }
@@ -306,45 +306,45 @@ function main() {
     });
   }
 
-  // ---- פסקאות: איחוי לפי סדר קריאה (עמוד → טור ימני → שמאלי) ----
+  // ---- פסקאות: זרימת חתיכות ליניארית — העתק מדויק של extract-reference.py ----
+  // **S4.12 (כיול סופי של רצף הפסקאות):** הייחוס בונה את הרצף כך — לכל עמוד,
+  // לכל טור (ימני ואז שמאלי), תגיות p-end/p-cut בסדר y; חתיכה פתוחה (open_para)
+  // מצטברת **בין עמודים וטורים** עד תגית p-end — אין סגירה בסוף עמוד, ואין
+  // קיבוץ לפי מזהה פסקה (חתיכות של פסקאות שונות מתמזגות עד p-end).
+  // כאן: חתיכה = רצף רציף של שורות אותה פסקה באותו טור; סוף-פסקה = שורת
+  // ה-line--last (isLast). מילת-החלון ממוזגת לשורה הראשונה (לא נספרת בנפרד).
   for (const p of pages) {
-    const byPara = new Map();
-    const order = [];
     for (const cn of ['right', 'left', 'single']) {
-      const colLines = p.lines.filter(l => l.col === cn);
-      colLines.sort((a, b) => a.y0 - b.y0);
+      const colLines = p.lines.filter(l => l.col === cn && l.kind === 'body' && l._ln && l._ln.paraId != null)
+        .sort((a, b) => a.y0 - b.y0);
+      // חלוקה לרצפים של אותו pid (חתיכה אחת = רצף אחד)
+      const chunks = [];
       for (const l of colLines) {
-        if (l.kind !== 'body') continue;
         const pid = l._ln.paraId;
-        if (pid == null) continue;
-        if (!byPara.has(pid)) { byPara.set(pid, { lines: 0, words: 0, head: l.text.split(' ').slice(0, 6).join(' '), ended: false }); order.push(pid); }
-        const pr = byPara.get(pid);
-        pr.lines += 1;
-        pr.words += l.text.split(' ').filter(Boolean).length;
-        if (l._ln.isLast) pr.ended = true;
+        const last = chunks[chunks.length - 1];
+        if (last && last.pid === pid) last.lines.push(l);
+        else chunks.push({ pid, lines: [l] });
       }
-    }
-    for (const pid of order) {
-      const pr = byPara.get(pid);
-      const isOpen = openPara && openPara.pid === pid;
-      if (isOpen) {
-        openPara.lines += pr.lines;
-        openPara.words += pr.words;
-      } else {
-        // איחוי כמו הייחוס: רצף חתיכות p-cut מכמה פסקאות נספר כפסקה אחת
-        // עד שורת p-end — בלי לאפס בין פסקאות (החלפת pid לא סוגרת).
-        if (openPara) {
-          openPara.lines += pr.lines;
-          openPara.words += pr.words;
-        } else {
-          openPara = { pid, lines: pr.lines, words: pr.words, head: pr.head };
+      for (const ch of chunks) {
+        let lines = 0, words = 0;
+        const headWords = [];
+        let ended = false;
+        for (const l of ch.lines) {
+          if (l.window !== true) lines += 1; // מילת-חלון ≡ חלק מהשורה הראשונה
+          const ws = l.text.split(' ').filter(Boolean);
+          words += ws.length;
+          for (const w of ws) { if (headWords.length < 6) headWords.push(w); }
+          if (l._ln.isLast) ended = true;
         }
+        if (openPara == null) {
+          openPara = { lines, words, head: headWords.join(' ') };
+        } else {
+          openPara.lines += lines;
+          openPara.words += words;
+        }
+        if (ended) flushPara(); // p-end — סגירת הרצף הפתוח
       }
-      if (pr.ended) flushPara();
     }
-    // **S4.9 (כמו הייחוס):** פסקה שנחתכה בין עמודים נסגרת בסוף העמוד —
-    // האיחוי של הייחוס הוא בתוך העמוד בלבד (איחוי p-cut באותו עמוד).
-    flushPara();
   }
   flushPara();
 
