@@ -817,4 +817,62 @@ describe('רגרסיית רישום — סורקים אחרי ה־UI (REQ-GOV-04
   });
 });
 
+// =====================================================================
+describe('D-84 — רינדור מחלונות (virtualization) לספרים ארוכים', () => {
+  // רקע: ספר אמת של 1,000+ עמודים יוצר מיליוני צמתי DOM ברינדור מלא —
+  // הלשונית קופאת. מעל 60 עמודים: placeholders בגובה אמיתי + חלון חי סביב הגלילה.
+  const REAL = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'real', 'no_long_test_text.txt'), 'utf8');
+  const { buildPreviewTab } = require('../../src/ui/preview-tab');
+
+  it('מסמך 88 עמודים: מצב וירטואלי — placeholders לכולם, חלון חי קטן', () => {
+    const result = typeset(REAL, getDefaultSettings());
+    assert(result.pages.length > 60, `נדרש >60 עמודים להפעלת וירטואליזציה (קיבלנו ${result.pages.length})`);
+    const doc = makeDoc();
+    const pv = buildPreviewTab(doc, {});
+    pv.setResult(serializeTypesetResult(result), getDefaultSettings());
+    assertEq(pv.isVirtual(), true, 'מעל הסף ⇒ מצב וירטואלי');
+    assertEq(pv.getPageCount(), result.pages.length, 'ספירת העמודים שלמה');
+    const allPages = pv.root.querySelectorAll('.preview-page');
+    assertEq(allPages.length, result.pages.length, 'placeholders + חיים = כל העמודים');
+    const rendered = pv.getRenderedCount();
+    assert(rendered > 0 && rendered <= 20, `חלון חי קטן (קיבלנו ${rendered})`);
+    const phs = pv.root.querySelectorAll('.preview-page--placeholder');
+    assertEq(phs.length, result.pages.length - rendered, 'placeholders = כולם פחות החלון החי');
+    // מבנה גיאומטרי: ל-placeholder יש רוחב/גובה מהתבנית (מקור יחיד)
+    const t0 = result.pages[0].template;
+    assert(phs.every(p => p.style && p.style.height === `${t0.height}px`), 'גובה placeholder = גובה תבנית');
+  });
+
+  it('קפיצה לעמוד רחוק: נרנדר עצל לפני הגלילה; DOM נשאר קטן', () => {
+    const result = typeset(REAL, getDefaultSettings());
+    const doc = makeDoc();
+    const pv = buildPreviewTab(doc, {});
+    pv.setResult(serializeTypesetResult(result), getDefaultSettings());
+    const target = result.pages.length - 5;
+    pv.scrollToPage(target);
+    assertEq(pv._lastScrollTarget(), target, 'יעד הגלילה נשמר');
+    assert(pv.getRenderedCount() > 0 && pv.getRenderedCount() <= 25, `DOM קטן גם אחרי קפיצה (קיבלנו ${pv.getRenderedCount()})`);
+    const phs = pv.root.querySelectorAll('.preview-page--placeholder');
+    const stillPh = phs.filter(p => p.getAttribute('data-page-index') === String(target));
+    assertEq(stillPh.length, 0, 'עמוד היעד כבר לא placeholder — הוא רונדר');
+    assertEq(pv.root.querySelectorAll('.preview-page').length, result.pages.length, 'הסדר והכמות נשמרים');
+    // highlightIssue על עמוד רחוק — גם הוא מרנדר עצל
+    pv.highlightIssue({ page: 2, id: 'x', target: '' });
+    const phs2 = pv.root.querySelectorAll('.preview-page--placeholder');
+    assertEq(phs2.filter(p => p.getAttribute('data-page-index') === '2').length, 0, 'עמוד הממצא רונדר להדגשה');
+    pv.clearHighlights();
+  });
+
+  it('מסמך קטן (≤60 עמודים): רינדור מלא — ההתנהגות המקורית נשמרת', () => {
+    const result = typeset(CORPUS, getDefaultSettings());
+    assert(result.pages.length <= 60, 'הקורפוס הקנוני קטן מהסף');
+    const doc = makeDoc();
+    const pv = buildPreviewTab(doc, {});
+    pv.setResult(serializeTypesetResult(result), getDefaultSettings());
+    assertEq(pv.isVirtual(), false, 'מתחת לסף ⇒ רינדור מלא');
+    assertEq(pv.getRenderedCount(), result.pages.length, 'כל העמודים חיים');
+    assertEq(pv.root.querySelectorAll('.preview-page--placeholder').length, 0, 'אין placeholders');
+  });
+});
+
 report('s10-ui');

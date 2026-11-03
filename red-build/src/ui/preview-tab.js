@@ -105,9 +105,145 @@ function buildPreviewTab(doc, opts) {
   root.appendChild(canvas);
 
   let zoom = 100;
-  let pageEls = new Map(); // pageIndex → element
+  let pageEls = new Map(); // pageIndex → element (במצב וירטואלי: רק החלון החי)
   let lastResult = null;
   let lastScrollTarget = null;
+
+  // ---- D-84: רינדור מחלונות (virtualization) לספרים ארוכים ----
+  // ספר אמת של 1,200+ עמודים = מיליוני צמתי DOM אם מרנדרים הכול — הלשונית
+  // קופאת. עד VIRTUAL_THRESHOLD עמודים ההתנהגות הקודמת נשמרת במלואה
+  // (רינדור מלא, כל הבדיקות הקיימות עוברות על מסמכים קטנים); מעליו —
+  // placeholders בגובה האמיתי ורינדור עצל של חלון סביב הגלילה/היעד.
+  const VIRTUAL_THRESHOLD = 60;
+  const VIRTUAL_WINDOW = 4; // ריפוד משני צידי הטווח הנראה
+  const virtual = { on: false, pages: [], settings: null, rendered: new Set(), phW: 794, phH: 1123 };
+  let scrollRaf = null;
+
+  /** בניית אלמנט עמוד אחד (מקור יחיד לרינדור מלא ולווירטואלי) — כולל ⏬ ולחיצה. */
+  function buildPageEl(page) {
+    const el = renderPage(page, virtual.settings, doc);
+    el.classList.add('preview-page');
+    // כפתור דיבאג פר־עמוד (V21): גיאומטריה + פרוסת ledger — בלי לגעת ברינדור
+    const dbg = doc.createElement('button');
+    dbg.type = 'button'; dbg.className = 'page-debug-btn'; dbg.textContent = '⏬';
+    dbg.title = 'הורד פרטי עמוד (JSON)';
+    dbg.setAttribute('aria-label', `הורד פרטי עמוד ${page.index + 1}`);
+    dbg.addEventListener('click', (ev) => {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      opts.onDebugDownload && opts.onDebugDownload(page.index);
+    });
+    el.appendChild(dbg);
+    // לחיצה על עמוד = גלילה אליו + סנכרון סמן (REQ-UI-05)
+    el.addEventListener('click', () => {
+      lastScrollTarget = page.index;
+      pageIndicator.textContent = `עמוד ${page.index + 1} מתוך ${virtual.pages.length || (lastResult && lastResult.pages.length) || 0}`;
+      opts.onActivatePage && opts.onActivatePage(page.index);
+    });
+    return el;
+  }
+
+  /** placeholder קל בגובה/רוחב האמיתי של העמוד (מהתבנית — מקור יחיד). */
+  function makePlaceholder(i) {
+    const ph = doc.createElement('div');
+    ph.className = 'preview-page preview-page--placeholder';
+    ph.setAttribute('data-page-index', String(i));
+    ph.setAttribute('aria-hidden', 'true');
+    const page = virtual.pages[i];
+    const w = page && page.template && page.template.width || virtual.phW;
+    const h = page && page.template && page.template.height || virtual.phH;
+    if (ph.style) { ph.style.width = `${w}px`; ph.style.height = `${h}px`; }
+    return ph;
+  }
+
+  // עזרי DOM עמידים גם ל-shim של הבדיקות (אין insertBefore/removeChild שם —
+  // children הוא מערך פשוט; בדפדפן נעשה שימוש ב-API האמיתי).
+  function domInsertBefore(parent, ref, el) {
+    if (typeof parent.insertBefore === 'function') { parent.insertBefore(el, ref); return; }
+    if (Array.isArray(parent.children)) {
+      const i = parent.children.indexOf(ref);
+      if (i >= 0) { parent.children.splice(i, 0, el); el.parentNode = parent; return; }
+    }
+    parent.appendChild(el);
+  }
+  function domRemove(parent, el) {
+    if (typeof parent.removeChild === 'function') { parent.removeChild(el); return; }
+    if (Array.isArray(parent.children)) {
+      const i = parent.children.indexOf(el);
+      if (i >= 0) parent.children.splice(i, 1);
+    }
+  }
+
+  /** רינדור עצל של עמוד i (החלפת placeholder באלמנט החי). */
+  function ensureRendered(i) {
+    if (pageEls.has(i)) return;
+    const el = buildPageEl(virtual.pages[i]);
+    const cur = canvas.children[i] || null; // ה-placeholder באותו מקום בסדר
+    if (cur && cur.classList && cur.classList.contains && cur.classList.contains('preview-page--placeholder') && cur.parentNode) {
+      domInsertBefore(cur.parentNode, cur, el);
+      domRemove(cur.parentNode, cur);
+    } else if (cur) {
+      domInsertBefore(canvas, cur, el);
+    } else {
+      canvas.appendChild(el);
+    }
+    pageEls.set(i, el);
+    virtual.rendered.add(i);
+  }
+
+  /** שחרור עמוד רחוק חזרה ל-placeholder (שמירה על DOM קטן וקבוע). */
+  function unrenderPage(i) {
+    const el = pageEls.get(i);
+    if (!el) return;
+    const ph = makePlaceholder(i);
+    if (el.parentNode) {
+      domInsertBefore(el.parentNode, el, ph);
+      domRemove(el.parentNode, el);
+    } else {
+      canvas.appendChild(ph);
+    }
+    pageEls.delete(i);
+    virtual.rendered.delete(i);
+  }
+
+  /** רינדור טווח [lo,hi] ושחרור המרוחקים ממנו (בתוספת ריפוד). */
+  function renderWindow(lo, hi) {
+    if (!virtual.on) return;
+    const n = virtual.pages.length;
+    const a = Math.max(0, lo), b = Math.min(n - 1, hi);
+    for (let i = a; i <= b; i++) ensureRendered(i);
+    for (const i of [...virtual.rendered]) {
+      if (i < a - VIRTUAL_WINDOW || i > b + VIRTUAL_WINDOW) unrenderPage(i);
+    }
+  }
+
+  /** אומדן הטווח הנראה מהגלילה — יחסי (עמיד לזום/מרווחים): scrollTop/scrollHeight × n.
+   *  הגולל האמיתי הוא root (.tab-panel עם overflow:auto) — לא ה-canvas. */
+  function visibleRange() {
+    const n = virtual.pages.length;
+    const scroller = (root.scrollHeight || root.clientHeight) ? root : canvas;
+    const sh = scroller.scrollHeight, st = scroller.scrollTop, ch = scroller.clientHeight;
+    if (!n || !sh || !isFinite(sh) || !isFinite(st) || !isFinite(ch)) return [0, 0];
+    const first = Math.max(0, Math.floor((st / sh) * n) - 1);
+    const last = Math.min(n - 1, Math.ceil(((st + ch) / sh) * n));
+    return [first, last];
+  }
+
+  function onVirtualScroll() {
+    scrollRaf = null;
+    if (!virtual.on) return;
+    const [a, b] = visibleRange();
+    renderWindow(a, b);
+  }
+  // D-84: מאזין גלילה על הגורר האמיתי (.tab-panel = root); ה-canvas עצמו אינו גולל.
+  // (במצב אופקי ה-canvas גולל אופקית — מאזין כפול, passive, נטול השפעה כשאין גלילה.)
+  const onScrollMaybe = () => {
+    if (!virtual.on || scrollRaf) return;
+    scrollRaf = (typeof requestAnimationFrame === 'function')
+      ? requestAnimationFrame(onVirtualScroll)
+      : setTimeout(onVirtualScroll, 16);
+  };
+  root.addEventListener('scroll', onScrollMaybe, { passive: true });
+  canvas.addEventListener('scroll', onScrollMaybe, { passive: true });
 
   // קישורי TOC (#page-N) — סנכרון לחיצה (REQ-UI-05: "TOC click sync").
   // רישום חד־פעמי מחוץ ל־setResult — אין הצטברות מאזינים.
@@ -148,35 +284,36 @@ function buildPreviewTab(doc, opts) {
     lastResult = serializedResult;
     canvas.textContent = '';
     pageEls = new Map();
-    for (const page of serializedResult.pages) {
-      const el = renderPage(page, settings, doc);
-      el.classList.add('preview-page');
-      // כפתור דיבאג פר־עמוד (V21): גיאומטריה + פרוסת ledger — בלי לגעת ברינדור
-      const dbg = doc.createElement('button');
-      dbg.type = 'button'; dbg.className = 'page-debug-btn'; dbg.textContent = '⏬';
-      dbg.title = 'הורד פרטי עמוד (JSON)';
-      dbg.setAttribute('aria-label', `הורד פרטי עמוד ${page.index + 1}`);
-      dbg.addEventListener('click', (ev) => {
-        if (ev && ev.stopPropagation) ev.stopPropagation();
-        opts.onDebugDownload && opts.onDebugDownload(page.index);
-      });
-      el.appendChild(dbg);
-      // לחיצה על עמוד = גלילה אליו + סנכרון סמן (REQ-UI-05)
-      el.addEventListener('click', () => {
-        lastScrollTarget = page.index;
-        pageIndicator.textContent = `עמוד ${page.index + 1} מתוך ${serializedResult.pages.length}`;
-        opts.onActivatePage && opts.onActivatePage(page.index);
-      });
-      canvas.appendChild(el);
-      pageEls.set(page.index, el);
+    virtual.on = Array.isArray(serializedResult.pages) && serializedResult.pages.length > VIRTUAL_THRESHOLD;
+    virtual.settings = settings;
+    virtual.pages = serializedResult.pages || [];
+    virtual.rendered = new Set();
+    if (!virtual.on) {
+      // מסמך קטן — רינדור מלא (ההתנהגות המקורית, ללא שינוי)
+      for (const page of virtual.pages) {
+        const el = buildPageEl(page);
+        canvas.appendChild(el);
+        pageEls.set(page.index, el);
+      }
+    } else {
+      // ספר ארוך — placeholders לכולם + חלון חי ראשוני (D-84)
+      const t0 = virtual.pages[0] && virtual.pages[0].template;
+      virtual.phW = (t0 && t0.width) || 794;
+      virtual.phH = (t0 && t0.height) || 1123;
+      for (let i = 0; i < virtual.pages.length; i++) {
+        const ph = makePlaceholder(i);
+        canvas.appendChild(ph);
+      }
+      renderWindow(0, Math.min(2 * VIRTUAL_WINDOW, virtual.pages.length - 1));
     }
     pageIndicator.textContent = serializedResult.pages.length
-      ? `עמוד 1 מתוך ${serializedResult.pages.length}` : 'אין עמודים';
+      ? `עמוד 1 מתוך ${serializedResult.pages.length}${virtual.on ? ' (תצוגת חלון)' : ''}` : 'אין עמודים';
     setZoom(100);
   }
 
   function scrollToPage(pageIndex) {
     lastScrollTarget = pageIndex;
+    if (virtual.on) renderWindow(pageIndex - VIRTUAL_WINDOW, pageIndex + VIRTUAL_WINDOW); // D-84: רינדור לפני גלילה
     const el = pageEls.get(pageIndex);
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
     if (lastResult) pageIndicator.textContent = `עמוד ${pageIndex + 1} מתוך ${lastResult.pages.length}`;
@@ -213,6 +350,7 @@ function buildPreviewTab(doc, opts) {
     clearHighlights();
     if (!finding) return;
     const idx = finding.page != null ? Number(finding.page) : null;
+    if (virtual.on && idx != null && Number.isFinite(idx)) renderWindow(idx - VIRTUAL_WINDOW, idx + VIRTUAL_WINDOW); // D-84
     const el = (idx != null && Number.isFinite(idx)) ? pageEls.get(idx) : null;
     if (el) {
       el.classList.add('issue-flash');
@@ -238,11 +376,19 @@ function buildPreviewTab(doc, opts) {
   /** סימון יעד סמן (כיוון א׳ של הסנכרון) — הבזק עדין */
   function setCaretHighlight(pageIndex) {
     for (const [, el] of pageEls) el.classList.remove('caret-target');
+    if (virtual.on) renderWindow(pageIndex - VIRTUAL_WINDOW, pageIndex + VIRTUAL_WINDOW); // D-84
     const el = pageEls.get(pageIndex);
     if (el) el.classList.add('caret-target');
   }
 
-  return { root, setResult, scrollToPage, jumpByHebrew, highlightIssue, clearHighlights, setCaretHighlight, getZoom: () => zoom, _lastScrollTarget: () => lastScrollTarget };
+  return {
+    root, setResult, scrollToPage, jumpByHebrew, highlightIssue, clearHighlights, setCaretHighlight,
+    getZoom: () => zoom, _lastScrollTarget: () => lastScrollTarget,
+    // D-84: חשיפה לבדיקות/אבחון של מצב הווירטואליזציה
+    isVirtual: () => virtual.on,
+    getRenderedCount: () => pageEls.size,
+    getPageCount: () => virtual.pages.length
+  };
 }
 
 module.exports = { buildPreviewTab, parseHebrewNumber };

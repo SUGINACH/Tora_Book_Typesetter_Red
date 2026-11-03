@@ -858,8 +858,13 @@ function typeset(rawText, settingsIn, env = {}) {
   let contentPreserved = true;
   const mismatchDetail = [];
   const gSrc = [], gOut = [];
-  for (const t of srcTokens) gSrc.push(...srcWordsOf(t));
-  gOut.push(...outWordsOfAll());
+  // **D-83 (תיקון קריסת ספר־אמת 03.11):** הזרקה בלולאה בלבד. spread על מערך ענק
+  // (ספר שלם, >125,154 מילים = מגבלת הארגומנטים של V8) זרק "Maximum call stack
+  // size exceeded" — העימוד עצמו הושלם והקריסה אירעה דווקא בבדיקת שימור התוכן
+  // שבסוף ה־pipeline. לולאת for אינה תלויה בגודל המחסנית.
+  const pushAll = (dst, src) => { for (let i = 0; i < src.length; i++) dst.push(src[i]); };
+  for (const t of srcTokens) pushAll(gSrc, srcWordsOf(t));
+  pushAll(gOut, outWordsOfAll());
 
   const norm = (arr) => arr.slice().sort().join('\n');
   if (norm(gSrc) !== norm(gOut)) {

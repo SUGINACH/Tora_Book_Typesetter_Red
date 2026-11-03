@@ -155,7 +155,9 @@ function buildSubset(font, chars) {
   out.push(...u32v(0x00010000), ...u16(n), ...u16(16 * n), ...u16(0), ...u16(0));
   for (const e of entries) out.push(...str4(e.t), ...u32v(0), ...u32v(e.offset), ...u32v(e.length));
   for (const e of entries) {
-    out.push(...e.data);
+    // **D-83:** טבלת גופן (glyf/cmap) עשויה לחרוג ממגבלת הארגומנטים של V8 (~125K)
+    // בספרים גדולים — הזרקה בלולאה בלבד (אותו תיקון כמו בבדיקת שימור התוכן).
+    for (let i = 0; i < e.data.length; i++) out.push(e.data[i]);
     while (out.length & 3) out.push(0);
   }
   const bytes = Buffer.from(out);

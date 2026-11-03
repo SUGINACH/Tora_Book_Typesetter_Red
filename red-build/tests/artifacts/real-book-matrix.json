@@ -1,0 +1,116 @@
+{
+  "generatedBy": "real-book-matrix (03.11 — דוח משתמש חי: קריסת ספר אמת ב-Pages)",
+  "doc": "tests/fixtures/real/long_test_text.txt (291,719 מילים — הקובץ ששחזר את D-83)",
+  "configs": [
+    {
+      "config": "default",
+      "pages": 1021,
+      "ms": 2108,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "e4f1392ee2084cd933c9baee441805feeac15eafc95ebc7a0ec8a2dea0a3375b",
+      "findingsOpen": 5835,
+      "findingsHigh": 0,
+      "openByKind": {
+        "candidate-rejected": 2971,
+        "widow-bottom": 1015,
+        "orphan-top": 666,
+        "rollback-compromise": 8,
+        "column-imbalance": 394,
+        "note-marker-line-break": 420,
+        "orphan-bottom": 110,
+        "page-underfill": 246,
+        "runt-line": 4,
+        "widow-top": 1
+      }
+    },
+    {
+      "config": "ornaments",
+      "pages": 1021,
+      "ms": 2032,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "e4f1392ee2084cd933c9baee441805feeac15eafc95ebc7a0ec8a2dea0a3375b",
+      "findingsOpen": 5835,
+      "findingsHigh": 0,
+      "openByKind": {
+        "candidate-rejected": 2971,
+        "widow-bottom": 1015,
+        "orphan-top": 666,
+        "rollback-compromise": 8,
+        "column-imbalance": 394,
+        "note-marker-line-break": 420,
+        "orphan-bottom": 110,
+        "page-underfill": 246,
+        "runt-line": 4,
+        "widow-top": 1
+      }
+    },
+    {
+      "config": "aq-on",
+      "pages": 1021,
+      "ms": 2152,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "e4f1392ee2084cd933c9baee441805feeac15eafc95ebc7a0ec8a2dea0a3375b",
+      "findingsOpen": 5835,
+      "findingsHigh": 0,
+      "openByKind": {
+        "candidate-rejected": 2971,
+        "widow-bottom": 1015,
+        "orphan-top": 666,
+        "rollback-compromise": 8,
+        "column-imbalance": 394,
+        "note-marker-line-break": 420,
+        "orphan-bottom": 110,
+        "page-underfill": 246,
+        "runt-line": 4,
+        "widow-top": 1
+      }
+    },
+    {
+      "config": "continuous-notes",
+      "pages": 1021,
+      "ms": 1943,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "e4f1392ee2084cd933c9baee441805feeac15eafc95ebc7a0ec8a2dea0a3375b",
+      "findingsOpen": 5835,
+      "findingsHigh": 0,
+      "openByKind": {
+        "candidate-rejected": 2971,
+        "widow-bottom": 1015,
+        "orphan-top": 666,
+        "rollback-compromise": 8,
+        "column-imbalance": 394,
+        "note-marker-line-break": 420,
+        "orphan-bottom": 110,
+        "page-underfill": 246,
+        "runt-line": 4,
+        "widow-top": 1
+      }
+    },
+    {
+      "config": "verso-headers",
+      "pages": 1021,
+      "ms": 2225,
+      "contentPreserved": true,
+      "geometryNeutral": true,
+      "layoutHash": "e4f1392ee2084cd933c9baee441805feeac15eafc95ebc7a0ec8a2dea0a3375b",
+      "findingsOpen": 5835,
+      "findingsHigh": 0,
+      "openByKind": {
+        "candidate-rejected": 2971,
+        "widow-bottom": 1015,
+        "orphan-top": 666,
+        "rollback-compromise": 8,
+        "column-imbalance": 394,
+        "note-marker-line-break": 420,
+        "orphan-bottom": 110,
+        "page-underfill": 246,
+        "runt-line": 4,
+        "widow-top": 1
+      }
+    }
+  ]
+}

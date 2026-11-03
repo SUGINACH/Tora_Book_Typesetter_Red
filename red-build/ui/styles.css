@@ -112,6 +112,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
 .preview-canvas.canvas--horizontal { flex-direction: row; overflow-x: auto; align-items: flex-start; }
 .preview-page { position: relative; box-shadow: var(--page-shadow); flex-shrink: 0; }
 .preview-canvas[data-zoom] .preview-page { transform-origin: top center; }
+/* D-84: עמוד-placeholder בספרים ארוכים — רינדור מחלונות; מסגרת עדינה מבדילה */
+.preview-page--placeholder { box-shadow: none; background: #212329; border: 1px dashed #3a3d45;
+  border-radius: 4px; }
 .page-debug-btn { position: absolute; top: 4px; left: 4px; z-index: 3; opacity: 0;
   background: var(--panel); color: var(--ink-dim); border: 1px solid #4a4d55; border-radius: 5px;
   padding: 1px 6px; font-size: .75rem; cursor: pointer; }
