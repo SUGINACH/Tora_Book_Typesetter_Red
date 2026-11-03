@@ -675,9 +675,12 @@ function legacyTypeset(rawText, settings, env) {
         if (sectionEnd) { balanceBlock(blk, availH); return; }
         const nextIsSpan = nextTok && nextTok.type[0] === 'h'
           && (HEADING_MODES[nextTok.level] || 'inline_2col') === 'span_1col';
-        const rH = blk.cols[0].reduce((a, u) => a + unitH(u), 0);
-        const lH = blk.cols[1].reduce((a, u) => a + unitH(u), 0);
-        if (nextIsSpan || rH > availH || Math.abs(rH - lH) > 60) {
+        // **S4.14 (מדידת עוגנים מפריכה את סעיף 3 בחיתוכי-עמוד):** עמ' 31
+        // בייחוס — בלוק 914px, ‏7 פסקאות גמורות (p-end), ‏39/32 שורות לא מאוזן
+        // (הפרש 150px > 60); עמ' 44: ‏49/38; עמ' 48: ‏40/51. כשהבלוק נגמר משום
+        // שהעמוד התמלא — המקור שומר את המילוי גם בהפרש גדול. האיזון בפועל
+        // רק בסוף מקטע ולפני span (ההוכחות של S4.13 לאותם מקרים תקפות).
+        if (nextIsSpan) {
           balanceBlock(blk, availH);
         }
       };
@@ -798,21 +801,14 @@ function legacyTypeset(rawText, settings, env) {
           const anyContent = stack.length > 1 || block.cols[0].length > 0 || block.cols[1].length > 0;
           if (!anyContent) fit = 1; // התקדמות מאולצת — שורה אחת לפחות
           else if (!isH0 && (block.cols[0].length || block.cols[1].length)) {
-            // **S4.13 (איזון-והמשך כמו המקור):** המקור מסיים כל בלוק בהיגיון
-            // הארבעה (סוף-פרק/span/גלישה/הפרש-60px — ראו finalizeBlock), ואז
-            // פותח בלוק הבא מתחת אם נשאר מקום (לולאת ה-while החיצונית:
-            // remPageHeight -= max(rH,lH) → בלוק הבא). הפסקה שלא נכנסה
-            // (toks[ti]) תיפתח שם מהטור הימני — כמו במקור.
+            // **S4.14 (הוכחה מבנית מהייחוס — אין המשך-מטה בלי span):** בכל
+            // 54 עמודי הייחוס אין אף עמוד עם שני בלוקים שאין ביניהם block-h3-span
+            // (כל 12 העמודים הרב-בלוקיים — block+span+block בדיוק). כשהעמוד
+            // התמלא המקור מותח את הבלוק לתחתית (stretchPageToBottom) ושובר
+            // עמוד — לולאת הבלוקים שלו רצה רק כשהטוקן הבא הוא span. ההמשך-מטה
+            // של S4.12/S4.13 הכניס תוכן עודף לעמודים מלאים (עמ' 31: ‏80 שורות
+            // אצלנו מול 71 בייחוס — 2 פסקאות שלמות הוכנסו בכוח).
             finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending);
-            const bottom = blockBottom();
-            // המשך רק אם נשאר מקום לשורה נוספת ויש תוכן — אחרת שוברים עמוד.
-            // **S4.13:** הסף 45px — כמו תנאי לולאת הבלוקים של המקור
-            // ((remPageHeight − reservedNow()) > 45); היה LINE_H≈21.
-            // (בלוק ריק + אין מקום ⇒ break — אין לולאה אינסופית.)
-            if (colBottom() - bottom > 45 && ti < toks.length) {
-              openBlock(bottom); // openBlock מאתחל fill: 0 — המשך מילוי מהטור הימני
-              continue;
-            }
             break fillPage;
           }
           else break fillPage;
@@ -878,17 +874,10 @@ function legacyTypeset(rawText, settings, env) {
             block.fill = 1;
           } else if (!isH0 && (block.cols[0].length || block.cols[1].length)) {
             // **S4.13 (איזון-והמשך כמו המקור):** חיתוך בטור השמאלי מסיים את
-            // מילוי הבלוק — היגיון הארבעה של המקור (finalizeBlock; הטוקן
-            // הבא = הפסקה שנחתכה, כלומר לא span), ואז בלוק המשך מתחת אם יש
-            // מקום. ההמשך (pending) נפתח שם מהטור הימני — כמו לולאת ה-while
-            // של המקור: מילוי → balanceColumns → בלוק הבא באותו עמוד.
+            // **S4.14 (כמו מסלול fit=0 לעיל):** חיתוך פסקה בתחתית הטור
+            // השמאלי = העמוד התמלא; המקור מותח את הבלוק לתחתית ושובר עמוד
+            // (הוכחה מבנית: אין בלוק-המשך בלי span בכל הייחוס).
             finalizeBlock(block, tok, false);
-            const bottom = blockBottom();
-            // **S4.13:** סף 45px כמו המקור (ראו הערה במסלול fit=0).
-            if (colBottom() - bottom > 45) {
-              openBlock(bottom);
-              continue;
-            }
             break fillPage;
           }
           else {
@@ -1075,7 +1064,7 @@ function legacyTypeset(rawText, settings, env) {
       // **S4.14 (דיאג גיאומטריה):** dump של מבנה הבלוקים להשוואה מול תוויות
       // הייחוס (block-2col W×H | col:right Np Nl Kw) — מופעל רק עם
       // RED_DEBUG_BLOCKS=1 ואינו משפיע על הפלט.
-      if (process.env.RED_DEBUG_BLOCKS) {
+      if (typeof process !== 'undefined' && process.env && process.env.RED_DEBUG_BLOCKS) {
         const cnt = (units) => ({
           p: units.filter(u => u.kind === 'para').length,
           l: units.filter(u => u.kind === 'para').reduce((a, u) => a + u.lines.length, 0),
@@ -1086,7 +1075,7 @@ function legacyTypeset(rawText, settings, env) {
         pg._blocks.push({ yTop: Math.round(block.yTop*10)/10, r: cnt(rUnits), l: cnt(lUnits), rH: Math.round((ry-block.yTop)*10)/10, lH: Math.round((ly-block.yTop)*10)/10, split: !!block.split });
       }
     }
-    if (process.env.RED_DEBUG_BLOCKS && stack.some(s => s.type === 'span')) {
+    if (typeof process !== 'undefined' && process.env && process.env.RED_DEBUG_BLOCKS && stack.some(s => s.type === 'span')) {
       pg._blocks = pg._blocks || [];
       for (const s of stack) if (s.type === 'span') pg._blocks.push({ span: true, y: Math.round(s.y*10)/10, h: s.h });
     }

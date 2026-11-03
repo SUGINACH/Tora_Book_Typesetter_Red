@@ -49,7 +49,11 @@ agent-browser wait 3500 >/dev/null
 # טעינת הספר + עימוד + מעבר לתצוגה — הנתיב החי האמיתי.
 # **S4.11:** polling עד להשלמת העימוד (hasResult && pages>0) במקום sleep קבוע —
 # הקובץ הגדול (849 עמודים) לוקח יותר מ-3 השניות שהיו כתובות כאן.
-READINESS="$(agent-browser eval "(async()=>{
+# **S4.14 (תיקון יציבות תשתית):** ה-eval הארוך (עד 240 שניות בתוך Runtime.evaluate
+# אחד) נכשל ב"CDP command timed out" כשהעימוד אורך יותר מפסק-הזמן הפנימי של
+# agent-browser. הפרדה לשלושה evals קצרים: הזרקה (חוזרת מיד), לולאת poll
+# ברמת ה-shell (כל iter eval מהיר), ומעבר לתצוגה. זהה לוגית, עמיד בזמן.
+INJECT="$(agent-browser eval "(async()=>{
   const app = window.__toraApp; if(!app) return 'NO_APP';
   const ta = document.querySelector('textarea'); if(!ta) return 'NO_TEXTAREA';
   const text = await (await fetch('/$FIXSERVED')).text();
@@ -57,18 +61,34 @@ READINESS="$(agent-browser eval "(async()=>{
   ta.dispatchEvent(new Event('input',{bubbles:true}));
   await new Promise(r=>setTimeout(r,400));
   app.onExplicitRetypeset();
-  const t0 = Date.now();
-  while (Date.now()-t0 < $READY_TIMEOUT_MS) {
-    const st = app.getState();
-    if (st && st.hasResult && st.pages > 0) break;
-    await new Promise(r=>setTimeout(r,400));
-  }
-  const st = app.getState();
-  if (!st || !st.hasResult || !(st.pages > 0)) return 'TIMEOUT_' + JSON.stringify(st||null);
-  for (const t of document.querySelectorAll('[role=tab],.tab,button')) if (/תצוגה/.test(t.textContent)) t.click();
-  await new Promise(r=>setTimeout(r,1500));
-  return 'READY_' + st.pages + '_pages';
+  return 'STARTED';
 })()" 2>&1 | tail -1)"
+INJECT="${INJECT//\"/}"
+case "$INJECT" in
+  STARTED) : ;;
+  *) echo "✗ הזרקה נכשלה: $INJECT"; exit 2 ;;
+esac
+
+READINESS="PENDING"
+T0=$(date +%s%3N)
+while :; do
+  ST="$(agent-browser eval "(function(){ const st = window.__toraApp && window.__toraApp.getState(); return st && st.hasResult && st.pages > 0 ? 'READY_' + st.pages + '_pages' : 'WAIT'; })()" 2>&1 | tail -1)"
+  ST="${ST//\"/}"
+  case "$ST" in
+    READY_*) READINESS="$ST"; break ;;
+  esac
+  NOW=$(date +%s%3N)
+  if [ $((NOW - T0)) -ge "$READY_TIMEOUT_MS" ]; then READINESS="TIMEOUT"; break; fi
+  sleep 2
+done
+case "$READINESS" in
+  READY_*) : ;;
+  *)
+    echo "✗ האפליקציה לא התמודדה בזמן ($READY_TIMEOUT_MS ms) — פלט: $READINESS"
+    exit 2
+    ;;
+esac
+agent-browser eval "(async()=>{ for (const t of document.querySelectorAll('[role=tab],.tab,button')) if (/תצוגה/.test(t.textContent)) t.click(); await new Promise(r=>setTimeout(r,1500)); return 'VIEW'; })()" >/dev/null 2>&1
 # הפלט של agent-browser eval מקודד-JSON (עטוף במרכאות) — מנקים אותן
 READINESS="${READINESS//\"/}"
 echo "$READINESS"
