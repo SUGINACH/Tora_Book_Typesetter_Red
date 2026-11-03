@@ -86,6 +86,26 @@ function createImudLibrary(engine) {
     return p;
   }
 
+  /** **03.11(ג):** גופן יציב לייצוא PDF כשהגופן המבוקש אינו בספרייה —
+   * עדיפות לגרסאות "פרנק רוהל דף" (המקבילה התורנית של Frank Ruhl Libre),
+   * ואז "פרנק רה רגיל", ולבסוף המשפחה הראשונה בקטלוג. */
+  async function loadDefaultExportFont() {
+    if (!fontCatalog.loaded) await loadFontCatalog();
+    const prefs = ['פרנק רוהל דפ רגיל', 'פרנק רה רגיל'];
+    for (const f of prefs) {
+      if (fontCatalog.byFamily.has(f)) {
+        const bytes = await loadFont(f);
+        if (bytes) return { family: f, bytes };
+      }
+    }
+    const first = fontCatalog.families[0];
+    if (first) {
+      const bytes = await loadFont(first);
+      if (bytes) return { family: first, bytes };
+    }
+    return null;
+  }
+
   /** רשימת עיצובי אוסף (מזהה+שם) — טעינה עצלה של הקובץ. */
   async function listDesigns(collection) {
     const meta = designs.get(collection);
@@ -136,7 +156,7 @@ function createImudLibrary(engine) {
     return css;
   }
 
-  return { loadFontCatalog, loadFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss };
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };

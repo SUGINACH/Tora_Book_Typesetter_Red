@@ -21,8 +21,17 @@ function firstFamily(css) {
   return m ? m[1] : String(css || '').split(',')[0].trim();
 }
 
-/** 22% (מגובה תיבת התוכן של A4 בפועל) ⇒ פיקסלים — יחידות המקור אחוז מגובה התוכן. */
-function pctToPx(v) { return Math.round(1040 * (parseFloat(v) / 100)); }
+/** **S4.6 (ביקורת 3):** אחוזים ⇒ פיקסלים לפי גובה תיבת התוכן **בפועל** שנמסר
+ * בהקשר הייבוא (ctx.contentHeightPx). ברירת המחדל 1040px (A4 של RED) נשמרת
+ * לתאימות — אך מסלול הטעינה ב-UI מעביר את הגיאומטריה האמיתית של המסמך. */
+function pctToPx(v, ctxOrHeight) {
+  const h = (typeof ctxOrHeight === 'number' && ctxOrHeight > 0)
+    ? ctxOrHeight
+    : (ctxOrHeight && Number(ctxOrHeight.contentHeightPx) > 0)
+      ? Number(ctxOrHeight.contentHeightPx)
+      : 1040;
+  return Math.round(h * (parseFloat(v) / 100));
+}
 
 /** סגנונות פתיחה של המקור ⇒ מצבי RED (headings-escort). */
 const OPEN_MODE_MAP = {
@@ -88,6 +97,41 @@ const DISPOSITIONS = {
   'fn-delim-open': { kind: 'mapped', to: 'fn-delim-open' },
   'fn-delim-close': { kind: 'mapped', to: 'fn-delim-close' },
 
+  // ============ **S4.6 (ביקורת 3):** הגדרות עיצוב אמיתיות שסווגו בטעות כ-ui-state ============
+  // לא לסווג משפחה שלמה לפי קידומת בלבד — לכל מפתח עם יעד RED קיים יש מיפוי מפורש.
+  // ההגדרות האלה מגיעות עכשיו למנוע בפועל (heading-N-font/size, header-slot, שער).
+  'f-h0': { kind: 'mapped', to: 'heading-0-font', transform: firstFamily, reason: 'S4.6: גופן כותרת H0 — קיים ברישום RED (heading-0-font)' },
+  'f-h1': { kind: 'mapped', to: 'heading-1-font', transform: firstFamily, reason: 'S4.6: גופן H1' },
+  'f-h2': { kind: 'mapped', to: 'heading-2-font', transform: firstFamily, reason: 'S4.6: גופן H2' },
+  'f-h3': { kind: 'mapped', to: 'heading-3-font', transform: firstFamily, reason: 'S4.6: גופן H3' },
+  'f-h4': { kind: 'mapped', to: 'heading-4-font', transform: firstFamily, reason: 'S4.6: גופן H4' },
+  'f-h5': { kind: 'mapped', to: 'heading-5-font', transform: firstFamily, reason: 'S4.6: גופן H5' },
+  'f-h6': { kind: 'mapped', to: 'heading-6-font', transform: firstFamily, reason: 'S4.6: גופן H6' },
+  'f-h7': { kind: 'mapped', to: 'heading-7-font', transform: firstFamily, reason: 'S4.6: גופן H7' },
+  's-h0': { kind: 'mapped', to: 'heading-0-size-pt', transform: parseFloat, reason: 'S4.6: גודל H0 (26 ⇒ 26pt; חריגת טווח מדווחת במיזוג ולא מושמטת)' },
+  's-h1': { kind: 'mapped', to: 'heading-1-size-pt', transform: parseFloat, reason: 'S4.6: גודל H1 (50 במקור — נשמר נאמן למקור; חריגת טווח מדווחת)' },
+  's-h2': { kind: 'mapped', to: 'heading-2-size-pt', transform: parseFloat, reason: 'S4.6: גודל H2' },
+  's-h3': { kind: 'mapped', to: 'heading-3-size-pt', transform: parseFloat, reason: 'S4.6: גודל H3' },
+  's-h4': { kind: 'mapped', to: 'heading-4-size-pt', transform: parseFloat, reason: 'S4.6: גודל H4' },
+  's-h5': { kind: 'mapped', to: 'heading-5-size-pt', transform: parseFloat, reason: 'S4.6: גודל H5' },
+  's-h6': { kind: 'mapped', to: 'heading-6-size-pt', transform: parseFloat, reason: 'S4.6: גודל H6' },
+  's-h7': { kind: 'mapped', to: 'heading-7-size-pt', transform: parseFloat, reason: 'S4.6: גודל H7 (6 במקור; חריגת טווח מדווחת)' },
+  'f-note-body': { kind: 'mapped', to: 'f-note-body-font', transform: firstFamily, reason: 'S4.6: גופן גוף ההערה — קיים ברישום RED' },
+  'f-hdr-r': { kind: 'mapped', to: ['header-recto-right-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט ימין בכותרת עליונה (recto)' },
+  'f-hdr-c': { kind: 'mapped', to: ['header-recto-center-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט מרכז (recto)' },
+  'f-hdr-l': { kind: 'mapped', to: ['header-recto-left-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט שמאל (recto)' },
+  's-hdr-r': { kind: 'mapped', to: ['header-recto-right-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט ימין (recto)' },
+  's-hdr-c': { kind: 'mapped', to: ['header-recto-center-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט מרכז (recto)' },
+  's-hdr-l': { kind: 'mapped', to: ['header-recto-left-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט שמאל (recto)' },
+  'f-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט ימין (verso)' },
+  'f-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט מרכז (verso)' },
+  'f-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט שמאל (verso)' },
+  's-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט ימין (verso)' },
+  's-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט מרכז (verso)' },
+  's-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט שמאל (verso)' },
+  'inp-book-title': { kind: 'mapped', to: 'imud-book-title', reason: 'S4.6: כותרת הספר — נצרכת בשער הראשי (dom-renderer)' },
+  'inp-book-subtitle': { kind: 'mapped', to: 'imud-book-subtitle', reason: 'S4.6: כותרת־משנה — נצרכת בשער הראשי' },
+
   // ============ הערות שוליים ============
   'fn-columns': { kind: 'mapped', to: 'footnote-columns', transform: parseInt },
   'fn-layout-mode': { kind: 'mapped', to: 'fn-layout-mode' },
@@ -111,7 +155,7 @@ const DISPOSITIONS = {
   'h2-ornament-set': { kind: 'merged', to: 'h2-orn-top', transform: (v) => v !== 'none' ? v : 'none', reason: 'ערכת עיטורים כללית ⇒ העיטור העליון; ערכות IMUD דרך imud-orn-*' },
   'h2-ornament-top-style': { kind: 'mapped', to: 'h2-orn-top' },
   'h2-ornament-bottom-style': { kind: 'mapped', to: 'h2-orn-bottom' },
-  'h2-title-orn-mode': { kind: 'mapped', to: 'h2-orn-scope', transform: (v) => ({ 'sign': 'sign', 'title': 'title', 'both': 'both', 'none': 'both' }[v] || 'both') },
+  'h2-title-orn-mode': { kind: 'mapped', to: 'h2-orn-scope', onlyIfAbsent: true, transform: (v) => ({ 'sign': 'sign', 'title': 'title', 'both': 'both', 'none': 'none' }[v] || 'both'), reason: 'S4.6 (ביקורת 3): none נשמר כ-none — בעבר הומר ל-both (היפוך הגדרת המקור); enum RED כעת כולל none. onlyIfAbsent: כשהקובץ מכיל גם את המפתח הישיר h2-orn-scope — הישיר גובר (קדימות מפורשת, לא סדר איטרציה)' },
   'h2-title-ornament-top-style': { kind: 'merged', to: 'h2-orn-top', reason: 'עיטור כותרת-הסימן — מוזג לעיטור הסימן (RED מאחד)' },
   'h2-title-ornament-bottom-style': { kind: 'merged', to: 'h2-orn-bottom', reason: 'עיטור כותרת-הסימן התחתון — מוזג לעיטור הסימן ב-RED' },
   'h2-title-ornament-r': { kind: 'mapped', to: 'h2-orn-side' },
@@ -177,31 +221,62 @@ function dispositionOf(oldKey) {
 
 /**
  * ייבוא קובץ הגדרות IMUD (או תבנית משתמש ישנה) להגדרות RED.
+ * **S4.6 (ביקורת 3) — שימור מלא:** ערכי ui-state כבר לא רק נספרים — הם נשמרים
+ * כנתונים במבנה מוגדר: אובייקט uiState בפלט + settings['_legacy-ui-state']
+ * (מפתח פנימי עם קידומת קו-תחתון — לא נכנס לייצוא ZIP, שורד בתבניות ה-UI).
  * @param {object} legacy — אובייקט ההגדרות הישן (key→value)
  * @param {object} [registryKeys] — Set/מערך מפתחות RED חוקיים (לסינון); אם לא — ללא סינון
- * @returns {{settings:object, dispositions:object, unmapped:string[], report:{mapped:number,merged:number,uiState:number,removed:number}}}
+ * @param {{contentHeightPx?:number}} [opts] — גיאומטריה אמיתית להמרות אחוז⇒פיקסל (ברירת מחדל 1040)
+ * @returns {{settings:object, uiState:object, dispositions:object, unmapped:string[], report:{mapped:number,merged:number,uiState:number,removed:number}}}
  */
-function importImudSettings(legacy, registryKeys) {
+function importImudSettings(legacy, registryKeys, opts = {}) {
   const settings = {};
+  const uiState = {};
   const dispositions = {};
   const unmapped = [];
   const report = { mapped: 0, merged: 0, uiState: 0, removed: 0 };
   const valid = registryKeys instanceof Set ? registryKeys : (Array.isArray(registryKeys) ? new Set(registryKeys) : null);
+  const ctx = { contentHeightPx: Number(opts.contentHeightPx) > 0 ? Number(opts.contentHeightPx) : 1040 };
+  // **S4.6:** שני מעברים — ממירים מותנים (onlyIfAbsent, כגון h2-title-orn-mode)
+  // מוחלים רק אם מפתח ישיר לא קבע כבר את היעד. קדימות מפורשת ולא תלוית-סדר.
+  const deferred = [];
+  const applyDisposition = (k, v, d) => {
+    dispositions[k] = d;
+    if ((d.kind === 'mapped' || d.kind === 'merged') && d.to) {
+      const targets = Array.isArray(d.to) ? d.to : [d.to];
+      const transformed = d.transform ? d.transform(v, ctx) : v;
+      let anyApplied = false;
+      let anyBlocked = false;
+      for (const t of targets) {
+        if (valid && !valid.has(t)) { unmapped.push(`${k}->${t}(!)`); continue; }
+        if (d.onlyIfAbsent && settings[t] !== undefined) { anyBlocked = true; continue; }
+        settings[t] = transformed;
+        anyApplied = true;
+      }
+      if (anyApplied) report[d.kind]++;
+      else if (anyBlocked) report[d.kind]++; // נספר — קיבל disposition מלא (נחסם בכוונה ע"י מפתח ישיר)
+    } else if (d.kind === 'ui-state') {
+      // **S4.6:** הערך נשמר כנתון — לא רק מונה. החזרה נפרדת + הטמעה בהגדרות
+      // (מפתח פנימי; לא מגיע למנוע, לא נמחק).
+      uiState[k] = v;
+      report.uiState++;
+    } else if (d.kind === 'removed') {
+      report.removed++;
+    } else {
+      report.merged++;
+    }
+  };
   for (const [k, v] of Object.entries(legacy || {})) {
     const d = dispositionOf(k);
     if (!d) { unmapped.push(k); continue; }
-    dispositions[k] = d;
-    if ((d.kind === 'mapped' || d.kind === 'merged') && d.to) {
-      if (valid && !valid.has(d.to)) { unmapped.push(`${k}->${d.to}(!)`); continue; }
-      settings[d.to] = d.transform ? d.transform(v) : v;
-      report[d.kind]++;
-    } else {
-      report[d.kind === 'ui-state' ? 'uiState' : d.kind === 'removed' ? 'removed' : 'merged']++;
-    }
+    if (d.onlyIfAbsent) { deferred.push([k, v, d]); continue; }
+    applyDisposition(k, v, d);
   }
+  for (const [k, v, d] of deferred) applyDisposition(k, v, d);
   // מיזוג משלים: mode-h1=sub_shaar ⇒ שער משנה דלוק (הסמנטיקה המקורית)
   if (legacy && legacy['mode-h1'] === 'sub_shaar') settings['show-shaar-sub'] = true;
-  return { settings, dispositions, unmapped, report };
+  if (Object.keys(uiState).length) settings['_legacy-ui-state'] = uiState;
+  return { settings, uiState, dispositions, unmapped, report };
 }
 
 module.exports = { DISPOSITIONS, dispositionOf, importImudSettings, firstFamily, pctToPx };

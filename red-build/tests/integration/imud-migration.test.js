@@ -23,15 +23,19 @@ describe('S4.5-ד: מיפוי default_settings.json המקורי — 100% dispos
     assertEq(missing, [], `מפתחות בלי disposition: ${missing.join(', ')}`);
   });
 
-  it('ייבוא מלא: אין unmapped; כל מפתח היעד קיים ברישום RED', () => {
-    const { settings, unmapped, report } = importImudSettings(LEGACY, RED_KEYS);
+  it('ייבוא מלא: אין unmapped; כל מפתח היעד קיים ברישום RED (מפתחות פנימיים _ מותרים)', () => {
+    const { settings, unmapped, report, uiState } = importImudSettings(LEGACY, RED_KEYS);
     assertEq(unmapped, [], 'אף מפתח לא נותר ללא החלטה');
     for (const k of Object.keys(settings)) {
-      assert(RED_KEYS.has(k), `היעד ${k} קיים ברישום RED`);
+      assert(RED_KEYS.has(k) || k.startsWith('_'), `היעד ${k} קיים ברישום RED או מפתח פנימי מתועד`);
     }
     // פירוט כמותי — מתועד בפלט:
     console.log(`  dispositions: mapped=${report.mapped} merged=${report.merged} ui-state=${report.uiState} removed=${report.removed} (מתוך ${Object.keys(LEGACY).length})`);
     assert(report.mapped >= 35, 'מיפויי-ערך מהותיים (טיפוגרפיה/מזהים/מספור) — לא רק סיווג UI');
+    assert(report.mapped + report.merged + report.uiState + report.removed === Object.keys(LEGACY).length, 'הספירה מכסה את כל המפתחות');
+    // **S4.6 (ביקורת 3):** ערכי ui-state נשמרים — לא רק נספרים (בעבר אובדן שקט של 186 ערכים)
+    assert(Object.keys(uiState).length === report.uiState, 'אובייקט uiState מכיל בדיוק את ערכי מצב ה-UI');
+    assert(settings['_legacy-ui-state'] && settings['_legacy-ui-state']['inp-book-desc'] === LEGACY['inp-book-desc'], 'ערכי UI מוטמעים ב-_legacy-ui-state');
   });
 
   it('ערכי המקור מוחלים במדויק (בדיקות נקודתיות מהביקורת)', () => {
@@ -53,6 +57,35 @@ describe('S4.5-ד: מיפוי default_settings.json המקורי — 100% dispos
     assertEq(settings['show-shaar-sub'], true, 'mode-h1=sub_shaar ⇒ שערי משנה דלוקים');
     assertEq(settings['page-num-format'], 'gematria', 'מספור גימטריה');
     assert(settings['h2-top-offset'] > 150, `h2-top-distance 22% ⇒ ~229px (קיבלנו ${settings['h2-top-offset']})`);
+    // **S4.6 (ביקורת 3):** הגדרות עיצוב שסווגו בטעות כ-ui-state מגיעות עכשיו למנוע
+    assertEq(settings['heading-0-font'], 'AlphaBlack', 'f-h0 ⇒ heading-0-font (משפחה ראשונה)');
+    assertEq(settings['heading-0-size-pt'], 26, 's-h0=26 ⇒ heading-0-size-pt');
+    assertEq(settings['heading-2-size-pt'], 17, 's-h2=17 ⇒ heading-2-size-pt');
+    assertEq(settings['f-note-body-font'], 'Frank Ruhl Libre', 'f-note-body ⇒ f-note-body-font');
+    assertEq(settings['header-recto-right-font'], 'Livorna', 'f-hdr-r ⇒ header-recto-right-font');
+    assertEq(settings['header-recto-right-size-pt'], 15, 's-hdr-r=15 ⇒ header-recto-right-size-pt');
+    assertEq(settings['header-verso-right-font'], 'Livorna', 'f-hdr-verso-r ⇒ header-verso-right-font');
+    assertEq(settings['imud-book-title'], 'ספר מלכי המלוכה', 'inp-book-title ⇒ imud-book-title (נצרך בשער)');
+    // h2-title-orn-mode=none בקובץ המלא: המפתח הישיר h2-orn-scope=both גובר (קדימות מפורשת);
+    // שימור ה-none עצמו נבדק להלן על אובייקט מינימלי בלי המפתח הישיר.
+    const soloNone = importImudSettings({ 'h2-title-orn-mode': 'none' }, RED_KEYS);
+    assertEq(soloNone.settings['h2-orn-scope'], 'none', 'h2-title-orn-mode=none (בלי מפתח ישיר) ⇒ none — לא both (בעבר היפוך ההגדרה)');
+  });
+
+  it('S4.6: pctToPx לפי גיאומטריה אמיתית — contentHeightPx מועבר ב-opts', () => {
+    const a = importImudSettings({ 'h2-top-distance': '22%' }, null, { contentHeightPx: 1027 });
+    assertEq(a.settings['h2-top-offset'], 226, '22% מ-1027px (גובה תיבת A4 בפועל) ⇒ 226');
+    const b = importImudSettings({ 'h2-top-distance': '22%' }, null, {});
+    assertEq(b.settings['h2-top-offset'], 229, 'ברירת מחדל 1040 ⇒ 229 (תאימות לאחור)');
+  });
+
+  it('S4.6: round-trip שלם — הגדרות מיובאות + ערכי UI שורדים מיזוג וטעינה חוזרת', () => {
+    const { mergeWithDefaults } = require('../../src/engine/output/project-io');
+    const imp = importImudSettings(LEGACY, RED_KEYS);
+    const { merged, unknownKeys } = mergeWithDefaults(imp.settings);
+    assertEq(unknownKeys, [], 'אין מפתחות לא מוכרים לאחר המיפוי (מפתחות _ פנימיים — לא "לא מוכרים")');
+    assert(merged['_legacy-ui-state'] && merged['_legacy-ui-state']['dim-h2-top-w'] === '65%', 'ערכי ה-UI שורדים את המיזוג (לא אובדים)');
+    assertEq(merged['body-font-size-pt'], 12, 'הערך המיובא גובר על ברירת המחדל');
   });
 
   it('ההגדרות המיובאות עוברות מיזוג מלא עם ברירות המחדל של RED (round-trip)', () => {

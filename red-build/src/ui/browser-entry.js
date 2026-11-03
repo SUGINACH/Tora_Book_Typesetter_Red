@@ -11,6 +11,21 @@ const { createApp } = require('./app-shell');
 const { workerTransport } = require('./worker-client');
 const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
+const { BASE_CSS } = require('../engine/output/html-export');
+
+/** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
+ * (טורים/שורות/פסים/עיטורים/שערים) המשמש את הייצוא העצמאי — גם לתצוגה החיה.
+ * בעבר התצוגה הסתמכה על styles.css שהכיל רק חלק מהכללים: בלי .column{position:absolute}
+ * הטורים התמסדרו כבלוקים בזרימה (RTL) — הטקסט נדחק לימין ושכבות חפפו.
+ * כללי הגלובל (html,body,.book) של המסמך העצמאי מוסרים — הם שייכים לקובץ המיוצא בלבד. */
+function injectPageBaseCss() {
+  const scoped = BASE_CSS
+    .replace(/^html,body\{[^}]*\}\s*/m, '')
+    .replace(/^\.book\{[^}]*\}\s*/m, '');
+  const st = document.createElement('style');
+  st.textContent = scoped;
+  document.head.appendChild(st);
+}
 
 function downloadJson(name, json) {
   const blob = new Blob([json], { type: 'application/json' });
@@ -63,12 +78,14 @@ function pickBinaryFile(accept, cb) {
 function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
+  injectPageBaseCss();
   const worker = new Worker('engine-worker.bundle.js');
+  // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
+  // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.
   const engine = new WorkerEngineClient(workerTransport(worker));
-  // **03.11 (EXT-14):** ספריית נכסי IMUD — פונטים/עיצובים/ברירות מחדל מקוריות.
   const imud = createImudLibrary(engine);
   const app = createApp(document, {
-    transport: workerTransport(worker),
+    engineClient: engine,
     fontStatus: (typeof document !== 'undefined' && document.fonts) ? 'loading' : 'ready',
     // **03.11:** ייצוא PDF/ZIP במנוע ה־Worker + הורדה בפועל בדפדפן
     remoteExport: true,
@@ -78,8 +95,13 @@ function boot() {
       else if (kind === 'zip') downloadBytes(name || 'book-project.zip', data, 'application/zip');
     },
     getExportFont: async (family) => {
+      // **03.11(ג):** הגוף המבוקש לא בספרייה (למשל שם אנגלי כשהקטלוג בעברית) —
+      // נפילה מפורשת לגופן יציב מהסט המוטמע (ברירות מחדל בעברית של IMUD),
+      // כך שייצוא PDF עובד מהקופסה גם בלי בחירת גופן מהספרייה. ההודעה מדווחת.
       const buf = await imud.loadFont(family);
-      return buf ? { name: family, bytes: buf } : null;
+      if (buf) return { name: family, bytes: buf };
+      const fb = await imud.loadDefaultExportFont();
+      return fb ? { name: fb.family, bytes: fb.bytes, fallbackFor: family } : null;
     },
     getExportFontCss: () => imud.exportFontCss(),
     // **03.11:** ספריית העיצובים — לפיקרים בפאנל הבורר

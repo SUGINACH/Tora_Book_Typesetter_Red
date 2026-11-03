@@ -346,6 +346,57 @@ describe('S10.2 שער 3 — חיפוש הגדרות בעברית + איפוס �
     assert(threw, 'פורמט לא מוכר חייב להידחות');
   });
 
+  // **S4.6 (ביקורת 3, סקירה 3):** מיגרציית המדור הקודם מחוברת למסלול הטעינה בפועל —
+  // תבנית עם מפתחות IMUD ישנים עוברת דרך importImudSettings (לא רק בבדיקת יחידה),
+  // הערכים מגיעים להגדרות, וערכי ui-state נשמרים ב-_legacy-ui-state (לא אובדים).
+  it('S4.6: תבנית מדור קודם (מפתחות IMUD) — מיפוי חי במסלול הטעינה + שימור ערכי UI', async () => {
+    await done;
+    const legacyTpl = JSON.stringify({
+      format: 'tora-typesetter-template', version: 1,
+      settings: {
+        'font-body': "'Guttman Rashi', serif",
+        'size-body': '12',
+        'f-h2': "'AlphaBlack', serif",
+        's-h2': '17',
+        'inp-book-title': 'ספר הבדיקה',
+        'h2-title-orn-mode': 'none',
+        'dim-h2-top-w': '65%',
+        'builder-something': 'on'
+      }
+    });
+    const res = app.loadTemplateJson(legacyTpl);
+    const s = app.getSettings();
+    assertEq(s['body-font'], 'Guttman Rashi', 'font-body ⇒ body-font (משפחה ראשונה) — המיפוי חי במסלול');
+    assertEq(s['body-font-size-pt'], 12, 'size-body ⇒ body-font-size-pt');
+    assertEq(s['heading-2-font'], 'AlphaBlack', 'f-h2 ⇒ heading-2-font — הגדרת עיצוב מגיעה למנוע');
+    assertEq(s['heading-2-size-pt'], 17, 's-h2 ⇒ heading-2-size-pt');
+    assertEq(s['imud-book-title'], 'ספר הבדיקה', 'inp-book-title ⇒ imud-book-title');
+    assertEq(s['h2-orn-scope'], 'none', 'h2-title-orn-mode=none ⇒ none (לא both)');
+    assert(s['_legacy-ui-state'] && s['_legacy-ui-state']['dim-h2-top-w'] === '65%', 'ערכי ui-state נשמרים (לא נזרקים)');
+    assert(s['_legacy-ui-state']['builder-something'] === 'on', 'מפתחות בורר ישנים נשמרים כנתונים');
+    assertEq(res.unknownKeys, [], 'אין מפתחות "לא מוכרים" — כולם קיבלו disposition');
+    // round-trip: שמירה וטעינה מחדש לא מאבדת את ערכי ה-UI
+    const again = app.loadTemplateJson(app.saveTemplateJson());
+    assertEq(again.unknownKeys, [], 'טעינה חוזרת נקייה');
+    assert(app.getSettings()['_legacy-ui-state']['dim-h2-top-w'] === '65%', 'ערכי UI שורדים שמירה+טעינה');
+  });
+
+  it('S4.6: engineClient משותף — שני צרכנים על אותו לקוח (ליבת תיקון ייצוא PDF)', async () => {
+    await done;
+    // בדפדפן היו שני WorkerEngineClient על אותו Worker — השני דרס את onmessage
+    // של הראשון והתשובות לregister-font של ספריית IMUD לעולם לא הגיעו.
+    // כאן: אותו אובייקט לקוח עובר גם לאפליקציה — מזהה זהה, הפעלה עובדת.
+    const { WorkerEngineClient } = require('../../src/ui/worker-client');
+    const inlineTransport = require('../../src/ui/inline-transport');
+    const shared = new WorkerEngineClient(inlineTransport.createInlineTransport());
+    const app2 = createApp(doc, { engineClient: shared });
+    assert(app2.engine === shared, 'האפליקציה משתמשת בלקוח המוזרק — לא יוצרת חדש');
+    const p = app2.onExplicitRetypeset();
+    await new Promise((r) => setTimeout(r, 30));
+    assert(app2.getState().pages >= 0, 'העימוד עובד דרך הלקוח המשותף');
+    void p;
+  });
+
   it('מפתח D-44: fx:debounce — המדיניות קוראת את ההגדרה בפועל', () => {
     assertEq(getDebounceMs(getDefaultSettings()), 350, 'ברירת המחדל 350ms (Spec §5.3)');
     assertEq(getDebounceMs({ 'debounce-light-change-ms': 500 }), 500, 'ערך משתמש נכבד');

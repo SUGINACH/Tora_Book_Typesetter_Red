@@ -48,7 +48,11 @@ function createApp(doc, opts = {}) {
     const { createInlineTransport } = require('./inline-transport');
     return createInlineTransport();
   }
-  const engine = new WorkerEngineClient(opts.transport || makeDefaultTransport());
+  // **03.11(ג) (תיקון ייצוא PDF שנתלה):** לקוח יחיד לכל הצרכנים. בעבר נוצרו
+  // שני WorkerEngineClient על אותו Worker — השני דרס את worker.onmessage
+  // של הראשון, והתשובות ל-register-font של ספריית IMUD לעולם לא הגיעו
+  // ⇒ loadFont נתלה ⇒ הייצוא נתקע אחרי "מייצר PDF במנוע…" בלי קובץ ובלי שגיאה.
+  const engine = opts.engineClient || new WorkerEngineClient(opts.transport || makeDefaultTransport());
 
   // ================= חלקי ה־UI =================
   const status = buildStatusStrip(doc, { onExplicitRetypeset: () => onExplicitRetypeset() });
@@ -321,7 +325,10 @@ function createApp(doc, opts = {}) {
       }
       const res = await engine.requestExport({ kind: 'pdf', text, settings, fontBytes: font.bytes, fontName: font.name });
       if (opts.onExportFile) opts.onExportFile('pdf', res.bytes, 'book.pdf');
-      status.setNotice(`יוצא PDF — ${res.info && res.info.pages ? res.info.pages : '?'} עמודים, ${res.info && res.info.outline ? res.info.outline : 0} סימניות, טקסט נבחר.`);
+      const fbNote = font.fallbackFor
+        ? ` (הגופן «${font.fallbackFor}» אינו בספרייה — הוטמע «${font.name}» במקומו)`
+        : '';
+      status.setNotice(`יוצא PDF — ${res.info && res.info.pages ? res.info.pages : '?'} עמודים, ${res.info && res.info.outline ? res.info.outline : 0} סימניות, טקסט נבחר.${fbNote}`);
       return { ok: true, kind: 'pdf', data: res.bytes, info: res.info };
     } catch (e) {
       status.setNotice('ייצוא PDF נכשל: ' + (e && e.message ? e.message : String(e)));
@@ -453,11 +460,40 @@ function createApp(doc, opts = {}) {
   function loadTemplateJson(json) {
     const raw = typeof json === 'string' ? JSON.parse(json) : json;
     if (raw.format !== 'tora-typesetter-template') throw new Error('תבנית לא מוכרת (format שגוי)');
-    const { merged, unknownKeys, issues } = mergeWithDefaults(migrate(raw.settings || {}));
+    // **S4.6 (ביקורת 3) — חיבור מיגרציית המדור הקודם למסלול הטעינה בפועל:**
+    // מפתחות שאינם ברישום RED עוברים דרך importImudSettings (טבלת ה-disposition)
+    // במקום להישאר "לא מוכרים". ערכי ui-state נשמרים ב-_legacy-ui-state (לא אובדם).
+    const { getSettingDefs } = require('../engine/core/settings-registry');
+    const { importImudSettings } = require('../engine/core/legacy-settings-map');
+    const migrated = migrate(raw.settings || {});
+    const regKeys = new Set(getSettingDefs().map(r => r.id));
+    const known = {};
+    const legacyKeys = {};
+    for (const [k, v] of Object.entries(migrated)) {
+      if (k === 'settings_version' || k.startsWith('_')) { known[k] = v; continue; }
+      (regKeys.has(k) ? known : legacyKeys)[k] = v;
+    }
+    let legacySettings = {};
+    if (Object.keys(legacyKeys).length) {
+      const imp = importImudSettings(legacyKeys, regKeys, { contentHeightPx: currentContentHeightPx() });
+      legacySettings = imp.settings; // כולל _legacy-ui-state (ערכי UI נשמרים)
+    }
+    const { merged, unknownKeys, issues } = mergeWithDefaults({ ...legacySettings, ...known });
     for (const [k, v] of Object.entries(merged)) settings[k] = v;
     settingsPanel.refreshValues();
     markHeavyDirty(); // הגדרות השתנו — המשתמש יחליט מתי לעמד (⚡)
     return { unknownKeys, issues };
+  }
+
+  /** **S4.6:** גובה תיבת התוכן בפועל של הגדרות העמוד הנוכחיות — להמרות אחוז⇒פיקסל
+   * במיפוי מדור קודם (h2-top-distance). נפילה ל-1040 (A4) אם אין גיאומטריה. */
+  function currentContentHeightPx() {
+    try {
+      const { buildPageTemplate } = require('../engine/layout/page-templates');
+      const t = buildPageTemplate('regular', settings, true);
+      if (t && t.contentBox && Number(t.contentBox.height) > 0) return Number(t.contentBox.height);
+    } catch (e) { /* תבנית לא זמינה — ברירת המחדל בהמשך */ }
+    return 1040;
   }
 
   // ================= דיבאג פר־עמוד (V21) =================

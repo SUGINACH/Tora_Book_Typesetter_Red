@@ -363,6 +363,11 @@ describe('REQ-ORN-01 — התאמת עיטורים לטקסט (מדידת JS; F-
     assertEq(s({ scope: 'title', top: 'pyramid', bottom: 'none', side: 'lance' }).signTop, false, 'title-only: top off');
     assert(s({ scope: 'both', top: 'pyramid', bottom: 'pyramid', side: 'lance' }).any, 'both on');
     assert(!s({ scope: 'both', top: 'none', bottom: 'none', side: 'none' }).any, 'kinds all none ⇒ off');
+    // **S4.6 (ביקורת 3):** none — היעדר עיטור מיוצג במפורש (מקור IMUD h2-title-orn-mode=none);
+    // בעבר הומר ל-both והפעיל עיטורים נגד הגדרת המשתמש.
+    const noneScope = s({ scope: 'none', top: 'pyramid', bottom: 'pyramid', side: 'lance' });
+    assert(!noneScope.signTop && !noneScope.signBottom && !noneScope.titleSide && !noneScope.any, 'scope=none: שום עיטור — גם כשהסוגים דלוקים');
+    assert(/scope-off/.test(noneScope.why), 'סיבה מתועדת: scope-off');
   });
 });
 

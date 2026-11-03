@@ -265,12 +265,32 @@ function buildPreviewTab(doc, opts) {
     zoom = Math.max(25, Math.min(400, Math.round(pct)));
     zoomPct.textContent = `${zoom}%`;
     canvas.dataset.zoom = String(zoom);
+    // **03.11(ג):** הזום בפועל — משתנה CSS שנצרך ע"י .preview-canvas[data-zoom]
+    // .preview-page{transform:scale(var(--zoom,1))}. בעבר הוגדר רק המאפיין
+    // data-zoom בלי אף כלל שמכפיל — הזום לא עשה דבר בתצוגה.
+    if (canvas.style && typeof canvas.style.setProperty === 'function') {
+      canvas.style.setProperty('--zoom', String(zoom / 100));
+    }
     if (canvas.dataset) canvas.dataset.fit = '';
   }
   zoomOut.addEventListener('click', () => setZoom(zoom - 10));
   zoomIn.addEventListener('click', () => setZoom(zoom + 10));
   zoomFit.addEventListener('click', () => setZoomFit());
-  function setZoomFit() { canvas.dataset.fit = 'width'; zoomPct.textContent = 'רוחב'; }
+  function setZoomFit() {
+    canvas.dataset.fit = 'width';
+    // **03.11(ג):** התאמה לרוחב בפועל — חישוב מרוחב הגורר (בדפדפן) ומרחב
+    // העמוד; בסביבת בדיקות/ה-shim אין מידות — נשאר התווית בלבד (כמו קודם).
+    try {
+      const avail = (typeof root.clientWidth === 'number' ? root.clientWidth : 0) - 48;
+      const pw = virtual.phW || 794;
+      if (avail > 0 && pw > 0) {
+        setZoom(Math.round((avail / pw) * 100));
+        zoomPct.textContent = 'רוחב';
+      } else {
+        zoomPct.textContent = 'רוחב';
+      }
+    } catch (e) { zoomPct.textContent = 'רוחב'; }
+  }
   // Ctrl+wheel = זום (REQ-UI-05)
   canvas.addEventListener('wheel', (ev) => {
     if (ev && ev.ctrlKey) {

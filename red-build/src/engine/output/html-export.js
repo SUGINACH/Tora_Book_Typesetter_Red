@@ -82,6 +82,19 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .toc-row--group .toc-item{display:inline-flex;gap:4px;text-decoration:none;color:inherit}
 .toc-row--group .toc-item .grp-page{color:#333}
 .toc-row--group .toc-item + .toc-item::before{content:'|';margin:0 6px;color:#777}
+/* **03.11(ג) תיקון קטסטרופת התצוגה:** כללים שהיו חסרים — הטורים/הפסים/העיטורים
+   ממוקמים ב-inline left/top/width/height ודורשים position:absolute גם בתצוגה
+   החיה וגם בקובץ העצמאי. BASE_CSS הזה מוזרק גם לאפליקציה (browser-entry) —
+   מקור שליטה יחיד לשני הנתיבים (F-09). */
+.spanning-band{position:absolute}
+.orn{position:absolute;background-repeat:no-repeat;background-position:center}
+.shaar-main-box,.shaar-sub-box,.shaar-back-box{position:absolute;display:flex;align-items:center;justify-content:center;font-weight:700;text-align:center;padding:0 8px}
+.custom-box{position:absolute;overflow:hidden}
+.custom-image{position:absolute;background-repeat:no-repeat;background-size:100% 100%}
+.line--last-right{text-align:right}
+.line--last-stretch{text-align:justify}
+.cs-counter{display:inline-block;min-width:1.4em;margin-inline-end:6px;font-weight:700;opacity:.7;font-size:.85em}
+.footnote{margin:1px 0}
 `;
 
 /** בניית מסמך HTML עצמאי מעמודי ה‑DOM שכבר רוכמו (string-level; עובד גם Node-side). */

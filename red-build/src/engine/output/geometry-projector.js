@@ -15,15 +15,7 @@
 
 const { scrubPUAText } = require('./dom-renderer');
 const { MeasureAPI } = require('../typography/measure-api');
-
-/** גודל גופן של שורה לפי סוגה (מקור: מפתחות heading-N-size-pt של הרישום). */
-function lineFontSizePt(ln, settings) {
-  if (ln.kind === 'heading') {
-    const s = settings[`heading-${ln.level}-size-pt`];
-    return s || settings['body-font-size-pt'];
-  }
-  return settings['body-font-size-pt'];
-}
+const { lineFontSizePt } = require('./line-font'); // **03.11(ג):** מקור יחיד — נצרך גם ע"י dom-renderer (תצוגה חיה + ייצוא); מיוצא הלאה לצרכנים קיימים
 
 /**
  * הקרנת עמוד בודד לגיאומטריה מפורשת.

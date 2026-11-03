@@ -2129,6 +2129,7 @@ const BINDINGS = [
     "type": "enum",
     "def": "both",
     "enum": [
+      "none",
       "sign",
       "title",
       "both"
@@ -2136,7 +2137,7 @@ const BINDINGS = [
     "min": null,
     "max": null,
     "step": null,
-    "note": "REQ-ORN-02: סימן בלבד / כותרת בלבד / שניהם"
+    "note": "REQ-ORN-02: סימן בלבד / כותרת בלבד / שניהם / כלום. **S4.6 (ביקורת 3):** none נוסף — במקור IMUD h2-title-orn-mode=none היה מומר ל-both (היפוך הגדרת המשתמש); ornament-fit כבר תומך (scope-off)"
   },
   {
     "id": "h2-orn-top",

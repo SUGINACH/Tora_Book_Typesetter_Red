@@ -5,7 +5,7 @@
 const { describe, it, assert, assertEq, report } = require('../harness');
 const { lexDocument, HEADING_RE } = require('../../src/engine/parser/dfa-lexer');
 const { scanBrackets } = require('../../src/engine/parser/bracket-scanner');
-const { tokenize, contentHash, normalizeText } = require('../../src/engine/parser/block-tokenizer');
+const { tokenize, contentHash, normalizeText, ATOMIC_SPACE } = require('../../src/engine/parser/block-tokenizer');
 
 describe('REQ-PAR-01 metadata only in preamble', () => {
   it('preamble metadata is captured', () => {
@@ -64,6 +64,50 @@ describe('REQ-PAR-01 metadata only in preamble', () => {
     const para = tokens.find(t => t.type === 'paragraph' && t.notes && t.notes.length);
     assert(para && /הערת שוליים בתחתית/.test(para.notes[0].split('\uE000').join(' ')), 'הערת שוליים בתוחמים נחלצה');
   });
+
+  // **S4.6 (ביקורת 3, סקירה 3 §1.3):** ארבעת השדות שלא נבדקו התנהגותית —
+  // שמירת זכויות / פרטי הוצאה לאור / פרטי קשר / פרטים נוספים — נבדקים כעת
+  // מזיהוי ועד אי-דליפה לגוף, יחד עם עשרת המזהים המלאים.
+  it('S4.6: כל עשרת מזהי המטא מזוהים בפתיח ולא דולפים לגוף (כולל ארבעת החסרים)', () => {
+    const doc = [
+      'שם הספר - ספר הבדיקות',
+      'נושא - בדיקות פרסר',
+      'נושא מפורט - בדיקת כל המזהים',
+      'פרטי מהדורא - מהדורת בדיקה',
+      'שם המחבר - מחבר הבדיקה',
+      'מקום ושנת הוצאה - ירושלים תשפ"ו',
+      'שמירת זכויות - כל הזכויות שמורות',
+      'פרטי הוצאה לאור - הוצאת הבדיקות',
+      'פרטי קשר - טלפון 02-0000000',
+      'פרטים נוספים - שורת ערות',
+      '',
+      'כותרת 1 - פרק ראשון',
+      'גוף ראשון.'
+    ].join('\n');
+    const { metadata, bodyLines } = lexDocument(doc);
+    assertEq(metadata['שמירת זכויות'], 'כל הזכויות שמורות', 'שמירת זכויות — מזוהה');
+    assertEq(metadata['פרטי הוצאה לאור'], 'הוצאת הבדיקות', 'פרטי הוצאה לאור — מזוהה');
+    assertEq(metadata['פרטי קשר'], 'טלפון 02-0000000', 'פרטי קשר — מזוהה');
+    assertEq(metadata['פרטים נוספים'], 'שורת ערות', 'פרטים נוספים — מזוהה');
+    assertEq(Object.keys(metadata).length, 10, 'כל עשרת השדות נאספו');
+    for (const key of ['שמירת זכויות', 'פרטי הוצאה לאור', 'פרטי קשר', 'פרטים נוספים']) {
+      assert(!bodyLines.some(l => l.trim().startsWith(key)), `השורה של ${key} לא בגוף`);
+    }
+    // שדות אלה נשמרים ומגיעים לתוצאה (קיום במטא ⇒ הוכחת שימור):
+    assert(bodyLines.some(l => l.includes('כותרת 1')), 'הגוף מתחיל אחרי הפתיח');
+  });
+
+  // **S4.6 (ביקורת 3, סקירה 3 §1.2):** כותרת 6 לא הייתה ב-fixture ולא בבדיקות —
+  // הקוד נראה כללי אך הטענה "כל הרמות 0–7 נבדקו" לא הוכחה. כאן: כיסוי מלא 0–7.
+  it('S4.6: כותרות 0–7 — כיסוי מלא כולל רמה 6', () => {
+    const lines = [];
+    for (const lv of [0, 1, 2, 3, 4, 5, 6, 7]) lines.push(`כותרת ${lv} - של רמה ${lv}`);
+    const tokens = tokenize(lines);
+    const heads = tokens.filter(t => t.type === 'heading');
+    assertEq(heads.length, 8, 'שמונה כותרות');
+    const levels = heads.map(t => t.level).sort((a, b) => a - b);
+    assertEq(levels, [0, 1, 2, 3, 4, 5, 6, 7], 'כל הרמות 0–7 כולל 6');
+  });
 });
 
 describe('REQ-PAR-02 balanced bracket scanner', () => {
@@ -100,6 +144,40 @@ describe('REQ-PAR-02 balanced bracket scanner', () => {
     assertEq(p.notes[1], 'ב');
     const refCount = p.parts.filter(x => x.kind === 'note-ref').length;
     assertEq(refCount, 2, 'count conservation: two refs');
+  });
+
+  // **S4.6 (ביקורת 3):** חוזה מיקומי הסוגר — closeStart/closeLen לתוחמים מרובי-תווים.
+  it('S4.6: closeStart/closeLen נחשפים לכל זוג — תוחם רב-תווים נחתך נכון', () => {
+    const r = scanBrackets([{ text: 'א [[הערה]] ב', paraIndex: 0 }], { open: '[[', close: ']]' });
+    assertEq(r.pairs.length, 1, 'זוג אחד');
+    const p = r.pairs[0];
+    assertEq(p.closeLen, 2, 'אורך הסוגר בפועל = 2');
+    assertEq(p.close, p.closeStart + 1, 'close (תו אחרון) = closeStart + closeLen - 1 — תואם לחוזה ההיסטורי');
+    const tokens = tokenize(['א [[הערה]] ב'], { fnOpen: '[[', fnClose: ']]' });
+    const tok = tokens[0];
+    assertEq(tok.notes.length, 1, 'הערה אחת');
+    assertEq(tok.notes[0], 'הערה', 'תוכן ההערה בלי שרידי התוחם (בעבר נכלל התו הראשון של הסוגר)');
+    const tail = tok.parts.find(x => x.kind === 'text' && x.value.includes('ב'));
+    assert(tail, 'הטקסט שאחרי ההערה שרד (בעבר דילוג תו בתוחם ארוך)');
+    assert(!tail.value.includes(']'), 'ללא שרידי תוחם בהמשך');
+  });
+
+  it('S4.6: תוחם מילולי END — חיתוך והמשך נכונים', () => {
+    const tokens = tokenize(['לפני <הערת סיום ארוכהEND אחרי'], { fnOpen: '<', fnClose: 'END' });
+    const tok = tokens[0];
+    assertEq(tok.notes[0], ['הערת', 'סיום', 'ארוכה'].join(ATOMIC_SPACE), 'התוכן עד תחילת הסוגר בדיוק (בלי חלק מהסוגר; רווחים כ-ATOMIC_SPACE)');
+    const tail = tok.parts.filter(x => x.kind === 'text').map(x => x.value).join(' ');
+    assert(tail.includes('אחרי'), 'ההמשך מתחיל מיד אחרי הסוגר — בלי דילוג תווים');
+    assert(!tail.includes('EN'), 'שרידי הסוגר אינם בהמשך');
+  });
+
+  it('S4.6: הצורה העברית ]ם — הסוגר כולו נצרך ולא דולג תו', () => {
+    const tokens = tokenize(['גוף [הערה]ם המשך']);
+    const tok = tokens[0];
+    assertEq(tok.notes[0], 'הערה', 'תוכן ההערה טהור (בלי ה-] של הצורה העברית)');
+    const tail = tok.parts.filter(x => x.kind === 'text').map(x => x.value).join(' ');
+    assert(tail.includes('המשך'), 'ההמשך שרד');
+    assert(!/\sם/.test(tail) && !/\]\s/.test(tail), 'אין שרידי סוגר (] או ם) בהמשך הטקסט');
   });
 });
 

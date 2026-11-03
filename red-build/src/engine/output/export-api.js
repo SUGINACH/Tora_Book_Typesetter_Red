@@ -29,6 +29,19 @@ function nodeOnly(loader) {
   return loader();
 }
 
+/** **03.11(ג) תיקון קריסת ייצוא HTML בדפדפן:** ב-DOM האמיתי outerHTML מאפיין
+ * (מחרוזת), ב-shim הבדיקות — פונקציה. הפונקציה הזו מטפלת בשניהם + נפילה
+ * לסריאליזציה ידנית בסיסית (אף סביבה לא נותרת בלי פלט). */
+function elementOuterHtml(el) {
+  if (!el) return '';
+  if (typeof el.outerHTML === 'function') return el.outerHTML(); // shim הבדיקות
+  if (typeof el.outerHTML === 'string') return el.outerHTML;      // DOM אמיתי
+  if (typeof el.innerHTML === 'string' && el.tagName) {
+    return `<${el.tagName}>${el.innerHTML}</${el.tagName}>`;       // מוצא אחרון
+  }
+  return '';
+}
+
 // ============ HTML עצמאי (REQ-EXP-02) ============
 
 /**
@@ -44,7 +57,7 @@ function exportHtml(result, settings, doc, meta = {}) {
   // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
   const pagesHtml = [];
   for (const pg of result.pages) {
-    pagesHtml.push(renderPage(pg, settings, doc, result.metadata).outerHTML());
+    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc, result.metadata)));
   }
   const sizeMm = pageMmOf(settings);
   const pageRules = settings['export-html-page-rules'] !== false

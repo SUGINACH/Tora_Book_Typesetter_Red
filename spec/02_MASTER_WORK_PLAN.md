@@ -166,6 +166,23 @@ archive/*← legacy lines (V20.x, old_ver, debug/) — read-only
 - [ ] font-picker preserves unknown saved font via injected option (regression test).
 - [ ] Monster §10.2 24-item list: each closed with commit/test reference or documented decision.
 
+### S4.5 תאימות מדור קודם — זיהוי וסיווג (03.11, ביקורות 1–2; מבוצע)
+**רקע:** דרישות S4.1-6/S4.2-4 התגלו כלא-ממומשות בביקורת חיצונית — מזהי טקסט חסרים, הגדרות IMUD ללא disposition. השלב בוצע בקומיט 70caa1d:
+1. מזהי מטא מלאים (10 שדות) ב-dfa-lexer + הערות סיום (תוכן מול הוראת כותרת — צורת רבים בלבד) + קידומת/תוחמים מוגדרים (en-line-prefix, fn-delim-open/close) דרך כל הצינור עד הסורק.
+2. `core/legacy-settings-map.js` — טבלת disposition לכל 264 מפתחות default_settings.json של המקור; fixture הקובץ האמיתי מחייב.
+3. בדיקות: pdf-targets 4/4 (יעדי סימניות/קישורים מהקובץ), balancePage אמיתות מהלכים, runt מחובר לקנס KP.
+
+### S4.6 Legacy Migration & Behavioral Parity (03.11(ג), ביקורת 3 — סקירת 70caa1d)
+**רקע:** הסקירה הוכיחה שהמיפוי לא היה מחובר למסלול המוצר, ערכי ui-state אבדו בשקט, והמרות סמנטיות הפכו הגדרות משתמש. שער קבלה זה נסגר רק כשכל הדרישות מוכחות:
+1. **חיבור למסלול הייבוא האמיתי:** `importImudSettings()` חלק מ-loadTemplateJson ב-app-shell (לא רק בדיקת יחידה). ✔ 03.11(ג)
+2. **אין סיווג משפחות לפי קידומת בלבד:** 31 מפתחות עיצוב אמיתיים קיבלו מיפוי מפורש (f-h0..7/s-h0..7 ⇒ heading-N-font/size-pt; f-note-body ⇒ f-note-body-font; f/s-hdr-{r,c,l} וגם verso ⇒ header-slot-font/size-pt; inp-book-title/subtitle ⇒ imud-book-*). ✔
+3. **שימור ערכי ui-state:** כל ערך שאינו הגדרת מנוע נשמר במבנה מוגדר (`uiState` בפלט + `_legacy-ui-state` בהגדרות; שורד מיזוג+טעינה; לא נכנס ל-ZIP — מתועד). ✔
+4. **מיפוי התנהגותי:** h2-title-orn-mode=none ⇒ none (enum הורחב; בעבר הומר ל-both — היפוך הגדרה); pctToPx לפי גובה תיבת תוכן אמיתי (opts.contentHeightPx ממסלול ה-UI; בעבר 1040 קבוע). ✔
+5. **חוזה תוחמים מרובי-תווים:** closeStart/closeLen בסורק; block-tokenizer חותך לפיהם (']]'/END/]ם — בדיקות ייעודיות). ✔
+6. **השלמת כיסוי בדיקות:** כותרות 0–7 כולל 6; 10 מזהי מטא כולל 4 החסרים; round-trip ייבוא→מיזוג→שמירה→פתיחה. ✔
+7. **כיסוי כל מקורות ההגדרות (פתוח):** לא רק IMUD_TORANI/default_settings.json — נדרשים fixtures לכל חמשת מאגרי המקור ולתבניות makom-bina. הרשימה המחייבת: Monster_Comparison_All_Repos_Branches.md (מאגר ההשוואות של המשתמש; אינו ב-RED — יש להעתיק את רשימת 24 הפריטים ל-`spec/MONSTER_24_CHECKLIST.md` ולסגור פריט-פריט עם הפניית בדיקה).
+8. **דפדפן אמיתי ב-CI (פתוח):** הבאגים של 03.11 (Buffer, unresolved-require, onmessage נדרס, outerHTML) עברו את 305 בדיקות ה-Node כי אין דפדפן אמיתי ב-CI — נדרשת בדיקת עשן headless (load → typeset → preview → שלושת הייצואים) כשער קבלה לכל פריסת gh-pages.
+
 ---
 
 # שלב S5 — שכבה 3: תכנון עמודים וטורים (DP Planner + Balancing + Protections Matrix)

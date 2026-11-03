@@ -108,10 +108,15 @@ function tokenize(bodyLines, opts = {}) {
     for (const p of outer) {
       const before = line.slice(cursor, p.open).trim();
       if (before) parts.push({ kind: 'text', value: before });
-      const noteText = line.slice(p.open + openCh.length, p.close).trim().replace(/ +/g, ATOMIC_SPACE);
+      // **S4.6 (ביקורת 3):** חיתוך לפי תחילת הסוגר + אורכו בפועל (closeStart/closeLen
+      // מהסורק) — נכון גם לתוחמים מרובי-תווים (']]'/END) ולצורה העברית ]ם. בעבר
+      // נוסף אורך התוחם המוגדר למיקום התו האחרון — קיצוץ/דילוג תווים בתוחם ארוך.
+      const cs = p.closeStart != null ? p.closeStart : p.close;
+      const cl = p.closeLen != null ? p.closeLen : closeCh.length;
+      const noteText = line.slice(p.open + openCh.length, cs).trim().replace(/ +/g, ATOMIC_SPACE);
       notes.push(noteText);
       parts.push({ kind: 'note-ref', noteIndex: notes.length - 1 });
-      cursor = p.close + closeCh.length;
+      cursor = cs + cl;
     }
     const tail = line.slice(cursor).trim();
     if (tail) parts.push({ kind: 'text', value: tail });

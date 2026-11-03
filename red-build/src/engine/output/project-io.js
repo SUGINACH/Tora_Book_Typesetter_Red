@@ -45,7 +45,9 @@ function mergeWithDefaults(migrated) {
   // derivePlacementFlags **אחרי** האיחוד — mode הוא מקור־האמת; דגלים שהומרו מקובץ
   // v1 ישן (ללא mode) נגזרים שוב כך שלעולם לא ייווצר מצב סותר מאובדן הערות (BRZ-15).
   const merged = derivePlacementFlags({ ...defs, ...migrated, settings_version: 2 });
-  const unknownKeys = Object.keys(migrated).filter(k => !(k in defs));
+  // **S4.6:** מפתחות פנימיים (קו-תחתון — נכסי זמן-ריצה כמו _legacy-ui-state/_customStyles)
+  // אינם "מפתחות לא מוכרים" — הם מבנה נתונים מתועד; ערכיהם עוברים במיזוג.
+  const unknownKeys = Object.keys(migrated).filter(k => !(k in defs) && !k.startsWith('_'));
   const issues = [];
   for (const r of registry) {
     const v = merged[r.id];

@@ -296,6 +296,30 @@ describe('S12.2 שער 3 — HTML עצמאי (REQ-EXP-02): חד־קובץ, offli
     assert(!a.includes(new Date().getFullYear() + ''), 'אין תאריך');
   });
 
+  // **03.11(ג) (דיווח משתמש: "הייצוא נכשל: renderPage(...).outerHTML is not a function"):**
+  // בדפדפן אמיתי outerHTML הוא מאפיין (מחרוזת) — לא פונקציה כמו ב-shim הבדיקות.
+  // הייצוא חייב לעבוד גם ב-DOM אמיתי: בדיקה עם יסוד שמממש מאפיין בלבד.
+  it('03.11(ג): ייצוא HTML ב-DOM אמיתי — outerHTML כמאפיין (לא פונקציה)', () => {
+    const propDoc = {
+      createElement(tag) {
+        const el = {
+          tagName: tag, children: [], style: {}, dataset: {},
+          setAttribute(k, v) { el['attr_' + k] = String(v); },
+          appendChild(c) { el.children.push(c); return c; },
+          addEventListener() {},
+          classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } }
+        };
+        Object.defineProperty(el, 'outerHTML', { get() { return `<${tag}>${el.children.length}</${tag}>`; } });
+        return el;
+      }
+    };
+    const html = exportHtml(result, settings, propDoc, { title: 'בדיקת מאפיין' });
+    assert(html.startsWith('<!DOCTYPE html>'), 'הייצוא הושלם — לא נזרק outerHTML is not a function');
+    assert(html.includes('class="book"'), 'מבנה הספר תקין');
+    const pages = html.match(/<article>/g) || [];
+    assert(pages.length === result.pages.length, `כל ${result.pages.length} העמודים עברו סריאליזציה`);
+  });
+
   it('offline-guard: הפניה חיצונית מוזרקת ⇒ דחייה עם exit 7 (דוקטרינת Orange)', () => {
     let threw = false;
     try { assertOfflineSafe('<script src="https://evil.example/x.js"></script>'); } catch (e) {

@@ -107,7 +107,12 @@ function scanBrackets(segments, opts = {}) {
           const o = stack.pop();
           pairs.push({
             open: o.openPos,
-            close: gp + form.len - 1, // last character of the closer
+            close: gp + form.len - 1, // last character of the closer (חוזה היסטורי — נשמר)
+            // **S4.6 (ביקורת 3):** חוזה משלים לתוחמים מרובי-תווים — תחילת הסוגר
+            // ואורכו בפועל. בעבר הצרכן (block-tokenizer) התייחס ל-close כאילו היה
+            // תחילת התוחם והוסיף שוב את אורך התוחם המוגדר — חיתוך שגוי ב-']]'/END.
+            closeStart: gp,
+            closeLen: form.len,
             depth: stack.length + 1,  // 1 = outermost pair (matches block-tokenizer convention)
             startPara: o.para,
             endPara: para,

@@ -63,6 +63,7 @@ const { columnDividerHeightPx } = require('../decoration/ornament-fit');
 const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
+const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font'); // **03.11(ג):** מקור יחיד לגופן/גודל שורה
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -73,10 +74,24 @@ function lastLineClass(ln, settings) {
   return ' line--last-center';
 }
 
+/** **03.11(ג):** מחסנית גופן עם fallback עברי קבוע — גרשיים מנוטרלים (הזרקה בטוחה ל-CSS). */
+function fontStack(family) {
+  const clean = String(family).replace(/'/g, '').trim();
+  if (!clean) return '';
+  return `'${clean}', 'Frank Ruhl Libre', 'David', serif`;
+}
+
 function renderLine(ln, doc, settings = {}) {
   const el = doc.createElement('div');
   el.className = 'line' + (ln.isLast ? ' line--last' + lastLineClass(ln, settings) : '');
   el.setAttribute('dir', 'rtl');
+  // **03.11(ג) (תיקון "החלפת גופן לא עושה כלום"):** גודל/גופן השורה מההגדרות —
+  // אותו מקור (line-font) כמו הפרויקטור. בלי זה התצוגה מציגה הכול בגודל/גופן
+  // שורש המסמך והתצוגה אינה מגיבה לשינויי גופן/גודל.
+  const lnPt = lineFontSizePt(ln, settings);
+  if (Number.isFinite(lnPt) && lnPt > 0) el.style.fontSize = `${ptToPx(lnPt)}px`;
+  const lnFont = lineFontFamily(ln, settings);
+  if (lnFont) el.style.fontFamily = fontStack(lnFont);
   if (ln.aqStretch && ln.aqStretch !== 1) {
     el.style.wordSpacing = `${(ln.aqStretch - 1) * 4}px`;
   }
@@ -457,6 +472,12 @@ function renderPage(page, settings, doc, header) {
   if (page.template.width != null) root.style.width = `${page.template.width}px`;
   if (page.template.height != null) root.style.height = `${page.template.height}px`;
   root.dir = 'rtl';
+  // **03.11(ג):** גופן/גודל הגוף על שורש העמוד — התצוגה והייצוא יחד מגיבים
+  // להגדרות body-font/body-font-size-pt (השורות דורסות לפי סוגן — כותרות וכו').
+  const bf = settings['body-font'];
+  if (bf) root.style.fontFamily = fontStack(bf);
+  const bsPt = Number(settings['body-font-size-pt']);
+  if (Number.isFinite(bsPt) && bsPt > 0) root.style.fontSize = `${ptToPx(bsPt)}px`;
 
   // key: background-color / background-opacity — rgba אמיתי (P0-5)
   const bg = settings['background-color'];
