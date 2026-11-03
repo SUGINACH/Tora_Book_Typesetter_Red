@@ -322,6 +322,17 @@ function importImudSettings(legacy, registryKeys, opts = {}) {
   // מיזוג משלים: mode-h1=sub_shaar ⇒ שער משנה דלוק (הסמנטיקה המקורית)
   if (legacy && legacy['mode-h1'] === 'sub_shaar') settings['show-shaar-sub'] = true;
   if (Object.keys(uiState).length) settings['_legacy-ui-state'] = uiState;
+  // **S4.9 (פרופיל העימוד המקורי):** קלט שנראה כמו default_settings.json המלא
+  // של המקור ⇒ ה-JSON הגולמי מוצמד תחת _imudRaw והפרופיל מסומן 'imud'.
+  // המנוע המרכזי (typeset) מפנה אז לפורט הנאמן (legacy-imud-flow) — התנהגות
+  // המקור היא המפרט (בקשת המשתמש 03.11: "בדיקה מתמטית ומוחלטת").
+  if (legacy && typeof legacy === 'object'
+    && legacy['fn-delim-open'] !== undefined
+    && legacy['size-body'] !== undefined
+    && legacy['line-height-body'] !== undefined) {
+    settings['_imudRaw'] = legacy;
+    settings['_layout-profile'] = 'imud';
+  }
   return { settings, uiState, dispositions, unmapped, report };
 }
 

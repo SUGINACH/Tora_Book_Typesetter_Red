@@ -110,7 +110,10 @@ function exportPdf(text, settingsIn, fontBytes, fontName) {
       'measure-impl': 'font-metrics'
     };
     const result = typeset(text, settings, { noRecommendations: true });
-    const projected = projectDocument(result, settings);
+    // **S4.9:** פרופיל IMUD — הקרנה ממקרן ה-legacy (גיאומטריה מפורשת מהייחוס)
+    const projected = result.legacyProfile
+      ? require('./legacy-projector').projectLegacyDocument(result, settings)
+      : projectDocument(result, settings);
     const drawnParts = [];
     for (const pg of projected.pages) {
       for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) for (const w of ln.words) drawnParts.push(w.text);

@@ -190,13 +190,19 @@ function writePdf(opts) {
       for (const ln of lines) {
         // **S12 (parity):** בסיס השורה מהמקרן (מודל תיבת שורה CSS — half-leading+ascent)
         const baselineY = ln.baselineY != null ? ln.baselineY : ln.y + ln.h - ln.sizePt * (96 / 72) * 0.78;
-        for (const w of ln.words) emitWord(w.text, w.x, baselineY, ln.sizePt);
+        // **S4.9 (legacy IMUD):** מילים עם גודל/בסיס משלהן (מילת-חלון 1.5×, סמני הערות)
+        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt);
       }
     };
     if (pg.spanning) emitLines(pg.spanning.lines);
     emitLines(pg.lines);
     // מרזב הערות — סמן + מילות ההערה (מימין לשמאל); בסיס מהמקרן
     for (const fn of pg.footnotes) {
+      if (fn.words && fn.words.length) {
+        // **S4.9 (legacy IMUD):** מילים עם מיקום מפורש מהמקרן
+        for (const w of fn.words) emitWord(w.text, w.x, fn.baselineY, w.sizePt || 8.5);
+        continue;
+      }
       const fs = 11;
       const baseY = fn.baselineY != null ? fn.baselineY : fn.y + 9;
       let x = fn.x + fn.w - 4;

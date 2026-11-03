@@ -95,6 +95,15 @@ function offsetInSpans(at, spans) {
  *   אסור לו לגעת בפריסה — no-op proof נאכף בבדיקה (hash זהה עם ובלי המזליף).
  */
 function typeset(rawText, settingsIn, env = {}) {
+  // **S4.9 (פרופיל העימוד המקורי):** הגדרות שמקורן ב-default_settings.json של
+  // התוכנה המקורית (importImudSettings מסמן layout-profile='imud' ומצרף
+  // את ה-JSON הגולמי) ⇒ הפעלת הפורט הנאמן של מנוע המקור. התנהגות המקור
+  // היא המפרט — כולל הגיאומטריה המדויקת שנמדדה מקובצי הייחוס שהעלה המשתמש
+  // (בקשת 03.11: "בדיקת עימוד מתמטית ומוחלטת דרך וורקפלו").
+  if (settingsIn && settingsIn['_layout-profile'] === 'imud' && settingsIn._imudRaw) {
+    const { legacyTypeset } = require('../layout/legacy-imud-flow');
+    return legacyTypeset(rawText, settingsIn, env);
+  }
   // **S10 (REQ-UI-03):** מזליף התקדמות — null כשלא סופק (אפס תקורה במסלול הרגיל).
   const onProgress = typeof env.onProgress === 'function' ? env.onProgress : null;
   const prog = (stage, pct, label, extra) => {

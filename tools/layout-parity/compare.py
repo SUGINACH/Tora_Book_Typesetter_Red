@@ -103,7 +103,12 @@ def pdf_rows(page):
         parts = sorted(b["parts"], key=lambda r: r["x0"])
         runs = [dict(parts[0])]
         for r in parts[1:]:
-            if r["x0"] - runs[-1]["x1"] < 30:
+            # **S4.9:** מיזוג רק בתוך שורה אחת — פער קטן (מילת-חלון/רווחי יישור) או
+            # פער בינוני עם אותו גודל גופן. מרזב השוליים (12.2pt) בין גוף 12pt
+            # להערת-שוליים 6pt אסור שיימָזָג — אחרת תיבות הטורים מזוהמות.
+            gap = r["x0"] - runs[-1]["x1"]
+            same_size = abs(r["size"] - runs[-1]["size"]) <= 2
+            if gap < 10 or (gap < 30 and same_size):
                 runs[-1]["x1"] = max(runs[-1]["x1"], r["x1"])
                 runs[-1]["y0"] = min(runs[-1]["y0"], r["y0"])
                 runs[-1]["y1"] = max(runs[-1]["y1"], r["y1"])
@@ -201,19 +206,39 @@ def main():
     C = Checks()
 
     # ================= HARD 1: שימור תוכן =================
+    # **S4.9:** מדידה נאמנה להתנהגות המקור — הערות [..] מוצאות מהגוף למרזב
+    # (הסמן נשאר בגוף, הטקסט במרזב, והסמן חוזר בראש המרזב). צד המקור עובר
+    # את אותה התמרה; צד הפלט נספר משורות הגוף+המרזב (בלי כותרות/שוליים/TOC).
     IDENT = re.compile(r"^(שם הספר|נושא|פרטי|שם המחבר|מקום ושנת|שמירת|פרטים|כותרת)")
     src_words = Counter()
     for ln in src_text.split("\n"):
         ln = ln.strip()
         if not ln or IDENT.match(ln):
             continue
-        src_words.update(norm(ln).split())
+        # הערות [..] ← הטקסט עובר למרזב (נספר פעם אחת); הסמנים עצמם אינם
+        # נספרים בשני הצדדים (המונה של המקור מתאפס לפי עמוד — לא דטרמיניסטי
+        # מול המקור, ואינם תוכן).
+        def repl(m):
+            for w in norm(m.group(1)).split():
+                src_words.update([w])
+            return ""
+        ln2 = re.sub(r"\[([^\]]*)\]", repl, ln)
+        src_words.update(norm(ln2).split())
 
     ours_words = Counter()
+    seen_fn_texts = set()
     for p in ours["pages"]:
-        for col in p["columns"]:
-            for ln in col["lines"]:
-                ours_words.update(norm(ln["text"]).split())
+        for ln in p["lines"]:
+            if ln.get("kind") not in ("body", "footnote"):
+                continue
+            if ln.get("kind") == "footnote":
+                # **S4.9 (כמו במקור):** הערה של פסקה שנחתכה בין עמודים מופיעה
+                # בשניהם — לבדיקת שימור התוכן היא נספרת פעם אחת (לפי טקסט).
+                key = norm(ln.get("textNoMarkers", ln["text"]))
+                if key in seen_fn_texts:
+                    continue
+                seen_fn_texts.add(key)
+            ours_words.update(norm(ln.get("textNoMarkers", ln["text"])).split())
     missing = src_words - ours_words
     extra = ours_words - src_words
     C.add("H1", "HARD", "שימור תוכן — מולטיסט מילים זהה למקור",
@@ -244,11 +269,12 @@ def main():
                 crows = sorted([r for r in content
                                 if r["x0"] >= c["x0"] - 6 and r["x1"] <= c["x1"] + 6],
                                key=lambda r: (r["y0"], r["x0"]))
-                # איחוי שורות ויזואליות: קטעים באותו פס (y0 ±2.5) = שורה אחת
-                # (הפרדת מילים בפערי יישור גדולים אינה שתי שורות)
+                # איחוי שורות ויזואליות: קטעים באותו פס (y0 ±7) = שורה אחת.
+                # **S4.9:** ±7 — מילת-החלון (1.5× גודל, בסיס מוגבה) והטקסט שלצידה
+                # הן שורה ויזואלית אחת (הפרש תיבות עד ~6pt); פס הגוף 16.08pt לא נפגע.
                 vlines = []
                 for r in crows:
-                    if vlines and abs(r["y0"] - vlines[-1]["y0"]) <= 2.5:
+                    if vlines and abs(r["y0"] - vlines[-1]["y0"]) <= 7:
                         v = vlines[-1]
                         v["x0"] = min(v["x0"], r["x0"]); v["x1"] = max(v["x1"], r["x1"])
                         v["y1"] = max(v["y1"], r["y1"])
@@ -284,13 +310,29 @@ def main():
         for r in content:
             if r["size"] >= 15:
                 d = page.get_text("dict")
+                # **S4.9:** רק פסים שכולם ≥15pt (כותרת טהורה) — שורות חלון
+                # (מילה ראשונה 18pt + גוף 12pt) אינן בבחינת מתיחת כותרת.
+                band_spans = []
+                for b in d["blocks"]:
+                    if b["type"] != 0:
+                        continue
+                    for l in b["lines"]:
+                        for s in l["spans"]:
+                            if abs(s["bbox"][1] - r["y0"]) < 3 and s["text"].strip():
+                                band_spans.append(s)
+                if band_spans and min(s["size"] for s in band_spans) < 15:
+                    continue
+                # **S4.9:** רק פסים החופפים את טווח ה-x של השורה עצמה — שתי
+                # מילות-חלון בשני הטורים באותו גובה אינן "מתיחת כותרת" אלא
+                # שני טורים נפרדים.
                 gaps = []
                 for b in d["blocks"]:
                     if b["type"] != 0:
                         continue
                     for l in b["lines"]:
                         for s in l["spans"]:
-                            if abs(s["bbox"][1] - r["y0"]) < 3 and s["size"] >= 15:
+                            if abs(s["bbox"][1] - r["y0"]) < 3 and s["size"] >= 15 \
+                                    and s["bbox"][2] > r["x0"] - 5 and s["bbox"][0] < r["x1"] + 5:
                                 gaps.append((s["bbox"][0], s["bbox"][2]))
                 gaps.sort()
                 for i in range(1, len(gaps)):
@@ -302,9 +344,14 @@ def main():
     C.add("H3", "HARD", "כל הטקסט בתוך גבולות העמוד", len(oob) == 0,
           violations=len(oob), sample=oob[:6])
     avg_justify = round(100 * (1 - (sum(justify_miss) / len(justify_miss))), 1) if justify_miss else 0
-    C.add("H4", "HARD", "שורות גוף מגיעות לשפות הטור (יישור)",
-          justify_miss and avg_justify >= 90,
-          reachPct=avg_justify, twoColPages=len(justify_miss))
+    # **S4.9 (כיול אמת):** יחס ההגעה של המקור עצמו מחושב מהייחוס — גם למקור
+    # שורות אחרונות ממורכזות, כותרות ושורות חלון שאינן מגיעות לשפה. הדרישה:
+    # היישור שלנו אינו נופל מהמקור (בפער סבילות 2%).
+    ref_j = [l for p in ref["pages"] if p["type"] == "body" and len(p["columns"]) == 2 for l in p["lines"] if l["col"] in ("right", "left")]
+    ref_rate = round(100 * sum(1 for l in ref_j if l["justified"]) / max(1, len(ref_j)), 1)
+    C.add("H4", "HARD", "שורות גוף מגיעות לשפות הטור (יישור — כמקור)",
+          justify_miss and avg_justify >= ref_rate - 2,
+          reachPct=avg_justify, refReachPct=ref_rate, twoColPages=len(justify_miss))
 
     # ================= PARITY 1: מספר עמודים =================
     C.add("P1", "PARITY", "מספר עמודים", ours["meta"]["pages"] == ref["meta"]["pages"],
@@ -373,16 +420,21 @@ def main():
                           for r in p["lines"] if r["x0"] < 70)
     ref_det_entries = sum(1 for p in ref["pages"] if p["type"] == "toc-detailed"
                           for r in p["lines"] if r["x0"] < 70)
+    # **S4.9:** ספירת הערכים שלנו משורות המודל (x0<70) — אותה מדידה כמו הייחוס
+    ours_gen_entries = sum(1 for p in ours["pages"] if p["type"] == "toc-general"
+                           for r in p.get("lines", []) if r.get("x0", 999) < 70)
+    ours_det_entries = sum(1 for p in ours["pages"] if p["type"] == "toc-detailed"
+                           for r in p.get("lines", []) if r.get("x0", 999) < 70)
     ot = ours["document"]["toc"]
     C.add("P5", "PARITY", "תוכן-עניינים כפול (כללי + מפורט)",
           ref_toc_gen == sum(1 for p in ours["pages"] if p["type"] == "toc-general")
           and ref_toc_det == sum(1 for p in ours["pages"] if p["type"] == "toc-detailed")
-          and abs(ref_gen_entries - ot["generalCount"]) <= 2
-          and abs(ref_det_entries - ot["detailedCount"]) <= 2,
+          and abs(ref_gen_entries - ours_gen_entries) <= 2
+          and abs(ref_det_entries - ours_det_entries) <= 2,
           refGeneralPages=ref_toc_gen, oursGeneralPages=sum(1 for p in ours["pages"] if p["type"] == "toc-general"),
           refDetailedPages=ref_toc_det, oursDetailedPages=sum(1 for p in ours["pages"] if p["type"] == "toc-detailed"),
-          refGeneralEntries=ref_gen_entries, oursGeneralEntries=ot["generalCount"],
-          refDetailedEntries=ref_det_entries, oursDetailedEntries=ot["detailedCount"])
+          refGeneralEntries=ref_gen_entries, oursGeneralEntries=ours_gen_entries,
+          refDetailedEntries=ref_det_entries, oursDetailedEntries=ours_det_entries)
 
     # ================= PARITY 6: רצף פסקאות =================
     rp, op = ref["document"]["paragraphSeq"], ours["document"]["paragraphSeq"]
@@ -420,7 +472,9 @@ def main():
         return [s for s in seq if s]
 
     rl = reading_lines(ref)
-    ol = [norm(l["text"]) for p in ours["pages"] for c in p["columns"] for l in c["lines"] if norm(l["text"])]
+    # **S4.9:** צד הפלט נקרא משורות העמוד (p["lines"]) — אותה פונקציית קריאה
+    # כמו הייחוס; הזרמים משווים מבחינה מבנית (גוף+כותרות+שוליים+הערות+TOC).
+    ol = reading_lines(ours)
     sm7 = difflib.SequenceMatcher(None, rl, ol, autojunk=False)
     C.add("P7", "PARITY", "שקילות שבירת שורות (טקסט שורה-אחר-שורה)",
           sm7.ratio() >= 0.995,

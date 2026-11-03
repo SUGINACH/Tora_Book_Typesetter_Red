@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 49 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 55 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -359,6 +359,13 @@ var __paths = {
   "src/engine/output/export-api.js|./html-export": "src/engine/output/html-export.js",
   "src/engine/output/export-api.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/output/export-api.js|../import/zip-reader": "src/engine/import/zip-reader.js",
+  "src/engine/output/export-api.js|./legacy-projector": "src/engine/output/legacy-projector.js",
+  "src/engine/output/legacy-projector.js|../layout/legacy-imud-flow": "src/engine/layout/legacy-imud-flow.js",
+  "src/engine/output/legacy-projector.js|../typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/engine/layout/legacy-imud-flow.js|../typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/engine/typography/measure-api.js|./measure-table": "src/engine/typography/measure-table.js",
+  "src/engine/typography/measure-api.js|./font-metrics": "src/engine/typography/font-metrics.js",
+  "src/engine/typography/measure-api.js|./kp-linebreak": "src/engine/typography/kp-linebreak.js",
   "src/ui/imud-library.js|../engine/decoration/asset-registry": "src/engine/decoration/asset-registry.js",
   "src/ui/imud-library.js|../engine/core/legacy-settings-map": "src/engine/core/legacy-settings-map.js",
   "src/ui/imud-library.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js"
@@ -11536,7 +11543,10 @@ function exportPdf(text, settingsIn, fontBytes, fontName) {
       'measure-impl': 'font-metrics'
     };
     const result = typeset(text, settings, { noRecommendations: true });
-    const projected = projectDocument(result, settings);
+    // **S4.9:** פרופיל IMUD — הקרנה ממקרן ה-legacy (גיאומטריה מפורשת מהייחוס)
+    const projected = result.legacyProfile
+      ? require('./legacy-projector').projectLegacyDocument(result, settings)
+      : projectDocument(result, settings);
     const drawnParts = [];
     for (const pg of projected.pages) {
       for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) for (const w of ln.words) drawnParts.push(w.text);
@@ -11883,6 +11893,2027 @@ function escapeHtml(s) {
 module.exports = { buildStandaloneHtml, assertOfflineSafe, BASE_CSS };
 
 };
+__modules["src/engine/output/legacy-projector.js"] = function (require, module, exports) {
+// src/engine/output/legacy-projector.js — הקרנת עמודי פרופיל IMUD לגיאומטריה מפורשת.
+'use strict';
+
+/**
+ * **S4.9:** מקרן ייעודי לעמודי legacy-imud-flow. כל שורה מקבלת מיקום מפורש
+ * (x/y/baseline/מילים עם רוחב וגודל פר-מילה) — מותאם לחוזה של writePdf
+ * (pages/lines/footnotes/folio/header) ול-pdf_rows של compare.py.
+ *
+ * הגיאומטריה מקורה אחד: legacy-imud-flow (GEO/SZ) — מכויל מהייחוס.
+ */
+
+const { GEO, SZ } = require('../layout/legacy-imud-flow');
+const { MeasureAPI } = require('../typography/measure-api');
+
+const COL_R = { x: GEO.COL_R_X, w: GEO.COL_W };
+const COL_L = { x: GEO.COL_L_X, w: GEO.COL_W };
+
+/** בסיס שורה לפי מודל תיבת השורה של CSS (half-leading + ascent). */
+function baselineOf(yTop, h, sizePt, ascentEm) {
+  const sizePx = sizePt * (96 / 72);
+  const contentH = (ascentEm + 0.2) * sizePx;
+  const half = Math.max(0, (h - contentH) / 2);
+  return yTop + half + ascentEm * sizePx;
+}
+
+/** מיקום מילים RTL מיושרות ברוחב נתון. מחזיר words:[{text,x,w,sizePt,baselineY}] */
+function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
+  const spaceW = api.measureTextWidth(' ', sizePt, 0);
+  const placed = words.map((w, i) => {
+    if (typeof w === 'object') return w; // כבר ממוקם (חלון/סמן)
+    const isMarker = opts.markers && opts.markers[i];
+    const isParen = opts.parenIdx && opts.parenIdx.has(i);
+    const sz = isMarker ? SZ.fnMarker : (isParen ? SZ.body + SZ.parenDelta : sizePt);
+    return { text: w, w: api.measureTextWidth(w, sz, 0), sizePt: sz };
+  });
+  const sumW = placed.reduce((a, w) => a + w.w, 0);
+  const gaps = Math.max(0, placed.length - 1);
+  let gapW = spaceW;
+  if (align === 'justify' && gaps > 0 && sumW + gaps * spaceW < width) {
+    gapW = (width - sumW) / gaps;
+  }
+  const lineW = sumW + gaps * gapW;
+  let xRight;
+  if (align === 'center') xRight = xLeft + (width + lineW) / 2;
+  else xRight = xLeft + width;
+  const out = [];
+  let cursor = xRight;
+  for (const w of placed) {
+    cursor -= w.w;
+    out.push({
+      text: w.text, x: cursor, w: w.w,
+      sizePt: w.sizePt, baselineY: w.sizePt < sizePt ? baseY - sizePt * (96 / 72) * 0.33 : baseY
+    });
+    cursor -= gapW;
+  }
+  return out;
+}
+
+/** הקרנת עמוד legacy בודד. */
+function projectLegacyPage(pg, settings, api) {
+  const ascent = api.ascentEm();
+  const out = {
+    width: GEO.PAGE_W, height: GEO.PAGE_H,
+    contentBox: { top: GEO.FLOW_TOP, bottom: GEO.FLOW_BOTTOM },
+    columns: [COL_R, COL_L],
+    lines: [], footnotes: [], folio: null, header: null, spanning: null
+  };
+
+  const isSingle = pg.type === 'preface' || pg.type === 'toc-general' || pg.type === 'toc-detailed'
+    || pg.type.startsWith('shaar');
+  const col0 = isSingle ? { x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48 } : COL_R;
+
+  // ---- פסים: סימן/כותרת h2/h0/h3 ממורכזים ברוחב הפס (552px) ----
+  // **S4.9:** פיצול למילים (פעולת טקסט נפרדת לכל מילה) — החילוץ מחזיר סדר לוגי,
+  // כמו שורות הכותרת בייחוס (לא הפוך כמו שורות ה-TOC החד-פעולתיות).
+  const bandLeft = GEO.COL_L_X;
+  const bandW = 2 * GEO.COL_W + 13.48;
+  for (const b of (pg.bands || [])) {
+    const baseY = baselineOf(b.y, b.h, b.sizePt, ascent);
+    const words = placeWords(b.text.split(' '), api, bandLeft, bandW, b.sizePt, 'center', baseY);
+    out.lines.push({
+      x: bandLeft, y: b.y, w: bandW, h: b.h, words, align: 'center',
+      kind: b.kind, level: null, isLast: false, sizePt: b.sizePt,
+      baselineY: baseY, tokenId: b.tokenId != null ? b.tokenId : null
+    });
+  }
+
+  // ---- תוכן השערים (ממורכז; מילים נפרדות — חילוץ לוגי, כמו בייחוס) ----
+  for (const g of (pg.gateLines || [])) {
+    const h = g.sizePt * (96 / 72) * 1.3;
+    const baseY = baselineOf(g.y, h, g.sizePt, ascent);
+    // **S4.9:** שורות המהדורה והמחבר בשער הראשי נכתבות אצל המקור כרצף אחד —
+    // החילוץ מחזיר אותן בסדר מילים הפוך. שאר שורות השער מפוצלות למילים (לוגי).
+    const singleOp = g.singleOp === true;
+    const words = placeWords(singleOp ? [g.text] : g.text.split(' '), api, bandLeft, bandW, g.sizePt, 'center', baseY);
+    out.lines.push({
+      x: bandLeft, y: g.y, w: bandW, h, words, align: 'center',
+      kind: 'gate', level: null, isLast: false, sizePt: g.sizePt, baselineY: baseY, tokenId: null
+    });
+  }
+
+  // ---- טורי גוף ----
+  pg.columns.forEach((colLines, ci) => {
+    const col = ci === 0 ? col0 : COL_L;
+    for (const ln of colLines) {
+      const baseY = baselineOf(ln.y, ln.heightPx, ln.sizePt, ascent);
+      let words;
+      if (ln.kind === 'heading') {
+        // כותרת inline — מילים נפרדות (חילוץ לוגי, כמו בייחוס)
+        const joined = ln.words.join(' ');
+        words = placeWords(joined.split(' '), api, col.x, col.w, ln.sizePt, 'center', baseY);
+      } else if (ln.window && ln.windowWords) {
+        // שורת חלון: מילת החלון (1.5×) בשפה הימנית; הטקסט ברוחב מוקטן
+        const winSz = ln.sizePt * 1.5;
+        const winW = api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6;
+        // **S4.9:** בסיס מילת-החלון צמוד לבסיס הטקסט (מוגבה מעט) — תיבת הגליפים
+        // של 1.5× גודל אינה חודרת לשורה הבאה (חפיפה אפס, כמו line-height:0.85 במקור)
+        const winBase = baseY - 2;
+        const winWords = placeWords(ln.windowWords, api, col.x + col.w - winW, winW, winSz, 'right', winBase);
+        const textW = col.w - winW;
+        const textWords = placeWords(ln.words, api, col.x, textW, ln.sizePt,
+          ln.isLast ? 'center' : 'justify', baseY);
+        words = [...winWords, ...textWords];
+      } else {
+        const align = ln.isLast ? 'center' : 'justify';
+        // **S4.9:** מילים בתוך (...) מרונדרות בגודל הסוגריים המוקטן — בדיוק
+        // כפי שנמדדו בשבירה (אחרת השורה רחבה מהטור וגולשת מהעמוד).
+        const parenIdx = new Set();
+        {
+          const stack = [];
+          ln.words.forEach((w, i) => {
+            if (w.startsWith('(')) stack.push(i);
+            if (w.endsWith(')') && stack.length) {
+              const from = stack.pop();
+              for (let k = from; k <= i; k++) parenIdx.add(k);
+            }
+          });
+        }
+        words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
+          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx });
+      }
+      out.lines.push({
+        x: col.x, y: ln.y, w: col.w, h: ln.heightPx, words,
+        align: ln.kind === 'heading' ? 'center' : (ln.isLast ? 'center' : 'justify'),
+        kind: ln.kind, level: ln.level || null, isLast: !!ln.isLast, sizePt: ln.sizePt,
+        baselineY: baseY, tokenId: ln.tokenId != null ? ln.tokenId : null
+      });
+    }
+  });
+
+  // ---- הערות צד בטורי השוליים ----
+  for (const mn of (pg.marginNotes || [])) {
+    const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
+    for (const l of mn.lines) {
+      const baseY = baselineOf(l.y, GEO.MN_PITCH, SZ.marginNote, ascent);
+      const words = placeWords(l.text.split(' '), api, x, GEO.MARGIN_W, SZ.marginNote, 'center', baseY);
+      out.lines.push({
+        x, y: l.y, w: GEO.MARGIN_W, h: GEO.MN_PITCH, words, align: 'center',
+        kind: 'margin-note', level: null, isLast: false, sizePt: SZ.marginNote,
+        baselineY: baseY, tokenId: null
+      });
+    }
+  }
+
+  // ---- מפריד הערות ----
+  // **S4.9:** המקור השתמש ב-✧✧✧ מגופן דפדפן חלופי; הגופן המוטמע שלנו חד-לשוני
+  // (אין גליפי כוכבים) — ההפרדה נשארת דרך ריווח התחתית בלבד.
+
+  // ---- הערות שוליים (תחתית) ----
+  for (const fn of (pg.footnotes || [])) {
+    let x = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
+    let baseY = null;
+    const words = [];
+    if (fn.marker) {
+      const mw = api.measureTextWidth(fn.marker, SZ.fnBody, 0);
+      x -= mw;
+      words.push({ text: fn.marker, x, w: mw, sizePt: SZ.fnBody });
+      x -= api.measureTextWidth(' ', SZ.fnBody, 0);
+    }
+    for (const l of fn.lines) {
+      if (baseY === null) baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
+      const lw = api.measureTextWidth(l.words.join(' '), SZ.fnBody, 0);
+      const x0 = Math.max(GEO.COL_L_X, x - lw);
+      let cursor = x;
+      const ws = [];
+      for (let i = l.words.length - 1; i >= 0; i--) {
+        const w = l.words[i];
+        const ww = api.measureTextWidth(w, SZ.fnBody, 0);
+        cursor -= ww;
+        ws.push({ text: w, x: cursor, w: ww, sizePt: SZ.fnBody });
+        cursor -= api.measureTextWidth(' ', SZ.fnBody, 0);
+      }
+      words.push(...ws);
+      void x0; void lw;
+    }
+    if (words.length) {
+      out.footnotes.push({ y: fn.lines[0].y, x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48, marker: fn.marker, text: fn.lines.map(l => l.words.join(' ')).join(' '), words, baselineY: baseY, h: fn.lines.length * GEO.FN_PITCH });
+    }
+  }
+
+  // ---- שורות תוכן-עניינים ----
+  if (pg.toc) {
+    if (pg.toc.title) {
+      const y = GEO.FLOW_TOP + TOC_TITLE_Y_OFFSET;
+      const baseY = baselineOf(y, 30, SZ.tocTitle, ascent);
+      const words = placeWords([pg.toc.title], api, bandLeft, bandW, SZ.tocTitle, 'center', baseY);
+      out.lines.push({
+        x: bandLeft, y, w: bandW, h: 30, words, align: 'center', kind: 'toc-title',
+        level: null, isLast: false, sizePt: SZ.tocTitle, baselineY: baseY, tokenId: null
+      });
+    }
+    for (const r of (pg.toc.rows || [])) {
+      const baseY = baselineOf(r.y, 26, r.sizePt, ascent);
+      // כותרת מימין (במדרגות לפי רמה), מספר משמאל
+      const tW = api.measureTextWidth(r.text, r.sizePt, 0);
+      const textWords = placeWords([r.text], api, r.x1 - tW, tW, r.sizePt, 'right', baseY);
+      const numW = api.measureTextWidth(r.folio, SZ.tocNum, 0);
+      const numWords = r.folio ? placeWords([r.folio], api, GEO.TOC_NUM_X, numW, SZ.tocNum, 'left', baseY) : [];
+      out.lines.push({
+        x: GEO.TOC_NUM_X, y: r.y, w: r.x1 - GEO.TOC_NUM_X, h: 26,
+        words: [...textWords, ...numWords], align: 'right', kind: 'toc-row',
+        level: r.level, isLast: false, sizePt: r.sizePt, baselineY: baseY, tokenId: null
+      });
+    }
+  }
+
+  // ---- גיליון ----
+  if (pg.folioDisplay) {
+    const fw = api.measureTextWidth(pg.folioDisplay, SZ.folio, 0);
+    out.folio = {
+      y: GEO.FOLIO_BASELINE - 14, x: Math.round((GEO.PAGE_W - fw) / 2), w: fw,
+      sizePt: SZ.folio, text: pg.folioDisplay, baselineY: GEO.FOLIO_BASELINE
+    };
+  }
+
+  // ---- כותרת עליונה תלת-סלוטית ----
+  if (pg.headerSlots && (pg.headerSlots.right || pg.headerSlots.center || pg.headerSlots.left)) {
+    const slots = [];
+    const mk = (pos, text, sizePt) => {
+      if (!text) return;
+      const w = api.measureTextWidth(text, sizePt, 0);
+      let x;
+      if (pos === 'right') x = GEO.COL_R_X + GEO.COL_W - 33 - w;
+      else if (pos === 'left') x = GEO.COL_L_X + 33;
+      else x = (GEO.PAGE_W - w) / 2;
+      slots.push({ pos, text, x, w, sizePt });
+    };
+    mk('right', pg.headerSlots.right, SZ.hdrR);
+    mk('center', pg.headerSlots.center, SZ.hdrC);
+    mk('left', pg.headerSlots.left, SZ.hdrL);
+    if (slots.length) {
+      // **S4.9:** כל סלוט מתפצל למילים — חילוץ לוגי כמו בייחוס
+      for (const s of slots) {
+        const baseY = GEO.HEADER_BASELINE;
+        s.words = placeWords(s.text.split(' '), api, s.x, s.w + 40, s.sizePt,
+          s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
+      }
+      out.header = { y: GEO.HEADER_BASELINE - 14, baselineY: GEO.HEADER_BASELINE, slots };
+    }
+  }
+
+  return out;
+}
+
+const FLOW_BOTTOM_DEFAULT = GEO.FLOW_TOP + GEO.FLOW_H;
+const TOC_TITLE_Y_OFFSET = 136; // כותרת ה-TOC ב-309px = FLOW_TOP+212.4 — מכויל
+
+/** הקרנת מסמך legacy שלם. */
+function projectLegacyDocument(result, settings) {
+  const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
+  const api = new MeasureAPI(settings, impl);
+  const pages = result.pages.map(p => projectLegacyPage(p, settings, api));
+  return { pages, inkBounds: pages.map(() => null), layoutHash: result.layoutHash };
+}
+
+module.exports = { projectLegacyPage, projectLegacyDocument };
+
+};
+__modules["src/engine/layout/legacy-imud-flow.js"] = function (require, module, exports) {
+// src/engine/layout/legacy-imud-flow.js — פורט נאמן של מנוע העימוד המקורי (פרופיל IMUD).
+'use strict';
+
+/**
+ * **S4.9 (בקשת המשתמש 03.11: "בדיקה מתמטית ומוחלטת"):** פרופיל העימוד המקורי.
+ *
+ * מקורות האמת (שניהם מחויבים במאגר):
+ *   1. audits/layout-reference.json — החילוץ המתמטי של פלט הגרסה הישנה (הצהובה)
+ *      מקובצי ה-PDF שהעלה המשתמש, כולל הסימון הגיאומטרי הבלתי-נראה.
+ *   2. audit/IMUD_TORANI/typesetter.js — קוד המקור של המנוע המקורי (הכתום).
+ *
+ * הפורט משחזר את ההתנהגות הנצפית של המקור: מבנה מסמך (שערים, תוכן-עניינים כפול,
+ * עמוד חלק, פרקים), בלוקים דו-טוריים מאוזנים, שבירת שורות גרידה עם חלון מילה-ראשונה,
+ * קשיחת שתי מילים אחרונות, הערות-שוליים בתחתית העמוד והערות צד בטורי השוליים —
+ * הכל בגיאומטריה המדויקת של הייחוס.
+ *
+ * הפרופיל מופעל כאשר ההגדרות מגיעות מ-default_settings.json המקורי
+ * (importImudSettings מסמן layout-profile='imud' ומצרף את ה-JSON הגולמי תחת
+ * _imudRaw). המנוע הכללי (DP) נשאר לשאר הפרופילים — התנהגות המקור היא המפרט.
+ */
+
+const crypto = require('crypto');
+const { MeasureAPI } = require('../typography/measure-api');
+
+// ---------- גיאומטריה (px @96dpi; PDF = px×0.75) — מכויל מהייחוס ----------
+const GEO = {
+  PAGE_W: 793.7, PAGE_H: 1122.5,               // A4
+  COL_W: 269.41,                                // רוחב טור (col:right 269 בתגיות המקור)
+  COL_R_X: 403.61, COL_L_X: 120.72,             // שפות טורים (ימני/שמאלי)
+  MARGIN_R_X: 686.3, MARGIN_L_X: 56.7, MARGIN_W: 50.5, // טורי שוליים (margin-col)
+  FLOW_TOP: 96.7,                               // ראשית זרימת הגוף בעמוד רגיל
+  FLOW_H: 925,                                  // **מכויל:** הייחוס ממלא עד ~1013px+; 925 מייצג את הקיבולת האפקטיבית
+  LINE_H: 21,                                   // **מכויל מהייחוס:** פס הגוף הדומיננטי 15.75pt=21px (הדפסת הדפדפן מקרבת את 16×1.34=21.44 לפיקסל שלם)
+  H2_SPACER: 180,                               // h2-spacer לפני סימן+כותרת
+  HEADER_BASELINE: 71.9,                        // פס כותרת: גליפים 42.56–57.56pt
+  FOLIO_BASELINE: 1054.5,                       // עמודון: y0=783.82pt (גליף ~1045px), ממורכז
+  FN_AREA_TOP: 969.5,                           // תחילת מרזב ההערות (y0=727.1pt בייחוס)
+  FN_PITCH: 16.7,                               // פס שורות הערה (8.5pt × 1.5 × 4/3)
+  TOC_NUM_X: 66.1,                              // מספרי תוכן-עניינים בשמאל (x0≈49.6pt)
+  TOC_TITLE_X1: 727.4,                          // שפה ימנית של כותרות תוכן-עניינים (545.6pt)
+  TOC_STAIR: 8,                                 // מדרגת כניסה לפי רמה (padding-right 8px)
+  MN_PITCH: 9.6                                 // פס שורות הערת-צד (8px × 1.2)
+};
+
+// גדלי גופן (pt — כמו הגדרות המקור; פיקסלים = pt×4/3)
+const SZ = {
+  body: 12, h0Title: 17, h0Body: 11.5, h2: 17, siman: 20, h3: 13.5,
+  h4: 12.5, h5: 11.5, h6: 10.5, parenDelta: -2,
+  fnBody: 8.5, fnMarker: 8, marginNote: 6, folio: 10.5,
+  hdrR: 15, hdrC: 11, hdrL: 15, divider: 6.75,
+  tocNum: 10.5, tocTitle: 17,
+  tocLevel: { 1: 12, 2: 11, 3: 10.5, 4: 10, 5: 9.5, 6: 9, 7: 8.8 }
+};
+
+const HEADING_MODES = {
+  0: 'new_page_1col', 1: 'sub_shaar', 2: 'new_page_1col', 3: 'span_1col',
+  4: 'inline_2col', 5: 'inline_2col', 6: 'inline_2col', 7: 'side_note'
+};
+
+// ---------- עזרים ----------
+function toGematria(num) {
+  num = parseInt(num, 10);
+  if (isNaN(num) || num <= 0) return '';
+  if (num === 15) return 'טו';
+  if (num === 16) return 'טז';
+  const hundreds = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
+  const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
+  const ones = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
+  let str = '';
+  let h = Math.floor(num / 100);
+  if (h > 0) { str += hundreds[Math.min(h, 9)]; num %= 100; }
+  const t = Math.floor(num / 10), o = num % 10;
+  if (t === 1 && (o === 5 || o === 6)) str += (o === 5) ? 'טו' : 'טז';
+  else str += tens[t] + ones[o];
+  return str;
+}
+
+function stripEditorialNotes(text) {
+  return String(text || '')
+    .replace(/##[\s\S]*?##/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.:;!?])/g, '$1')
+    .trim();
+}
+
+const META_FIELDS = [
+  ['bookTitle', /^(?:שם הספר[:\s]*)?שם הספר\s*[-–—:]\s*/i],
+  ['subject', /^(?:נושא(?:\\|\/)כותרת משנה[:\s]*)?נושא\s*[-–—:]\s*/i],
+  ['desc', /^(?:נושא מפורט\s*(?:\\|\/)\s*תיאור[:\s]*)?נושא מפורט\s*[-–—:]\s*/i],
+  ['edition', /^(?:פרטי מהדורא\s*(?:\\|\/)\s*חלקים[:\s]*)?פרטי מהדורא\s*[-–—:]\s*/i],
+  ['author', /^(?:שם המחבר[:\s]*)?שם המחבר\s*[-–—:]\s*/i],
+  ['copyright', /^שמירת זכויות\s*[-–—:]\s*/i],
+  ['publisher', /^פרטי הוצאה לאור\s*[-–—:]\s*/i],
+  ['contact', /^פרטי קשר\s*[-–—:]\s*/i],
+  ['extra', /^פרטים נוספים\s*[-–—:]\s*/i],
+  ['year', /^(?:מקום ושנת הוצאה[:\s]*)?מקום ושנת הוצאה\s*[-–—:]\s*/i]
+];
+
+function parseMetadata(rawText) {
+  const meta = {};
+  const clean = [];
+  for (const line of String(rawText).split('\n')) {
+    const t = line.trim();
+    let hit = false;
+    for (const [key, re] of META_FIELDS) {
+      if (re.test(t)) { meta[key] = t.replace(re, '').trim(); hit = true; break; }
+    }
+    if (!hit) clean.push(line);
+  }
+  return { meta, text: clean.join('\n') };
+}
+
+/** תוחמי הערות: [ ... ] — זיהוי זוגות (כמו findDelimiterMatches במקור). */
+function findNotes(text, open, close) {
+  const out = [];
+  if (!open || !close) return out;
+  let from = 0;
+  for (;;) {
+    const s = text.indexOf(open, from);
+    if (s === -1) break;
+    const e = text.indexOf(close, s + open.length);
+    if (e === -1) break;
+    out.push({ start: s, end: e + close.length, text: text.slice(s + open.length, e) });
+    from = e + close.length;
+  }
+  return out;
+}
+
+function hasUnclosedNote(text, open, close) {
+  if (!open || !close) return false;
+  const s = text.indexOf(open);
+  if (s === -1) return false;
+  return text.indexOf(close, s + open.length) === -1;
+}
+
+/** קריאת קונפיגורציה מה-JSON המקורי (עם ברירות המחדל ההיסטוריות). */
+function readConfig(imud) {
+  const g = (k, d) => (imud && imud[k] !== undefined && imud[k] !== '' ? imud[k] : d);
+  const b = (k, d) => {
+    const v = g(k, d);
+    return v === true || v === 'true' || v === '1' || v === 1;
+  };
+  const n = (k, d) => {
+    const v = parseFloat(g(k, d));
+    return isNaN(v) ? d : v;
+  };
+  return {
+    fnOpen: String(g('fn-delim-open', '[')),
+    fnClose: String(g('fn-delim-close', ']')),
+    endPrefix: String(g('en-line-prefix', 'הערת סיום -')),
+    dropWordMode: String(g('drop-word-mode', 'window')),
+    dropWordCount: n('drop-word-count', 1),
+    dropWordMinLines: n('drop-word-min-lines', 2),
+    avoidRunt: b('avoid-runt-word', true),
+    autoSimanH2: b('h2-auto-siman', true),
+    resetSimanOnH1: b('h2-reset-siman', true),
+    showMainShaar: b('show-main-shaar', true),
+    showBackShaar: b('show-back-shaar', false),
+    showSubShaar: b('show-sub-shaar', true),
+    countSubShaar: b('sub-shaar-count-numbering', true),
+    countGeneralToc: b('general-toc-count-numbering', true),
+    countDetailedToc: b('detailed-toc-count-numbering', true),
+    enableGeneralToc: b('enable-general-toc', true),
+    enableDetailedToc: b('enable-detailed-toc', true),
+    oddH0: b('odd-h0', true),
+    oddH1: b('odd-h1', true),
+    oddH2: b('odd-h2', false),
+    hdrRType: String(g('hdr-r-type', 'book_title_split_r')),
+    hdrCType: String(g('hdr-c-type', 'h2_without_siman')),
+    hdrLType: String(g('hdr-l-type', 'book_title_split_l')),
+    gtocShow: imud && 'gtoc-show' in imud ? imud['gtoc-show'] : [1, 2, 3, 4, 5, 6],
+    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6]
+  };
+}
+
+// ---------- טוקניזציה (כמו performTypeset של המקור) ----------
+function tokenizeDoc(rawText, cfg) {
+  let text = stripEditorialNotes(rawText);
+  const { meta, text: noMeta } = parseMetadata(text);
+  text = noMeta;
+  if (cfg.fnOpen) {
+    const esc = cfg.fnOpen.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    text = text.replace(new RegExp('\\s+(' + esc + ')', 'g'), '$1');
+  }
+  const lines = text.split('\n');
+  const tokens = [];
+  let pendingSideNote = null;
+  let pendingEndNote = null;
+  const endPrefix = cfg.endPrefix;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line) continue;
+    while (hasUnclosedNote(line, cfg.fnOpen, cfg.fnClose) && i + 1 < lines.length) {
+      const next = lines[i + 1].trim();
+      if (!next) break;
+      i++; line += ' ' + next;
+    }
+    if (endPrefix && line.startsWith(endPrefix)) {
+      pendingEndNote = line.slice(endPrefix.length).replace(/^[:\-–—]\s*/, '').trim();
+      continue;
+    }
+    const hMatch = line.match(/^כותרת\s*(\d+)(?:\s+מספר\s+(\d+))?.*?[-–—]\s*(.*)$/);
+    if (hMatch) {
+      const lvl = parseInt(hMatch[1], 10);
+      const txt = (hMatch[3] || '').trim();
+      const num = hMatch[2] ? parseInt(hMatch[2], 10) : null;
+      if (lvl === 7 && HEADING_MODES[7] === 'side_note') {
+        pendingSideNote = txt;
+      } else {
+        tokens.push({ id: tokens.length, type: 'h' + lvl, level: lvl, text: txt, num });
+      }
+    } else {
+      tokens.push({
+        id: tokens.length, type: 'p', text: line,
+        sideNote: pendingSideNote, endNote: pendingEndNote
+      });
+      pendingSideNote = null; pendingEndNote = null;
+    }
+  }
+  return { meta, tokens };
+}
+
+// ---------- שבירת שורות: פורט של getLinesFromParagraph ----------
+/**
+ * גרידה כמו הדפדפן במקור: מילים נמדדות בגופן הגוף; הערה [...] מוצגת במדידה
+ * כ"א" (הסמן); המילה הראשונה בחלון (1.5×) מכווצת את שתי השורות הראשונות;
+ * שתי המילים האחרונות קשורות ברווח בלתי-שביר (מניעת מילה יתומה).
+ */
+class LineBreaker {
+  constructor(api, cfg) {
+    this.api = api;
+    this.cfg = cfg;
+    this.cache = new Map();
+  }
+  w(text, sizePt) {
+    const key = sizePt + '|' + text;
+    let v = this.cache.get(key);
+    if (v === undefined) { v = this.api.measureTextWidth(text, sizePt, 0); this.cache.set(key, v); }
+    return v;
+  }
+
+  /** מילים למדידה + מילים לפלט + טווחי הערות (אטומיות כמו במקור). */
+  splitWords(text) {
+    const { fnOpen, fnClose } = this.cfg;
+    const safe = String(text).trim();
+    const notes = findNotes(safe, fnOpen, fnClose);
+    let atomic = safe;
+    for (const n of notes) {
+      const inner = safe.slice(n.start + fnOpen.length, n.end - fnClose.length).replace(/\s+/g, '\uE000');
+      atomic = atomic.slice(0, n.start + fnOpen.length) + inner + atomic.slice(n.end - fnClose.length);
+    }
+    const words = atomic.split(/\s+/).filter(Boolean);
+    const escO = fnOpen.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escC = fnClose.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const inWord = new RegExp(escO + '[\\s\\S]*?' + escC, 'g');
+    const disp = words.map(word => {
+      if (word.startsWith(fnOpen) && word.endsWith(fnClose)) return 'א';
+      return word.replace(inWord, 'א').replace(/\uE000/g, ' ');
+    });
+    const out = words.map(word => word.replace(/\uE000/g, ' '));
+    return { words, disp, out, notes };
+  }
+
+  /** החלפת מילת-הערה בסמן הגימטריה (בפלט בלבד). */
+  static markerWord(n) { return toGematria(n) + '.'; }
+
+  /**
+   * שבירה גרידה של פסקה.
+   * **S4.9 (מדידת סוגריים):** מילים בתוך (...) נמדדות בגודל הסוגריים המוקטן
+   * (size-body + s-paren, כלומר 12-2=10pt) — כך פסקאות עם סוגריים אצל המקור
+   * מתקצרות בשורות (הרינדור עצמו ב-10pt ממילא).
+   * @returns {{lines:Array<{words:string[], window:boolean, heightPx:number}>, hasWindow:boolean, windowWords:string[]|null, notes:Array}}
+   */
+  breakPara(text, colWidthPx, sizePt, allowWindow) {
+    const cfg = this.cfg;
+    const { disp, out, notes } = this.splitWords(text);
+    const spaceW = this.w(' ', sizePt);
+    // טווחי סוגריים מאוזנים — מילים בתוכם נמדדות בגודל מוקטן
+    const parenWords = new Set();
+    {
+      const stack = [];
+      for (let i = 0; i < out.length; i++) {
+        const wd = out[i];
+        if (wd.startsWith('(')) stack.push(i);
+        if (wd.endsWith(')') && stack.length) {
+          const from = stack.pop();
+          for (let k = from; k <= i; k++) parenWords.add(k);
+        }
+      }
+    }
+    const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
+    const wordWs = disp.map((d, i) => this.w(d, parenWords.has(i) ? parenSize : sizePt));
+    if (!out.length) return { lines: [], hasWindow: false, windowWords: null, notes };
+
+    // חלון מילה-ראשונה: אמדן שורות כמו המדידה הכפולה במקור
+    const totalW = wordWs.reduce((a, b) => a + b, 0) + spaceW * Math.max(0, out.length - 1);
+    const estLines = Math.max(1, Math.ceil(totalW / colWidthPx));
+    const firstHasNote = out.slice(0, Math.min(cfg.dropWordCount, out.length))
+      .some(w => w.includes(cfg.fnOpen));
+    let useWindow = false, windowW = 0, windowWords = null;
+    if (allowWindow && cfg.dropWordMode === 'window' && estLines >= cfg.dropWordMinLines && !firstHasNote) {
+      useWindow = true;
+      windowWords = out.slice(0, cfg.dropWordCount);
+      windowW = this.w(disp.slice(0, cfg.dropWordCount).join(' '), sizePt * 1.5) + 6;
+    }
+
+    // קשיחת שתי המילים האחרונות
+    const flowStart = useWindow ? cfg.dropWordCount : 0;
+    const pairStart = out.length - 2;
+    const bindPair = cfg.avoidRunt && (out.length - flowStart) >= 3 && pairStart >= flowStart;
+
+    const lines = [];
+    let cur = [], curW = 0, lineNo = 0;
+    const limitOf = () => (useWindow && lineNo < 2) ? colWidthPx - windowW : colWidthPx;
+
+    if (useWindow) {
+      // שורות 0–1: החלון בשפה הימנית; הזרימה ברוחב מוקטן. מילות החלון אינן בזרימה.
+    }
+    for (let i = flowStart; i < out.length; i++) {
+      const bindHere = bindPair && i === pairStart; // המילה הלפני-אחרונה — נבדקת עם יורשתה
+      const w1 = wordWs[i];
+      const w2 = bindHere ? wordWs[i + 1] + spaceW : 0;
+      const addW = (cur.length ? spaceW : 0) + w1 + (bindHere ? w2 : 0);
+      if (cur.length && curW + addW > limitOf() + 0.01) {
+        lines.push({ words: cur, window: useWindow && lineNo < 2 });
+        cur = []; curW = 0; lineNo++;
+      }
+      cur.push(out[i]);
+      curW += (cur.length > 1 ? spaceW : 0) + w1;
+      if (bindHere) {
+        cur.push(out[i + 1]);
+        curW += spaceW + wordWs[i + 1];
+        i++;
+      }
+    }
+    if (cur.length) lines.push({ words: cur, window: useWindow && lineNo < 2 });
+    for (const l of lines) l.heightPx = GEO.LINE_H;
+    return { lines, hasWindow: useWindow, windowWords, notes };
+  }
+}
+
+// =====================================================================
+//  הרכבת המסמך — פורט של performTypeset (מבנה, בלוקים, עימוד)
+//  מודל: עמוד = מחסנית אנכית של פסים (span של h3) ובלוקים דו-טוריים מאוזנים.
+// =====================================================================
+
+const FLOW_BOTTOM = GEO.FLOW_TOP + GEO.FLOW_H; // 1011.7px
+const H2_AREA_H = 271.3;   // **מכויל מהייחוס (עמ' 11):** הזרימה מתחילה ב-368px — סימן ב-284.9, כותרת ב-321.1, h3-span מ-368
+const H3_SPAN_H = 40;      // **מכויל מהייחוס:** span מ-368 ועד הגוף ב-407.6 (עמ' 11)
+const H0_AREA_H = 251.3;   // **מכויל מהייחוס (עמ' 10):** הזרימה מתחילה ב-348px; הכותרת ב-309px
+const SINGLE_W = 552.3;    // .single-wide-col = 2×269.41+13.48 (grid)
+const H0_LINE_H = 22.2;    // 15.33px × 1.45 (line-height של h0-body)
+const TOC_TITLE_BLOCK_H = 213;
+
+/** גובה פריט כותרת inline (h4/h5/h6) בטור — גודל×1.22 + מרווחי המקור. */
+function headingItemH(level) {
+  const sz = ({ 4: SZ.h4, 5: SZ.h5, 6: SZ.h6 })[level] || SZ.body;
+  // **מכויל מהייחוס:** שורת הכותרת + מרווח תחתון (margin-bottom 4px + collapse)
+  return sz * (96 / 72) * 1.22 + 6;
+}
+
+/** גלישת שורות גרידה גנרית (להערות). */
+function wrapText(text, api, widthPx, sizePt) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = [], curW = 0;
+  const spaceW = api.measureTextWidth(' ', sizePt, 0);
+  for (const w of words) {
+    const ww = api.measureTextWidth(w, sizePt, 0);
+    const add = ww + (cur.length ? spaceW : 0);
+    if (cur.length && curW + add > widthPx) { lines.push(cur.join(' ')); cur = [w]; curW = ww; }
+    else { cur.push(w); curW += add; }
+  }
+  if (cur.length) lines.push(cur.join(' '));
+  return lines;
+}
+
+/**
+ * legacyTypeset — הנתיב החי לפרופיל IMUD (התנהגות המקור = המפרט).
+ */
+function legacyTypeset(rawText, settings) {
+  const cfg = readConfig(settings._imudRaw || {});
+  const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
+  const api = new MeasureAPI(settings, impl);
+  const brk = new LineBreaker(api, cfg);
+  const { meta, tokens } = tokenizeDoc(rawText, cfg);
+
+  const bookTitle = (meta.bookTitle || 'ספר').trim();
+  const tw = bookTitle.split(/\s+/);
+  const mid = Math.ceil(tw.length / 2);
+  const hdrR = tw.slice(0, mid).join(' ');
+  const hdrL = tw.slice(mid).join(' ');
+
+  // ---- מקטעים (כמו המקור: h1→sub_shaar, h0/h2→new_page, השאר inline) ----
+  const sections = [];
+  let cur = { tokens: [] };
+  for (const t of tokens) {
+    const mode = t.type[0] === 'h' ? (HEADING_MODES[t.level] || 'inline_2col') : 'inline_2col';
+    if (mode === 'sub_shaar') {
+      if (cur.tokens.length) sections.push(cur);
+      sections.push({ subShaar: t, tokens: [] });
+      cur = { tokens: [] };
+    } else if (mode === 'new_page_1col' || mode === 'new_page_2col') {
+      if (cur.tokens.length) sections.push(cur);
+      cur = { newPage: t, tokens: [] };
+    } else {
+      cur.tokens.push(t);
+    }
+  }
+  if (cur.tokens.length) sections.push(cur);
+
+  const pages = [];
+  const headingFolio = new Map();
+  let simanCounter = 0;
+  let currentH2 = '';
+  let currentH1 = '';
+  let pending = null; // {token, lines, lineIdx} — המשך פסקה חתוכה בין עמודים/טורים
+
+  function blankPageObj(type) {
+    return {
+      index: -1, type, legacy: true, pageNumber: null, folioDisplay: '',
+      headerSlots: null, bands: [], columns: [[], []], marginNotes: [], footnotes: [],
+      fnSep: false, toc: null, _metadata: meta,
+      template: { width: GEO.PAGE_W, height: GEO.PAGE_H, contentBox: { top: GEO.FLOW_TOP, bottom: FLOW_BOTTOM } }
+    };
+  }
+  function newPage(type) {
+    const pg = blankPageObj(type);
+    pages.push(pg);
+    return pg;
+  }
+  const setHeader = (pg, center) => { pg.headerSlots = { right: hdrR, center: center || '', left: hdrL }; };
+
+  // ---------- עמודי שער ----------
+  // **S4.9:** תוכן השערים מהמטא-דאטה של המסמך — במיקומים המכוינים מהייחוס
+  // (shaar-main: כותרת 46pt ב-128pt, משנה 21pt, תיאור 12pt, מהדורה 11.5pt, מחבר 15pt;
+  //  shaar-back: זכויות/פרטים; shaar-sub: כותרת ה-h1 ב-36pt + המשך ב-21pt).
+  function gateLinesFor(type, h1Token) {
+    const pt = (v) => v / 0.75;
+    if (type === 'shaar-main') return [
+      { text: meta.bookTitle || '', sizePt: 46, y: pt(128.1) },
+      { text: meta.subject || '', sizePt: 21, y: pt(225.2) },
+      { text: meta.desc || '', sizePt: 12, y: pt(410.3) },
+      { text: meta.edition || '', sizePt: 11.5, y: pt(558.0), singleOp: true },
+      { text: meta.author || '', sizePt: 15, y: pt(713.5), singleOp: true }
+    ].filter(g => g.text);
+    if (type === 'shaar-back') return [
+      { text: meta.copyright ? 'כל הזכויות שמורות' : '', sizePt: 13.5, y: pt(191.8) },
+      { text: meta.copyright || '', sizePt: 10, y: pt(216.4) },
+      { text: meta.publisher || '', sizePt: 11, y: pt(357.3) },
+      { text: meta.contact || '', sizePt: 10, y: pt(500.9) },
+      { text: meta.extra || '', sizePt: 9.5, y: pt(644.3) }
+    ].filter(g => g.text);
+    if (type === 'shaar-sub' && h1Token) {
+      const parts = h1Token.text.split(/[-–—]/).map(s => s.trim()).filter(Boolean);
+      const first = parts[0] || h1Token.text;
+      const rest = parts.slice(1).join(' - ');
+      const out = [{ text: first, sizePt: 36, y: pt(345.7) }];
+      if (rest) out.push({ text: rest, sizePt: 21, y: pt(469.7) });
+      return out;
+    }
+    return [];
+  }
+  if (cfg.showMainShaar) { const g0 = newPage('shaar-main'); g0.gateLines = gateLinesFor('shaar-main'); }
+  if (cfg.showBackShaar) { const g1 = newPage('shaar-back'); g1.gateLines = gateLinesFor('shaar-back'); }
+
+  // ---------- זרימת מקטע ----------
+  function flowSection(sec) {
+    const toks = sec.tokens;
+    let ti = 0;
+    let sectionFirst = true;
+    const isH0 = sec.newPage && sec.newPage.level === 0;
+    const isH2 = sec.newPage && sec.newPage.level === 2;
+
+    while (ti < toks.length || pending) {
+      const pg = newPage(isH0 ? (sectionFirst ? 'preface' : 'regular')
+        : (sectionFirst && isH2 ? 'sign-open' : 'regular'));
+      let top = GEO.FLOW_TOP;
+      if (sectionFirst && sec.newPage) {
+        if (isH0) {
+          pg.bands.push({ kind: 'h0-title', text: sec.newPage.text, sizePt: SZ.h0Title, y: 309.0, h: 30, tokenId: sec.newPage.id });
+          top = GEO.FLOW_TOP + H0_AREA_H;
+          currentH2 = sec.newPage.text;
+        } else if (isH2) {
+          if (cfg.autoSimanH2) {
+            simanCounter++;
+            pg.bands.push({ kind: 'h2-siman', text: 'סימן ' + toGematria(simanCounter), sizePt: SZ.siman, y: 284.9, h: 36, tokenId: null });
+          }
+          const disp = sec.newPage.text.replace(/^סימן\s+[א-ת]+[:\-–—\s]*/i, '').trim();
+          pg.bands.push({ kind: 'h2-title', text: disp, sizePt: SZ.h2, y: 321.1, h: 30, tokenId: sec.newPage.id });
+          currentH2 = disp;
+          // **S4.9 (תיקון קריטי):** הזרימה מתחילה מתחת לאזור ה-h2 (סימן+כותרת) —
+          // בלי זה הבלוקים מוצבים מראש העמוד, מתנגשים בכותרות וגוררים
+          // הסחת עימוד של ~29 שורות בכל עמוד פתיחת סימן.
+          top = GEO.FLOW_TOP + H2_AREA_H;
+        }
+      }
+      setHeader(pg, currentH2);
+      sectionFirst = false;
+
+      const fnQueue = [];
+      let noteCounter = 0; // איפוס מונה הערות לפי עמוד (כמו המקור)
+      let fnReserved = 0;
+      // **S4.9 (התנהגות המקור הנצפית):** הערות של פסקה מופיעות ומוזרמות לתקציב
+      // בכל עמוד שבו לפסקה שורות — גם בהמשכים (הייחוס מציג את הערה-א בעמודים
+      // 11 וגם 12, והתקציב מצטמצם כבר בעמוד הראשון של הפסקה).
+      const paraNotes = new Map(); // tokenId → [{marker, text}] (מופקות בפעם הראשונה)
+      const tokPages = new Map();  // tokenId → Set(pageIndex)
+      const requeueParaNotes = (tokenId) => {
+        const notes = paraNotes.get(tokenId);
+        if (!notes) return;
+        for (const n of notes) {
+          fnQueue.push({ marker: n.marker, text: n.text, dup: true });
+        }
+        fnReserved = fnReserveFor(fnQueue);
+      };
+
+      // ---- מבנה העמוד: מחסנית של פסים ובלוקים; מילוי דו-טורי (ימני ואז שמאלי) ----
+      const stack = [];
+      let block = null;
+      const openBlock = (yTop) => {
+        block = { yTop, cols: [[], []], cursor: [yTop, yTop], fill: 0 };
+        stack.push(block);
+      };
+      const blockBottom = () => block ? Math.max(block.cursor[0], block.cursor[1]) : top;
+      const colBottom = () => FLOW_BOTTOM - fnReserved;
+
+      fillPage: while (ti < toks.length || pending) {
+        const tok = pending ? pending.token : toks[ti];
+        const mode = tok.type[0] === 'h' ? (HEADING_MODES[tok.level] || 'inline_2col') : 'inline_2col';
+
+        if (mode === 'span_1col' && !pending) {
+          const curY = block ? blockBottom() : top;
+          if (colBottom() - curY < H3_SPAN_H + 6) break fillPage;
+          if (block && (block.cols[0].length || block.cols[1].length)) balanceBlock(block, colBottom() - block.yTop);
+          stack.push({ type: 'span', text: tok.text, y: curY, h: H3_SPAN_H, tokenId: tok.id });
+          openBlock(curY + H3_SPAN_H);
+          ti++;
+          continue;
+        }
+        if (tok.type[0] === 'h') {
+          if (!block) openBlock(top);
+          const h = headingItemH(tok.level);
+          if (block.cursor[block.fill] + h > colBottom()) {
+            if (block.fill === 0 && !isH0 && !(block.cols[0].length === 0)) {
+              block.fill = 1; // המשך בטור השמאלי
+            } else if (block.cols[block.fill].length || block.cols[0].length) {
+              break fillPage;
+            }
+          }
+          block.cols[block.fill].push({ kind: 'heading', level: tok.level, text: tok.text, h, tokenId: tok.id });
+          block.cursor[block.fill] += h;
+          ti++;
+          continue;
+        }
+
+        // ---- פסקה ----
+        if (!block) openBlock(top);
+        const isH0Body = isH0;
+        const bodySz = isH0Body ? SZ.h0Body : SZ.body;
+        const pitch = isH0Body ? H0_LINE_H : GEO.LINE_H;
+        const colW = isH0Body ? SINGLE_W : GEO.COL_W;
+        let lines, hasWindow = false, windowWords = null;
+        const isCont = !!pending;
+        if (pending) {
+          lines = pending.lines;
+          // המשך פסקה — ההערות שלה חוזרות לתור העמוד (כמו במקור)
+          requeueParaNotes(tok.id);
+        } else {
+          tokPages.set(tok.id, new Set([pages.length - 1]));
+          const r = brk.breakPara(tok.text, colW, bodySz, true);
+          lines = r.lines; hasWindow = r.hasWindow; windowWords = r.windowWords;
+        }
+        const startIdx = pending ? pending.lineIdx : 0;
+        const total = lines.length - startIdx;
+
+        // תקציב מוקדם: כל ההערות של הפסקה (מהשבירה המלאה) נכנסות לתור העמוד
+        // כבר בעמוד הראשון שלה — כך התקציב מצטמצם מוקדם כמו במקור.
+        if (!isCont) {
+          const allNotes = [];
+          for (const lw of lines) {
+            for (const w of lw.words) {
+              const a0 = w.indexOf(cfg.fnOpen);
+              const a1 = a0 >= 0 ? w.lastIndexOf(cfg.fnClose) : -1;
+              if (a0 >= 0 && a1 > a0 + cfg.fnOpen.length) {
+                allNotes.push(w.slice(a0 + cfg.fnOpen.length, a1));
+              }
+            }
+          }
+          if (allNotes.length) {
+            if (!paraNotes.has(tok.id)) {
+              paraNotes.set(tok.id, allNotes.map((t, i) => ({ marker: LineBreaker.markerWord(i + 1), text: t })));
+            }
+            for (const n of paraNotes.get(tok.id)) {
+              if (!fnQueue.some(q => q.text === n.text)) {
+                fnQueue.push({ marker: n.marker, text: n.text, dup: true });
+              }
+            }
+            fnReserved = fnReserveFor(fnQueue);
+          }
+        }
+
+        let fit = 0;
+        for (let k = 1; k <= total; k++) {
+          if (block.cursor[block.fill] + k * pitch <= colBottom() + 0.01) fit = k; else break;
+        }
+        // אלמנה/יתומה (chooseSplitLines של המקור)
+        if (fit > 0 && fit < total) {
+          const canPush = block.cols[0].length > 0 || block.cols[1].length > 0 || stack.length > 1;
+          if (fit === 1 && canPush) fit = 0;
+          else if (total - fit === 1 && fit > 1) fit -= 1;
+          else if (total - fit === 1 && fit === 1 && canPush) fit = 0;
+        }
+        if (fit === 0) {
+          // הטור הנוכחי מלא — מעבר לטור השמאלי (בלוק דו-טורי); אחרת עמוד הבא
+          if (block.fill === 0 && !isH0 && block.cols[0].length > 0) {
+            block.fill = 1;
+            continue;
+          }
+          const anyContent = stack.length > 1 || block.cols[0].length > 0 || block.cols[1].length > 0;
+          if (!anyContent) fit = 1; // התקדמות מאולצת — שורה אחת לפחות
+          else break fillPage;
+        }
+
+        // סמני הערות בשורות המוצבות.
+        // **S4.9:** הערה עשויה להיות מוצמדת למילה שלפניה ("השבוע.[חלוקת...]")
+        // — זיהוי לפי אינדקס התוחמים בתוך המילה (כמו findDelimiterMatches
+        // במקור), לא רק מילה שלמה שמתחילה ב-[.
+        const emitted = [];
+        for (let k = 0; k < fit; k++) {
+          const ln = lines[startIdx + k];
+          const words = [];
+          const markerIdx = []; // אינדקסים של סמני הערות (להסרה מדויקת במודל)
+          for (const w of ln.words) {
+            const at0 = w.indexOf(cfg.fnOpen);
+            const at1 = at0 >= 0 ? w.lastIndexOf(cfg.fnClose) : -1;
+            if (at0 >= 0 && at1 > at0 + cfg.fnOpen.length) {
+              const prefix = w.slice(0, at0);
+              const inner = w.slice(at0 + cfg.fnOpen.length, at1);
+              const suffix = w.slice(at1 + cfg.fnClose.length);
+              if (prefix) words.push(prefix);
+              noteCounter += 1;
+              const marker = LineBreaker.markerWord(noteCounter);
+              fnQueue.push({ marker, text: inner });
+              if (!paraNotes.has(tok.id)) paraNotes.set(tok.id, []);
+              if (!paraNotes.get(tok.id).some(n => n.text === inner)) {
+                paraNotes.get(tok.id).push({ marker, text: inner });
+              }
+              fnReserved = fnReserveFor(fnQueue);
+              markerIdx.push(words.length);
+              words.push(marker);
+              if (suffix) words.push(suffix);
+            } else {
+              words.push(w);
+            }
+          }
+          emitted.push({ ...ln, words, markerIdx });
+        }
+        const isEnd = startIdx + fit >= lines.length;
+        block.cols[block.fill].push({
+          kind: 'para', tokenId: tok.id, lines: emitted, from: startIdx,
+          isEnd, isCont, hasWindow: hasWindow && !isCont, windowWords,
+          pitch, sizePt: bodySz, sideNote: (!isCont && tok.sideNote) ? tok.sideNote : null
+        });
+        block.cursor[block.fill] += fit * pitch;
+        // **S4.9:** מרווח בין פסקאות — p { margin-bottom: 7px } במקור (רק בסוף פסקה)
+        if (isEnd) block.cursor[block.fill] += 7;
+        if (isEnd) { pending = null; ti++; }
+        else {
+          pending = { token: tok, lines, lineIdx: startIdx + fit };
+          // הפסקה נחתכה — אם הטור השמאלי עוד פנוי, ממשיכים בו; אחרת עמוד הבא
+          if (block.fill === 0 && !isH0 && block.cols[0].length > 0) {
+            block.fill = 1;
+          } else {
+            break fillPage;
+          }
+        }
+      }
+
+      // סגירת הבלוק האחרון: אם המקטע נגמר — איזון
+      const sectionEnded = ti >= toks.length && !pending;
+      if (block && sectionEnded && !isH0 && (block.cols[0].length || block.cols[1].length)) {
+        balanceBlock(block, colBottom() - block.yTop);
+      }
+
+      // ---- פריסת המחסנית לעמוד: פסים + בלוקים → טורים עם y מפורש ----
+      layoutStack(pg, stack, top);
+
+      // ---- הערות שוליים בתחתית (bottom-anchored) ----
+      if (fnQueue.length) {
+        pg.fnSep = true;
+        // **S4.9:** השורה הראשונה של כל הערה קצרה ברוחב הסמן — אחרת המילים
+        // גולשות מעבר לשפה השמאלית של הדף.
+        const items = fnQueue.map(n => {
+          const mkW = api.measureTextWidth(n.marker, SZ.fnBody, 0) + api.measureTextWidth(' ', SZ.fnBody, 0);
+          const lines = wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody);
+          return { marker: n.marker, lines, mkW };
+        });
+        const totalH = items.reduce((a, n) => a + n.lines.length * GEO.FN_PITCH, 0);
+        let yy = FLOW_BOTTOM - totalH;
+        for (const n of items) {
+          const it = { marker: n.marker, lines: [] };
+          for (const l of n.lines) { it.lines.push({ words: String(l).split(' '), y: yy }); yy += GEO.FN_PITCH; }
+          pg.footnotes.push(it);
+        }
+      }
+    }
+  }
+
+  function fnReserveFor(queue) {
+    if (!queue.length) return 0;
+    let total = 0;
+    for (const n of queue) {
+      total += wrapText(n.text, api, SINGLE_W, SZ.fnBody).length * GEO.FN_PITCH;
+    }
+    return total + 24; // מפריד + מרווחים (כמו +24 במקור)
+  }
+
+  /**
+   * איזון בלוק: חלוקת היחידות מחדש בין הטורים לגבהים שווים בקירוב —
+   * **בכפוף לגובה העמודה הפנוי** (colBottom − yTop). אם החלוקה המאוזנת גולשת,
+   * יחידות מוחזרות מהטור השני לראשון; אם גם זה לא מספיק — נשמר המילוי המקורי
+   * (שהוכח כחוקי בזמן המילוי). בלי זה בלוק 41/31 שורות היה הופך ל-24/48 —
+   * והטור השמאלי גולש מתחת לתחתית הזרימה.
+   */
+  function balanceBlock(block, availH) {
+    const units = [...block.cols[0], ...block.cols[1]];
+    const totalH = units.reduce((a, u) => a + unitH(u), 0);
+    const target = totalH / 2;
+    const cap = Math.max(availH != null ? availH : Infinity, target);
+    const r = [], l = [];
+    let y = 0, idx = 0;
+    for (; idx < units.length; idx++) {
+      const u = units[idx];
+      const h = unitH(u);
+      if ((y + h <= target + GEO.LINE_H || (r.length === 0 && l.length === 0)) && y + h <= cap) { r.push(u); y += h; }
+      else break;
+    }
+    for (; idx < units.length; idx++) l.push(units[idx]);
+    // החזרת יחידות מ-l ל-r כש-l גולש
+    let rH = r.reduce((a, u) => a + unitH(u), 0);
+    let lH = l.reduce((a, u) => a + unitH(u), 0);
+    while (l.length && lH > cap && rH + unitH(l[0]) <= cap) {
+      const u = l.shift();
+      r.push(u); rH += unitH(u); lH -= unitH(u);
+    }
+    if (lH > cap) {
+      block.split = null; // נטישת האיזון — המילוי המקורי חוקי מהגדרתו
+      return;
+    }
+    block.split = { r, l };
+    // **S4.9:** ה-cursor מתעדכן לתחתיות האמיתיות — אחרי האיזון מיקום הפס/הבלוק
+    // הבא (blockBottom) היה מחושב מהמילוי הקודם וחופף את זנב הטור המאוזן.
+    block.cursor[0] = block.yTop + rH;
+    block.cursor[1] = block.yTop + lH;
+  }
+
+  function unitH(u) {
+    if (u.kind === 'heading') return u.h;
+    // פסקה שהסתיימה כוללת את מרווח ה-7px שאחריה
+    return u.lines.length * u.pitch + (u.isEnd ? 7 : 0);
+  }
+
+  /** פריסת המחסנית: כותבת שורות עם y מפורש לטורי העמוד. */
+  function layoutStack(pg, stack, top) {
+    const colR = [], colL = [];
+    let y = top;
+    for (const seg of stack) {
+      if (seg.type === 'span') {
+        pg.bands.push({ kind: 'h3-title', text: seg.text, sizePt: SZ.h3, y: seg.y + 8, h: seg.h, tokenId: seg.tokenId });
+        y = seg.y + seg.h;
+        continue;
+      }
+      const block = seg;
+      const rUnits = block.split ? block.split.r : block.cols[0];
+      const lUnits = block.split ? block.split.l : block.cols[1];
+      let ry = block.yTop;
+      for (const u of rUnits) ry = emitUnit(pg, colR, u, ry, 'right');
+      let ly = block.yTop;
+      for (const u of lUnits) ly = emitUnit(pg, colL, u, ly, 'left');
+      y = Math.max(ry, ly);
+    }
+    pg.columns[0] = colR;
+    pg.columns[1] = colL;
+    void y;
+  }
+
+  function emitUnit(pg, col, u, y, sideName) {
+    if (u.kind === 'heading') {
+      col.push({
+        words: [u.text], sizePt: ({ 4: SZ.h4, 5: SZ.h5, 6: SZ.h6 })[u.level] || SZ.body,
+        heightPx: u.h, kind: 'heading', level: u.level, isLast: false,
+        tokenId: u.tokenId, window: false, windowWords: null, y,
+        paraId: null, lineIdx: null, align: 'center'
+      });
+      return y + u.h;
+    }
+    let i = 0;
+    for (const ln of u.lines) {
+      const lineIdxGlobal = u.from + i;
+      col.push({
+        words: ln.words.slice(),
+        markerIdx: ln.markerIdx || [],
+        sizePt: u.sizePt, heightPx: u.pitch, kind: 'paragraph',
+        isLast: u.isEnd && i === u.lines.length - 1,
+        tokenId: u.tokenId,
+        window: !!(u.hasWindow && lineIdxGlobal < 2),
+        windowWords: (u.hasWindow && lineIdxGlobal === 0) ? u.windowWords : null,
+        y, paraId: u.tokenId, lineIdx: lineIdxGlobal
+      });
+      y += u.pitch;
+      i++;
+    }
+    if (u.isEnd) y += 7; // מרווח בין פסקאות (p{margin-bottom:7px} במקור)
+    if (u.sideNote) {
+      const anchor = y - u.lines.length * u.pitch;
+      const lines = wrapText(u.sideNote, api, GEO.MARGIN_W - 2, SZ.marginNote);
+      pg.marginNotes.push({
+        side: sideName === 'right' ? 'right' : 'left',
+        anchorY: anchor,
+        lines: lines.map((t, i2) => ({ text: t, y: anchor + i2 * GEO.MN_PITCH }))
+      });
+    }
+    return y;
+  }
+
+  // ---- הרצת המקטעים ----
+  for (const sec of sections) {
+    if (sec.subShaar) {
+      const t = sec.subShaar;
+      if (cfg.resetSimanOnH1) simanCounter = 0;
+      const pg = newPage('shaar-sub');
+      pg._h1Token = t;
+      pg.gateLines = gateLinesFor('shaar-sub', t);
+      currentH1 = t.text.split(/[-–—]/)[0].trim();
+      continue;
+    }
+    flowSection(sec);
+  }
+
+  // ---- תוכן-עניינים כפול + מספור סופי ----
+  const genShow = Array.isArray(cfg.gtocShow) ? cfg.gtocShow : [1, 2, 3, 4, 5, 6];
+  const detShow = Array.isArray(cfg.dtocShow) ? cfg.dtocShow : [2, 3, 4, 5, 6];
+  const genEntries = tokens.filter(t => t.type[0] === 'h' && genShow.includes(t.level))
+    .map(t => ({ tokenId: t.id, level: t.level, text: t.text }));
+  const detEntries = tokens.filter(t => t.type[0] === 'h' && detShow.includes(t.level))
+    .map(t => ({ tokenId: t.id, level: t.level, text: t.text }));
+
+  function tocRowH(level) {
+    return (SZ.tocLevel[level] || 10.5) * (96 / 72) * 1.3 + 8;
+  }
+  /**
+   * **S4.9 (התנהגות המקור):** הפריסה לעמודים היא ביחידות אטומיות — שורת h1/h2
+   * + קבוצת תתי-הכותרות שלה (break-inside: avoid במקור). קבוצה שלא נכנסת
+   * עוברת שלמה לעמוד הבא. כך נוצר פיצול 17/28/19 של הייחוס.
+   */
+  function makeTocPages(kind, entries, title) {
+    const rows = entries.map(e => ({ ...e, sizePt: SZ.tocLevel[e.level] || 10.5, h: tocRowH(e.level) }));
+    // יחידות: h1 בודד; h2 + כל ה-h3..h6 שאחריו עד ה-h2 הבא
+    const units = [];
+    for (const r of rows) {
+      if (r.level <= 2 || !units.length) units.push([r]);
+      else units[units.length - 1].push(r);
+    }
+    const pagesRows = [];
+    let curRows = [], curH = 0, first = true;
+    for (const u of units) {
+      const uH = u.reduce((a, r) => a + r.h, 0);
+      const avail = first ? GEO.FLOW_H - TOC_TITLE_BLOCK_H : GEO.FLOW_H;
+      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; }
+      curRows.push(...u); curH += uH;
+    }
+    if (curRows.length) pagesRows.push({ rows: curRows, first });
+    return pagesRows.map((pr, pi) => {
+      const pg = blankPageObj(kind);
+      pg.headerSlots = { right: hdrR, center: title, left: hdrL };
+      const isLast = pi === pagesRows.length - 1;
+      const top = pr.first ? GEO.FLOW_TOP + TOC_TITLE_BLOCK_H + 61 : GEO.FLOW_TOP + 17;
+      const rowYs = [];
+      if (!isLast && pr.rows.length > 1) {
+        const gap = (FLOW_BOTTOM - 6 - top) / (pr.rows.length - 1);
+        pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+      } else {
+        let yy = top;
+        for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
+      }
+      pg.toc = {
+        title: pr.first ? title : null,
+        rows: pr.rows.map((r, i) => ({
+          tokenId: r.tokenId, level: r.level, text: r.text, sizePt: r.sizePt, y: rowYs[i],
+          folio: '',
+          x1: GEO.TOC_TITLE_X1 - (r.level - 1) * GEO.TOC_STAIR
+        }))
+      };
+      return pg;
+    });
+  }
+
+  // סדר סופי: gates → toc-general×G → [blank] → shaar-sub → toc-detailed×D → body
+  // **תיקון S4.9:** "שערים" = shaar-main/back בלבד — shaar-sub שייך לגוף (אחרי
+  // ה-blank), אחרת הוא נגרר לראש המסמך וכל הסדר משתבש.
+  const gates = [];
+  const bodies = [];
+  for (const p of pages) ((p.type === 'shaar-main' || p.type === 'shaar-back') ? gates : bodies).push(p);
+  const genPages = cfg.enableGeneralToc && genEntries.length ? makeTocPages('toc-general', genEntries, 'תוכן עניינים כללי') : [];
+  const gCount = genPages.length;
+  const needBlank = cfg.oddH1 && ((1 + gCount) % 2 === 0);
+  const blank = needBlank ? blankPageObj('blank') : null;
+  const detPages = cfg.enableDetailedToc && detEntries.length ? makeTocPages('toc-detailed', detEntries, 'תוכן עניינים מפורט') : [];
+  const subIdx = bodies.findIndex(p => p.type === 'shaar-sub');
+  const before = subIdx >= 0 ? bodies.slice(0, subIdx + 1) : [];
+  const after = subIdx >= 0 ? bodies.slice(subIdx + 1) : bodies;
+
+  const final = [...gates, ...genPages];
+  if (blank) final.push(blank);
+  final.push(...before, ...detPages, ...after);
+
+  // מספור סופי + folios + אינדקסים
+  let pn = 1;
+  for (const p of final) {
+    const counted = ['toc-general', 'toc-detailed', 'blank', 'shaar-sub', 'regular', 'sign-open', 'preface'].includes(p.type);
+    p.pageNumber = counted ? pn++ : null;
+    const shows = ['toc-general', 'toc-detailed', 'regular', 'sign-open', 'preface'].includes(p.type);
+    p.folioDisplay = shows && p.pageNumber ? toGematria(p.pageNumber) : '';
+  }
+  final.forEach((p, i) => { p.index = i; });
+
+  // folio של כל כותרת = העמוד שבו היא הוצבה
+  const folioByToken = new Map();
+  for (const p of final) {
+    if (p._h1Token) folioByToken.set(p._h1Token.id, p.folioDisplay);
+    for (const b of (p.bands || [])) if (b.tokenId != null) folioByToken.set(b.tokenId, p.folioDisplay);
+    for (const col of p.columns) for (const ln of col) {
+      if (ln.kind === 'heading' && ln.tokenId != null && !folioByToken.has(ln.tokenId)) folioByToken.set(ln.tokenId, p.folioDisplay);
+    }
+  }
+  for (const p of final) if (p.toc) for (const r of p.toc.rows) r.folio = folioByToken.get(r.tokenId) || '';
+
+  pages.length = 0;
+  pages.push(...final);
+
+  // ---- תוצאה ----
+  const tokensOut = tokens.map(t => ({ id: 'lt' + t.id, type: t.type, level: t.level, text: t.text, num: t.num || null }));
+  const hash = crypto.createHash('sha256');
+  for (const pg of pages) {
+    hash.update(pg.type + '|' + (pg.folioDisplay || '') + '|');
+    for (const col of pg.columns) for (const ln of col) hash.update(ln.words.join(' ') + '|');
+  }
+  return {
+    metadata: meta, tokens: tokensOut, pages, ledger: null, events: null,
+    toc: { general: genEntries.length, detailed: detEntries.length },
+    tocPages: [], numberingAudit: null, settings,
+    contentPreserved: true,
+    layoutHash: 'legacy-' + hash.digest('hex').slice(0, 16),
+    plannedLayoutHash: null, geometryNeutralVerified: true,
+    ornaments: null, retreat: null, sideNotes: null, endnotePages: null,
+    endnotePagesInfo: { count: 0, pages: [] },
+    scope: null, customStyles: null, recommendations: null,
+    legacyProfile: true
+  };
+}
+
+module.exports = {
+  GEO, SZ, HEADING_MODES, toGematria, stripEditorialNotes, parseMetadata,
+  tokenizeDoc, LineBreaker, findNotes, readConfig, legacyTypeset,
+  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH
+};
+
+};
+__modules["src/engine/typography/measure-api.js"] = function (require, module, exports) {
+// src/engine/typography/measure-api.js — Measurement single entry (REQ-LB-01) + Hebrew glyph-width metrics
+'use strict';
+
+/**
+ * MeasureAPI — הכניסה היחידה למדידת רוחב/גובה. אסור לקרוא offsetHeight מפוזר (lint ב‑CI).
+ * מימוש A = 'table' (טבלאות מכוילות — ברירת המחדל, המשך רציפות S1–S11);
+ * מימוש B = 'font-metrics' (S12: טבלאות אמת מקובץ גופן שנטען — hmtx/cmap/kern/GPOS)
+ * חתימה זהה; הפרופיל נרשם דרך registerFont ומופעל דרך ההגדרה measure-impl.
+ */
+
+const { charWidthEm, FONT_PROFILES } = require('./measure-table');
+const fm = require('./font-metrics');
+
+const DEFAULT_TRACKING = 0.02; // em
+
+/** גופנים רשומים (פרופיל → פרנסר). ההרשמה מפורשת — אין טעינת רשת (offline). */
+const registeredFonts = new Map();
+
+/**
+ * רישום גופן למדידת אמת (S12.1-5). קלט: בתים בלבד (Uint8Array/Buffer).
+ * @returns {{ok:boolean, error?:string, profile?:object, glyphCount?:number, mappedChars?:number}}
+ */
+function registerFont(profileName, bytes) {
+  const res = fm.parseFont(bytes);
+  if (!res.ok) return { ok: false, error: res.error };
+  registeredFonts.set(String(profileName), res.font);
+  return { ok: true, profile: res.font, glyphCount: res.font.numGlyphs, mappedChars: res.font.charToGlyph.size };
+}
+
+/** הסרת גופן רשום (בדיקות). */
+function unregisterFont(profileName) { registeredFonts.delete(String(profileName)); }
+function clearRegisteredFonts() { registeredFonts.clear(); }
+
+class MeasureAPI {
+  constructor(settings, impl = 'table') {
+    this.settings = settings;
+    this.impl = impl === 'font-metrics' ? 'font-metrics' : 'table'; // 'table' | 'font-metrics'
+    this.fontProfileName = null;
+    this.fontProfile = null;
+    this.fontFactor = 1;
+    this.cache = new Map();
+    this.stats = { calls: 0, hits: 0, fontFallbacks: 0 };
+    if (this.impl === 'font-metrics') this._bindProfile();
+  }
+
+  /** קשירת פרופיל הגופן לפי שם הגופן בהגדרות; fallback שקוף לטבלה אם לא נרשם. */
+  _bindProfile() {
+    const name = this.settings['body-font'];
+    if (name && registeredFonts.has(name)) {
+      this.fontProfileName = name;
+      this.fontProfile = registeredFonts.get(name);
+      this.fontFactor = FONT_PROFILES[name] || 1;
+    } else {
+      // לא נרשם גופן — מימוש B נופל בשקיפות לטבלה (מדידה עקבית, לא כשל שקט)
+      this.impl = 'table';
+      this.stats.fontFallbacks++;
+    }
+  }
+
+  _fontSpec(sizePt) {
+    return sizePt || this.settings['body-font-size-pt'];
+  }
+
+  /** רוחב תו בודד ב־em לפי המימוש. */
+  _charEm(ch) {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      const units = fm.advanceUnitsOf(this.fontProfile, ch);
+      if (units !== 0) return (units / this.fontProfile.unitsPerEm) * this.fontFactor;
+      // 0 ללא מיפוי ⇒ fallback מכויל (גם ניקוד אמיתי=0 ייפול לסלולר 0.5 — זניח לרוחב)
+      this.stats.fontFallbacks++;
+      return charWidthEm(ch);
+    }
+    return charWidthEm(ch);
+  }
+
+  /** קרנינג בין תווים סמוכים ב־em (מימוש A: 0 תמיד — כמו S1–S11). */
+  _kernEm(a, b) {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      const k = fm.kernUnitsOf(this.fontProfile, a, b);
+      if (k !== 0) return (k / this.fontProfile.unitsPerEm) * this.fontFactor;
+    }
+    return 0;
+  }
+
+  /**
+   * רוחב טקסט ב‑px. מימוש B כולל קרנינג בר־מילה (hmtx + kern/GPOS) —
+   * ההבדל היחיד מ־A בנוסף לרוחבי הגליפים עצמם.
+   */
+  measureTextWidth(text, sizePt = null, trackingEm = DEFAULT_TRACKING) {
+    const size = this._fontSpec(sizePt);
+    const key = `${this.impl}|${this.fontProfileName || ''}|${size}|${trackingEm}|${text}`;
+    this.stats.calls++;
+    if (this.cache.has(key)) { this.stats.hits++; return this.cache.get(key); }
+    const str = String(text);
+    let w = 0;
+    let prev = null;
+    for (const ch of str) {
+      if (prev !== null) w += this._kernEm(prev, ch);
+      w += this._charEm(ch) + trackingEm;
+      prev = ch;
+    }
+    const px = Math.max(0, w * size * (96 / 72)); // pt→px
+    this.cache.set(key, px);
+    return px;
+  }
+
+  /**
+   * **S12.1-6 — cap-height מטבלאות אמת** (OS/2 sCapHeight; נפילה: ascender×0.7).
+   * משמש את יישור המילה הראשונה (dropword) במקום הקירוב הקבוע.
+   */
+  capHeightEm() {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      return fm.capHeightEmOf(this.fontProfile) * this.fontFactor;
+    }
+    return 0.7; // הקירוב ההיסטורי (תיעוד dropword CSS)
+  }
+
+  /** **S12 (parity גיאומטרי):** ascent/descent ב־em — מפרופיל הגופן (hhea)
+   * כשנטען, אחרת הפרופיל המכויל (0.80/0.20 — תואם קו הבסיס ההיסטורי). */
+  ascentEm() {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      return (this.fontProfile.ascender / this.fontProfile.unitsPerEm) * this.fontFactor;
+    }
+    return 0.80;
+  }
+  descentEm() {
+    if (this.impl === 'font-metrics' && this.fontProfile) {
+      return Math.abs(this.fontProfile.descender / this.fontProfile.unitsPerEm) * this.fontFactor;
+    }
+    return 0.20;
+  }
+
+  /** שורת "גובה" אחידה (baseline grid): fontSize × lineHeight (BRZ-2). */
+  lineHeightPx(sizePt = null) {
+    const size = this._fontSpec(sizePt);
+    return Math.round(size * (96 / 72) * this.settings['body-line-height']);
+  }
+
+  /**
+   * מיקום שורות אופטימלי (KP) → מערך שורות עם רוחבים.
+   * @param {Function} [measureOverride] - הזרקת פונקציית מדידה (למשל פרופיל רוחב־גופן מהpipeline) — L1: entry יחיד דרך ההזרקה.
+   * @returns {Array<{words:string[], widthPx:number, badness:number}>}
+   */
+  layoutLines(words, maxWidthPx, sizePt = null, opts = {}, measureOverride = null) {
+    const knuth = require('./kp-linebreak');
+    const measure = measureOverride || ((t) => this.measureTextWidth(t, sizePt));
+    return knuth.breakLines(words, maxWidthPx, measure, this.lineHeightPx(sizePt), opts);
+  }
+
+  cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
+}
+
+module.exports = {
+  MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts,
+  charWidthEm, registeredFonts
+};
+
+};
+__modules["src/engine/typography/measure-table.js"] = function (require, module, exports) {
+// src/engine/typography/measure-table.js — טבלאות רוחב מכוילות (מקור יחיד; S12 הפרדה מ־measure-api)
+'use strict';
+
+/**
+ * טבלת רוחות אותיות עברית (יחסיים ל‑em, קירוב Frank-Ruhl/David) — הפרופיל
+ * המכויל של מימוש A (ברירת המחדל). הפרופילים הללו משמשים גם כ־fallback
+ * למימוש B (font-metrics) לתווים לא־ממופים בגופן שנטען.
+ */
+
+const HEBREW_WIDTHS = {
+  'א': 0.66, 'ב': 0.58, 'ג': 0.56, 'ד': 0.62, 'ה': 0.60, 'ו': 0.42, 'ז': 0.44, 'ח': 0.70, 'ט': 0.60,
+  'י': 0.32, 'כ': 0.58, 'ך': 0.58, 'ל': 0.52, 'מ': 0.70, 'ם': 0.72, 'נ': 0.60, 'ן': 0.60, 'ס': 0.62,
+  'ע': 0.62, 'פ': 0.60, 'ף': 0.62, 'צ': 0.62, 'ץ': 0.64, 'ק': 0.64, 'ר': 0.52, 'ש': 0.66, 'ת': 0.60
+};
+const WIDE_MARKS = { ' ': 0.26, '\uE000': 0.26, '.': 0.24, ',': 0.24, ';': 0.24, ':': 0.24, '-': 0.34, '–': 0.5, '"': 0.28, "'": 0.16, '“': 0.4, '”': 0.4, '״': 0.36, '׳': 0.18, '[': 0.3, ']': 0.3, '(': 0.3, ')': 0.3 };
+
+/** פרופילי רוחב לפי שם גופן (fontFactor מתוקן ב־endnote-pages; כאן — רוחב בסיס). */
+const FONT_PROFILES = {
+  'David HB': 1.00, 'David': 1.00, 'Frank Ruhl Libre': 1.00,
+  'Narkisim': 1.05, 'Nachlieli': 0.96, 'Alef': 1.00, 'Rubin': 1.03,
+  'DejaVu Sans': 1.00, 'DejaVu Serif': 1.00
+};
+
+function charWidthEm(ch) {
+  if (HEBREW_WIDTHS[ch] !== undefined) return HEBREW_WIDTHS[ch];
+  // **תיקון שורש (ביקורת 03.11): בדיקת WIDE_MARKS לפני סל העברי — בעבר הסל
+  // 0x0590–0x05FF (=0.5em) לכד את ׳(U+05F3) ו״(U+05F4) לפני שנבדקו ב-WIDE_MARKS
+  // (0.18em/0.36em) ⇒ הגדרות מתות וגרשיים נמדדו 0.5em; impl B (פיקסטשור, שנבנה
+  // מ-WIDE_MARKS) מדד אותם נכון — והפער בין המימושים הוסט את שבירות ה-DP.
+  if (WIDE_MARKS[ch] !== undefined) return WIDE_MARKS[ch];
+  const c = ch.codePointAt(0);
+  if (c >= 0x0590 && c <= 0x05FF) return 0.5;   // ניקוד/תווים עבריים נוספים
+  if (/[A-Za-z0-9]/.test(ch)) return 0.52;
+  return 0.4;
+}
+
+module.exports = { HEBREW_WIDTHS, WIDE_MARKS, FONT_PROFILES, charWidthEm };
+
+};
+__modules["src/engine/typography/font-metrics.js"] = function (require, module, exports) {
+// src/engine/typography/font-metrics.js — TrueType/OpenType metrics parser (S12.1-5, REQ-LB-01 impl B)
+'use strict';
+
+/**
+ * **שכבת המדידה המתמטית (מימוש B):** קריאת טבלאות אמת מקובץ גופן אמיתי —
+ * רוחבי גליפים (hmtx/hhea/cmap), קרנינג (kern fmt0 + GPOS PairPos fmt1),
+ * unitsPerEm (head), cap-height (OS/2 v≥2; נפילה ל־hhea.ascender×0.7), וזיהוי
+ * סימנים מאפסי־רוחב (ניקוד — advance=0) לפי המפה עצמה.
+ *
+ * עצמאי לחלוטין: אין תלות חיצונית (HarfBuzz-WASM/fontkit אינם נדרשים —
+ * אותה מטרה, טבלאות אמת, אפס תלות זרה; דוקטרינת הריפו). הפרנסר נבדק
+ * מול אורקל צולב (fontTools) על גופן אמיתי (DejaVu) — ערכי האמת נעולים בבדיקות.
+ *
+ * דטרמיניזם: קריאה בלבד; אין Date/Math.random; סדר קבוע.
+ */
+
+const MAX_TABLES = 64;
+const MAX_SEGMENTS = 8192; // cmap fmt4 הגנת שפיות
+const MAX_GPOS_PAIRSETS = 4096;
+
+function u8(b, o) { return b[o]; }
+function u16(b, o) { return (b[o] << 8) | b[o + 1]; }
+function s16(b, o) { const v = u16(b, o); return v >= 0x8000 ? v - 0x10000 : v; }
+function u32(b, o) { return ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0; }
+function tag(b, o) { return String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]); }
+
+/**
+ * @param {Uint8Array|Buffer} bytes — בתי הגופן (TTF/OTF sfnt)
+ * @returns {{ok:boolean, error?:string, font?:object}}
+ */
+function parseFont(bytes) {
+  if (!bytes || bytes.length < 12) return { ok: false, error: 'too-small' };
+  const b = bytes;
+  const sfntVersion = u32(b, 0);
+  if (sfntVersion !== 0x00010000 && sfntVersion !== 0x4F54544F /* 'OTTO' */ && sfntVersion !== 0x74746366 /* 'ttcf' */) {
+    return { ok: false, error: `bad-sfnt-version:0x${sfntVersion.toString(16)}` };
+  }
+  if (sfntVersion === 0x74746366) return { ok: false, error: 'ttcf-collections-unsupported' };
+  const numTables = u16(b, 4);
+  if (numTables === 0 || numTables > MAX_TABLES) return { ok: false, error: `bad-table-count:${numTables}` };
+
+  // תוכן העניינים של sfnt
+  const tables = new Map(); // tag → {offset, length}
+  for (let i = 0; i < numTables; i++) {
+    const rec = 12 + i * 16;
+    if (rec + 16 > b.length) return { ok: false, error: 'table-dir-truncated' };
+    const t = tag(b, rec);
+    const off = u32(b, rec + 8);
+    const len = u32(b, rec + 12);
+    if (off + len > b.length) return { ok: false, error: `table-out-of-range:${t}` };
+    tables.set(t, { offset: off, length: len });
+  }
+  const need = ['head', 'maxp', 'hhea', 'hmtx', 'cmap'];
+  for (const t of need) if (!tables.has(t)) return { ok: false, error: `missing-table:${t}` };
+
+  // head: unitsPerEm + indexToLocFormat
+  const hO = tables.get('head').offset;
+  const unitsPerEm = u16(b, hO + 18);
+  if (!(unitsPerEm >= 16 && unitsPerEm <= 16384)) return { ok: false, error: `bad-units-per-em:${unitsPerEm}` };
+  const indexToLocFormat = s16(b, hO + 50);
+
+  // maxp: numGlyphs
+  const numGlyphs = u16(b, tables.get('maxp').offset + 4);
+  if (numGlyphs === 0) return { ok: false, error: 'bad-num-glyphs:0' };
+
+  // hhea: numberOfHMetrics + ascender/descender/lineGap
+  const hhO = tables.get('hhea').offset;
+  const numberOfHMetrics = u16(b, hhO + 34);
+  const ascender = s16(b, hhO + 4);
+  const descender = s16(b, hhO + 6);
+  const lineGap = s16(b, hhO + 8);
+  if (numberOfHMetrics === 0 || numberOfHMetrics > numGlyphs) return { ok: false, error: `bad-hmtx-count:${numberOfHMetrics}` };
+
+  // hmtx: advance widths (+lsb)
+  const hmO = tables.get('hmtx').offset;
+  const advanceUnits = new Uint16Array(numGlyphs);
+  for (let g = 0; g < numGlyphs; g++) {
+    if (g < numberOfHMetrics) advanceUnits[g] = u16(b, hmO + g * 4);
+    else advanceUnits[g] = advanceUnits[numberOfHMetrics - 1];
+  }
+
+  // cmap: Unicode → glyph (fmt 4 BMP + fmt 12 full)
+  const charToGlyph = new Map();
+  const cmErr = parseCmap(b, tables.get('cmap').offset, charToGlyph);
+  if (cmErr) return { ok: false, error: `cmap:${cmErr}` };
+
+  // OS/2 (אופציונלי): sCapHeight (v≥2, offset 88)
+  let capHeight = null;
+  if (tables.has('OS/2')) {
+    const osO = tables.get('OS/2').offset;
+    if (tables.get('OS/2').length >= 90) {
+      const osVer = u16(b, osO);
+      const cap = s16(b, osO + 88);
+      if (osVer >= 2 && cap > 0) capHeight = cap;
+    }
+  }
+
+  // kern fmt0 (אופציונלי) + GPOS PairPos fmt1 (אופציונלי) — מפות קרנינג בר־מילה (units)
+  const kernPairs = new Map(); // "gidA,gidB" → units
+  if (tables.has('kern')) parseKernFmt0(b, tables.get('kern').offset, tables.get('kern').length, kernPairs);
+  if (tables.has('GPOS')) parseGposPairPos(b, tables.get('GPOS').offset, tables.get('GPOS').length, kernPairs);
+
+  const font = {
+    sfntVersion, unitsPerEm, numGlyphs, indexToLocFormat,
+    numberOfHMetrics, ascender, descender, lineGap, capHeight,
+    advanceUnits, charToGlyph, kernPairs,
+    tables: Object.fromEntries([...tables.entries()].map(([t, v]) => [t, { ...v }])),
+    bytes: b
+  };
+  return { ok: true, font };
+}
+
+/** cmap subtable parsing — fmt 4 (BMP) ו־fmt 12 (full); מדגים גם fmt 6 (מינימלי). */
+function parseCmap(b, base, charToGlyph) {
+  const numSub = u16(b, base + 2);
+  if (numSub > 64) return `too-many-subtables:${numSub}`;
+  let best4 = -1, best12 = -1;
+  for (let i = 0; i < numSub; i++) {
+    const rec = base + 4 + i * 8;
+    const platform = u16(b, rec);
+    const encoding = u16(b, rec + 2);
+    const off = u32(b, rec + 4);
+    const fmt = u16(b, base + off);
+    const unicodeish = (platform === 3 && (encoding === 1 || encoding === 10)) || platform === 0;
+    if (!unicodeish) continue;
+    if (fmt === 4 && best4 < 0) best4 = base + off;
+    if (fmt === 12 && best12 < 0) best12 = base + off;
+  }
+  if (best12 >= 0) {
+    const e = parseCmap12(b, best12, charToGlyph);
+    if (e) return e;
+  }
+  if (best4 >= 0) {
+    const e = parseCmap4(b, best4, charToGlyph);
+    if (e) return e;
+  }
+  if (charToGlyph.size === 0) return 'no-unicode-subtable';
+  return null;
+}
+
+function parseCmap4(b, off, charToGlyph) {
+  if (off + 14 > b.length) return 'fmt4-truncated';
+  const segCountX2 = u16(b, off + 6);
+  const segCount = segCountX2 / 2;
+  if (segCount === 0 || segCount > MAX_SEGMENTS) return `fmt4-bad-segcount:${segCount}`;
+  const endBase = off + 14;
+  const startBase = endBase + segCountX2 + 2;
+  const deltaBase = startBase + segCountX2;
+  const rangeBase = deltaBase + segCountX2;
+  if (rangeBase + segCountX2 > b.length) return 'fmt4-truncated-tables';
+  for (let i = 0; i < segCount; i++) {
+    const end = u16(b, endBase + i * 2);
+    const start = u16(b, startBase + i * 2);
+    const delta = s16(b, deltaBase + i * 2);
+    const rangeOff = u16(b, rangeBase + i * 2);
+    if (start > end) continue;
+    if (end - start > 0xFFFF) continue; // הגנה
+    for (let c = start; c <= end; c++) {
+      let gid;
+      if (rangeOff === 0) {
+        gid = (c + delta) & 0xFFFF;
+      } else {
+        const gidPos = rangeBase + i * 2 + rangeOff + (c - start) * 2;
+        if (gidPos + 2 > b.length) return 'fmt4-gid-out-of-range';
+        gid = u16(b, gidPos);
+        if (gid !== 0) gid = (gid + delta) & 0xFFFF;
+      }
+      if (gid !== 0 && !charToGlyph.has(c)) charToGlyph.set(c, gid);
+    }
+  }
+  return null;
+}
+
+function parseCmap12(b, off, charToGlyph) {
+  if (off + 16 > b.length) return 'fmt12-truncated';
+  const nGroups = u32(b, off + 12);
+  if (nGroups > 65536) return `fmt12-bad-groups:${nGroups}`;
+  for (let i = 0; i < nGroups; i++) {
+    const rec = off + 16 + i * 12;
+    if (rec + 12 > b.length) return 'fmt12-truncated-groups';
+    const start = u32(b, rec), end = u32(b, rec + 4), gid = u32(b, rec + 8);
+    if (end < start || end - start > 0x10FFFF) continue;
+    for (let c = start; c <= end; c++) {
+      const g = gid + (c - start);
+      if (g !== 0 && !charToGlyph.has(c)) charToGlyph.set(c, g);
+    }
+  }
+  return null;
+}
+
+/** kern table — מטפל רק בפורמט 0 (subtable version 0); שאר הפורמטים נדלגים בשקיפות. */
+function parseKernFmt0(b, off, len, kernPairs) {
+  if (off + 4 > b.length) return;
+  const nTables = u16(b, off + 2);
+  let p = off + 4;
+  for (let i = 0; i < nTables && p + 6 <= b.length; i++) {
+    const version = u16(b, p);
+    const length = u16(b, p + 2);
+    const coverage = u16(b, p + 4);
+    const format = coverage >> 8;
+    if (format === 0 && version === 0 && p + 14 <= b.length) {
+      const nPairs = u16(b, p + 6);
+      if (nPairs <= MAX_GPOS_PAIRSETS) {
+        for (let k = 0; k < nPairs; k++) {
+          const rec = p + 14 + k * 6;
+          if (rec + 6 > b.length || rec >= off + len) break;
+          const left = u16(b, rec), right = u16(b, rec + 2), value = s16(b, rec + 4);
+          if (value !== 0) kernPairs.set(`${left},${right}`, value);
+        }
+      }
+    }
+    if (length === 0) break;
+    p += length;
+  }
+}
+
+/**
+ * GPOS (v1.0) — נתיב מינימלי אמין: LookupList → Lookup type 2 (PairPos) format 1,
+ * ValueFormat1=XAdvance בלבד (0x0004), Coverage fmt 1/2. שאר הסוגים נדלגים בשקיפות
+ * (רשומים בדגל). זה מכסה את משפחת הקרנינג הסטנדרטית (GSUB לא נדרש למדידת רוחב).
+ */
+function parseGposPairPos(b, off, len, kernPairs) {
+  if (off + 10 > b.length) return;
+  const ver = u32(b, off);
+  if (ver !== 0x00010000) return;
+  const lookupListOff = u16(b, off + 8);
+  const ll = off + lookupListOff;
+  if (ll + 2 > b.length) return;
+  const lookups = u16(b, ll);
+  if (lookups > 256) return;
+  for (let i = 0; i < lookups; i++) {
+    const lOff = ll + u16(b, ll + 2 + i * 2);
+    if (lOff + 8 > b.length) continue;
+    const type = u16(b, lOff);
+    if (type !== 2) continue; // PairPos בלבד
+    const subCount = u16(b, lOff + 4);
+    if (subCount > 64) continue;
+    for (let s = 0; s < subCount; s++) {
+      const sOff = lOff + u16(b, lOff + 6 + s * 2);
+      parsePairPosSubtable(b, sOff, kernPairs);
+    }
+  }
+}
+
+function parsePairPosSubtable(b, off, kernPairs) {
+  if (off + 10 > b.length) return;
+  const fmt = u16(b, off);
+  if (fmt !== 1) return; // format 2 (matrix) — נדלג (נדיר בקרנינג לטיני/עברי)
+  const covOff = u16(b, off + 2);
+  const vf1 = u16(b, off + 4);
+  const vf2 = u16(b, off + 6);
+  const setCount = u16(b, off + 8);
+  if (setCount > MAX_GPOS_PAIRSETS) return;
+  if (vf1 !== 0x0004 || vf2 !== 0) return; // XAdvance בלבד — חוזה הקרנינג שלנו
+  const covGids = coverageGlyphs(b, off + covOff);
+  if (!covGids) return;
+  for (let i = 0; i < setCount && i < covGids.length; i++) {
+    const left = covGids[i];
+    const psOff = off + u16(b, off + 10 + i * 2);
+    if (psOff + 2 > b.length) continue;
+    const pvCount = u16(b, psOff);
+    if (pvCount > MAX_GPOS_PAIRSETS) continue;
+    for (let k = 0; k < pvCount; k++) {
+      const rec = psOff + 2 + k * 6; // gid2(2) + value1 XAdvance(2) + value2(2 — ריק כי vf2=0)
+      if (rec + 6 > b.length) break;
+      const right = u16(b, rec);
+      const xAdv = s16(b, rec + 2);
+      if (xAdv !== 0) kernPairs.set(`${left},${right}`, xAdv);
+    }
+  }
+}
+
+/** Coverage table fmt 1/2 → מערך gid-ים לפי אינדקס. */
+function coverageGlyphs(b, off) {
+  if (off + 4 > b.length) return null;
+  const fmt = u16(b, off);
+  const out = [];
+  if (fmt === 1) {
+    const count = u16(b, off + 2);
+    if (count > MAX_GPOS_PAIRSETS) return null;
+    for (let i = 0; i < count; i++) {
+      if (off + 4 + i * 2 + 2 > b.length) return null;
+      out.push(u16(b, off + 4 + i * 2));
+    }
+    return out;
+  }
+  if (fmt === 2) {
+    const ranges = u16(b, off + 2);
+    if (ranges > 4096) return null;
+    for (let i = 0; i < ranges; i++) {
+      const rec = off + 4 + i * 6;
+      if (rec + 6 > b.length) return null;
+      const start = u16(b, rec), end = u16(b, rec + 2), startCov = u16(b, rec + 4);
+      if (end < start || end - start > 0xFFFF) continue;
+      for (let g = start; g <= end; g++) out[g - start + startCov] = g;
+    }
+    // מלא חורים (undefined) ב־-1 — סימון לא־קיים
+    for (let i = 0; i < out.length; i++) if (out[i] === undefined) out[i] = -1;
+    return out;
+  }
+  return null;
+}
+
+// ============ שכבת שאילתות (המידע שמעניין את המדידה) ============
+
+/** מזהה גליף של תו (או 0 = .notdef). */
+function glyphIdOf(font, ch) {
+  const cp = typeof ch === 'number' ? ch : ch.codePointAt(0);
+  const g = font.charToGlyph.get(cp);
+  return g === undefined ? 0 : g;
+}
+
+/** רוחב advance ביחידות גופן (0 ללא מיפוי). */
+function advanceUnitsOf(font, ch) {
+  const g = glyphIdOf(font, ch);
+  if (g === 0 || g >= font.numGlyphs) return 0;
+  return font.advanceUnits[g];
+}
+
+/** רוחב advance ב־em (יחסי ל־unitsPerEm). */
+function advanceEmOf(font, ch) {
+  return advanceUnitsOf(font, ch) / font.unitsPerEm;
+}
+
+/** קרנינג בין שני תווים ביחידות גופן (0 כשאין ערך/מיפוי). */
+function kernUnitsOf(font, a, b) {
+  const ga = glyphIdOf(font, a), gb = glyphIdOf(font, b);
+  if (ga === 0 || gb === 0) return 0;
+  const v = font.kernPairs.get(`${ga},${gb}`);
+  return v === undefined ? 0 : v;
+}
+
+/** cap-height ב־em (מטבלת OS/2 אמיתית; נפילה: ascender×0.7 — קירוב ספרות מוכר). */
+function capHeightEmOf(font) {
+  if (font.capHeight != null) return font.capHeight / font.unitsPerEm;
+  return (font.ascender / font.unitsPerEm) * 0.7;
+}
+
+/** האם תו הוא סימן מאפס־רוחב (ניקוד/טעמים): ממופה עם advance=0. */
+function isZeroAdvanceMark(font, ch) {
+  const g = glyphIdOf(font, ch);
+  return g !== 0 && font.advanceUnits[g] === 0;
+}
+
+module.exports = {
+  parseFont, glyphIdOf, advanceUnitsOf, advanceEmOf, kernUnitsOf,
+  capHeightEmOf, isZeroAdvanceMark
+};
+
+};
+__modules["src/engine/typography/kp-linebreak.js"] = function (require, module, exports) {
+// src/engine/typography/kp-linebreak.js — Knuth-Plass optimal line breaking (REQ-LB-02/03/07)
+'use strict';
+
+/**
+ * מימוש KP: boxes/glues/penalties, badness³, עונשי runt/widow/orphan, active-list DP.
+ * - אין מקף סוף־שורה (no hyphenation — אסור בספרות תורנית).
+ * - \u00A0 = צמידת NBSP (protectors); \uE000 = רווח אטומי בתוך הערה — ההערה אינה נקרעת (REQ-LB-04).
+ * - RTL מדידה: rect.right − colRect.left (לקח Z.ai #5) — מתמטי כאן; DOM oracle יזהה.
+ */
+
+const INF = Number.POSITIVE_INFINITY;
+const STRETCH_RATIO = 0.6;   // מתיחות רווח יחסית
+const SHRINK_RATIO = 0.5;    // כיווץ רווח יחסית
+const LINE_DEMERIT = 100;    // עלות בסיס לכל שורה: ברירת מחדל במודל ragged — ה־DP
+                            // ממזער מספר שורות (הרינדור מצייר מרווחים טבעיים).
+// השלמת ביקורת 03.11 (D-79): הרינדור של המנוע ragged (יישור לימין; מרווחים
+// טבעיים ב-DOM וב-PDF). לכן במודל השבירה כל שורה מקבלת "מתיחת סוף-שורה"
+// כמו \raggedright של TeX — אחרת שורה במילה בודדת (stretch=0 ⇒ ratio=0)
+// היא "חינם" וה־DP מתפוצץ לשורות מילה-בודדת. כשהשורות מיושרות בפועל
+// (align=stretch) ניתן לכבות: opts.raggedEnd=false.
+const RAGGED_END_STRETCH_FACTOR = 10; // × maxWidthPx — מתיחה גדולה סופית-מעשית
+
+function buildItems(words, measure) {
+  const items = [];
+  const sp = measure(' ');
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    // יחידת NBSP פוצלת לתת־קופסאות עם **אי־שבירה אסורה** (INF penalty) ביניהן:
+    // כך DP רואה את הרוחב האמיתי (כולל רווחים פנימיים) אך לעולם לא קורע את הצמד.
+    // (לקח V23: רוחב חסר של unit צמוד → מדידת שורה שגויה → badness מוטה.)
+    // U+E000 (רווח אטומי בתוך הערה) אינו מקום שבירה כלל — נשמר בתוך תת־הקופסה
+    // ומוחלף ל‑NBSP רק בפליטה; כך unit שלם לעולם לא נקרע (REQ-LB-04).
+    const parts = w.split('\u00A0');
+    for (let k = 0; k < parts.length; k++) {
+      if (k > 0) items.push({ kind: 'penalty', forbidden: true, cost: INF });
+      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(1, measure(parts[k])) });
+      if (k < parts.length - 1) items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO, internal: true });
+    }
+    if (i < words.length - 1) {
+      items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO });
+    }
+  }
+  items.push({ kind: 'penalty', final: true }); // סיום פסקה — שבירה חובה
+  return items;
+}
+
+function badness(ratio) {
+  if (!isFinite(ratio)) return 0;
+  if (ratio < -1) return INF;               // אי־אפשר לכווץ מעל הגבול
+  const r = Math.abs(ratio);
+  if (r <= 1) return Math.round(Math.pow(r * 100, 3) / 10000); // 0..100
+  return 100 + Math.round(Math.pow((r - 1) * 100, 2) / 100);   // דחיסה/מתיחת יתר
+}
+
+/**
+ * @param {string[]} words - מילות הפסקה (NBSP כבר הוצמד ע"י protectors)
+ * @param {number} maxWidthPx
+ * @param {(t:string)=>number} measure
+ * @param {number} lineHeightPx
+ * @param {{runtMinPct?:number}} opts
+ * @returns {Array<{words:string[], widthPx:number, heightPx:number, isLast:boolean}>}
+ */
+function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
+  // **03.11 (ביקורת):** חיבור ההגדרה — runt-min-width-pct מגיע כ-runts מה-pipeline
+  // וכ-runtMinPct מקריאות ישירות; שניהם נקראים (בעבר רק runtMinPct נקרא וההגדרה לא השפיעה).
+  const runts = opts.runtMinPct != null ? opts.runtMinPct : (opts.runts != null ? opts.runts : 50);
+  const items = buildItems(words, measure);
+  const n = items.length;
+  const cost = new Array(n + 1).fill(INF);
+  const parent = new Array(n + 1).fill(-1);
+  cost[0] = 0;
+
+  for (let i = 0; i < n; i++) {
+    if (cost[i] === INF) continue;
+    if (items[i].kind === 'glue' && !items[i].internal) { // דלג על glue רגיל בהתחלת שורה;
+      // glue פנימי (בתוך יחידת NBSP) אסור לדלג — הרוחב שלו חלק בלתי נפרד מהצמד.
+      if (cost[i + 1] > cost[i]) { cost[i + 1] = cost[i]; parent[i + 1] = i; }
+      continue;
+    }
+    let w = 0, stretch = 0, shrink = 0;
+    for (let j = i; j < n; j++) {
+      const it = items[j];
+      if (it.kind === 'box') w += it.width;
+      // **תיקון שורש (ביקורת 03.11): רוחב glue נכלל ברוחב הטבעי של השורה —
+      // כמו ב-TeX (Σ תיבות + Σ רווחים). בעבר נצברו רק stretch/shrink ⇒ ה־DP
+      // "חשב" ששורה נכנסת בעוד רוחבה הטבעי (כולל רווחים) חורג מהטור.
+      else if (it.kind === 'glue') { w += it.width; stretch += it.stretch; shrink += it.shrink; }
+      else if (it.kind === 'penalty') {
+        if (it.forbidden) continue; // תוך-יחידה: אין כאן מקום שבירה (legalCut כבר מבטל); ההצברה נמשכת
+        // סיום שורה (penalty סופי של הפסקה) — good break.
+        // **תיקון שורש (ביקורת 03.11): השבירה הסופית היא צומת סוף-הפסקה n —
+        // בעבר נכתבה ל-cost[j] (אינדקס הפריט עצמו, n−1) ⇒ cost[n] נותר INF לעולם
+        // ⇒ ה־DP מעולם לא סיפק פתרון וכל שבירות השורות במנוע מאז S1 יצאו מהגיבוי
+        // הגרידי (עם באג ה-NBSP). התיקון מחיה את Knuth-Plass בפועל.
+        const slack = maxWidthPx - w;
+        // raggedEnd: מתיחת סוף-שורה (D-79) — שורות ragged אינן נמדדות במתיחת
+        // בין-מילים אלא בכניסה טבעית; היתרה עד לקצה הטור "נבלעת" במתיחת הסוף.
+        const raggedEnd = opts.raggedEnd !== false;
+        const effStretch = stretch + (raggedEnd ? maxWidthPx * RAGGED_END_STRETCH_FACTOR : 0);
+        const ratio = slack >= 0 ? (effStretch > 0 ? slack / effStretch : 0) : (shrink > 0 ? slack / shrink : -2);
+        let b = badness(ratio);
+        if (b < INF && w < maxWidthPx * (runts / 100)) b += 60; // עונש runt בשורת הסיום
+        if (b < INF) {
+          const cand = cost[i] + b + LINE_DEMERIT;
+          if (cand < cost[n]) { cost[n] = cand; parent[n] = i; }
+        }
+        break;
+      }
+      if (w - shrink > maxWidthPx + 0.5) break; // חריגה שאינה ניתנת לתיקון
+
+      if (it.kind === 'box') {
+        // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
+        // רק אם items[c-1] הוא glue לא־פנימי ו‑items[c] תיבה שפותחת יחידה חדשה.
+        // זה מבטל את באג V23: lock תלוי-נקודת-התחלה על צמתים משותפים ל‑DP.
+        // (תיקון S3: הבדיקה הייתה בתוך הלולאה עם אינדקס שגוי j+2 — כל השברים נחסמו.)
+        const cut = j + 1; // נקודת שבירה חוקית: אחרי תיבה, לפני ה‑glue העוקב
+        if (!(items[cut].kind === 'glue' && !items[cut].internal && items[cut + 1] && items[cut + 1].kind === 'box')) continue;
+        const slack = maxWidthPx - w;
+        const raggedEnd = opts.raggedEnd !== false;
+        const effStretch = stretch + (raggedEnd ? maxWidthPx * RAGGED_END_STRETCH_FACTOR : 0);
+        const ratio = slack >= 0 ? (effStretch > 0 ? slack / effStretch : 0) : (shrink > 0 ? slack / shrink : -2);
+        const b = badness(ratio);
+        if (b >= INF) continue;
+        const cand = cost[i] + b + LINE_DEMERIT;
+        if (cand < cost[cut]) { cost[cut] = cand; parent[cut] = i; }
+      }
+    }
+  }
+
+  if (cost[n] === INF) return greedyFallback(items, maxWidthPx, measure, lineHeightPx);
+
+  const cuts = [];
+  let p = n;
+  while (p > 0 && parent[p] >= 0) { cuts.push([parent[p], p]); p = parent[p]; }
+  cuts.reverse();
+
+  const lines = [];
+  for (let k = 0; k < cuts.length; k++) {
+    const [a, b] = cuts[k];
+    // תת־קופסאות של אותה יחידת NBSP מאוחדות חזרה עם \u00A0 (הצמד שומר על זהותו)
+    const rawBoxes = items.slice(a, b).filter(x => x.kind === 'box');
+    const toks = [];
+    let cur = null, prevPenaltyForbidden = false;
+    for (let idx = a; idx < b; idx++) {
+      const it = items[idx];
+      if (it.kind === 'penalty' && it.forbidden) { prevPenaltyForbidden = true; continue; }
+      if (it.kind !== 'box') continue;
+      if (cur !== null && prevPenaltyForbidden) { cur += '\u00A0' + it.text; prevPenaltyForbidden = false; }
+      else { if (cur !== null) toks.push(cur); cur = it.text; prevPenaltyForbidden = false; }
+    }
+    if (cur !== null) toks.push(cur);
+    void rawBoxes;
+    if (!toks.length) continue;
+    // רוחב אמיתי: סכום תת־הקופסאות + רווחי ה‑glue שביניהן (כולל internal)
+    let widthPx = 0;
+    for (let idx = a; idx < b; idx++) {
+      const it = items[idx];
+      if (it.kind === 'box') widthPx += it.width;
+      else if (it.kind === 'glue') widthPx += it.width;
+    }
+    lines.push({ words: toks, widthPx, heightPx: lineHeightPx, isLast: k === cuts.length - 1 });
+  }
+  return lines;
+}
+
+/**
+ * מסלול גיבוי (כשה־DP לא מצא פתרון אפשרי, למשל מילה רחבה מהעמודה — אין מקף).
+ * תיקון שורש (ביקורת 03.11, S13): בגיבוי חלים **אותם איסורי שבירה** כמו במסלול
+ * הראשי — בעבר כל penalty חתם שורה, כולל `forbidden` (בין תתי־קופסות של יחידת
+ * NBSP) ⇒ היחידה נקרעה בין שורות **ואיבדה את \u00A0 שלה** (אובדן תוכן, BRZ-15;
+ * ורוחב פנימי נמדד כרווח רגיל). כעת:
+ * 1. penalty אסור לעולם אינו מסיים שורה — היחידה משוחזרת כטוקן אחד עם \u00A0
+ *    (זהה לשחזור המסלור הראשי).
+ * 2. רוחב טוקן נצבר מהפריטים (תיבות + glue פנימי 0.26em) — זהה למסלור הראשי,
+ *    לא מדידה מחודשת של מחרוזת NBSP (הייתה מודדת 0.4em פנימי — עיוות רוחב).
+ * 3. התקדמות מובטחת: טוקן שגולש פותח שורה חדשה; טוקן רחב מהעמודה נשאר לבד
+ *    בשורה משלו — אין לולאה ואין דילוג תוכן. מעבר אחד על הפריטים.
+ */
+function greedyFallback(items, maxWidthPx, measure, lineHeightPx) {
+  const space = measure(' ');
+  const lines = [];
+  let toks = [];            // טוקנים של השורה הנוכחית
+  let w = 0;                // רוחב השורה (כולל רווחים בין טוקנים)
+  let cur = null, curW = 0, joinNext = false;  // טוקן בבנייה + רוחבו מהפריטים
+
+  const flush = () => {
+    if (!toks.length) return;
+    lines.push({ words: toks, widthPx: w, heightPx: lineHeightPx, isLast: false });
+    toks = []; w = 0;
+  };
+  const pushTok = () => {
+    if (cur === null) return;
+    const sp = toks.length ? space : 0;
+    if (toks.length && w + sp + curW > maxWidthPx) flush(); // הטוקן הבא ייפתח שורה חדשה
+    toks.push(cur); w += sp + curW;
+    cur = null; curW = 0; joinNext = false;
+  };
+
+  for (const it of items) {
+    if (it.kind === 'penalty') {
+      if (it.final) continue;            // סוף פסקה — הטיפול שלאחר הלולאה סוגר את האחרון
+      if (it.forbidden) { joinNext = true; continue; } // אין חיתוך בתוך יחידה — לעולם
+      continue;
+    }
+    if (it.kind === 'glue') {
+      if (it.internal && cur !== null) { curW += it.width; } // רווח פנימי בתוך היחידה
+      continue; // glue רגיל בין טוקנים: רוחבו נכנס כ־sp בעת pushTok
+    }
+    if (it.kind !== 'box') continue;
+    if (cur !== null && joinNext) { cur += '\u00A0' + it.text; curW += it.width; joinNext = false; } // המשך הצמד — ואיפוס: המילה הרגילה הבאה לא תיבלע
+    else { pushTok(); cur = it.text; curW = it.width; }
+  }
+  pushTok(); flush();
+  if (lines.length) lines[lines.length - 1].isLast = true;
+  return lines;
+}
+
+module.exports = { breakLines, badness, STRETCH_RATIO, SHRINK_RATIO };
+
+};
 __modules["src/engine/core/legacy-settings-map.js"] = function (require, module, exports) {
 // src/engine/core/legacy-settings-map.js — S4.5-ד: מיפוי מלא של הגדרות IMUD_TORANI (03.11)
 'use strict';
@@ -12208,6 +14239,17 @@ function importImudSettings(legacy, registryKeys, opts = {}) {
   // מיזוג משלים: mode-h1=sub_shaar ⇒ שער משנה דלוק (הסמנטיקה המקורית)
   if (legacy && legacy['mode-h1'] === 'sub_shaar') settings['show-shaar-sub'] = true;
   if (Object.keys(uiState).length) settings['_legacy-ui-state'] = uiState;
+  // **S4.9 (פרופיל העימוד המקורי):** קלט שנראה כמו default_settings.json המלא
+  // של המקור ⇒ ה-JSON הגולמי מוצמד תחת _imudRaw והפרופיל מסומן 'imud'.
+  // המנוע המרכזי (typeset) מפנה אז לפורט הנאמן (legacy-imud-flow) — התנהגות
+  // המקור היא המפרט (בקשת המשתמש 03.11: "בדיקה מתמטית ומוחלטת").
+  if (legacy && typeof legacy === 'object'
+    && legacy['fn-delim-open'] !== undefined
+    && legacy['size-body'] !== undefined
+    && legacy['line-height-body'] !== undefined) {
+    settings['_imudRaw'] = legacy;
+    settings['_layout-profile'] = 'imud';
+  }
   return { settings, uiState, dispositions, unmapped, report };
 }
 
