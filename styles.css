@@ -111,7 +111,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
   display: flex; flex-direction: column; align-items: center; gap: 24px; }
 .preview-canvas.canvas--horizontal { flex-direction: row; overflow-x: auto; align-items: flex-start; }
 .preview-page { position: relative; box-shadow: var(--page-shadow); flex-shrink: 0; }
-.preview-canvas[data-zoom] .preview-page { transform-origin: top center; }
 /* D-84: עמוד-placeholder בספרים ארוכים — רינדור מחלונות; מסגרת עדינה מבדילה */
 .preview-page--placeholder { box-shadow: none; background: #212329; border: 1px dashed #3a3d45;
   border-radius: 4px; }
@@ -146,38 +145,17 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
 .coverage-lifecycle { width: 100%; font-size: .78rem; color: var(--ink-dim); }
 .coverage-reason { font-size: .75rem; color: var(--ink-dim); padding: 2px 0; }
 
-/* ---- עמודים (בסיס — משלים את BASE_CSS בייצוא) ---- */
-.page { background: #fff; color: #000; position: relative; overflow: hidden; }
-.line { white-space: normal; text-align: right; }
-.line--last { text-align: center; }
-.running-head { display: flex; width: 100%; }
-.head--sep-gray { border-bottom: 1px solid #999; }
-.head--sep-black { border-bottom: 1.5px solid #000; }
-.head-slot { display: inline-block; }
-.head-slot--right { text-align: right; } .head-slot--center { text-align: center; } .head-slot--left { text-align: left; }
-.footnotes { position: absolute; bottom: 8px; left: 12px; right: 12px; font-size: .8em; }
-.fn-rule--regular { border-top: 1px solid #000; height: 0; }
-.fn-rule--circles { border-top: 3px dotted #000; height: 0; }
-.fn-rule--sparkle { border-top: 2px dashed #6b6b6b; height: 0; }
-.fn-rule--star { border-top: 3px double #4a4a4a; height: 0; }
-.fn-rule--diamond { border-top: 2px solid #000; height: 0; transform: scaleX(.6); }
-.fn--continuation { color: #555; font-style: italic; }
-.folio { position: absolute; bottom: 4px; width: 100%; text-align: center; }
-.folio--outer-left { left: 8px; width: auto; text-align: left; }
-.folio--outer-right { right: 8px; width: auto; text-align: right; }
-.folio--top { bottom: auto; top: 4px; }
-.folio--in-header { bottom: auto; top: 6px; }
-.page-num-badge { display: inline-flex; align-items: center; justify-content: center; padding: 1px 4px; }
-.page-num-frame-circle { border: 1.2px solid #333; border-radius: 50%; min-width: 22px; height: 22px; }
-.page-num-frame-box { border: 1.2px solid #333; border-radius: 3px; min-width: 22px; height: 20px; padding: 1px 4px; }
-.side-note { position: absolute; font-size: .75em; max-height: 60%; overflow: hidden; }
-.col-divider { position: absolute; width: 0; border-left: 1px solid #999; }
-.w--paren { color: #333; }
-.deco { position: absolute; background-repeat: repeat; background-position: center; }
-.shaar-main-box { position: absolute; display: flex; align-items: center; justify-content: center;
-  font-weight: 700; text-align: center; }
-.toc-row { display: flex; align-items: baseline; gap: 6px; margin: 2px 0; }
-.toc-row .toc-dots { flex: 1; border-bottom: 1px dotted #000; min-width: 24px; margin: 0 6px 4px; }
+/* ---- עמודי הספר ----
+   **03.11(ג) תיקון קטסטרופת התצוגה:** כללי העמודים (טורים/שורות/פסים/עיטורים/
+   שערים/הערות/גיליון) כבר לא משוכפלים כאן. המקור היחיד הוא BASE_CSS של
+   html-export.js — מוזרק למסמך ב-boot (browser-entry.injectPageBaseCss) וכך
+   התצוגה החיה והקובץ העצמאי המיוצא תמיד זהים (F-09 — אין שני מקורות שיתפצלו). */
+.export-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+/* זום בפועל: setZoom מעדכן את --zoom על הקנבס (03.11(ג) — בעבר data-zoom
+   לא הוחל על שום כלל הכפלה והזום לא עשה דבר) */
+.preview-canvas[data-zoom] .preview-page { transform-origin: top center;
+  transform: scale(var(--zoom, 1)); }
+.preview-canvas.canvas--horizontal[data-zoom] .preview-page { transform-origin: top right; }
 
 /* נגישות: מיקוד נראה */
 :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }

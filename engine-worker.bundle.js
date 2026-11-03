@@ -1,6 +1,6 @@
 // ui/engine-worker.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת ה־Worker (המנוע המלא — אין לטעון בחוט ה־UI)
-// מודולים: 57 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 58 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -390,10 +390,12 @@ var __paths = {
   "src/engine/output/dom-renderer.js|../decoration/asset-registry": "src/engine/decoration/asset-registry.js",
   "src/engine/output/dom-renderer.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/output/dom-renderer.js|../decoration/folio": "src/engine/decoration/folio.js",
+  "src/engine/output/dom-renderer.js|./line-font": "src/engine/output/line-font.js",
   "src/engine/decoration/page-decorations.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/typography/font-subset.js|./font-metrics": "src/engine/typography/font-metrics.js",
   "src/engine/output/geometry-projector.js|./dom-renderer": "src/engine/output/dom-renderer.js",
   "src/engine/output/geometry-projector.js|../typography/measure-api": "src/engine/typography/measure-api.js",
+  "src/engine/output/geometry-projector.js|./line-font": "src/engine/output/line-font.js",
   "src/engine/output/zip-writer.js|../import/zip-reader": "src/engine/import/zip-reader.js",
   "src/engine/output/project-io.js|../core/settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/extensions/extensions-io.js|./style-schema": "src/engine/extensions/style-schema.js",
@@ -1745,7 +1747,7 @@ const registry = [
 
   // ---- עיטורים (ORNAMENTS) ---- **S8 (D-54): מפתחות העיטורים חוזרים עם מנגנון חי + בדיקת אפקט**
   // (D-45 הסיר אותם עד שיהיה מנגנום; כעת כל אחד נצרך בפועל בפאס העיטורים L5).
-  K('h2-orn-scope', 'enum', 'both', P.ORNAMENTS, 'sel-h2-orn-scope', ['decoration/ornament-fit'], 'fx:h2-orn-scope', { enum: ['sign', 'title', 'both'], note: 'REQ-ORN-02: סימן בלבד / כותרת בלבד / שניהם' }),
+  K('h2-orn-scope', 'enum', 'both', P.ORNAMENTS, 'sel-h2-orn-scope', ['decoration/ornament-fit'], 'fx:h2-orn-scope', { enum: ['none', 'sign', 'title', 'both'], note: 'REQ-ORN-02: סימן בלבד / כותרת בלבד / שניהם / כלום. **S4.6 (ביקורת 3):** none נוסף — במקור IMUD h2-title-orn-mode=none היה מומר ל-both (היפוך הגדרת המשתמש); ornament-fit כבר תומך (scope-off)' }),
   K('h2-orn-top', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-top', ['decoration/ornament-fit'], 'fx:h2-orn-top', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור עליון לסימן (V4: מצבים עצמאיים)' }),
   K('h2-orn-bottom', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-bottom', ['decoration/ornament-fit'], 'fx:h2-orn-bottom', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור תחתון לסימן' }),
   K('h2-orn-side', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-side', ['decoration/ornament-fit'], 'fx:h2-orn-side', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור צדדי לכותרת (V4)' }),
@@ -2074,10 +2076,15 @@ function tokenize(bodyLines, opts = {}) {
     for (const p of outer) {
       const before = line.slice(cursor, p.open).trim();
       if (before) parts.push({ kind: 'text', value: before });
-      const noteText = line.slice(p.open + openCh.length, p.close).trim().replace(/ +/g, ATOMIC_SPACE);
+      // **S4.6 (ביקורת 3):** חיתוך לפי תחילת הסוגר + אורכו בפועל (closeStart/closeLen
+      // מהסורק) — נכון גם לתוחמים מרובי-תווים (']]'/END) ולצורה העברית ]ם. בעבר
+      // נוסף אורך התוחם המוגדר למיקום התו האחרון — קיצוץ/דילוג תווים בתוחם ארוך.
+      const cs = p.closeStart != null ? p.closeStart : p.close;
+      const cl = p.closeLen != null ? p.closeLen : closeCh.length;
+      const noteText = line.slice(p.open + openCh.length, cs).trim().replace(/ +/g, ATOMIC_SPACE);
       notes.push(noteText);
       parts.push({ kind: 'note-ref', noteIndex: notes.length - 1 });
-      cursor = p.close + closeCh.length;
+      cursor = cs + cl;
     }
     const tail = line.slice(cursor).trim();
     if (tail) parts.push({ kind: 'text', value: tail });
@@ -2215,7 +2222,12 @@ function scanBrackets(segments, opts = {}) {
           const o = stack.pop();
           pairs.push({
             open: o.openPos,
-            close: gp + form.len - 1, // last character of the closer
+            close: gp + form.len - 1, // last character of the closer (חוזה היסטורי — נשמר)
+            // **S4.6 (ביקורת 3):** חוזה משלים לתוחמים מרובי-תווים — תחילת הסוגר
+            // ואורכו בפועל. בעבר הצרכן (block-tokenizer) התייחס ל-close כאילו היה
+            // תחילת התוחם והוסיף שוב את אורך התוחם המוגדר — חיתוך שגוי ב-']]'/END.
+            closeStart: gp,
+            closeLen: form.len,
             depth: stack.length + 1,  // 1 = outermost pair (matches block-tokenizer convention)
             startPara: o.para,
             endPara: para,
@@ -7998,6 +8010,19 @@ function nodeOnly(loader) {
   return loader();
 }
 
+/** **03.11(ג) תיקון קריסת ייצוא HTML בדפדפן:** ב-DOM האמיתי outerHTML מאפיין
+ * (מחרוזת), ב-shim הבדיקות — פונקציה. הפונקציה הזו מטפלת בשניהם + נפילה
+ * לסריאליזציה ידנית בסיסית (אף סביבה לא נותרת בלי פלט). */
+function elementOuterHtml(el) {
+  if (!el) return '';
+  if (typeof el.outerHTML === 'function') return el.outerHTML(); // shim הבדיקות
+  if (typeof el.outerHTML === 'string') return el.outerHTML;      // DOM אמיתי
+  if (typeof el.innerHTML === 'string' && el.tagName) {
+    return `<${el.tagName}>${el.innerHTML}</${el.tagName}>`;       // מוצא אחרון
+  }
+  return '';
+}
+
 // ============ HTML עצמאי (REQ-EXP-02) ============
 
 /**
@@ -8013,7 +8038,7 @@ function exportHtml(result, settings, doc, meta = {}) {
   // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
   const pagesHtml = [];
   for (const pg of result.pages) {
-    pagesHtml.push(renderPage(pg, settings, doc, result.metadata).outerHTML());
+    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc, result.metadata)));
   }
   const sizeMm = pageMmOf(settings);
   const pageRules = settings['export-html-page-rules'] !== false
@@ -8326,6 +8351,7 @@ const { columnDividerHeightPx } = require('../decoration/ornament-fit');
 const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
+const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font'); // **03.11(ג):** מקור יחיד לגופן/גודל שורה
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -8336,10 +8362,24 @@ function lastLineClass(ln, settings) {
   return ' line--last-center';
 }
 
+/** **03.11(ג):** מחסנית גופן עם fallback עברי קבוע — גרשיים מנוטרלים (הזרקה בטוחה ל-CSS). */
+function fontStack(family) {
+  const clean = String(family).replace(/'/g, '').trim();
+  if (!clean) return '';
+  return `'${clean}', 'Frank Ruhl Libre', 'David', serif`;
+}
+
 function renderLine(ln, doc, settings = {}) {
   const el = doc.createElement('div');
   el.className = 'line' + (ln.isLast ? ' line--last' + lastLineClass(ln, settings) : '');
   el.setAttribute('dir', 'rtl');
+  // **03.11(ג) (תיקון "החלפת גופן לא עושה כלום"):** גודל/גופן השורה מההגדרות —
+  // אותו מקור (line-font) כמו הפרויקטור. בלי זה התצוגה מציגה הכול בגודל/גופן
+  // שורש המסמך והתצוגה אינה מגיבה לשינויי גופן/גודל.
+  const lnPt = lineFontSizePt(ln, settings);
+  if (Number.isFinite(lnPt) && lnPt > 0) el.style.fontSize = `${ptToPx(lnPt)}px`;
+  const lnFont = lineFontFamily(ln, settings);
+  if (lnFont) el.style.fontFamily = fontStack(lnFont);
   if (ln.aqStretch && ln.aqStretch !== 1) {
     el.style.wordSpacing = `${(ln.aqStretch - 1) * 4}px`;
   }
@@ -8720,6 +8760,12 @@ function renderPage(page, settings, doc, header) {
   if (page.template.width != null) root.style.width = `${page.template.width}px`;
   if (page.template.height != null) root.style.height = `${page.template.height}px`;
   root.dir = 'rtl';
+  // **03.11(ג):** גופן/גודל הגוף על שורש העמוד — התצוגה והייצוא יחד מגיבים
+  // להגדרות body-font/body-font-size-pt (השורות דורסות לפי סוגן — כותרות וכו').
+  const bf = settings['body-font'];
+  if (bf) root.style.fontFamily = fontStack(bf);
+  const bsPt = Number(settings['body-font-size-pt']);
+  if (Number.isFinite(bsPt) && bsPt > 0) root.style.fontSize = `${ptToPx(bsPt)}px`;
 
   // key: background-color / background-opacity — rgba אמיתי (P0-5)
   const bg = settings['background-color'];
@@ -9100,6 +9146,44 @@ module.exports = {
 };
 
 };
+__modules["src/engine/output/line-font.js"] = function (require, module, exports) {
+// src/engine/output/line-font.js — מפרט גופן/גודל של שורה לפי סוגה (03.11(ג))
+'use strict';
+
+/**
+ * **מקור יחיד** לגודל/גופן של שורה לפי סוגה — נצרך גם על ידי geometry-projector
+ * (הקרנת PDF) וגם על ידי dom-renderer (תצוגה חיה + ייצוא HTML). בעבר הפרויקטור
+ * ידע לחשב את גודל הכותרת אך ה-DOM לא — והתצוגה הציגה כותרות בגודל הגוף
+ * והתעלמה מהחלפת גופן הגוף (דיווח משתמש 03.11: "ניסיתי להחליף גופן, בתצוגה
+ * לא השתנה כלום").
+ */
+
+/** גודל גופן (pt) של שורה לפי סוגה (מקור: מפתחות heading-N-size-pt של הרישום). */
+function lineFontSizePt(ln, settings) {
+  if (ln && ln.kind === 'heading') {
+    const s = settings[`heading-${ln.level}-size-pt`];
+    return s || settings['body-font-size-pt'];
+  }
+  return settings['body-font-size-pt'];
+}
+
+/** משפחת גופן של שורה לפי סוגה (heading-N-font; ריק ⇒ גופן הגוף). */
+function lineFontFamily(ln, settings) {
+  if (ln && ln.kind === 'heading') {
+    const f = settings[`heading-${ln.level}-font`];
+    if (f) return f;
+  }
+  return settings['body-font'] || '';
+}
+
+/** pt → px (96/72) עם עיגול יציב (אותו נוסח בכל הנתיבים). */
+function ptToPx(pt) {
+  return Math.round(Number(pt) * (96 / 72) * 100) / 100;
+}
+
+module.exports = { lineFontSizePt, lineFontFamily, ptToPx };
+
+};
 __modules["src/engine/output/html-export.js"] = function (require, module, exports) {
 // src/engine/output/html-export.js — Standalone HTML export + offline guard (REQ-EXP, Orange exit-7 doctrine)
 'use strict';
@@ -9185,6 +9269,19 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .toc-row--group .toc-item{display:inline-flex;gap:4px;text-decoration:none;color:inherit}
 .toc-row--group .toc-item .grp-page{color:#333}
 .toc-row--group .toc-item + .toc-item::before{content:'|';margin:0 6px;color:#777}
+/* **03.11(ג) תיקון קטסטרופת התצוגה:** כללים שהיו חסרים — הטורים/הפסים/העיטורים
+   ממוקמים ב-inline left/top/width/height ודורשים position:absolute גם בתצוגה
+   החיה וגם בקובץ העצמאי. BASE_CSS הזה מוזרק גם לאפליקציה (browser-entry) —
+   מקור שליטה יחיד לשני הנתיבים (F-09). */
+.spanning-band{position:absolute}
+.orn{position:absolute;background-repeat:no-repeat;background-position:center}
+.shaar-main-box,.shaar-sub-box,.shaar-back-box{position:absolute;display:flex;align-items:center;justify-content:center;font-weight:700;text-align:center;padding:0 8px}
+.custom-box{position:absolute;overflow:hidden}
+.custom-image{position:absolute;background-repeat:no-repeat;background-size:100% 100%}
+.line--last-right{text-align:right}
+.line--last-stretch{text-align:justify}
+.cs-counter{display:inline-block;min-width:1.4em;margin-inline-end:6px;font-weight:700;opacity:.7;font-size:.85em}
+.footnote{margin:1px 0}
 `;
 
 /** בניית מסמך HTML עצמאי מעמודי ה‑DOM שכבר רוכמו (string-level; עובד גם Node-side). */
@@ -9733,15 +9830,7 @@ __modules["src/engine/output/geometry-projector.js"] = function (require, module
 
 const { scrubPUAText } = require('./dom-renderer');
 const { MeasureAPI } = require('../typography/measure-api');
-
-/** גודל גופן של שורה לפי סוגה (מקור: מפתחות heading-N-size-pt של הרישום). */
-function lineFontSizePt(ln, settings) {
-  if (ln.kind === 'heading') {
-    const s = settings[`heading-${ln.level}-size-pt`];
-    return s || settings['body-font-size-pt'];
-  }
-  return settings['body-font-size-pt'];
-}
+const { lineFontSizePt } = require('./line-font'); // **03.11(ג):** מקור יחיד — נצרך גם ע"י dom-renderer (תצוגה חיה + ייצוא); מיוצא הלאה לצרכנים קיימים
 
 /**
  * הקרנת עמוד בודד לגיאומטריה מפורשת.
@@ -10488,7 +10577,9 @@ function mergeWithDefaults(migrated) {
   // derivePlacementFlags **אחרי** האיחוד — mode הוא מקור־האמת; דגלים שהומרו מקובץ
   // v1 ישן (ללא mode) נגזרים שוב כך שלעולם לא ייווצר מצב סותר מאובדן הערות (BRZ-15).
   const merged = derivePlacementFlags({ ...defs, ...migrated, settings_version: 2 });
-  const unknownKeys = Object.keys(migrated).filter(k => !(k in defs));
+  // **S4.6:** מפתחות פנימיים (קו-תחתון — נכסי זמן-ריצה כמו _legacy-ui-state/_customStyles)
+  // אינם "מפתחות לא מוכרים" — הם מבנה נתונים מתועד; ערכיהם עוברים במיזוג.
+  const unknownKeys = Object.keys(migrated).filter(k => !(k in defs) && !k.startsWith('_'));
   const issues = [];
   for (const r of registry) {
     const v = merged[r.id];
