@@ -126,6 +126,19 @@ function boot() {
   imud.loadFontCatalog().then((families) => {
     app.refreshFontCatalog && app.refreshFontCatalog(families);
   }).catch(() => { /* ספרייה לא זמינה (למשל מקומי בלי assets) — ממשק בסיסי */ });
+  // **03.11(ד) — "שום דבר מהגדרות ברירת המחדל אינו קיים" (דיווח משתמש 3):**
+  // האפליקציה עולה עם ברירות המחדל הגנריות של RED. ברירות המחדל של הפרויקט
+  // המקורי (264 מפתחות: גופני עיצוב, שערים, כותרות עליונות, יישורים) מוטמעות
+  // בנכסים — ועתה מוחלות אוטומטית בעלייה, כך שספר חדש נראה כמו המקור מהשנייה
+  // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
+  // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
+  // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
+  imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(({ settings: imported }) => {
+    return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
+  }).then(() => {
+    // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
+    if (app.getText && app.getText().trim()) app.onExplicitRetypeset();
+  }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
   }

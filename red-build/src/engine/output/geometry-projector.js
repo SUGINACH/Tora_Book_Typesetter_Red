@@ -16,6 +16,7 @@
 const { scrubPUAText } = require('./dom-renderer');
 const { MeasureAPI } = require('../typography/measure-api');
 const { lineFontSizePt } = require('./line-font'); // **03.11(ג):** מקור יחיד — נצרך גם ע"י dom-renderer (תצוגה חיה + ייצוא); מיוצא הלאה לצרכנים קיימים
+const { buildShaarBlocks } = require('./shaar-content'); // **03.11(ד):** תוכן השערים — אותו מודל כמו ה-DOM
 
 /**
  * הקרנת עמוד בודד לגיאומטריה מפורשת.
@@ -75,6 +76,63 @@ function projectPage(page, settings, api) {
         out.lines.push(fakeLine(text, 18, y, tpl.width - 36, rowH, settings, measure));
       }
       yi++;
+    }
+  }
+
+  // **03.11(ד):** תוכן מובנה של עמודי השער — אותו מודל כמו ה-DOM (shaar-content).
+  // בלי זה ייצוא ה-PDF הציג עמודי שער ריקים. הפריסה משקפת את ה-flex של ה-DOM:
+  // 'between' — בלוק ראשון בראש התיבה, אחרון בתחתית, השאר מופצים ברווחים שווים
+  // (space-between); 'center' — מחסנית ממורכזת אנכית. עיטור הכתר גרפי — נדלג.
+  if (/^shaar-/.test(page.type)) {
+    const model = buildShaarBlocks(page, settings, page._metadata);
+    if (model && model.blocks.length) {
+      const b = model.box;
+      const boxX = b.left, boxW = Math.max(40, tpl.width - b.left - b.right);
+      const boxY = b.top, boxH = Math.max(60, tpl.height - b.top - b.bottom);
+      // גובה כל בלוק: גלישת שורות לרוחב התיבה + גובה שורה לפי הגודל
+      const blocks = model.blocks.map(bl => {
+        if (bl.graphic) return { ...bl, lines: [], h: 24 };
+        const words = String(bl.text || '').split(/\s+/).filter(Boolean);
+        const lines = [];
+        let cur = [], curW = 0;
+        for (const w of words) {
+          const ww = measure.measureTextWidth(w, bl.sizePt, 0);
+          const add = cur.length ? measure.measureTextWidth(' ', bl.sizePt, 0) + ww : ww;
+          if (cur.length && curW + add > boxW) { lines.push(cur); cur = [w]; curW = ww; }
+          else { cur.push(w); curW += add; }
+        }
+        if (cur.length) lines.push(cur);
+        const lh = Math.max(12, Math.round((bl.sizePt * (96 / 72)) * 1.25));
+        return { ...bl, lines, h: lines.length * lh };
+      });
+      let y;
+      if (model.mode === 'between') {
+        const total = blocks.reduce((a2, b2) => a2 + b2.h, 0);
+        const gaps = Math.max(0, blocks.length - 1);
+        const gap = gaps ? Math.max(0, (boxH - total) / gaps) : 0;
+        y = boxY;
+        for (const bl of blocks) {
+          if (bl.lines && bl.lines.length) pushCentered(bl, y);
+          y += bl.h + gap;
+        }
+      } else {
+        const total = blocks.reduce((a2, b2) => a2 + b2.h, 0);
+        y = boxY + Math.max(0, (boxH - total) / 2);
+        for (const bl of blocks) {
+          if (bl.lines && bl.lines.length) pushCentered(bl, y);
+          y += bl.h;
+        }
+      }
+      function pushCentered(bl, yTop) {
+        const lh = bl.h / bl.lines.length;
+        bl.lines.forEach((words, li) => {
+          const text = words.join(' ');
+          const tw = Math.max(1, measure.measureTextWidth(text, bl.sizePt, 0));
+          const lineH = Math.max(12, Math.round((bl.sizePt * (96 / 72)) * 1.25));
+          out.lines.push(centeredLine(text, boxX, yTop + li * lh, boxW, lineH, bl.sizePt, measure, bl.cls));
+          void tw;
+        });
+      }
     }
   }
 
@@ -213,6 +271,23 @@ function attachBaselines(page, settings, measure) {
 }
 
 /** שורה מלאכותית (TOC/עזר) — מילה אחת מימין לשמאל; מיקום מפורש. */
+/** **03.11(ד):** שורת שער ממורכזת — מילים ממוקמות מהמרכז החוצה (RTL). */
+function centeredLine(text, x, y, w, h, sizePt, measure, cls) {
+  const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));
+  const widths = words.map(w2 => measure.measureTextWidth(w2, sizePt, 0));
+  const gapW = measure.measureTextWidth(' ', sizePt, 0);
+  const totalW = widths.reduce((a, b2) => a + b2, 0) + gapW * Math.max(0, words.length - 1);
+  // RTL: המילה הראשונה בקצה הימני של הטקסט הממורכז, והשאר משמאל לה
+  let cursor = x + (w + totalW) / 2; // הקצה הימני של הטקסט
+  const wordPos = [];
+  for (let i = 0; i < words.length; i++) {
+    cursor -= widths[i];
+    wordPos.push({ text: words[i], x: cursor, w: widths[i] });
+    cursor -= gapW;
+  }
+  return { x, y, w, h, words: wordPos, align: 'center', kind: 'shaar-content', level: null, isLast: false, sizePt, baselineY: null, tokenId: null, cls: cls || '' };
+}
+
 function fakeLine(text, x, y, w, h, settings, measure) {
   const sizePt = 12;
   const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));

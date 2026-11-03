@@ -27,7 +27,34 @@ jobs:
             command -v "$t" >/dev/null 2>&1 || { echo "MISSING: $t (expected after poppler-utils install)"; exit 1; }
           done
           test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf || { echo "MISSING: DejaVuSans.ttf (expected after fonts-dejavu-core install)"; exit 1; }
-      - name: Run full test suite (307 tests, zero deps)
+      - name: Run full test suite (388 tests, zero deps)
         run: cd red-build && npm test
       - name: Determinism check
         run: cd red-build && npm run test:determinism
+
+  # **03.11(ד) — אודיט עימוד בדפדפן אמיתי (שקיפות עימוד מהקוד):** בדיקות ה-Node
+  # מאמתות את המודל, אבל דיווח משתמש 3 הוכיח שהן לא תופסות ניתוקים בנתיב החי
+  # (header שלא הועבר, CSS חסוב, גופן שלא נטען). ה-job הזה מריץ את האפליקציה
+  # בדפדפן headless אמיתי, טוען את ספר המבחן, ומודד גיאומטריה בפועל:
+  # חפיפות שורות, גלישות מטור, כותרות עליונות, שערים, יישור וגופנים.
+  layout-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install agent-browser + headless browser
+        run: |
+          npm install -g agent-browser
+          agent-browser install --with-deps
+      - name: Run real-browser layout audit (fail on any layout problem)
+        run: bash tools/layout-audit/run.sh
+      - name: Upload layout report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-audit-report
+          path: /tmp/layout-audit-report.json
+          if-no-files-found: ignore
+

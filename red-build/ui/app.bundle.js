@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 48 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 49 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -333,6 +333,7 @@ var __paths = {
   "src/engine/output/dom-renderer.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/output/dom-renderer.js|../decoration/folio": "src/engine/decoration/folio.js",
   "src/engine/output/dom-renderer.js|./line-font": "src/engine/output/line-font.js",
+  "src/engine/output/dom-renderer.js|./shaar-content": "src/engine/output/shaar-content.js",
   "src/engine/decoration/page-decorations.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/decoration/asset-registry.js|./svg-sanitize": "src/engine/decoration/svg-sanitize.js",
   "src/ui/testing-tab.js|../audit/report-schema": "src/audit/report-schema.js",
@@ -491,6 +492,19 @@ function boot() {
   imud.loadFontCatalog().then((families) => {
     app.refreshFontCatalog && app.refreshFontCatalog(families);
   }).catch(() => { /* ספרייה לא זמינה (למשל מקומי בלי assets) — ממשק בסיסי */ });
+  // **03.11(ד) — "שום דבר מהגדרות ברירת המחדל אינו קיים" (דיווח משתמש 3):**
+  // האפליקציה עולה עם ברירות המחדל הגנריות של RED. ברירות המחדל של הפרויקט
+  // המקורי (264 מפתחות: גופני עיצוב, שערים, כותרות עליונות, יישורים) מוטמעות
+  // בנכסים — ועתה מוחלות אוטומטית בעלייה, כך שספר חדש נראה כמו המקור מהשנייה
+  // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
+  // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
+  // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
+  imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(({ settings: imported }) => {
+    return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
+  }).then(() => {
+    // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
+    if (app.getText && app.getText().trim()) app.onExplicitRetypeset();
+  }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
   }
@@ -595,13 +609,41 @@ function createApp(doc, opts = {}) {
     // **03.11 (EXT-14):** ספריית IMUD — בוררי עיצובים + ברירות המקור + הודעות
     imudLibrary: opts.imudLibrary || null,
     onNotice: (msg) => status.setNotice(msg),
-    onApplyLegacyDefaults: (imported) => {
-      // החלה מלאה של ברירות המקור (מיזוג על ההגדרות) + ריענון + עימוד מפורש
-      Object.assign(settings, imported);
-      settingsPanel.refreshValues();
-      onExplicitRetypeset();
-    }
+    onApplyLegacyDefaults: (imported) => applyLegacyDefaults(imported, { source: 'panel' })
   });
+
+  /** **03.11(ד):** החלת ברירות המחדל המקוריות — נתיב יחיד לשני הקוראים:
+   * כפתור הפאנל והאתחול בעלייה (boot). אחרי ההחלה נטענים כל הגופנים
+   * שההגדרות החדשות דורשות (גוף/כותרות/כותרות-עליונות/שערים) — בלי זה
+   * הערכים נכונים אבל הדפדפן מציג גופן מערכת ו"החלפת גופן לא עושה כלום".
+   * @param {object} imported - הגדרות מיובאות (importImudSettings)
+   * @param {{source?:string, retypeset?:boolean}} [opts2] - panel: כן עימוד; boot: עימוד רק אם יש טקסט
+   */
+  async function applyLegacyDefaults(imported, opts2 = {}) {
+    Object.assign(settings, imported);
+    settingsPanel.refreshValues();
+    // טעינת כל הגופנים שההגדרות דורשות — גם מחסניות (loadFontStack פותר מול הקטלוג)
+    if (opts.imudLibrary && typeof opts.imudLibrary.loadFontStack === 'function') {
+      const fontKeys = [
+        'body-font', 'first-word-font', 'dh-font', 'f-note-body-font',
+        ...Array.from({ length: 8 }, (_, i) => `heading-${i}-font`),
+        'shaar-title-font', 'shaar-subtitle-font', 'shaar-desc-font', 'shaar-sections-font',
+        'shaar-author-font', 'shaar-year-font', 'shaar-back-text-font'
+      ];
+      for (const side of ['recto', 'verso']) {
+        for (const pos of ['right', 'center', 'left']) fontKeys.push(`header-${side}-${pos}-font`);
+      }
+      const seen = new Set();
+      for (const k of fontKeys) {
+        const v = settings[k];
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        try { await opts.imudLibrary.loadFontStack(v); } catch (e) { /* גופן חיצוני — fallback מערכת, מתועד */ }
+      }
+    }
+    const wantRetypeset = opts2.retypeset !== undefined ? opts2.retypeset : true;
+    if (wantRetypeset) onExplicitRetypeset();
+  }
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
   // שינוי הרחבות = כבד (F-06): אין עימוד אוטומטי — ⚡ בלבד.
@@ -1054,6 +1096,7 @@ function createApp(doc, opts = {}) {
     exportRequest: onExportRequest, // **S12:** ייצוא (html/pdf/zip) — קריאה בלבד
     refreshFontCatalog: (families) => settingsPanel.refreshFontCatalog && settingsPanel.refreshFontCatalog(families), // **03.11**
     imudLibrary: opts.imudLibrary || null, // **03.11:** ספריית IMUD לניפוי/הרחבות
+    applyLegacyDefaults, // **03.11(ד):** נתיב יחיד להחלת ברירות המקור (פאנל + אתחול)
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
@@ -1135,8 +1178,12 @@ const registry = [
   K('body-last-line-align', 'enum', 'center', P.TYPO, 'sel-last-line-align', ['output/dom-renderer'], 'fx:last-line-align', { enum: ['center', 'right', 'stretch'], note: 'wiring מ‑Orange ✓' }),
 
   // ---- כותרות 0–7 (HEADINGS) ----
+  // **03.11(ד):** ברירות המחדל של המצבים נאמנות למקור: h3=span_1col ⇒ full-width
+  // (פס חוצה־טורים), h4–h6=inline_2col ⇒ regular (בתוך הטור — שם נשתלים עיטורי
+  // הצד והמפרידים), h7=side_note ⇒ side-note. בעבר כולן full-width — ואז כותרת
+  // שנמדדה ב-674px הוצבה בטור 270px (גלישה/חפיפה — דיווח משתמש 3).
   ...[0, 1, 2, 3, 4, 5, 6, 7].flatMap(h => [
-    K(`heading-${h}-mode`, 'enum', h === 7 ? 'side-note' : 'full-width', P.HEADINGS, `sel-h${h}-mode`, ['layout/headings-escort'], `fx:h${h}-mode`, { enum: ['full-width', 'regular', 'side-note', 'new-page'] }),
+    K(`heading-${h}-mode`, 'enum', h === 7 ? 'side-note' : h >= 4 ? 'regular' : 'full-width', P.HEADINGS, `sel-h${h}-mode`, ['layout/headings-escort'], `fx:h${h}-mode`, { enum: ['full-width', 'regular', 'side-note', 'new-page'] }),
     K(`heading-${h}-font`, 'font', 'David HB', P.HEADINGS, `sel-h${h}-font`, ['typography/measure-api'], `fx:h${h}-font`),
     K(`heading-${h}-size-pt`, 'number', [20, 18, 16, 15, 14, 14, 13, 12][h], P.HEADINGS, `rng-h${h}-size`, ['typography/measure-api'], `fx:h${h}-size`, { min: 8, max: 48 }),
   ]),
@@ -1266,6 +1313,36 @@ const registry = [
   K('imud-divider', 'string', '', P.ORNAMENTS, 'inp-imud-divider', ['decoration/ornament-plan'], 'fx:imud-divider', { note: 'מפריד סעיפים מעוצב (323 עיצובים) — משמש מפרידי שער/כותרות במצב תמונה' }),
   K('imud-book-title', 'string', '', P.THEMES, 'inp-imud-book-title', ['output/dom-renderer'], 'fx:imud-book-title', { note: 'כותרת הספר בשער (עקיפת מטא-נתוני המסמך אם הוגדר)' }),
   K('imud-book-subtitle', 'string', '', P.THEMES, 'inp-imud-book-subtitle', ['output/dom-renderer'], 'fx:imud-book-subtitle', { note: 'כותרת־משנה בשער' }),
+  // **03.11(ד) — דיווח משתמש 3 ("אין עמודי שער, אין כותרות עליונות, שום דבר מהגדרות
+  // ברירת המחדל אינו קיים"): המקור (IMUD_TORANI default_settings.json) מחזיק
+  // show-main-shaar=true / show-sub-shaar=true / show-back-shaar=true כברירת מחדל —
+  // השערים חלק ממבנה הספר, לא אופציה. מפתחות המתגים המפורשים משחזרים זאת.
+  K('shaar-main-enabled', 'bool', true, P.THEMES, 'chk-shaar-main', ['decoration/shaar-pages'], 'fx:shaar-main', { note: '03.11(ד): שער ראשי כברירת מחדל — כמקור (show-main-shaar=true). מתג שער-העיצוב/ערכת-הנושא מוסיף רקע מעוצב, לא מחליף את המתג' }),
+  K('shaar-sub-enabled', 'bool', true, P.THEMES, 'chk-shaar-sub', ['decoration/shaar-pages'], 'fx:shaar-sub', { note: '03.11(ד): שער־משנה לכל פתיחת חלק — כמקור (show-sub-shaar=true); show-shaar-sub הישן נשמר כמתג נוסף (או)' }),
+  // **03.11(ד): תוכן מובנה של עמודי השער (פורט renderMainShaar/renderSubShaar/renderBackShaar
+  // של המקור): גופנים/גדלים לכל רכיב. ברירות המחדל = ערכי המקור אחרי הסרת המשפחות
+  // שאינן זמינות (Lia Sgula/Livorna/Alpha* אינן בספרייה — המקור עצמו נפל ל-Bellefair/
+  // David Libre/Frank Ruhl Libre דרך ה-fallbacks, ואלה מוטמעים כעת בנכסים).
+  K('shaar-title-font', 'font', 'Bellefair', P.THEMES, 'sel-shaar-title-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-title-font', { note: "מקור: f-sh-title=\"'Lia Sgula', 'Bellefair', serif\" — Lia Sgula אינה זמינה; Bellefair המוטמע" }),
+  K('shaar-title-size-pt', 'number', 46, P.THEMES, 'rng-shaar-title-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-title-size', { min: 20, max: 90, note: 'מקור: s-sh-title=46' }),
+  K('shaar-subtitle-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-subtitle-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-subtitle-font', { note: "מקור: f-sh-sub=\"'Livorna', 'David Libre', serif\"" }),
+  K('shaar-subtitle-size-pt', 'number', 21, P.THEMES, 'rng-shaar-subtitle-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-subtitle-size', { min: 10, max: 40, note: 'מקור: s-sh-sub=21' }),
+  K('shaar-desc-font', 'font', 'Frank Ruhl Libre', P.THEMES, 'sel-shaar-desc-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-desc-font', { note: "מקור: f-sh-desc=\"'Livorna', 'Frank Ruhl Libre', serif\"" }),
+  K('shaar-desc-size-pt', 'number', 12, P.THEMES, 'rng-shaar-desc-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-desc-size', { min: 8, max: 20, note: 'מקור: s-sh-desc=12' }),
+  K('shaar-sections-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-sections-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-sections-font', { note: "מקור: f-sh-sec=\"'David Libre', serif\"" }),
+  K('shaar-sections-size-pt', 'number', 11.5, P.THEMES, 'rng-shaar-sections-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-sections-size', { min: 8, max: 20, note: 'מקור: s-sh-sec=11.5' }),
+  K('shaar-author-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-author-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-author-font', { note: "מקור: f-sh-author=\"'David Libre', serif\"" }),
+  K('shaar-author-size-pt', 'number', 15, P.THEMES, 'rng-shaar-author-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-author-size', { min: 8, max: 24, note: 'מקור: s-sh-author=15' }),
+  K('shaar-year-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-year-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-year-font', { note: "מקור: f-sh-year=\"'David Libre', serif\"" }),
+  K('shaar-year-size-pt', 'number', 12, P.THEMES, 'rng-shaar-year-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-year-size', { min: 8, max: 20, note: 'מקור: s-sh-year=12' }),
+  K('shaar-back-text-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-back-text-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-back-text-font', { note: 'גוף טקסט השער האחורי (שורות שמירת־זכויות) — מקור: David Libre' }),
+  K('shaar-back-text-size-pt', 'number', 10.5, P.THEMES, 'rng-shaar-back-text-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-back-text-size', { min: 8, max: 16, note: 'מקור: שורות ההמשך 10.5pt (השורה הראשונה 13pt מודגשת)' }),
+  // נתוני הספר לשערים — ממופים מ-inp-book-* של המקור; בלי ערך — נופלים למטא-נתוני המסמך
+  K('imud-book-desc', 'string', '', P.THEMES, 'inp-imud-book-desc', ['output/dom-renderer'], 'fx:imud-book-desc', { note: 'תיאור בשער הראשי (מקור: inp-book-desc ← «נושא מפורט»)' }),
+  K('imud-book-sections', 'string', '', P.THEMES, 'inp-imud-book-sections', ['output/dom-renderer'], 'fx:imud-book-sections', { note: 'פרטי מהדורא בשער הראשי (מקור: inp-book-sections ← «פרטי מהדורא»)' }),
+  K('imud-book-author', 'string', '', P.THEMES, 'inp-imud-book-author', ['output/dom-renderer'], 'fx:imud-book-author', { note: 'שם המחבר בשערים (מקור: inp-book-author ← «שם המחבר»)' }),
+  K('imud-book-year', 'string', '', P.THEMES, 'inp-imud-book-year', ['output/dom-renderer'], 'fx:imud-book-year', { note: 'מקום ושנת הוצאה בשערים (מקור: inp-book-year ← «מקום ושנת הוצאה»)' }),
+  K('shaar-back-text', 'string', '', P.THEMES, 'inp-shaar-back-text', ['output/dom-renderer'], 'fx:shaar-back-text', { note: 'טקסט השער האחורי (מקור: inp-back-shaar-text; ברירת מחדל בזמן ריצה: «שמירת זכויות» מהמטא או ״כל הזכויות שמורות למחבר.״)' }),
 
   // ---- מזהי טקסט מוגדרים (S4.5 — chat-v20.3 היסטורי; ברירות מחדל = המקור) ----
   K('en-line-prefix', 'string', 'הערת סיום -', P.NOTES, 'inp-en-line-prefix', ['parser/dfa-lexer', 'parser/block-tokenizer'], 'fx:en-prefix', { note: 'שורה המתחילה בקידומת ⇒ הערת סיום (הקידומת אינה מופיעה בפלט). ריק = ביטול הזיהוי. הוראת כותרת עמודי ההערות — רק בצורת הרבים «הערות סיום - כותרת»' }),
@@ -2840,7 +2917,7 @@ const BINDINGS = [
     "panelKey": "HEADINGS",
     "labelHe": "כותרת 4 — אופן",
     "type": "enum",
-    "def": "full-width",
+    "def": "regular",
     "enum": [
       "full-width",
       "regular",
@@ -2887,7 +2964,7 @@ const BINDINGS = [
     "panelKey": "HEADINGS",
     "labelHe": "כותרת 5 — אופן",
     "type": "enum",
-    "def": "full-width",
+    "def": "regular",
     "enum": [
       "full-width",
       "regular",
@@ -2934,7 +3011,7 @@ const BINDINGS = [
     "panelKey": "HEADINGS",
     "labelHe": "כותרת 6 — אופן",
     "type": "enum",
-    "def": "full-width",
+    "def": "regular",
     "enum": [
       "full-width",
       "regular",
@@ -5095,6 +5172,300 @@ const BINDINGS = [
     "note": "כותרת־משנה בשער"
   },
   {
+    "id": "shaar-main-enabled",
+    "control": "chk-shaar-main",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער ראשי מופעל (כמקור)",
+    "type": "bool",
+    "def": true,
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "03.11(ד): שער ראשי כברירת מחדל — כמקור (show-main-shaar=true). מתג שער-העיצוב/ערכת-הנושא מוסיף רקע מעוצב, לא מחליף את המתג"
+  },
+  {
+    "id": "shaar-sub-enabled",
+    "control": "chk-shaar-sub",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער־משנה לכל חלק (כמקור)",
+    "type": "bool",
+    "def": true,
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "03.11(ד): שער־משנה לכל פתיחת חלק — כמקור (show-sub-shaar=true); show-shaar-sub הישן נשמר כמתג נוסף (או)"
+  },
+  {
+    "id": "shaar-title-font",
+    "control": "sel-shaar-title-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גופן כותרת הספר",
+    "type": "font",
+    "def": "Bellefair",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקור: f-sh-title=\"'Lia Sgula', 'Bellefair', serif\" — Lia Sgula אינה זמינה; Bellefair המוטמע"
+  },
+  {
+    "id": "shaar-title-size-pt",
+    "control": "rng-shaar-title-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גודל כותרת הספר (pt)",
+    "type": "number",
+    "def": 46,
+    "enum": null,
+    "min": 20,
+    "max": 90,
+    "step": null,
+    "note": "מקור: s-sh-title=46"
+  },
+  {
+    "id": "shaar-subtitle-font",
+    "control": "sel-shaar-subtitle-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גופן כותרת־משנה",
+    "type": "font",
+    "def": "David Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקור: f-sh-sub=\"'Livorna', 'David Libre', serif\""
+  },
+  {
+    "id": "shaar-subtitle-size-pt",
+    "control": "rng-shaar-subtitle-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גודל כותרת־משנה (pt)",
+    "type": "number",
+    "def": 21,
+    "enum": null,
+    "min": 10,
+    "max": 40,
+    "step": null,
+    "note": "מקור: s-sh-sub=21"
+  },
+  {
+    "id": "shaar-desc-font",
+    "control": "sel-shaar-desc-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גופן התיאור",
+    "type": "font",
+    "def": "Frank Ruhl Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקור: f-sh-desc=\"'Livorna', 'Frank Ruhl Libre', serif\""
+  },
+  {
+    "id": "shaar-desc-size-pt",
+    "control": "rng-shaar-desc-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גודל התיאור (pt)",
+    "type": "number",
+    "def": 12,
+    "enum": null,
+    "min": 8,
+    "max": 20,
+    "step": null,
+    "note": "מקור: s-sh-desc=12"
+  },
+  {
+    "id": "shaar-sections-font",
+    "control": "sel-shaar-sections-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גופן פרטי מהדורא",
+    "type": "font",
+    "def": "David Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקור: f-sh-sec=\"'David Libre', serif\""
+  },
+  {
+    "id": "shaar-sections-size-pt",
+    "control": "rng-shaar-sections-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גודל פרטי מהדורא (pt)",
+    "type": "number",
+    "def": 11.5,
+    "enum": null,
+    "min": 8,
+    "max": 20,
+    "step": null,
+    "note": "מקור: s-sh-sec=11.5"
+  },
+  {
+    "id": "shaar-author-font",
+    "control": "sel-shaar-author-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גופן שם המחבר",
+    "type": "font",
+    "def": "David Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקור: f-sh-author=\"'David Libre', serif\""
+  },
+  {
+    "id": "shaar-author-size-pt",
+    "control": "rng-shaar-author-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גודל שם המחבר (pt)",
+    "type": "number",
+    "def": 15,
+    "enum": null,
+    "min": 8,
+    "max": 24,
+    "step": null,
+    "note": "מקור: s-sh-author=15"
+  },
+  {
+    "id": "shaar-year-font",
+    "control": "sel-shaar-year-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גופן מקום ושנה",
+    "type": "font",
+    "def": "David Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקור: f-sh-year=\"'David Libre', serif\""
+  },
+  {
+    "id": "shaar-year-size-pt",
+    "control": "rng-shaar-year-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער — גודל מקום ושנה (pt)",
+    "type": "number",
+    "def": 12,
+    "enum": null,
+    "min": 8,
+    "max": 20,
+    "step": null,
+    "note": "מקור: s-sh-year=12"
+  },
+  {
+    "id": "shaar-back-text-font",
+    "control": "sel-shaar-back-text-font",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער אחורי — גופן הטקסט",
+    "type": "font",
+    "def": "David Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "גוף טקסט השער האחורי (שורות שמירת־זכויות) — מקור: David Libre"
+  },
+  {
+    "id": "shaar-back-text-size-pt",
+    "control": "rng-shaar-back-text-size",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שער אחורי — גודל הטקסט (pt)",
+    "type": "number",
+    "def": 10.5,
+    "enum": null,
+    "min": 8,
+    "max": 16,
+    "step": null,
+    "note": "מקור: שורות ההמשך 10.5pt (השורה הראשונה 13pt מודגשת)"
+  },
+  {
+    "id": "imud-book-desc",
+    "control": "inp-imud-book-desc",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "תיאור (שער — נושא מפורט)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "תיאור בשער הראשי (מקור: inp-book-desc ← «נושא מפורט»)"
+  },
+  {
+    "id": "imud-book-sections",
+    "control": "inp-imud-book-sections",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "פרטי מהדורא (שער)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "פרטי מהדורא בשער הראשי (מקור: inp-book-sections ← «פרטי מהדורא»)"
+  },
+  {
+    "id": "imud-book-author",
+    "control": "inp-imud-book-author",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "שם המחבר (שער)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "שם המחבר בשערים (מקור: inp-book-author ← «שם המחבר»)"
+  },
+  {
+    "id": "imud-book-year",
+    "control": "inp-imud-book-year",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "מקום ושנת הוצאה (שער)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "מקום ושנת הוצאה בשערים (מקור: inp-book-year ← «מקום ושנת הוצאה»)"
+  },
+  {
+    "id": "shaar-back-text",
+    "control": "inp-shaar-back-text",
+    "panel": "ערכות נושא, שערים ורקעים",
+    "panelKey": "THEMES",
+    "labelHe": "טקסט השער האחורי (שמירת זכויות)",
+    "type": "string",
+    "def": "",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "טקסט השער האחורי (מקור: inp-back-shaar-text; ברירת מחדל בזמן ריצה: «שמירת זכויות» מהמטא או ״כל הזכויות שמורות למחבר.״)"
+  },
+  {
     "id": "en-line-prefix",
     "control": "inp-en-line-prefix",
     "panel": "הערות שוליים וסיום",
@@ -6093,7 +6464,9 @@ function buildPageTemplate(type, settings, isRecto = true) {
     numbered: ![PAGE_TYPES.SHAAR_MAIN, PAGE_TYPES.SHAAR_SUB, PAGE_TYPES.SHAAR_BACK, PAGE_TYPES.TOC_GENERAL, PAGE_TYPES.TOC_DETAIL, PAGE_TYPES.FILLER].includes(type)
       ? true : (type.startsWith('shaar') ? settings['count-shaar-pages'] : settings['count-toc-pages']),
     counts: ![PAGE_TYPES.FILLER].includes(type),
-    hasRunningHead: [PAGE_TYPES.REGULAR, PAGE_TYPES.SIGN_OPEN, PAGE_TYPES.H3_SPREAD, PAGE_TYPES.PREFACE].includes(type),
+    // **03.11(ד):** עמודי תוכן־העניינים מציגים כותרת עליונה כמו המקור
+    // (renderPaginatedTOC של המקור מרנדר top-header-grid בכל עמודי התוכן).
+    hasRunningHead: [PAGE_TYPES.REGULAR, PAGE_TYPES.SIGN_OPEN, PAGE_TYPES.H3_SPREAD, PAGE_TYPES.PREFACE, PAGE_TYPES.TOC_GENERAL, PAGE_TYPES.TOC_DETAIL].includes(type),
   };
 }
 
@@ -7279,7 +7652,8 @@ const { columnDividerHeightPx } = require('../decoration/ornament-fit');
 const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
-const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font'); // **03.11(ג):** מקור יחיד לגופן/גודל שורה
+const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font');
+const { buildShaarBlocks, shaarFontOf } = require('./shaar-content'); // **03.11(ד)** // **03.11(ג):** מקור יחיד לגופן/גודל שורה
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -7290,11 +7664,25 @@ function lastLineClass(ln, settings) {
   return ' line--last-center';
 }
 
-/** **03.11(ג):** מחסנית גופן עם fallback עברי קבוע — גרשיים מנוטרלים (הזרקה בטוחה ל-CSS). */
+/** **03.11(ד):** מחסנית גופן — תומכת גם בערך מרובה־משפחות ("'A', 'B', serif"
+ * מהמקור). גרשיים מנוטרלים (הזרקה בטוחה ל-CSS), משפחות גנריות (serif/sans-serif)
+ * עוברות כמו שהן, ופולבאקים עבריים נוספים רק אם אינם כבר ברשימה. */
 function fontStack(family) {
-  const clean = String(family).replace(/'/g, '').trim();
-  if (!clean) return '';
-  return `'${clean}', 'Frank Ruhl Libre', 'David', serif`;
+  // ניקוי לפי משפחה: גרשיים מוסרים, ותווים מסוכנים להזרקת CSS (; : { } / וכו')
+  // נפסלים — נשארים אותיות (לטיניות ועבריות), ספרות, רווחים ומקפים בלבד.
+  const safe = (x) => String(x || '').replace(/'/g, '').replace(/[^\w\u0590-\u05FF\uFB1D-\uFB4F\s-]/g, '').trim();
+  const parts = String(family || '').split(',').map(safe).filter(Boolean);
+  if (!parts.length) return '';
+  const out = [];
+  const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i;
+  for (const p of parts) {
+    out.push(GENERIC.test(p) ? p : `'${p}'`);
+  }
+  for (const fb of ['Frank Ruhl Libre', 'David', 'serif']) {
+    const plain = `'${fb}'`;
+    if (!out.includes(plain) && !out.includes(fb)) out.push(GENERIC.test(fb) ? fb : plain);
+  }
+  return out.join(', ');
 }
 
 function renderLine(ln, doc, settings = {}) {
@@ -7672,10 +8060,61 @@ function renderCustomPageContent(page, doc) {
   return els;
 }
 
+/** **03.11(ד) — תוכן מובנה של עמודי השער (פורט renderMainShaar/renderSubShaar/
+ * renderBackShaar של המקור). המודל (בלוקים/תיבה/פריסה) חי ב-shaar-content.js —
+ * מקור יחיד שצורך גם ההיטל ל-PDF (F-09); כאן רק ההקרנה ל-DOM.
+ * עד כאן עמוד שער בלי עיצוב־תמונה היה עמוד ריק לגמרי — "אין עמודי שער"
+ * מבחינת המשתמש. המבנה, התיבות והגדלים נאמנים למקור. */
+function renderShaarContent(page, settings, doc, metadata) {
+  const model = buildShaarBlocks(page, settings, metadata);
+  if (!model) return [];
+  const els = [];
+  const px = (pt) => `${ptToPx(pt)}px`;
+
+  const wrap = doc.createElement('div');
+  const variant = page.type === 'shaar-main' ? 'main' : page.type === 'shaar-sub' ? 'sub' : 'back';
+  wrap.className = `shaar-content shaar-content--${variant}`;
+  wrap.dir = 'rtl';
+  wrap.style.top = `${model.box.top}px`;
+  wrap.style.bottom = `${model.box.bottom}px`;
+  wrap.style.right = `${model.box.right}px`;
+  wrap.style.left = `${model.box.left}px`;
+
+  for (const b of model.blocks) {
+    if (b.graphic) {
+      const el = doc.createElement('div');
+      el.className = 'shaar-crown';
+      el.innerHTML = b.graphic === 'crown-sub'
+        ? '<svg viewBox="0 0 300 30"><path d="M10,15 Q75,5 140,15 Q145,10 150,5 Q155,10 160,15 Q225,5 290,15 Q225,25 160,15 Q155,20 150,25 Q145,20 140,15 Q75,25 10,15 Z" fill="#222"/></svg>'
+        : '<svg viewBox="0 0 400 40"><circle cx="200" cy="20" r="10" fill="none" stroke="#000" stroke-width="4.5"/><circle cx="200" cy="20" r="4.5" fill="#000"/><path d="M182,20 C182,24 165,27 140,27 C90,27 40,22 5,20 C40,18 90,13 140,13 C165,13 182,16 182,20 Z" fill="#000"/><path d="M218,20 C218,24 235,27 260,27 C310,27 360,22 395,20 C360,18 310,13 260,13 C235,13 218,16 218,20 Z" fill="#000"/></svg>';
+      wrap.appendChild(el);
+      continue;
+    }
+    const el = doc.createElement('div');
+    el.className = b.cls;
+    el.dir = 'rtl';
+    const fam = shaarFontOf(b.cls, settings);
+    if (fam) el.style.fontFamily = fontStack(fam);
+    if (b.sizePt > 0) el.style.fontSize = px(b.sizePt);
+    if (b.bold) el.style.fontWeight = '700';
+    if (b.letterSpacingPx) el.style.letterSpacing = `${b.letterSpacingPx}px`;
+    el.textContent = scrubPUAText(String(b.text == null ? '' : b.text));
+    wrap.appendChild(el);
+  }
+  els.push(wrap);
+  return els;
+}
+
 /**
  * רנדור עמוד שלם. @param {object} page - תוצר dp-planner + header + numbersByIndex
+ * **03.11(ד):** header ברירת מחדל = page.header — הצינור מחשב ומצמיד כותרת עליונה
+ * לכל עמוד (pipeline), וכל קורא שלא מעביר ארגומנט מקבל אותה אוטומטית. עד כאן
+ * התצוגה החיה (preview-tab) לא העבירה כלום והייצוא העביר מטא־נתונים בטעות —
+ * שני הנתיבים הציגו עמודים בלי כותרת עליונה בזמן שהבדיקות העבירו את הארגומנט
+ * במפורש ולא תפסו את הנתק (דיווח משתמש 3: "אין כותרות עליונות").
  */
 function renderPage(page, settings, doc, header) {
+  if (header == null && page && page.header) header = page.header;
   if (!page.template) {
     // עמודי הערות שלא חוברו לרצף המספור — תבנית ברירת מחדל חוקית (A4) במקום קריסה
     page.template = { width: 794, height: 1123, columns: [], margins: { top: 40, bottom: 40, side: 60, outer: 60 }, contentBox: { top: 40, bottom: 1080, height: 1040 }, gutter: 0, counts: false, numbered: false, hasRunningHead: false };
@@ -7728,8 +8167,16 @@ function renderPage(page, settings, doc, header) {
   // **S8 (REQ-ORN-05/08):** רקעים/ערכות/תיבות שער — שכבות תשתית לפני התוכן
   for (const el of renderPageBackgroundAndShaar(page, settings, doc, page._metadata)) root.appendChild(el);
 
+  // **03.11(ד):** תוכן מובנה של עמודי השער (בס״ד/כותרת/כתר/תיאור/מחבר/שנה —
+  // פורט המקור). בלי זה עמוד שער ללא עיצוב־תמונה היה ריק לחלוטין.
+  for (const el of renderShaarContent(page, settings, doc, page._metadata)) root.appendChild(el);
+
   // **S9 (REQ-HDR-05):** עמודי תוכן־עניינים — שורות + נקודות + עוגנים; אין טורי גוף
+  // **03.11(ד):** כותרת עליונה גם בעמודי התוכן־עניינים — כמקור
+  // (renderPaginatedTOC מרנדר top-header-grid בכל עמודי התוכן).
   if (page.type === 'toc-general' || page.type === 'toc-detail') {
+    const hToc = renderHeader(header, doc);
+    if (hToc) root.appendChild(hToc);
     for (const el of renderTocPageContent(page, doc)) root.appendChild(el);
     const folioToc = renderFolio(page, settings, doc);
     if (folioToc) root.appendChild(folioToc);
@@ -7798,7 +8245,7 @@ function renderPage(page, settings, doc, header) {
   return root;
 }
 
-module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent, applyCustomStyleSpec };
+module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderShaarContent, renderCustomPageContent, applyCustomStyleSpec, fontStack };
 
 };
 __modules["src/engine/notes/markers.js"] = function (require, module, exports) {
@@ -8565,6 +9012,119 @@ function ptToPx(pt) {
 }
 
 module.exports = { lineFontSizePt, lineFontFamily, ptToPx };
+
+};
+__modules["src/engine/output/shaar-content.js"] = function (require, module, exports) {
+// src/engine/output/shaar-content.js — מודל תוכן עמודי השער (03.11(ד))
+'use strict';
+
+/**
+ * **מקור יחיד (F-09) לתוכן המובנה של עמודי השער** — פורט renderMainShaar/
+ * renderSubShaar/renderBackShaar של הפרויקט המקורי. נצרך על ידי שני הנתיבים:
+ * dom-renderer (תצוגה חיה + ייצוא HTML) ו-geometry-projector (ייצוא PDF) —
+ * כך שהשער נראה אותו דבר בכל הפלטים (עד כאן ההיטל לא כלל את תוכן השער
+ * וה־PDF הראה עמודים ריקים).
+ *
+ * המודל: תיבה (מ"מ של המקור) + רשימת בלוקים (טקסט/גודל/משקל) + אופן פריסה:
+ * 'between' = flex space-between (שער ראשי: בס״ד למעלה, שנה למטה), 'center'
+ * = flex ממורכז (שער־משנה/אחורי). העיטור (כתר) הוא בלוק גרפי ללא טקסט —
+ * ה-DOM מצייר אותו; ההיטל מדלג (במקור לא היה ייצוא PDF כלל).
+ */
+
+const MM_TO_PX = 96 / 25.4;
+
+/** תיבת השער לפי הסוג — מיקומי המקור (מ"מ → פיקסלים). */
+function shaarBoxOf(type) {
+  const mm = (v) => Math.round(v * MM_TO_PX);
+  if (type === 'shaar-main') {
+    return { top: mm(20), bottom: mm(16), right: mm(15), left: mm(15), mode: 'between' };
+  }
+  if (type === 'shaar-sub') {
+    return { top: mm(20), bottom: mm(20), right: mm(95), left: mm(15), mode: 'center' };
+  }
+  // shaar-back
+  return { top: mm(22), bottom: mm(18), right: mm(15), left: mm(95), mode: 'center' };
+}
+
+/** פיצול מקף של כותרת חלק (renderSubShaar המקורי): main=לפני, sub=אחרי. */
+function splitPartTitle(text) {
+  let titleMain = String(text || '');
+  let titleSub = '';
+  if (/[-–—]/.test(titleMain)) {
+    const parts = titleMain.split(/[-–—]/);
+    titleMain = parts[0].trim();
+    titleSub = parts.slice(1).join(' - ').trim();
+  }
+  return { titleMain, titleSub };
+}
+
+/**
+ * בניית בלוקי תוכן השער. גישה מילולית להגדרות (דרישת סורק ה-phantom-key).
+ * @param {object} page - עמוד CP5 (shaarInfo.title לשער־משנה, _metadata למטא)
+ * @param {object} settings
+ * @param {object} [metadata] - מטא המסמך (גובר _metadata)
+ * @returns {{mode:string, box:object, blocks:Array<{cls,text,sizePt,bold,graphic}>}|null}
+ */
+function buildShaarBlocks(page, settings, metadata) {
+  if (!page || !page.type || !/^shaar-/.test(page.type)) return null;
+  const meta = metadata || page._metadata || {};
+  const bookTitle = settings['imud-book-title'] || meta['שם הספר'] || meta['ספר'] || meta['title'] || 'שם הספר';
+  const subtitle = settings['imud-book-subtitle'] || meta['נושא'] || '';
+  const desc = settings['imud-book-desc'] || meta['נושא מפורט'] || '';
+  const sections = settings['imud-book-sections'] || meta['פרטי מהדורא'] || '';
+  const author = settings['imud-book-author'] || meta['שם המחבר'] || '';
+  const year = settings['imud-book-year'] || meta['מקום ושנת הוצאה'] || '';
+  const backRaw = settings['shaar-back-text'] || meta['שמירת זכויות'] || 'כל הזכויות שמורות למחבר.';
+
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 12; };
+  const box = shaarBoxOf(page.type);
+  const B = [];
+
+  if (page.type === 'shaar-main') {
+    B.push({ cls: 'bsd-header', text: 'בס״ד', sizePt: num(settings['shaar-year-size-pt']), bold: true, letterSpacingPx: 5 });
+    B.push({ cls: 'book-title-main', text: bookTitle, sizePt: num(settings['shaar-title-size-pt']) });
+    B.push({ cls: 'book-subtitle', text: subtitle, sizePt: num(settings['shaar-subtitle-size-pt']), bold: true });
+    B.push({ cls: 'shaar-crown', text: '', sizePt: 0, graphic: 'crown-main' });
+    B.push({ cls: 'book-description', text: desc, sizePt: num(settings['shaar-desc-size-pt']) });
+    B.push({ cls: 'book-sections-summary', text: sections, sizePt: num(settings['shaar-sections-size-pt']), bold: true });
+    B.push({ cls: 'author-block', text: author, sizePt: num(settings['shaar-author-size-pt']) });
+    B.push({ cls: 'publication-footer', text: year, sizePt: num(settings['shaar-year-size-pt']), bold: true, letterSpacingPx: 1 });
+  } else if (page.type === 'shaar-sub') {
+    const { titleMain, titleSub } = splitPartTitle(page.shaarInfo && page.shaarInfo.title);
+    B.push({ cls: 'book-title-main', text: titleMain, sizePt: 36 });
+    if (titleSub) {
+      B.push({ cls: 'shaar-crown', text: '', sizePt: 0, graphic: 'crown-sub' });
+      B.push({ cls: 'book-subtitle', text: titleSub, sizePt: num(settings['shaar-subtitle-size-pt']), bold: true });
+    }
+  } else {
+    B.push({ cls: 'book-title-main book-title-main--back', text: bookTitle, sizePt: 36 });
+    const lines = String(backRaw).split('\n').map(l => l.trim()).filter(Boolean);
+    lines.forEach((l, i) => B.push({
+      cls: 'back-shaar-text-line', text: l,
+      sizePt: i === 0 ? 13 : num(settings['shaar-back-text-size-pt']), bold: i === 0
+    }));
+    if (author) B.push({ cls: 'author-block', text: author, sizePt: num(settings['shaar-author-size-pt']) });
+    if (year) B.push({ cls: 'publication-footer', text: year, sizePt: num(settings['shaar-year-size-pt']), bold: true });
+  }
+  return { mode: box.mode, box, blocks: B.filter(b => b.graphic || String(b.text || '').length) };
+}
+
+/** משפחות הגופן של הבלוקים — לפי ההגדרות (גישה מילולית לסורק). */
+function shaarFontOf(cls, settings) {
+  switch (true) {
+    case cls.includes('bsd-header'):
+    case cls.includes('publication-footer'): return settings['shaar-year-font'];
+    case cls.includes('book-title-main'): return settings['shaar-title-font'];
+    case cls.includes('book-subtitle'): return settings['shaar-subtitle-font'];
+    case cls.includes('book-description'): return settings['shaar-desc-font'];
+    case cls.includes('book-sections-summary'): return settings['shaar-sections-font'];
+    case cls.includes('author-block'): return settings['shaar-author-font'];
+    case cls.includes('back-shaar-text-line'): return settings['shaar-back-text-font'];
+    default: return '';
+  }
+}
+
+module.exports = { buildShaarBlocks, shaarBoxOf, shaarFontOf, splitPartTitle, MM_TO_PX };
 
 };
 __modules["src/ui/testing-tab.js"] = function (require, module, exports) {
@@ -9406,6 +9966,29 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 
     // תקציב הערות לפני מיקום (F-17 probe==reserved, כולל מדיניות הערה ארוכה)
     if (blk.kind === 'paragraph') reserveNotes(blk);
+
+    // **03.11(ד) — span_1col של המקור ל-H3–H6 (mode=full-width):** עד כאן כותרת
+    // שנמדדה ברוחב מלא (674px) הוצבה בטור של 270px — שורה ברוחב 471px בטור
+    // חצי-רוחב, נגררת בדפדפן לגלישה/חפיפה ("טקסטים אחד על השני" — דיווח משתמש 3).
+    // עתה היא מוצבת בפס חוצה־טורים כמו H2 (FWD-1) — בלי עמוד חדש (המקור:
+    // כותרת הענף ממשיכה באותו עמוד; עמוד חדש רק אם אין מקום לפס).
+    if (blk.kind === 'heading' && blk.level >= 3 && blk.level <= 6 && blk.fullWidth) {
+      if (cur.spanning || cur.columns.some(c => c.length)) {
+        flushPage();
+        cur = newPage(PAGE_TYPES.REGULAR);
+      }
+      if (!cur.spanning && cur.template.columns.length >= 2) {
+        const bandH3 = blk.lines.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+        cur.spanning = {
+          lines: blk.lines.map((ln, i) => ({ ...ln, meta: { tokenId: blk.tokenId, firstOfBlock: i === 0, docPart: blk.part }, seq: seqCounter++ })),
+          heightPx: bandH3,
+          titleTopPadPx: 0,
+          orn: null
+        };
+        eventLog.emit('page-plan', 'h3-spanning', { token: blk.tokenId, level: blk.level, heightPx: bandH3 }, cur.index);
+        continue; // הכותרת בפס; הבלוקים הבאים ימלאו את הטורים מתחת
+      }
+    }
 
     if (blk.kind === 'heading' && blk.level === 2) {
       // PT-05: עמוד חדש תמיד + סימון פתיחת סימן (D-36) + בניית תבנית מלאה
@@ -10898,9 +11481,12 @@ function elementOuterHtml(el) {
 function exportHtml(result, settings, doc, meta = {}) {
   // **זהות בתים עם הרינדור החי:** כל עמוד מוקרן דרך dom-renderer בדיוק כמו
   // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
+  // **03.11(ד):** בעבר הועבר result.metadata כארגומנט ה-header — טעות סוג:
+  // ההעברה הזו לא הציגה כותרת עליונה בייצוא (מטא־נתונים אינם header). מעתה
+  // renderPage נופל לברירת המחדל page.header שהצינור מצמיד לכל עמוד.
   const pagesHtml = [];
   for (const pg of result.pages) {
-    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc, result.metadata)));
+    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc)));
   }
   const sizeMm = pageMmOf(settings);
   const pageRules = settings['export-html-page-rules'] !== false
@@ -11185,7 +11771,7 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}
 .column{position:absolute;top:0;bottom:0}
-.line{white-space:normal;text-align:right}
+.line{white-space:normal;text-align:justify;text-justify:inter-word}
 .line--last{text-align:center}
 .running-head{display:flex;width:100%}
 .head--sep-gray{border-bottom:1px solid #999}
@@ -11243,6 +11829,27 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .custom-image{position:absolute;background-repeat:no-repeat;background-size:100% 100%}
 .line--last-right{text-align:right}
 .line--last-stretch{text-align:justify}
+/* **03.11(ד) — יישור שורות הגוף לשני הצדדים כמו המקור:** .main-column/p במקור
+   הם text-align:justify; text-justify:inter-word ("טורים מיושרים באופן מושלם").
+   עד כאן היה text-align:right — שורה ברוחב טור מלא שהטקסט שלה קצר יותר השאירה
+   חור בצד שמאל ונתנה מראה "דחוק לימין" (דיווח משתמש 3). היישור סוגר את הפער
+   בדיוק כפי שמנוע הפסקאות תכנן (המנוע שובר שורות לרוחב המידה; הדפדפן
+   מותח רווחים לסגירת שארית). שורות אחרונות נשארות לפי body-last-line-align. */
+/* **03.11(ד) — תוכן מובנה של עמודי השער (פורט CSS המקור):** */
+.shaar-content{position:absolute;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;z-index:20}
+.shaar-content--sub,.shaar-content--back{justify-content:center}
+.bsd-header{font-family:'David Libre',serif;font-size:15pt;letter-spacing:5px;font-weight:700;margin-bottom:40px}
+.book-title-main{line-height:1.1;margin:10px 0 40px 0;font-weight:400}
+.shaar-content--sub .book-title-main,.shaar-content--back .book-title-main{margin:10px 0 15px 0}
+.book-subtitle{font-weight:700;line-height:1.25}
+.shaar-crown{width:180px;height:24px;margin:12px auto}
+.shaar-crown svg{width:100%;height:100%;display:block}
+.book-description{line-height:1.5;max-width:65%;margin:10px auto}
+.book-sections-summary{line-height:1.5;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:6px 12px;margin:8px 0;font-weight:700}
+.author-block{line-height:1.3}
+.publication-footer{font-weight:700;letter-spacing:1px}
+.back-shaar-text-line{font-size:10.5pt;line-height:1.6;max-width:90%;margin:10px auto;color:#333}
+.book-title-main--back{font-size:36pt}
 .cs-counter{display:inline-block;min-width:1.4em;margin-inline-end:6px;font-weight:700;opacity:.7;font-size:.85em}
 .footnote{margin:1px 0}
 `;
@@ -11298,6 +11905,23 @@ __modules["src/engine/core/legacy-settings-map.js"] = function (require, module,
 function firstFamily(css) {
   const m = String(css || '').match(/'([^']+)'/);
   return m ? m[1] : String(css || '').split(',')[0].trim();
+}
+
+/** **03.11(ד):** פתרון מחסנית גופנים של המקור מול הספרייה הזמינה.
+ * ערכי המקור הם מחסניות CSS ("'AlphaBlack', 'David Libre', serif") — המשפחה
+ * הראשונה בדרך כלל אינה מותקנת והדפדפן נופל להמשך הרשימה. כאן מחליטים מראש:
+ * המשפחה הראשונה שקיימת ב-availableFonts (קטלוג הספרייה שהועבר ב-ctx) היא
+ * הערך; בלי קטלוג — מחזירים את הראשונה (התנהגות firstFamily הישנה). */
+function resolveStack(css, ctx) {
+  const raw = String(css || '').replace(/'/g, '');
+  const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+    .filter(p => !/^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(p));
+  if (!parts.length) return String(css || '');
+  const avail = ctx && ctx.availableFonts;
+  if (avail instanceof Set) {
+    for (const p of parts) if (avail.has(p)) return p;
+  }
+  return parts[0];
 }
 
 /** **S4.6 (ביקורת 3):** אחוזים ⇒ פיקסלים לפי גובה תיבת התוכן **בפועל** שנמסר
@@ -11379,14 +12003,14 @@ const DISPOSITIONS = {
   // ============ **S4.6 (ביקורת 3):** הגדרות עיצוב אמיתיות שסווגו בטעות כ-ui-state ============
   // לא לסווג משפחה שלמה לפי קידומת בלבד — לכל מפתח עם יעד RED קיים יש מיפוי מפורש.
   // ההגדרות האלה מגיעות עכשיו למנוע בפועל (heading-N-font/size, header-slot, שער).
-  'f-h0': { kind: 'mapped', to: 'heading-0-font', transform: firstFamily, reason: 'S4.6: גופן כותרת H0 — קיים ברישום RED (heading-0-font)' },
-  'f-h1': { kind: 'mapped', to: 'heading-1-font', transform: firstFamily, reason: 'S4.6: גופן H1' },
-  'f-h2': { kind: 'mapped', to: 'heading-2-font', transform: firstFamily, reason: 'S4.6: גופן H2' },
-  'f-h3': { kind: 'mapped', to: 'heading-3-font', transform: firstFamily, reason: 'S4.6: גופן H3' },
-  'f-h4': { kind: 'mapped', to: 'heading-4-font', transform: firstFamily, reason: 'S4.6: גופן H4' },
-  'f-h5': { kind: 'mapped', to: 'heading-5-font', transform: firstFamily, reason: 'S4.6: גופן H5' },
-  'f-h6': { kind: 'mapped', to: 'heading-6-font', transform: firstFamily, reason: 'S4.6: גופן H6' },
-  'f-h7': { kind: 'mapped', to: 'heading-7-font', transform: firstFamily, reason: 'S4.6: גופן H7' },
+  'f-h0': { kind: 'mapped', to: 'heading-0-font', transform: resolveStack, reason: 'S4.6: גופן כותרת H0 — קיים ברישום RED (heading-0-font)' },
+  'f-h1': { kind: 'mapped', to: 'heading-1-font', transform: resolveStack, reason: 'S4.6: גופן H1' },
+  'f-h2': { kind: 'mapped', to: 'heading-2-font', transform: resolveStack, reason: 'S4.6: גופן H2' },
+  'f-h3': { kind: 'mapped', to: 'heading-3-font', transform: resolveStack, reason: 'S4.6: גופן H3' },
+  'f-h4': { kind: 'mapped', to: 'heading-4-font', transform: resolveStack, reason: 'S4.6: גופן H4' },
+  'f-h5': { kind: 'mapped', to: 'heading-5-font', transform: resolveStack, reason: 'S4.6: גופן H5' },
+  'f-h6': { kind: 'mapped', to: 'heading-6-font', transform: resolveStack, reason: 'S4.6: גופן H6' },
+  'f-h7': { kind: 'mapped', to: 'heading-7-font', transform: resolveStack, reason: 'S4.6: גופן H7' },
   's-h0': { kind: 'mapped', to: 'heading-0-size-pt', transform: parseFloat, reason: 'S4.6: גודל H0 (26 ⇒ 26pt; חריגת טווח מדווחת במיזוג ולא מושמטת)' },
   's-h1': { kind: 'mapped', to: 'heading-1-size-pt', transform: parseFloat, reason: 'S4.6: גודל H1 (50 במקור — נשמר נאמן למקור; חריגת טווח מדווחת)' },
   's-h2': { kind: 'mapped', to: 'heading-2-size-pt', transform: parseFloat, reason: 'S4.6: גודל H2' },
@@ -11395,21 +12019,45 @@ const DISPOSITIONS = {
   's-h5': { kind: 'mapped', to: 'heading-5-size-pt', transform: parseFloat, reason: 'S4.6: גודל H5' },
   's-h6': { kind: 'mapped', to: 'heading-6-size-pt', transform: parseFloat, reason: 'S4.6: גודל H6' },
   's-h7': { kind: 'mapped', to: 'heading-7-size-pt', transform: parseFloat, reason: 'S4.6: גודל H7 (6 במקור; חריגת טווח מדווחת)' },
-  'f-note-body': { kind: 'mapped', to: 'f-note-body-font', transform: firstFamily, reason: 'S4.6: גופן גוף ההערה — קיים ברישום RED' },
-  'f-hdr-r': { kind: 'mapped', to: ['header-recto-right-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט ימין בכותרת עליונה (recto)' },
-  'f-hdr-c': { kind: 'mapped', to: ['header-recto-center-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט מרכז (recto)' },
-  'f-hdr-l': { kind: 'mapped', to: ['header-recto-left-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט שמאל (recto)' },
+  'f-note-body': { kind: 'mapped', to: 'f-note-body-font', transform: resolveStack, reason: 'S4.6: גופן גוף ההערה — קיים ברישום RED' },
+  'f-hdr-r': { kind: 'mapped', to: ['header-recto-right-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט ימין בכותרת עליונה (recto)' },
+  'f-hdr-c': { kind: 'mapped', to: ['header-recto-center-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט מרכז (recto)' },
+  'f-hdr-l': { kind: 'mapped', to: ['header-recto-left-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט שמאל (recto)' },
   's-hdr-r': { kind: 'mapped', to: ['header-recto-right-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט ימין (recto)' },
   's-hdr-c': { kind: 'mapped', to: ['header-recto-center-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט מרכז (recto)' },
   's-hdr-l': { kind: 'mapped', to: ['header-recto-left-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט שמאל (recto)' },
-  'f-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט ימין (verso)' },
-  'f-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט מרכז (verso)' },
-  'f-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט שמאל (verso)' },
+  'f-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט ימין (verso)' },
+  'f-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט מרכז (verso)' },
+  'f-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט שמאל (verso)' },
   's-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט ימין (verso)' },
   's-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט מרכז (verso)' },
   's-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט שמאל (verso)' },
   'inp-book-title': { kind: 'mapped', to: 'imud-book-title', reason: 'S4.6: כותרת הספר — נצרכת בשער הראשי (dom-renderer)' },
   'inp-book-subtitle': { kind: 'mapped', to: 'imud-book-subtitle', reason: 'S4.6: כותרת־משנה — נצרכת בשער הראשי' },
+  // **03.11(ד) — דיווח משתמש 3 / בקשת על מה-01.11: "הטמע את כל ברירות המחדל
+  // של הפרויקט המקורי".** מתגי השערים ונתוני הספר נפלו ל-ui-state לפי כלל
+  // הקידומת הגס (^(show|inp)-) והושמטו מהמנוע — לכן "אין עמודי שער" גם אחרי
+  // ייבוא ברירות המחדל. עתה מיפוי מפורש למפתחות RED האמיתיים.
+  'show-main-shaar': { kind: 'mapped', to: 'shaar-main-enabled', transform: (v) => v !== false && v !== 'false', reason: '03.11(ד): מתג שער ראשי — ברירת המחדל במקור true (השער חלק ממבנה הספר, לא אופציה)' },
+  'show-sub-shaar': { kind: 'mapped', to: 'shaar-sub-enabled', transform: (v) => v !== false && v !== 'false', reason: '03.11(ד): מתג שער־משנה — ברירת מחדל true כמקור' },
+  'show-back-shaar': { kind: 'mapped', to: 'shaar-back-enabled', transform: (v) => v !== false && v !== 'false', reason: '03.11(ד): מתג שער אחורי — ברירת מחדל true כמקור' },
+  'f-sh-title': { kind: 'mapped', to: 'shaar-title-font', transform: resolveStack, reason: '03.11(ד): גופן כותרת השער (מקור: Lia Sgula → Bellefair המוטמע)' },
+  's-sh-title': { kind: 'mapped', to: 'shaar-title-size-pt', transform: parseFloat, reason: '03.11(ד): גודל כותרת השער (מקור: 46)' },
+  'f-sh-sub': { kind: 'mapped', to: 'shaar-subtitle-font', transform: resolveStack, reason: '03.11(ד): גופן כותרת־משנה בשער (מקור: Livorna → David Libre)' },
+  's-sh-sub': { kind: 'mapped', to: 'shaar-subtitle-size-pt', transform: parseFloat, reason: '03.11(ד): גודל כותרת־משנה (מקור: 21)' },
+  'f-sh-desc': { kind: 'mapped', to: 'shaar-desc-font', transform: resolveStack, reason: '03.11(ד): גופן התיאור (מקור: Livorna → Frank Ruhl Libre)' },
+  's-sh-desc': { kind: 'mapped', to: 'shaar-desc-size-pt', transform: parseFloat, reason: '03.11(ד): גודל התיאור (מקור: 12)' },
+  'f-sh-sec': { kind: 'mapped', to: 'shaar-sections-font', transform: resolveStack, reason: '03.11(ד): גופן פרטי המהדורא (מקור: David Libre)' },
+  's-sh-sec': { kind: 'mapped', to: 'shaar-sections-size-pt', transform: parseFloat, reason: '03.11(ד): גודל פרטי המהדורא (מקור: 11.5)' },
+  'f-sh-author': { kind: 'mapped', to: 'shaar-author-font', transform: resolveStack, reason: '03.11(ד): גופן שם המחבר (מקור: David Libre)' },
+  's-sh-author': { kind: 'mapped', to: 'shaar-author-size-pt', transform: parseFloat, reason: '03.11(ד): גודל שם המחבר (מקור: 15)' },
+  'f-sh-year': { kind: 'mapped', to: 'shaar-year-font', transform: resolveStack, reason: '03.11(ד): גופן השנה/בס״ד (מקור: David Libre)' },
+  's-sh-year': { kind: 'mapped', to: 'shaar-year-size-pt', transform: parseFloat, reason: '03.11(ד): גודל השנה (מקור: 12)' },
+  'inp-book-desc': { kind: 'mapped', to: 'imud-book-desc', reason: '03.11(ד): תיאור הספר בשער (מקור: inp-book-desc ← «נושא מפורט»)' },
+  'inp-book-sections': { kind: 'mapped', to: 'imud-book-sections', reason: '03.11(ד): פרטי מהדורא בשער (מקור: inp-book-sections ← «פרטי מהדורא»)' },
+  'inp-book-author': { kind: 'mapped', to: 'imud-book-author', reason: '03.11(ד): שם המחבר בשערים (מקור: inp-book-author ← «שם המחבר»)' },
+  'inp-book-year': { kind: 'mapped', to: 'imud-book-year', reason: '03.11(ד): מקום ושנה בשערים (מקור: inp-book-year ← «מקום ושנת הוצאה»)' },
+  'inp-back-shaar-text': { kind: 'mapped', to: 'shaar-back-text', reason: '03.11(ד): טקסט השער האחורי (שמירת זכויות)' },
 
   // ============ הערות שוליים ============
   'fn-columns': { kind: 'mapped', to: 'footnote-columns', transform: parseInt },
@@ -11516,6 +12164,11 @@ function importImudSettings(legacy, registryKeys, opts = {}) {
   const report = { mapped: 0, merged: 0, uiState: 0, removed: 0 };
   const valid = registryKeys instanceof Set ? registryKeys : (Array.isArray(registryKeys) ? new Set(registryKeys) : null);
   const ctx = { contentHeightPx: Number(opts.contentHeightPx) > 0 ? Number(opts.contentHeightPx) : 1040 };
+  // **03.11(ד):** קטלוג הגופנים הזמין (אם הועבר) — לפתרון מחסניות הגופן של המקור
+  // מול מה שבאמת קיים בספרייה המוטמעת (f-h0="'AlphaBlack', 'David Libre', serif"
+  // ⇒ David Libre כש-AlphaBlack אינה בספרייה — בדיוק כמו שהדפדפן היה נופל).
+  if (opts.availableFonts instanceof Set) ctx.availableFonts = opts.availableFonts;
+  else if (Array.isArray(opts.availableFonts)) ctx.availableFonts = new Set(opts.availableFonts);
   // **S4.6:** שני מעברים — ממירים מותנים (onlyIfAbsent, כגון h2-title-orn-mode)
   // מוחלים רק אם מפתח ישיר לא קבע כבר את היעד. קדימות מפורשת ולא תלוית-סדר.
   const deferred = [];
@@ -11558,7 +12211,7 @@ function importImudSettings(legacy, registryKeys, opts = {}) {
   return { settings, uiState, dispositions, unmapped, report };
 }
 
-module.exports = { DISPOSITIONS, dispositionOf, importImudSettings, firstFamily, pctToPx };
+module.exports = { DISPOSITIONS, dispositionOf, importImudSettings, firstFamily, resolveStack, pctToPx };
 
 };
 __modules["src/ui/imud-library.js"] = function (require, module, exports) {
@@ -11704,10 +12357,40 @@ function createImudLibrary(engine) {
     return `imud:${collection}:${id}`;
   }
 
-  /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition. */
+  /** **03.11(ד):** פתרון ערך גופן (משפחה בודדת או מחסנית "'A', 'B', serif")
+   * למשפחה הראשונה הקיימת בקטלוג — בדיוק כפי שהדפדפן היה נופל במחסנית.
+   * @returns {string|null} שם משפחה מהקטלוג, או null אם אף אחת אינה זמינה. */
+  function resolveFamily(value) {
+    if (!fontCatalog.loaded || !value) return null;
+    const raw = String(value).replace(/'/g, '');
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+      .filter(p => !/^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(p));
+    for (const p of parts) if (fontCatalog.byFamily.has(p)) return p;
+    return null;
+  }
+
+  /** **03.11(ד):** טעינת גופן לפי ערך הגדרה — תומך גם במחסנית (נפתרת מול
+   * הקטלוג) וגם במשפחה בודדת. מחזיר Promise<ArrayBuffer|null>. */
+  function loadFontStack(value) {
+    if (value == null) return Promise.resolve(null);
+    const direct = fontCatalog.byFamily.get(String(value).trim());
+    if (direct) return loadFont(String(value).trim());
+    const resolved = resolveFamily(value);
+    return resolved ? loadFont(resolved) : Promise.resolve(null);
+  }
+
+  /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition.
+   * **03.11(ד):** מועבר גם קטלוג הגופנים הזמין — כך שמחסניות הגופן של המקור
+   * ("'AlphaBlack', 'David Libre', serif") נפתרות מיד למשפחה הזמינה בפועל
+   * (David Libre) וההגדרות שמתקבלות ניתנות לטעינה ולמדידה אמיתית. */
   async function loadLegacyDefaults() {
+    if (!fontCatalog.loaded) await loadFontCatalog().catch(() => {});
     const legacy = await fetchJson(`${BASE}/default_settings.json`);
-    const { settings, unmapped, report } = importImudSettings(legacy, new Set(getSettingDefs().map(r => r.id)));
+    const { settings, unmapped, report } = importImudSettings(
+      legacy,
+      new Set(getSettingDefs().map(r => r.id)),
+      { availableFonts: fontCatalog.byFamily ? new Set(fontCatalog.byFamily.keys()) : undefined }
+    );
     return { settings, unmapped, report };
   }
 
@@ -11720,7 +12403,7 @@ function createImudLibrary(engine) {
     return css;
   }
 
-  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss };
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss, resolveFamily, loadFontStack };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };

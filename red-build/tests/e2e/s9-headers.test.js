@@ -184,8 +184,11 @@ describe('S9.2 gate 1 — מטריצת כותרות: כל מקור×יישור×
     };
     const r = typeset(sampleDoc(2, 18), s);
     const doc = makeDoc();
-    const versoPage = r.pages.find(pg => !pg.isRecto && pg.header && pg.template.hasRunningHead);
-    const rectoPage = r.pages.find(pg => pg.isRecto && pg.header && pg.template.hasRunningHead);
+    // **03.11(ד):** עמודי תוכן־עניינים מקבלים כעת כותרת כמקור — ה-golden הזה
+    // בודק סלוטים מותאמים של עמודי גוף; מחפשים עמוד גוף במפורש.
+    const BODY = new Set(['regular', 'sign-open', 'preface', 'h3-spread']);
+    const versoPage = r.pages.find(pg => !pg.isRecto && pg.header && BODY.has(pg.type));
+    const rectoPage = r.pages.find(pg => pg.isRecto && pg.header && BODY.has(pg.type));
     assert(versoPage && rectoPage, 'both sides must carry headers');
     const vEl = renderPage(versoPage, s, doc, versoPage.header);
     const rEl = renderPage(rectoPage, s, doc, rectoPage.header);
@@ -228,10 +231,13 @@ describe('S9.2 gate 1 — מטריצת כותרות: כל מקור×יישור×
     assertEq(hv.slots.right.font, s['header-verso-right-font'], 'font stays physical-side (D-61)');
   });
 
-  it('כותרת ייעודית לעמודים הפותחים ב‑H2/H3 (REQ-HDR-02) — כבויה כברירת מחדל', () => {
+  it('עמודי פתיחה מציגים כותרת עליונה כברירת מחדל — כמקור (03.11(ד), תיקון D-36)', () => {
     const sDef = getDefaultSettings();
     const openingH2 = ctxPage(true, { opensWithHeadingLevel: 2, chapterOpening: true });
-    assertEq(buildHeader(openingH2, sDef, { bookName: 'ב' }), null, 'default: opening page no header (D-36)');
+    // **03.11(ד):** במקור ה-top-header-grid מוצג בכל עמודי התוכן, כולל פתיחות.
+    // D-36 הישן (null לכל פתיחה) הסתיר כותרות לגמרי בספרים עשירי כותרות.
+    const hDef = buildHeader(openingH2, sDef, { bookName: 'ב' });
+    assert(hDef && hDef.dedicated === false, 'opening page gets regular header (03.11(ד))');
     const s = {
       ...getDefaultSettings(),
       'header-opening-dedicated': true,
@@ -243,9 +249,10 @@ describe('S9.2 gate 1 — מטריצת כותרות: כל מקור×יישור×
     assert(h && h.dedicated === true, 'dedicated header activated');
     assertEq(h.slots.center.text, 'ספר טוב', 'opening center from opening slots');
     assertEq(h.slots.right.text, '', 'opening right empty');
-    // פתיחת H1 (preface) אינה H2/H3 — נשארת בלי כותרת:
+    // פתיחת H1 (preface) — כותרת רגילה (לא ייעודית — אינה H2/H3):
     const openingH1 = ctxPage(true, { opensWithHeadingLevel: 1, chapterOpening: true });
-    assertEq(buildHeader(openingH1, s, { bookName: 'ב' }), null, 'H1 opening stays headerless');
+    const h1hdr = buildHeader(openingH1, s, { bookName: 'ב' });
+    assert(h1hdr && h1hdr.dedicated === false, 'H1 opening: regular header (03.11(ד))');
   });
 
   it('מקורות טקסט: פיצול שם־הספר במקף (main/rest), מצבי hdr-h1-title-mode, ניקוי פיסוק', () => {
@@ -370,9 +377,14 @@ describe('S9.2 gate 3 — תוכן־עניינים: עמודים אמיתיים,
     const s = getDefaultSettings();
     const r = typeset(sampleDoc(3, 18), s);
     assert(r.tocPages.length >= 1, 'TOC pages exist');
-    assertEq(r.pages[0].type, 'toc-general', 'TOC at front');
-    assertEq(r.tocInsert.at, 0, 'inserted at 0');
-    const tocPg = r.pages[0];
+    // **03.11(ד):** עמודי השער (ראשי+אחורי, ברירת מחדל כמקור) קודמים לתוכן־העניינים —
+    // סדר המקור: שער ראשי → שער אחורי → תוכן־עניינים → גוף.
+    assertEq(r.pages[0].type, 'shaar-main', 'main shaar at front (03.11(ד))');
+    assertEq(r.pages[1].type, 'shaar-back', 'back shaar second (original order)');
+    const tocIdx = r.pages.findIndex(p => p.type === 'toc-general');
+    assert(tocIdx === 2, `TOC after shaar pages (got ${tocIdx})`);
+    assertEq(r.tocInsert.at, tocIdx, 'inserted at TOC index');
+    const tocPg = r.pages[tocIdx];
     assertEq(tocPg.toc.title, 'תוכן העניינים', 'title');
     const entries = tocPg.toc.rows.filter(x => x.kind === 'entry');
     assert(entries.length >= 3, `entries for 3 parts+simanim (got ${entries.length})`);
@@ -398,7 +410,7 @@ describe('S9.2 gate 3 — תוכן־עניינים: עמודים אמיתיים,
     assert(html.includes('href="#page-'), 'clickable anchors');
     assert(html.includes('toc-dots'), 'leader dots');
     assert(html.includes('toc-num'), 'row numbering (general-toc-count-numbering)');
-    assert(html.includes(`id="page-0"`), 'page anchor id for jump targets');
+    assert(html.includes(`id="page-${tocPg.index}"`), 'page anchor id for jump targets');
     // הקישורים פותרים לעוגן קיים:
     const ids = new Set(r.pages.map(p => `page-${p.index}`));
     const hrefs = [...html.matchAll(/href="#(page-\d+)"/g)].map(m => m[1]);
@@ -551,13 +563,24 @@ describe('S9.2 gate 4 — first/last-word מתעדכנות אחרי עימוד �
       'header-verso-right-source': 'last-word',
     };
     const r = typeset(sampleDoc(3, 18), s);
+    // **03.11(ד):** עמודי פתיחה מקבלים כעת כותרת (כמקור) — עמוד שכל שורותיו כותרות
+    // אין לו מילת גוף ראשונה/אחרונה; הוא נבדק בנפרד להלן.
     const withHeaders = r.pages.filter(p => p.header && p.columns.some(c => c.length));
-    assert(withHeaders.length >= 2, 'pages with headers');
+    const hasBody = (pg) => [
+      ...(pg.spanning ? pg.spanning.lines : []),
+      ...pg.columns.flat(),
+    ].some(l => l.kind !== 'heading');
+    assert(withHeaders.filter(hasBody).length >= 2, 'pages with headers and body lines');
     for (const pg of withHeaders) {
       const bodyLines = [
         ...(pg.spanning ? pg.spanning.lines : []),
         ...pg.columns.flat(),
       ].filter(l => l.kind !== 'heading');
+      if (!bodyLines.length) {
+        assertEq(pg.firstWord, '', `page ${pg.index} heading-only: firstWord empty`);
+        assertEq(pg.lastWord, '', `page ${pg.index} heading-only: lastWord empty`);
+        continue;
+      }
       const expectFirst = bodyLines[0].words[0];
       const expectLast = bodyLines[bodyLines.length - 1].words[bodyLines[bodyLines.length - 1].words.length - 1];
       assertEq(pg.firstWord, trimEdgePunctuation(expectFirst), `page ${pg.index} firstWord`);

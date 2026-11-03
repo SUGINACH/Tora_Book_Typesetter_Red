@@ -215,9 +215,12 @@ function buildTocPages(model, pageType, title, settings, measure, lineHeight, io
  */
 function insertTocPages(pages, tocPages, settings, io = {}) {
   if (!tocPages.length) return { pages, inserted: 0, at: 0 };
-  // רצף פותח מבני: שער ראשי / עמודים מותאמים שהוצבו בראש
+  // רצף פותח מבני: עמודי front-matter אמיתיים בלבד (שער ראשי/אחורי/פתיחה מותאמת).
+  // **03.11(ד):** שערי־משנה (shaar-sub) שייכים לזרימת הגוף — הם באים אחרי
+  // תוכן־העניינים (לפני החלק שלהם), לא לפניו. בעבר כל isShaar דולג — ושער־המשנה
+  // של החלק הראשון נדחק לפני התוכן־עניינים.
   let at = 0;
-  while (at < pages.length && (pages[at].isShaar || pages[at].type === 'custom')) at++;
+  while (at < pages.length && (pages[at]._frontMatter === true)) at++;
   const out = pages.slice(0, at).concat(tocPages, pages.slice(at));
   out.forEach((p, i) => { p.index = i; });
   // בניית תבניות מחדש לפי הזוגיות הסופית (D-63) — אותו סוג, אותן הגדרות, זוגיות נכונה

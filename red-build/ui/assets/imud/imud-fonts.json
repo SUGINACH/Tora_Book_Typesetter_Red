@@ -2193,5 +2193,29 @@
 "family": "תעמולה רגיל",
 "file": "Taamula-Regular.ttf",
 "format": "truetype"
+},
+{
+"family": "David Libre",
+"file": "DavidLibre-Regular.ttf",
+"format": "truetype",
+"source": "google-fonts/ofl/davidlibre (SIL OFL 1.1)"
+},
+{
+"family": "Frank Ruhl Libre",
+"file": "FrankRuhlLibre-VF.ttf",
+"format": "truetype",
+"source": "google-fonts/ofl/frankruhllibre (SIL OFL 1.1) — variable, default 400"
+},
+{
+"family": "Bellefair",
+"file": "Bellefair-Regular.ttf",
+"format": "truetype",
+"source": "google-fonts/ofl/bellefair (SIL OFL 1.1)"
+},
+{
+"family": "Noto Serif Hebrew",
+"file": "NotoSerifHebrew-VF.ttf",
+"format": "truetype",
+"source": "google-fonts/ofl/notoserifhebrew (SIL OFL 1.1) — variable, default 400"
 }
 ]

@@ -140,10 +140,40 @@ function createImudLibrary(engine) {
     return `imud:${collection}:${id}`;
   }
 
-  /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition. */
+  /** **03.11(ד):** פתרון ערך גופן (משפחה בודדת או מחסנית "'A', 'B', serif")
+   * למשפחה הראשונה הקיימת בקטלוג — בדיוק כפי שהדפדפן היה נופל במחסנית.
+   * @returns {string|null} שם משפחה מהקטלוג, או null אם אף אחת אינה זמינה. */
+  function resolveFamily(value) {
+    if (!fontCatalog.loaded || !value) return null;
+    const raw = String(value).replace(/'/g, '');
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+      .filter(p => !/^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(p));
+    for (const p of parts) if (fontCatalog.byFamily.has(p)) return p;
+    return null;
+  }
+
+  /** **03.11(ד):** טעינת גופן לפי ערך הגדרה — תומך גם במחסנית (נפתרת מול
+   * הקטלוג) וגם במשפחה בודדת. מחזיר Promise<ArrayBuffer|null>. */
+  function loadFontStack(value) {
+    if (value == null) return Promise.resolve(null);
+    const direct = fontCatalog.byFamily.get(String(value).trim());
+    if (direct) return loadFont(String(value).trim());
+    const resolved = resolveFamily(value);
+    return resolved ? loadFont(resolved) : Promise.resolve(null);
+  }
+
+  /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition.
+   * **03.11(ד):** מועבר גם קטלוג הגופנים הזמין — כך שמחסניות הגופן של המקור
+   * ("'AlphaBlack', 'David Libre', serif") נפתרות מיד למשפחה הזמינה בפועל
+   * (David Libre) וההגדרות שמתקבלות ניתנות לטעינה ולמדידה אמיתית. */
   async function loadLegacyDefaults() {
+    if (!fontCatalog.loaded) await loadFontCatalog().catch(() => {});
     const legacy = await fetchJson(`${BASE}/default_settings.json`);
-    const { settings, unmapped, report } = importImudSettings(legacy, new Set(getSettingDefs().map(r => r.id)));
+    const { settings, unmapped, report } = importImudSettings(
+      legacy,
+      new Set(getSettingDefs().map(r => r.id)),
+      { availableFonts: fontCatalog.byFamily ? new Set(fontCatalog.byFamily.keys()) : undefined }
+    );
     return { settings, unmapped, report };
   }
 
@@ -156,7 +186,7 @@ function createImudLibrary(engine) {
     return css;
   }
 
-  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss };
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss, resolveFamily, loadFontStack };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };

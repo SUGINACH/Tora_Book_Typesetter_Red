@@ -63,7 +63,8 @@ const { columnDividerHeightPx } = require('../decoration/ornament-fit');
 const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
-const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font'); // **03.11(ג):** מקור יחיד לגופן/גודל שורה
+const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font');
+const { buildShaarBlocks, shaarFontOf } = require('./shaar-content'); // **03.11(ד)** // **03.11(ג):** מקור יחיד לגופן/גודל שורה
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -74,11 +75,25 @@ function lastLineClass(ln, settings) {
   return ' line--last-center';
 }
 
-/** **03.11(ג):** מחסנית גופן עם fallback עברי קבוע — גרשיים מנוטרלים (הזרקה בטוחה ל-CSS). */
+/** **03.11(ד):** מחסנית גופן — תומכת גם בערך מרובה־משפחות ("'A', 'B', serif"
+ * מהמקור). גרשיים מנוטרלים (הזרקה בטוחה ל-CSS), משפחות גנריות (serif/sans-serif)
+ * עוברות כמו שהן, ופולבאקים עבריים נוספים רק אם אינם כבר ברשימה. */
 function fontStack(family) {
-  const clean = String(family).replace(/'/g, '').trim();
-  if (!clean) return '';
-  return `'${clean}', 'Frank Ruhl Libre', 'David', serif`;
+  // ניקוי לפי משפחה: גרשיים מוסרים, ותווים מסוכנים להזרקת CSS (; : { } / וכו')
+  // נפסלים — נשארים אותיות (לטיניות ועבריות), ספרות, רווחים ומקפים בלבד.
+  const safe = (x) => String(x || '').replace(/'/g, '').replace(/[^\w\u0590-\u05FF\uFB1D-\uFB4F\s-]/g, '').trim();
+  const parts = String(family || '').split(',').map(safe).filter(Boolean);
+  if (!parts.length) return '';
+  const out = [];
+  const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i;
+  for (const p of parts) {
+    out.push(GENERIC.test(p) ? p : `'${p}'`);
+  }
+  for (const fb of ['Frank Ruhl Libre', 'David', 'serif']) {
+    const plain = `'${fb}'`;
+    if (!out.includes(plain) && !out.includes(fb)) out.push(GENERIC.test(fb) ? fb : plain);
+  }
+  return out.join(', ');
 }
 
 function renderLine(ln, doc, settings = {}) {
@@ -456,10 +471,61 @@ function renderCustomPageContent(page, doc) {
   return els;
 }
 
+/** **03.11(ד) — תוכן מובנה של עמודי השער (פורט renderMainShaar/renderSubShaar/
+ * renderBackShaar של המקור). המודל (בלוקים/תיבה/פריסה) חי ב-shaar-content.js —
+ * מקור יחיד שצורך גם ההיטל ל-PDF (F-09); כאן רק ההקרנה ל-DOM.
+ * עד כאן עמוד שער בלי עיצוב־תמונה היה עמוד ריק לגמרי — "אין עמודי שער"
+ * מבחינת המשתמש. המבנה, התיבות והגדלים נאמנים למקור. */
+function renderShaarContent(page, settings, doc, metadata) {
+  const model = buildShaarBlocks(page, settings, metadata);
+  if (!model) return [];
+  const els = [];
+  const px = (pt) => `${ptToPx(pt)}px`;
+
+  const wrap = doc.createElement('div');
+  const variant = page.type === 'shaar-main' ? 'main' : page.type === 'shaar-sub' ? 'sub' : 'back';
+  wrap.className = `shaar-content shaar-content--${variant}`;
+  wrap.dir = 'rtl';
+  wrap.style.top = `${model.box.top}px`;
+  wrap.style.bottom = `${model.box.bottom}px`;
+  wrap.style.right = `${model.box.right}px`;
+  wrap.style.left = `${model.box.left}px`;
+
+  for (const b of model.blocks) {
+    if (b.graphic) {
+      const el = doc.createElement('div');
+      el.className = 'shaar-crown';
+      el.innerHTML = b.graphic === 'crown-sub'
+        ? '<svg viewBox="0 0 300 30"><path d="M10,15 Q75,5 140,15 Q145,10 150,5 Q155,10 160,15 Q225,5 290,15 Q225,25 160,15 Q155,20 150,25 Q145,20 140,15 Q75,25 10,15 Z" fill="#222"/></svg>'
+        : '<svg viewBox="0 0 400 40"><circle cx="200" cy="20" r="10" fill="none" stroke="#000" stroke-width="4.5"/><circle cx="200" cy="20" r="4.5" fill="#000"/><path d="M182,20 C182,24 165,27 140,27 C90,27 40,22 5,20 C40,18 90,13 140,13 C165,13 182,16 182,20 Z" fill="#000"/><path d="M218,20 C218,24 235,27 260,27 C310,27 360,22 395,20 C360,18 310,13 260,13 C235,13 218,16 218,20 Z" fill="#000"/></svg>';
+      wrap.appendChild(el);
+      continue;
+    }
+    const el = doc.createElement('div');
+    el.className = b.cls;
+    el.dir = 'rtl';
+    const fam = shaarFontOf(b.cls, settings);
+    if (fam) el.style.fontFamily = fontStack(fam);
+    if (b.sizePt > 0) el.style.fontSize = px(b.sizePt);
+    if (b.bold) el.style.fontWeight = '700';
+    if (b.letterSpacingPx) el.style.letterSpacing = `${b.letterSpacingPx}px`;
+    el.textContent = scrubPUAText(String(b.text == null ? '' : b.text));
+    wrap.appendChild(el);
+  }
+  els.push(wrap);
+  return els;
+}
+
 /**
  * רנדור עמוד שלם. @param {object} page - תוצר dp-planner + header + numbersByIndex
+ * **03.11(ד):** header ברירת מחדל = page.header — הצינור מחשב ומצמיד כותרת עליונה
+ * לכל עמוד (pipeline), וכל קורא שלא מעביר ארגומנט מקבל אותה אוטומטית. עד כאן
+ * התצוגה החיה (preview-tab) לא העבירה כלום והייצוא העביר מטא־נתונים בטעות —
+ * שני הנתיבים הציגו עמודים בלי כותרת עליונה בזמן שהבדיקות העבירו את הארגומנט
+ * במפורש ולא תפסו את הנתק (דיווח משתמש 3: "אין כותרות עליונות").
  */
 function renderPage(page, settings, doc, header) {
+  if (header == null && page && page.header) header = page.header;
   if (!page.template) {
     // עמודי הערות שלא חוברו לרצף המספור — תבנית ברירת מחדל חוקית (A4) במקום קריסה
     page.template = { width: 794, height: 1123, columns: [], margins: { top: 40, bottom: 40, side: 60, outer: 60 }, contentBox: { top: 40, bottom: 1080, height: 1040 }, gutter: 0, counts: false, numbered: false, hasRunningHead: false };
@@ -512,8 +578,16 @@ function renderPage(page, settings, doc, header) {
   // **S8 (REQ-ORN-05/08):** רקעים/ערכות/תיבות שער — שכבות תשתית לפני התוכן
   for (const el of renderPageBackgroundAndShaar(page, settings, doc, page._metadata)) root.appendChild(el);
 
+  // **03.11(ד):** תוכן מובנה של עמודי השער (בס״ד/כותרת/כתר/תיאור/מחבר/שנה —
+  // פורט המקור). בלי זה עמוד שער ללא עיצוב־תמונה היה ריק לחלוטין.
+  for (const el of renderShaarContent(page, settings, doc, page._metadata)) root.appendChild(el);
+
   // **S9 (REQ-HDR-05):** עמודי תוכן־עניינים — שורות + נקודות + עוגנים; אין טורי גוף
+  // **03.11(ד):** כותרת עליונה גם בעמודי התוכן־עניינים — כמקור
+  // (renderPaginatedTOC מרנדר top-header-grid בכל עמודי התוכן).
   if (page.type === 'toc-general' || page.type === 'toc-detail') {
+    const hToc = renderHeader(header, doc);
+    if (hToc) root.appendChild(hToc);
     for (const el of renderTocPageContent(page, doc)) root.appendChild(el);
     const folioToc = renderFolio(page, settings, doc);
     if (folioToc) root.appendChild(folioToc);
@@ -582,4 +656,4 @@ function renderPage(page, settings, doc, header) {
   return root;
 }
 
-module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent, applyCustomStyleSpec };
+module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderShaarContent, renderCustomPageContent, applyCustomStyleSpec, fontStack };

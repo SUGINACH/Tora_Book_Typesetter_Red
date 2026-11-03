@@ -1,6 +1,6 @@
 // ui/engine-worker.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת ה־Worker (המנוע המלא — אין לטעון בחוט ה־UI)
-// מודולים: 58 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 59 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -391,11 +391,13 @@ var __paths = {
   "src/engine/output/dom-renderer.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/output/dom-renderer.js|../decoration/folio": "src/engine/decoration/folio.js",
   "src/engine/output/dom-renderer.js|./line-font": "src/engine/output/line-font.js",
+  "src/engine/output/dom-renderer.js|./shaar-content": "src/engine/output/shaar-content.js",
   "src/engine/decoration/page-decorations.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/typography/font-subset.js|./font-metrics": "src/engine/typography/font-metrics.js",
   "src/engine/output/geometry-projector.js|./dom-renderer": "src/engine/output/dom-renderer.js",
   "src/engine/output/geometry-projector.js|../typography/measure-api": "src/engine/typography/measure-api.js",
   "src/engine/output/geometry-projector.js|./line-font": "src/engine/output/line-font.js",
+  "src/engine/output/geometry-projector.js|./shaar-content": "src/engine/output/shaar-content.js",
   "src/engine/output/zip-writer.js|../import/zip-reader": "src/engine/import/zip-reader.js",
   "src/engine/output/project-io.js|../core/settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/extensions/extensions-io.js|./style-schema": "src/engine/extensions/style-schema.js",
@@ -1672,8 +1674,12 @@ const registry = [
   K('body-last-line-align', 'enum', 'center', P.TYPO, 'sel-last-line-align', ['output/dom-renderer'], 'fx:last-line-align', { enum: ['center', 'right', 'stretch'], note: 'wiring מ‑Orange ✓' }),
 
   // ---- כותרות 0–7 (HEADINGS) ----
+  // **03.11(ד):** ברירות המחדל של המצבים נאמנות למקור: h3=span_1col ⇒ full-width
+  // (פס חוצה־טורים), h4–h6=inline_2col ⇒ regular (בתוך הטור — שם נשתלים עיטורי
+  // הצד והמפרידים), h7=side_note ⇒ side-note. בעבר כולן full-width — ואז כותרת
+  // שנמדדה ב-674px הוצבה בטור 270px (גלישה/חפיפה — דיווח משתמש 3).
   ...[0, 1, 2, 3, 4, 5, 6, 7].flatMap(h => [
-    K(`heading-${h}-mode`, 'enum', h === 7 ? 'side-note' : 'full-width', P.HEADINGS, `sel-h${h}-mode`, ['layout/headings-escort'], `fx:h${h}-mode`, { enum: ['full-width', 'regular', 'side-note', 'new-page'] }),
+    K(`heading-${h}-mode`, 'enum', h === 7 ? 'side-note' : h >= 4 ? 'regular' : 'full-width', P.HEADINGS, `sel-h${h}-mode`, ['layout/headings-escort'], `fx:h${h}-mode`, { enum: ['full-width', 'regular', 'side-note', 'new-page'] }),
     K(`heading-${h}-font`, 'font', 'David HB', P.HEADINGS, `sel-h${h}-font`, ['typography/measure-api'], `fx:h${h}-font`),
     K(`heading-${h}-size-pt`, 'number', [20, 18, 16, 15, 14, 14, 13, 12][h], P.HEADINGS, `rng-h${h}-size`, ['typography/measure-api'], `fx:h${h}-size`, { min: 8, max: 48 }),
   ]),
@@ -1803,6 +1809,36 @@ const registry = [
   K('imud-divider', 'string', '', P.ORNAMENTS, 'inp-imud-divider', ['decoration/ornament-plan'], 'fx:imud-divider', { note: 'מפריד סעיפים מעוצב (323 עיצובים) — משמש מפרידי שער/כותרות במצב תמונה' }),
   K('imud-book-title', 'string', '', P.THEMES, 'inp-imud-book-title', ['output/dom-renderer'], 'fx:imud-book-title', { note: 'כותרת הספר בשער (עקיפת מטא-נתוני המסמך אם הוגדר)' }),
   K('imud-book-subtitle', 'string', '', P.THEMES, 'inp-imud-book-subtitle', ['output/dom-renderer'], 'fx:imud-book-subtitle', { note: 'כותרת־משנה בשער' }),
+  // **03.11(ד) — דיווח משתמש 3 ("אין עמודי שער, אין כותרות עליונות, שום דבר מהגדרות
+  // ברירת המחדל אינו קיים"): המקור (IMUD_TORANI default_settings.json) מחזיק
+  // show-main-shaar=true / show-sub-shaar=true / show-back-shaar=true כברירת מחדל —
+  // השערים חלק ממבנה הספר, לא אופציה. מפתחות המתגים המפורשים משחזרים זאת.
+  K('shaar-main-enabled', 'bool', true, P.THEMES, 'chk-shaar-main', ['decoration/shaar-pages'], 'fx:shaar-main', { note: '03.11(ד): שער ראשי כברירת מחדל — כמקור (show-main-shaar=true). מתג שער-העיצוב/ערכת-הנושא מוסיף רקע מעוצב, לא מחליף את המתג' }),
+  K('shaar-sub-enabled', 'bool', true, P.THEMES, 'chk-shaar-sub', ['decoration/shaar-pages'], 'fx:shaar-sub', { note: '03.11(ד): שער־משנה לכל פתיחת חלק — כמקור (show-sub-shaar=true); show-shaar-sub הישן נשמר כמתג נוסף (או)' }),
+  // **03.11(ד): תוכן מובנה של עמודי השער (פורט renderMainShaar/renderSubShaar/renderBackShaar
+  // של המקור): גופנים/גדלים לכל רכיב. ברירות המחדל = ערכי המקור אחרי הסרת המשפחות
+  // שאינן זמינות (Lia Sgula/Livorna/Alpha* אינן בספרייה — המקור עצמו נפל ל-Bellefair/
+  // David Libre/Frank Ruhl Libre דרך ה-fallbacks, ואלה מוטמעים כעת בנכסים).
+  K('shaar-title-font', 'font', 'Bellefair', P.THEMES, 'sel-shaar-title-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-title-font', { note: "מקור: f-sh-title=\"'Lia Sgula', 'Bellefair', serif\" — Lia Sgula אינה זמינה; Bellefair המוטמע" }),
+  K('shaar-title-size-pt', 'number', 46, P.THEMES, 'rng-shaar-title-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-title-size', { min: 20, max: 90, note: 'מקור: s-sh-title=46' }),
+  K('shaar-subtitle-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-subtitle-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-subtitle-font', { note: "מקור: f-sh-sub=\"'Livorna', 'David Libre', serif\"" }),
+  K('shaar-subtitle-size-pt', 'number', 21, P.THEMES, 'rng-shaar-subtitle-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-subtitle-size', { min: 10, max: 40, note: 'מקור: s-sh-sub=21' }),
+  K('shaar-desc-font', 'font', 'Frank Ruhl Libre', P.THEMES, 'sel-shaar-desc-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-desc-font', { note: "מקור: f-sh-desc=\"'Livorna', 'Frank Ruhl Libre', serif\"" }),
+  K('shaar-desc-size-pt', 'number', 12, P.THEMES, 'rng-shaar-desc-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-desc-size', { min: 8, max: 20, note: 'מקור: s-sh-desc=12' }),
+  K('shaar-sections-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-sections-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-sections-font', { note: "מקור: f-sh-sec=\"'David Libre', serif\"" }),
+  K('shaar-sections-size-pt', 'number', 11.5, P.THEMES, 'rng-shaar-sections-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-sections-size', { min: 8, max: 20, note: 'מקור: s-sh-sec=11.5' }),
+  K('shaar-author-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-author-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-author-font', { note: "מקור: f-sh-author=\"'David Libre', serif\"" }),
+  K('shaar-author-size-pt', 'number', 15, P.THEMES, 'rng-shaar-author-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-author-size', { min: 8, max: 24, note: 'מקור: s-sh-author=15' }),
+  K('shaar-year-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-year-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-year-font', { note: "מקור: f-sh-year=\"'David Libre', serif\"" }),
+  K('shaar-year-size-pt', 'number', 12, P.THEMES, 'rng-shaar-year-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-year-size', { min: 8, max: 20, note: 'מקור: s-sh-year=12' }),
+  K('shaar-back-text-font', 'font', 'David Libre', P.THEMES, 'sel-shaar-back-text-font', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-back-text-font', { note: 'גוף טקסט השער האחורי (שורות שמירת־זכויות) — מקור: David Libre' }),
+  K('shaar-back-text-size-pt', 'number', 10.5, P.THEMES, 'rng-shaar-back-text-size', ['output/shaar-content', 'output/dom-renderer'], 'fx:shaar-back-text-size', { min: 8, max: 16, note: 'מקור: שורות ההמשך 10.5pt (השורה הראשונה 13pt מודגשת)' }),
+  // נתוני הספר לשערים — ממופים מ-inp-book-* של המקור; בלי ערך — נופלים למטא-נתוני המסמך
+  K('imud-book-desc', 'string', '', P.THEMES, 'inp-imud-book-desc', ['output/dom-renderer'], 'fx:imud-book-desc', { note: 'תיאור בשער הראשי (מקור: inp-book-desc ← «נושא מפורט»)' }),
+  K('imud-book-sections', 'string', '', P.THEMES, 'inp-imud-book-sections', ['output/dom-renderer'], 'fx:imud-book-sections', { note: 'פרטי מהדורא בשער הראשי (מקור: inp-book-sections ← «פרטי מהדורא»)' }),
+  K('imud-book-author', 'string', '', P.THEMES, 'inp-imud-book-author', ['output/dom-renderer'], 'fx:imud-book-author', { note: 'שם המחבר בשערים (מקור: inp-book-author ← «שם המחבר»)' }),
+  K('imud-book-year', 'string', '', P.THEMES, 'inp-imud-book-year', ['output/dom-renderer'], 'fx:imud-book-year', { note: 'מקום ושנת הוצאה בשערים (מקור: inp-book-year ← «מקום ושנת הוצאה»)' }),
+  K('shaar-back-text', 'string', '', P.THEMES, 'inp-shaar-back-text', ['output/dom-renderer'], 'fx:shaar-back-text', { note: 'טקסט השער האחורי (מקור: inp-back-shaar-text; ברירת מחדל בזמן ריצה: «שמירת זכויות» מהמטא או ״כל הזכויות שמורות למחבר.״)' }),
 
   // ---- מזהי טקסט מוגדרים (S4.5 — chat-v20.3 היסטורי; ברירות מחדל = המקור) ----
   K('en-line-prefix', 'string', 'הערת סיום -', P.NOTES, 'inp-en-line-prefix', ['parser/dfa-lexer', 'parser/block-tokenizer'], 'fx:en-prefix', { note: 'שורה המתחילה בקידומת ⇒ הערת סיום (הקידומת אינה מופיעה בפלט). ריק = ביטול הזיהוי. הוראת כותרת עמודי ההערות — רק בצורת הרבים «הערות סיום - כותרת»' }),
@@ -3603,6 +3639,29 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     // תקציב הערות לפני מיקום (F-17 probe==reserved, כולל מדיניות הערה ארוכה)
     if (blk.kind === 'paragraph') reserveNotes(blk);
 
+    // **03.11(ד) — span_1col של המקור ל-H3–H6 (mode=full-width):** עד כאן כותרת
+    // שנמדדה ברוחב מלא (674px) הוצבה בטור של 270px — שורה ברוחב 471px בטור
+    // חצי-רוחב, נגררת בדפדפן לגלישה/חפיפה ("טקסטים אחד על השני" — דיווח משתמש 3).
+    // עתה היא מוצבת בפס חוצה־טורים כמו H2 (FWD-1) — בלי עמוד חדש (המקור:
+    // כותרת הענף ממשיכה באותו עמוד; עמוד חדש רק אם אין מקום לפס).
+    if (blk.kind === 'heading' && blk.level >= 3 && blk.level <= 6 && blk.fullWidth) {
+      if (cur.spanning || cur.columns.some(c => c.length)) {
+        flushPage();
+        cur = newPage(PAGE_TYPES.REGULAR);
+      }
+      if (!cur.spanning && cur.template.columns.length >= 2) {
+        const bandH3 = blk.lines.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+        cur.spanning = {
+          lines: blk.lines.map((ln, i) => ({ ...ln, meta: { tokenId: blk.tokenId, firstOfBlock: i === 0, docPart: blk.part }, seq: seqCounter++ })),
+          heightPx: bandH3,
+          titleTopPadPx: 0,
+          orn: null
+        };
+        eventLog.emit('page-plan', 'h3-spanning', { token: blk.tokenId, level: blk.level, heightPx: bandH3 }, cur.index);
+        continue; // הכותרת בפס; הבלוקים הבאים ימלאו את הטורים מתחת
+      }
+    }
+
     if (blk.kind === 'heading' && blk.level === 2) {
       // PT-05: עמוד חדש תמיד + סימון פתיחת סימן (D-36) + בניית תבנית מלאה
       // (בעבר בענף ה־else הוחלף סוג העמוד בלי בניית תבנית SIGN_OPEN —
@@ -3851,7 +3910,9 @@ function buildPageTemplate(type, settings, isRecto = true) {
     numbered: ![PAGE_TYPES.SHAAR_MAIN, PAGE_TYPES.SHAAR_SUB, PAGE_TYPES.SHAAR_BACK, PAGE_TYPES.TOC_GENERAL, PAGE_TYPES.TOC_DETAIL, PAGE_TYPES.FILLER].includes(type)
       ? true : (type.startsWith('shaar') ? settings['count-shaar-pages'] : settings['count-toc-pages']),
     counts: ![PAGE_TYPES.FILLER].includes(type),
-    hasRunningHead: [PAGE_TYPES.REGULAR, PAGE_TYPES.SIGN_OPEN, PAGE_TYPES.H3_SPREAD, PAGE_TYPES.PREFACE].includes(type),
+    // **03.11(ד):** עמודי תוכן־העניינים מציגים כותרת עליונה כמו המקור
+    // (renderPaginatedTOC של המקור מרנדר top-header-grid בכל עמודי התוכן).
+    hasRunningHead: [PAGE_TYPES.REGULAR, PAGE_TYPES.SIGN_OPEN, PAGE_TYPES.H3_SPREAD, PAGE_TYPES.PREFACE, PAGE_TYPES.TOC_GENERAL, PAGE_TYPES.TOC_DETAIL].includes(type),
   };
 }
 
@@ -4946,9 +5007,13 @@ function buildHeader(page, settings, ctx) {
   const physical = page.isRecto ? 'recto' : 'verso';
   // REQ-HDR-02: עמוד הנפתח ב‑H2/H3 + header-opening-dedicated ⇒ סלוטי מקור ייעודיים
   const dedicated = settings['header-opening-dedicated'] === true && pageOpensWithH2H3(page);
-  // **D-36 + REQ-HDR-02:** עמוד פתיחה (פרק/סימן) ללא כותרת עליונה — אלא אם הופעלה
-  // הכותרת הייעודית לפותחות H2/H3 (ברירת מחדל כבויה — התנהגות ≤S8 נשמרת).
-  if (page.chapterOpening && !dedicated) return null;
+  // **03.11(ד) — תיקון D-36 חלקי, נאמן למקור:** במקור (top-header-grid) הכותרת
+  // העליונה מוצגת בכל עמודי התוכן, כולל עמודי פתיחה של פרק/סימן. D-36 העלים
+  // אותה מכל עמודי הפתיחה — ובספרים עשירי כותרות (כל עמוד פתיחה) זה הסתיר
+  // את הכותרות לגמרי ("אין כותרות עליונות" — דיווח משתמש 3). עתה: כל עמוד
+  // תבניתו hasRunningHead מציג כותרת; שערים/תוכן־עניינים/הערות נשארים בלי
+  // (template.hasRunningHead=false שלהם). header-opening-dedicated נשמר כמצב
+  // סלוטים ייעודי לפותחות H2/H3.
   const sourceSide = dedicated ? 'opening' : resolveSameAs(physical, settings);
   // טקסט מותאם תמיד מהצד הפיזי של העמוד (סלוטי הפתיחה יורשים — D-61)
   const customSide = dedicated ? physical : sourceSide;
@@ -5992,22 +6057,48 @@ const { buildPickerModel } = require('./theme-sets');
 
 /**
  * האם ערכת נושא פעילה (הופעלה דרך activateThemeSet או הוגדרה ידנית).
- * ברירת המחדל 'default' ⇒ אין עמודי שער — התנהגות שמרנית שלא משנה מסמכים קיימים.
- * **03.11 (EXT-14):** גם בחירת עיצוב ספרייה (imud-shaar-main) מפעילה את השערים.
+ * **03.11(ד):** אין עוד תלות בין קיום השערים לערכת נושא — המתגים המפורשים
+ * (shaar-main-enabled/shaar-sub-enabled/shaar-back-enabled, ברירת מחדל true
+ * כמקור) קובעים את קיום השערים; ערכת נושא/עיצוב מוסיפה רקע מעוצב בלבד.
  */
 function themeActive(settings) {
   const id = settings['theme-set-id'];
   return Boolean(id && id !== 'default') || Boolean(settings['shaar-main-image']) || Boolean(settings['imud-shaar-main']);
 }
 
-function makeShaarPage(type, settings, index) {
+/** **03.11(ד):** שער ראשי — מתג מפורש; ברירת מחדל true כמקור (show-main-shaar).
+ * ערכת־נושא/עיצוב ספרייה אינן כופות קיום — הן מוסיפות רקע מעוצב בלבד;
+ * כיבוי מפורש (shaar-main-enabled=false) גובר על הכול.
+ * תאימות לאחור: shaar-main-image/imud-shaar-main שהוגדרו בתבניות ישנות
+ * (מעידות על כוונת שער) מדליקות גם כשהמתג לא נשמר. */
+function mainShaarActive(settings) {
+  if (settings['shaar-main-enabled'] === false) return false;
+  return settings['shaar-main-enabled'] === true || themeActive(settings);
+}
+
+/** **03.11(ד):** שער־משנה — ברירת מחדל true כמקור (show-sub-shaar); המתג
+ * הישן show-shaar-sub=true מדליק (תאימות תבניות); כיבוי מפורש גובר. */
+function subShaarActive(settings) {
+  if (settings['shaar-sub-enabled'] === false) return false;
+  return settings['shaar-sub-enabled'] === true || settings['show-shaar-sub'] === true || themeActive(settings);
+}
+
+/** **03.11(ד):** שער אחורי — ברירת מחדל true כמקור (show-back-shaar=true). */
+function backShaarActive(settings) {
+  return settings['shaar-back-enabled'] !== false;
+}
+
+function makeShaarPage(type, settings, index, info) {
   const tpl = buildPageTemplate(type, settings, index % 2 === 0);
   return {
     index, type, template: tpl,
     columns: Array.from({ length: tpl.columns.length }, () => []),
     footnotes: [], sideNotes: [], headingsOnPage: [], balanceInfo: null,
     fnReservedHeightPx: 0, chapterOpening: true, // D-36: שער — ללא גיליון לעין
-    decorations: [], isShaar: true
+    decorations: [], isShaar: true,
+    // **03.11(ד):** נתוני תוכן השער — שער־משנה נושא את כותרת החלק (פיצול במקף
+    // כמקור: renderSubShaar — titleMain/titleSub). המידע נצרך ב-dom-renderer.
+    shaarInfo: info || null
   };
 }
 
@@ -6022,8 +6113,9 @@ function makeShaarPage(type, settings, index) {
 function insertShaarPages(pages, blocks, settings, customDefs) {
   const out = [];
   const inserted = [];
-  const active = themeActive(settings);
-  const showSub = settings['show-shaar-sub'] === true;
+  const active = mainShaarActive(settings);
+  const showSub = subShaarActive(settings);
+  const showBack = backShaarActive(settings);
   const partsCount = new Set(blocks.filter(b => b.kind === 'heading' && b.level === 1).map(b => b.part)).size;
 
   // עמודים מותאמים — תכנון מיקום (PT-09)
@@ -6032,13 +6124,20 @@ function insertShaarPages(pages, blocks, settings, customDefs) {
 
   const push = (page, why) => { out.push(page); if (why) inserted.push({ type: page.type, why }); };
 
-  // PT-01 + custom before/after-shaar-main
+  // PT-01 + custom before/after-shaar-main.
+  // _frontMatter מסמן עמודי פתיחה אמיתיים — תוכן־העניינים נכנס אחריהם ולפני
+  // כל דף גוף (כולל שערי־משנה של החלק הראשון — סדר המקור 03.11(ד)).
+  const pushFront = (page, why) => { page._frontMatter = true; push(page, why); };
   if (customPlan) for (const d of customPlan.start.filter(d => d.position.at === 'before-shaar-main')) {
-    customPlaced.push(d.id); push(makeCustomPage(d, settings, 0), `custom:${d.id}`);
+    customPlaced.push(d.id); pushFront(makeCustomPage(d, settings, 0), `custom:${d.id}`);
   }
-  if (active) push(makeShaarPage(PAGE_TYPES.SHAAR_MAIN, settings, out.length), 'theme-main');
+  if (active) pushFront(makeShaarPage(PAGE_TYPES.SHAAR_MAIN, settings, out.length), 'shaar-main');
+  // **03.11(ד) — סדר המקור:** השער האחורי מודפס מיד אחרי השער הראשי (גיליון 1
+  // דו־צדדי: חזית/גב — כך גם typesetDocument המקורי: main-shaar → back-shaar →
+  // תוכן־עניינים → גוף). עד כאן היה בסוף המסמך (PT-03 הישן).
+  if (showBack) pushFront(makeShaarPage(PAGE_TYPES.SHAAR_BACK, settings, out.length), 'shaar-back');
   if (customPlan) for (const d of customPlan.start.filter(d => d.position.at === 'after-shaar-main')) {
-    customPlaced.push(d.id); push(makeCustomPage(d, settings, out.length), `custom:${d.id}`);
+    customPlaced.push(d.id); pushFront(makeCustomPage(d, settings, out.length), `custom:${d.id}`);
   }
 
   // גוף המסמך — עם שערי־משנה לפני פתיחות חלקים ועמודים מותאמים סביב חלקים
@@ -6060,7 +6159,13 @@ function insertShaarPages(pages, blocks, settings, customDefs) {
       if (customPlan) for (const d of (customPlan.beforePart.get(openingPart) || [])) {
         customPlaced.push(d.id); push(makeCustomPage(d, settings, out.length), `custom:${d.id}`);
       }
-      if (showSub) push(makeShaarPage(PAGE_TYPES.SHAAR_SUB, settings, out.length), `theme-sub:part${openingPart}`);
+      if (showSub) {
+        // **03.11(ד):** כותרת החלק לתוכן השער־משנה (מקור: renderSubShaar — פיצול
+        // במקף: titleMain=לפני, titleSub=אחרי). הכותרת נלקחת מהבלוק עצמו (מקור יחיד).
+        const partBlock = blocks.find(b => b.kind === 'heading' && b.level === 1 && b.part === openingPart);
+        const partTitle = partBlock ? partBlock.lines.map(l => l.words.join(' ')).join(' ').trim() : '';
+        push(makeShaarPage(PAGE_TYPES.SHAAR_SUB, settings, out.length, { part: openingPart, title: partTitle }), `shaar-sub:part${openingPart}`);
+      }
       lastPart = openingPart;
     }
     push(pg);
@@ -6069,12 +6174,10 @@ function insertShaarPages(pages, blocks, settings, customDefs) {
     }
   }
 
-  // PT-03 שער אחורי + custom:end
+  // custom:end — עמודים מותאמים בסוף המסמך (PT-09); השער האחורי כבר הוכנס אחרי
+  // הראשי (סדר המקור — 03.11(ד)).
   if (customPlan) for (const d of customPlan.end) {
     customPlaced.push(d.id); push(makeCustomPage(d, settings, out.length), `custom:${d.id}`);
-  }
-  if (active && settings['shaar-back-enabled'] !== false) {
-    push(makeShaarPage(PAGE_TYPES.SHAAR_BACK, settings, out.length), 'theme-back');
   }
 
   // reindex — כל האינדקסים מחדש אחרי ההכנסה (folio/TOC/recto מחושבים בהמשך מהאינדקס)
@@ -6095,7 +6198,7 @@ function makeCustomPage(def, settings, index) {
   };
 }
 
-module.exports = { insertShaarPages, themeActive, buildPickerModel };
+module.exports = { insertShaarPages, themeActive, mainShaarActive, subShaarActive, backShaarActive, buildPickerModel };
 
 };
 __modules["src/engine/decoration/custom-pages.js"] = function (require, module, exports) {
@@ -6612,9 +6715,12 @@ function buildTocPages(model, pageType, title, settings, measure, lineHeight, io
  */
 function insertTocPages(pages, tocPages, settings, io = {}) {
   if (!tocPages.length) return { pages, inserted: 0, at: 0 };
-  // רצף פותח מבני: שער ראשי / עמודים מותאמים שהוצבו בראש
+  // רצף פותח מבני: עמודי front-matter אמיתיים בלבד (שער ראשי/אחורי/פתיחה מותאמת).
+  // **03.11(ד):** שערי־משנה (shaar-sub) שייכים לזרימת הגוף — הם באים אחרי
+  // תוכן־העניינים (לפני החלק שלהם), לא לפניו. בעבר כל isShaar דולג — ושער־המשנה
+  // של החלק הראשון נדחק לפני התוכן־עניינים.
   let at = 0;
-  while (at < pages.length && (pages[at].isShaar || pages[at].type === 'custom')) at++;
+  while (at < pages.length && (pages[at]._frontMatter === true)) at++;
   const out = pages.slice(0, at).concat(tocPages, pages.slice(at));
   out.forEach((p, i) => { p.index = i; });
   // בניית תבניות מחדש לפי הזוגיות הסופית (D-63) — אותו סוג, אותן הגדרות, זוגיות נכונה
@@ -7021,6 +7127,22 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
     // ---------- 2. עיטורי צד H3 (REQ-ORN-01: התאמת גובה לשורה) ----------
     if ((settings['h3-side-orn'] || 'none') !== 'none') {
       const sideH = Math.round(Number(settings['h3-side-orn-height-em']) * fontPx);
+      // **03.11(ד):** H3 במצב full-width חיה בפס חוצה־טורים (span_1col של המקור) —
+      // עיטורי הצד נשתלים משני צדי שורת הפס ברוחב התוכן המלא.
+      if (page.spanning && page.spanning.lines.length) {
+        const bln = page.spanning.lines[0];
+        if (bln.kind === 'heading' && bln.level === 3 && bln.meta && bln.meta.firstOfBlock) {
+          const left = Math.min(...tpl.columns.map(c => c.x));
+          const right = Math.max(...tpl.columns.map(c => c.x + c.w));
+          const lineH = bln.heightPx || fontPx;
+          const lift = sideOrnamentLiftPx(fontPx);
+          const yy = tpl.contentBox.top + sideOrnamentOffsetY(lineH, sideH) + lift;
+          const wSide = Math.round(fontPx * 1.2);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-right', kindStyle: settings['h3-side-orn'], x: Math.round(right - wSide), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-left', kindStyle: settings['h3-side-orn'], x: Math.round(left), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
+          planted.h3Side += 2;
+        }
+      }
       const nCols = Math.min(page.columns.length, tpl.columns.length); // יישור לתבנית (טור פנטום)
       for (let c = 0; c < nCols; c++) {
         const col = page.columns[c];
@@ -7042,6 +7164,31 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
     }
 
     // ---------- 3. מפרידי כותרות H3–H6 (REQ-ORN-04: fits() בכל אתרי ההוספה) ----------
+    // **03.11(ד):** כותרת H3–H6 בפס חוצה־טורים (full-width) — מפריג מתחת לפס,
+    // ממורכז, ברוחב יחסי לרוחב התוכן (אותו סגנון כמו בטור).
+    if (settings['heading-dividers-h3-h6'] && page.spanning && page.spanning.lines.length) {
+      const bln = page.spanning.lines[page.spanning.lines.length - 1];
+      if (bln.kind === 'heading' && bln.level >= 3 && bln.level <= 6
+        && page.columns.every(c => !c.some(l => l.kind === 'heading' && l.tokenId === bln.tokenId))) {
+        const left = Math.min(...tpl.columns.map(c => c.x));
+        const right = Math.max(...tpl.columns.map(c => c.x + c.w));
+        const fullW = right - left;
+        const used = page.spanning.heightPx || 0;
+        const remaining = tpl.contentBox.height - used;
+        const dec = headingDividerDecision(settings, remaining, DIVIDER_H_PX, {
+          columnLinesBefore: [bln], colIdx: 0, pageIndex: pi, tokenId: (bln.meta && bln.meta.tokenId) || bln.tokenId, band: true
+        });
+        if (dec.insert) {
+          counters.record(dec.rollbackKey);
+          const wDiv = Math.min(Math.round(fullW * 0.5), Math.round(fontPx * 6));
+          const y = tpl.contentBox.top + used - Math.round((bln.heightPx || 0) / 2) - 1;
+          pushOrnament(page, { kind: 'heading-divider', slot: `hdr-div-l${bln.level}`, kindStyle: 'thin', x: Math.round(left + (fullW - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX, rollbackKey: dec.rollbackKey }, rejected, pi, settings);
+          planted.headingDivider++;
+        } else if (dec.why !== 'disabled' && dec.why !== 'column-head-or-empty') {
+          rejected.push({ page: pi, kind: 'heading-divider', why: dec.why });
+        }
+      }
+    }
     if (settings['heading-dividers-h3-h6']) {
       const nColsD = Math.min(page.columns.length, tpl.columns.length); // יישור לתבנית
       for (let c = 0; c < nColsD; c++) {
@@ -7295,8 +7442,10 @@ function columnDividerGeometry(page, settings) {
  */
 function headingDividerDecision(settings, remainingPx, dividerHeightPx, ctx = {}) {
   if (!settings['heading-dividers-h3-h6']) return { insert: false, why: 'disabled' };
-  // משמרות REQ-ORN-04: לא בראש טור, לא בטור ריק — נבדק באתר ההצבה בפועל
-  if (!dividerInsertable(ctx.columnLinesBefore, ctx.colIdx)) return { insert: false, why: 'column-head-or-empty' };
+  // משמרות REQ-ORN-04: לא בראש טור, לא בטור ריק — נבדק באתר ההצבה בפועל.
+  // **03.11(ד):** בפס חוצה־טורים (ctx.band) אין מושג "ראש טור" — הכותרת בראש
+  // הפס מעצם טבעה; נותרת רק בדיקת התקציב.
+  if (!ctx.band && !dividerInsertable(ctx.columnLinesBefore, ctx.colIdx)) return { insert: false, why: 'column-head-or-empty' };
   if (!fits(remainingPx, dividerHeightPx)) return { insert: false, why: 'no-fit-budget' };
   return {
     insert: true,
@@ -8036,9 +8185,12 @@ function elementOuterHtml(el) {
 function exportHtml(result, settings, doc, meta = {}) {
   // **זהות בתים עם הרינדור החי:** כל עמוד מוקרן דרך dom-renderer בדיוק כמו
   // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
+  // **03.11(ד):** בעבר הועבר result.metadata כארגומנט ה-header — טעות סוג:
+  // ההעברה הזו לא הציגה כותרת עליונה בייצוא (מטא־נתונים אינם header). מעתה
+  // renderPage נופל לברירת המחדל page.header שהצינור מצמיד לכל עמוד.
   const pagesHtml = [];
   for (const pg of result.pages) {
-    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc, result.metadata)));
+    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc)));
   }
   const sizeMm = pageMmOf(settings);
   const pageRules = settings['export-html-page-rules'] !== false
@@ -8351,7 +8503,8 @@ const { columnDividerHeightPx } = require('../decoration/ornament-fit');
 const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
-const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font'); // **03.11(ג):** מקור יחיד לגופן/גודל שורה
+const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font');
+const { buildShaarBlocks, shaarFontOf } = require('./shaar-content'); // **03.11(ד)** // **03.11(ג):** מקור יחיד לגופן/גודל שורה
 
 /** S9 — body-last-line-align (center|right|stretch): יישור שורה אחרונה של פסקה. */
 function lastLineClass(ln, settings) {
@@ -8362,11 +8515,25 @@ function lastLineClass(ln, settings) {
   return ' line--last-center';
 }
 
-/** **03.11(ג):** מחסנית גופן עם fallback עברי קבוע — גרשיים מנוטרלים (הזרקה בטוחה ל-CSS). */
+/** **03.11(ד):** מחסנית גופן — תומכת גם בערך מרובה־משפחות ("'A', 'B', serif"
+ * מהמקור). גרשיים מנוטרלים (הזרקה בטוחה ל-CSS), משפחות גנריות (serif/sans-serif)
+ * עוברות כמו שהן, ופולבאקים עבריים נוספים רק אם אינם כבר ברשימה. */
 function fontStack(family) {
-  const clean = String(family).replace(/'/g, '').trim();
-  if (!clean) return '';
-  return `'${clean}', 'Frank Ruhl Libre', 'David', serif`;
+  // ניקוי לפי משפחה: גרשיים מוסרים, ותווים מסוכנים להזרקת CSS (; : { } / וכו')
+  // נפסלים — נשארים אותיות (לטיניות ועבריות), ספרות, רווחים ומקפים בלבד.
+  const safe = (x) => String(x || '').replace(/'/g, '').replace(/[^\w\u0590-\u05FF\uFB1D-\uFB4F\s-]/g, '').trim();
+  const parts = String(family || '').split(',').map(safe).filter(Boolean);
+  if (!parts.length) return '';
+  const out = [];
+  const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i;
+  for (const p of parts) {
+    out.push(GENERIC.test(p) ? p : `'${p}'`);
+  }
+  for (const fb of ['Frank Ruhl Libre', 'David', 'serif']) {
+    const plain = `'${fb}'`;
+    if (!out.includes(plain) && !out.includes(fb)) out.push(GENERIC.test(fb) ? fb : plain);
+  }
+  return out.join(', ');
 }
 
 function renderLine(ln, doc, settings = {}) {
@@ -8744,10 +8911,61 @@ function renderCustomPageContent(page, doc) {
   return els;
 }
 
+/** **03.11(ד) — תוכן מובנה של עמודי השער (פורט renderMainShaar/renderSubShaar/
+ * renderBackShaar של המקור). המודל (בלוקים/תיבה/פריסה) חי ב-shaar-content.js —
+ * מקור יחיד שצורך גם ההיטל ל-PDF (F-09); כאן רק ההקרנה ל-DOM.
+ * עד כאן עמוד שער בלי עיצוב־תמונה היה עמוד ריק לגמרי — "אין עמודי שער"
+ * מבחינת המשתמש. המבנה, התיבות והגדלים נאמנים למקור. */
+function renderShaarContent(page, settings, doc, metadata) {
+  const model = buildShaarBlocks(page, settings, metadata);
+  if (!model) return [];
+  const els = [];
+  const px = (pt) => `${ptToPx(pt)}px`;
+
+  const wrap = doc.createElement('div');
+  const variant = page.type === 'shaar-main' ? 'main' : page.type === 'shaar-sub' ? 'sub' : 'back';
+  wrap.className = `shaar-content shaar-content--${variant}`;
+  wrap.dir = 'rtl';
+  wrap.style.top = `${model.box.top}px`;
+  wrap.style.bottom = `${model.box.bottom}px`;
+  wrap.style.right = `${model.box.right}px`;
+  wrap.style.left = `${model.box.left}px`;
+
+  for (const b of model.blocks) {
+    if (b.graphic) {
+      const el = doc.createElement('div');
+      el.className = 'shaar-crown';
+      el.innerHTML = b.graphic === 'crown-sub'
+        ? '<svg viewBox="0 0 300 30"><path d="M10,15 Q75,5 140,15 Q145,10 150,5 Q155,10 160,15 Q225,5 290,15 Q225,25 160,15 Q155,20 150,25 Q145,20 140,15 Q75,25 10,15 Z" fill="#222"/></svg>'
+        : '<svg viewBox="0 0 400 40"><circle cx="200" cy="20" r="10" fill="none" stroke="#000" stroke-width="4.5"/><circle cx="200" cy="20" r="4.5" fill="#000"/><path d="M182,20 C182,24 165,27 140,27 C90,27 40,22 5,20 C40,18 90,13 140,13 C165,13 182,16 182,20 Z" fill="#000"/><path d="M218,20 C218,24 235,27 260,27 C310,27 360,22 395,20 C360,18 310,13 260,13 C235,13 218,16 218,20 Z" fill="#000"/></svg>';
+      wrap.appendChild(el);
+      continue;
+    }
+    const el = doc.createElement('div');
+    el.className = b.cls;
+    el.dir = 'rtl';
+    const fam = shaarFontOf(b.cls, settings);
+    if (fam) el.style.fontFamily = fontStack(fam);
+    if (b.sizePt > 0) el.style.fontSize = px(b.sizePt);
+    if (b.bold) el.style.fontWeight = '700';
+    if (b.letterSpacingPx) el.style.letterSpacing = `${b.letterSpacingPx}px`;
+    el.textContent = scrubPUAText(String(b.text == null ? '' : b.text));
+    wrap.appendChild(el);
+  }
+  els.push(wrap);
+  return els;
+}
+
 /**
  * רנדור עמוד שלם. @param {object} page - תוצר dp-planner + header + numbersByIndex
+ * **03.11(ד):** header ברירת מחדל = page.header — הצינור מחשב ומצמיד כותרת עליונה
+ * לכל עמוד (pipeline), וכל קורא שלא מעביר ארגומנט מקבל אותה אוטומטית. עד כאן
+ * התצוגה החיה (preview-tab) לא העבירה כלום והייצוא העביר מטא־נתונים בטעות —
+ * שני הנתיבים הציגו עמודים בלי כותרת עליונה בזמן שהבדיקות העבירו את הארגומנט
+ * במפורש ולא תפסו את הנתק (דיווח משתמש 3: "אין כותרות עליונות").
  */
 function renderPage(page, settings, doc, header) {
+  if (header == null && page && page.header) header = page.header;
   if (!page.template) {
     // עמודי הערות שלא חוברו לרצף המספור — תבנית ברירת מחדל חוקית (A4) במקום קריסה
     page.template = { width: 794, height: 1123, columns: [], margins: { top: 40, bottom: 40, side: 60, outer: 60 }, contentBox: { top: 40, bottom: 1080, height: 1040 }, gutter: 0, counts: false, numbered: false, hasRunningHead: false };
@@ -8800,8 +9018,16 @@ function renderPage(page, settings, doc, header) {
   // **S8 (REQ-ORN-05/08):** רקעים/ערכות/תיבות שער — שכבות תשתית לפני התוכן
   for (const el of renderPageBackgroundAndShaar(page, settings, doc, page._metadata)) root.appendChild(el);
 
+  // **03.11(ד):** תוכן מובנה של עמודי השער (בס״ד/כותרת/כתר/תיאור/מחבר/שנה —
+  // פורט המקור). בלי זה עמוד שער ללא עיצוב־תמונה היה ריק לחלוטין.
+  for (const el of renderShaarContent(page, settings, doc, page._metadata)) root.appendChild(el);
+
   // **S9 (REQ-HDR-05):** עמודי תוכן־עניינים — שורות + נקודות + עוגנים; אין טורי גוף
+  // **03.11(ד):** כותרת עליונה גם בעמודי התוכן־עניינים — כמקור
+  // (renderPaginatedTOC מרנדר top-header-grid בכל עמודי התוכן).
   if (page.type === 'toc-general' || page.type === 'toc-detail') {
+    const hToc = renderHeader(header, doc);
+    if (hToc) root.appendChild(hToc);
     for (const el of renderTocPageContent(page, doc)) root.appendChild(el);
     const folioToc = renderFolio(page, settings, doc);
     if (folioToc) root.appendChild(folioToc);
@@ -8870,7 +9096,7 @@ function renderPage(page, settings, doc, header) {
   return root;
 }
 
-module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderCustomPageContent, applyCustomStyleSpec };
+module.exports = { renderPage, renderLine, scrubPUAText, bgRgba, PT_CLASS, renderSpanningBand, renderDecorations, renderPageBackgroundAndShaar, renderShaarContent, renderCustomPageContent, applyCustomStyleSpec, fontStack };
 
 };
 __modules["src/engine/decoration/page-decorations.js"] = function (require, module, exports) {
@@ -9184,6 +9410,119 @@ function ptToPx(pt) {
 module.exports = { lineFontSizePt, lineFontFamily, ptToPx };
 
 };
+__modules["src/engine/output/shaar-content.js"] = function (require, module, exports) {
+// src/engine/output/shaar-content.js — מודל תוכן עמודי השער (03.11(ד))
+'use strict';
+
+/**
+ * **מקור יחיד (F-09) לתוכן המובנה של עמודי השער** — פורט renderMainShaar/
+ * renderSubShaar/renderBackShaar של הפרויקט המקורי. נצרך על ידי שני הנתיבים:
+ * dom-renderer (תצוגה חיה + ייצוא HTML) ו-geometry-projector (ייצוא PDF) —
+ * כך שהשער נראה אותו דבר בכל הפלטים (עד כאן ההיטל לא כלל את תוכן השער
+ * וה־PDF הראה עמודים ריקים).
+ *
+ * המודל: תיבה (מ"מ של המקור) + רשימת בלוקים (טקסט/גודל/משקל) + אופן פריסה:
+ * 'between' = flex space-between (שער ראשי: בס״ד למעלה, שנה למטה), 'center'
+ * = flex ממורכז (שער־משנה/אחורי). העיטור (כתר) הוא בלוק גרפי ללא טקסט —
+ * ה-DOM מצייר אותו; ההיטל מדלג (במקור לא היה ייצוא PDF כלל).
+ */
+
+const MM_TO_PX = 96 / 25.4;
+
+/** תיבת השער לפי הסוג — מיקומי המקור (מ"מ → פיקסלים). */
+function shaarBoxOf(type) {
+  const mm = (v) => Math.round(v * MM_TO_PX);
+  if (type === 'shaar-main') {
+    return { top: mm(20), bottom: mm(16), right: mm(15), left: mm(15), mode: 'between' };
+  }
+  if (type === 'shaar-sub') {
+    return { top: mm(20), bottom: mm(20), right: mm(95), left: mm(15), mode: 'center' };
+  }
+  // shaar-back
+  return { top: mm(22), bottom: mm(18), right: mm(15), left: mm(95), mode: 'center' };
+}
+
+/** פיצול מקף של כותרת חלק (renderSubShaar המקורי): main=לפני, sub=אחרי. */
+function splitPartTitle(text) {
+  let titleMain = String(text || '');
+  let titleSub = '';
+  if (/[-–—]/.test(titleMain)) {
+    const parts = titleMain.split(/[-–—]/);
+    titleMain = parts[0].trim();
+    titleSub = parts.slice(1).join(' - ').trim();
+  }
+  return { titleMain, titleSub };
+}
+
+/**
+ * בניית בלוקי תוכן השער. גישה מילולית להגדרות (דרישת סורק ה-phantom-key).
+ * @param {object} page - עמוד CP5 (shaarInfo.title לשער־משנה, _metadata למטא)
+ * @param {object} settings
+ * @param {object} [metadata] - מטא המסמך (גובר _metadata)
+ * @returns {{mode:string, box:object, blocks:Array<{cls,text,sizePt,bold,graphic}>}|null}
+ */
+function buildShaarBlocks(page, settings, metadata) {
+  if (!page || !page.type || !/^shaar-/.test(page.type)) return null;
+  const meta = metadata || page._metadata || {};
+  const bookTitle = settings['imud-book-title'] || meta['שם הספר'] || meta['ספר'] || meta['title'] || 'שם הספר';
+  const subtitle = settings['imud-book-subtitle'] || meta['נושא'] || '';
+  const desc = settings['imud-book-desc'] || meta['נושא מפורט'] || '';
+  const sections = settings['imud-book-sections'] || meta['פרטי מהדורא'] || '';
+  const author = settings['imud-book-author'] || meta['שם המחבר'] || '';
+  const year = settings['imud-book-year'] || meta['מקום ושנת הוצאה'] || '';
+  const backRaw = settings['shaar-back-text'] || meta['שמירת זכויות'] || 'כל הזכויות שמורות למחבר.';
+
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 12; };
+  const box = shaarBoxOf(page.type);
+  const B = [];
+
+  if (page.type === 'shaar-main') {
+    B.push({ cls: 'bsd-header', text: 'בס״ד', sizePt: num(settings['shaar-year-size-pt']), bold: true, letterSpacingPx: 5 });
+    B.push({ cls: 'book-title-main', text: bookTitle, sizePt: num(settings['shaar-title-size-pt']) });
+    B.push({ cls: 'book-subtitle', text: subtitle, sizePt: num(settings['shaar-subtitle-size-pt']), bold: true });
+    B.push({ cls: 'shaar-crown', text: '', sizePt: 0, graphic: 'crown-main' });
+    B.push({ cls: 'book-description', text: desc, sizePt: num(settings['shaar-desc-size-pt']) });
+    B.push({ cls: 'book-sections-summary', text: sections, sizePt: num(settings['shaar-sections-size-pt']), bold: true });
+    B.push({ cls: 'author-block', text: author, sizePt: num(settings['shaar-author-size-pt']) });
+    B.push({ cls: 'publication-footer', text: year, sizePt: num(settings['shaar-year-size-pt']), bold: true, letterSpacingPx: 1 });
+  } else if (page.type === 'shaar-sub') {
+    const { titleMain, titleSub } = splitPartTitle(page.shaarInfo && page.shaarInfo.title);
+    B.push({ cls: 'book-title-main', text: titleMain, sizePt: 36 });
+    if (titleSub) {
+      B.push({ cls: 'shaar-crown', text: '', sizePt: 0, graphic: 'crown-sub' });
+      B.push({ cls: 'book-subtitle', text: titleSub, sizePt: num(settings['shaar-subtitle-size-pt']), bold: true });
+    }
+  } else {
+    B.push({ cls: 'book-title-main book-title-main--back', text: bookTitle, sizePt: 36 });
+    const lines = String(backRaw).split('\n').map(l => l.trim()).filter(Boolean);
+    lines.forEach((l, i) => B.push({
+      cls: 'back-shaar-text-line', text: l,
+      sizePt: i === 0 ? 13 : num(settings['shaar-back-text-size-pt']), bold: i === 0
+    }));
+    if (author) B.push({ cls: 'author-block', text: author, sizePt: num(settings['shaar-author-size-pt']) });
+    if (year) B.push({ cls: 'publication-footer', text: year, sizePt: num(settings['shaar-year-size-pt']), bold: true });
+  }
+  return { mode: box.mode, box, blocks: B.filter(b => b.graphic || String(b.text || '').length) };
+}
+
+/** משפחות הגופן של הבלוקים — לפי ההגדרות (גישה מילולית לסורק). */
+function shaarFontOf(cls, settings) {
+  switch (true) {
+    case cls.includes('bsd-header'):
+    case cls.includes('publication-footer'): return settings['shaar-year-font'];
+    case cls.includes('book-title-main'): return settings['shaar-title-font'];
+    case cls.includes('book-subtitle'): return settings['shaar-subtitle-font'];
+    case cls.includes('book-description'): return settings['shaar-desc-font'];
+    case cls.includes('book-sections-summary'): return settings['shaar-sections-font'];
+    case cls.includes('author-block'): return settings['shaar-author-font'];
+    case cls.includes('back-shaar-text-line'): return settings['shaar-back-text-font'];
+    default: return '';
+  }
+}
+
+module.exports = { buildShaarBlocks, shaarBoxOf, shaarFontOf, splitPartTitle, MM_TO_PX };
+
+};
 __modules["src/engine/output/html-export.js"] = function (require, module, exports) {
 // src/engine/output/html-export.js — Standalone HTML export + offline guard (REQ-EXP, Orange exit-7 doctrine)
 'use strict';
@@ -9222,7 +9561,7 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}
 .column{position:absolute;top:0;bottom:0}
-.line{white-space:normal;text-align:right}
+.line{white-space:normal;text-align:justify;text-justify:inter-word}
 .line--last{text-align:center}
 .running-head{display:flex;width:100%}
 .head--sep-gray{border-bottom:1px solid #999}
@@ -9280,6 +9619,27 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .custom-image{position:absolute;background-repeat:no-repeat;background-size:100% 100%}
 .line--last-right{text-align:right}
 .line--last-stretch{text-align:justify}
+/* **03.11(ד) — יישור שורות הגוף לשני הצדדים כמו המקור:** .main-column/p במקור
+   הם text-align:justify; text-justify:inter-word ("טורים מיושרים באופן מושלם").
+   עד כאן היה text-align:right — שורה ברוחב טור מלא שהטקסט שלה קצר יותר השאירה
+   חור בצד שמאל ונתנה מראה "דחוק לימין" (דיווח משתמש 3). היישור סוגר את הפער
+   בדיוק כפי שמנוע הפסקאות תכנן (המנוע שובר שורות לרוחב המידה; הדפדפן
+   מותח רווחים לסגירת שארית). שורות אחרונות נשארות לפי body-last-line-align. */
+/* **03.11(ד) — תוכן מובנה של עמודי השער (פורט CSS המקור):** */
+.shaar-content{position:absolute;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;z-index:20}
+.shaar-content--sub,.shaar-content--back{justify-content:center}
+.bsd-header{font-family:'David Libre',serif;font-size:15pt;letter-spacing:5px;font-weight:700;margin-bottom:40px}
+.book-title-main{line-height:1.1;margin:10px 0 40px 0;font-weight:400}
+.shaar-content--sub .book-title-main,.shaar-content--back .book-title-main{margin:10px 0 15px 0}
+.book-subtitle{font-weight:700;line-height:1.25}
+.shaar-crown{width:180px;height:24px;margin:12px auto}
+.shaar-crown svg{width:100%;height:100%;display:block}
+.book-description{line-height:1.5;max-width:65%;margin:10px auto}
+.book-sections-summary{line-height:1.5;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:6px 12px;margin:8px 0;font-weight:700}
+.author-block{line-height:1.3}
+.publication-footer{font-weight:700;letter-spacing:1px}
+.back-shaar-text-line{font-size:10.5pt;line-height:1.6;max-width:90%;margin:10px auto;color:#333}
+.book-title-main--back{font-size:36pt}
 .cs-counter{display:inline-block;min-width:1.4em;margin-inline-end:6px;font-weight:700;opacity:.7;font-size:.85em}
 .footnote{margin:1px 0}
 `;
@@ -9831,6 +10191,7 @@ __modules["src/engine/output/geometry-projector.js"] = function (require, module
 const { scrubPUAText } = require('./dom-renderer');
 const { MeasureAPI } = require('../typography/measure-api');
 const { lineFontSizePt } = require('./line-font'); // **03.11(ג):** מקור יחיד — נצרך גם ע"י dom-renderer (תצוגה חיה + ייצוא); מיוצא הלאה לצרכנים קיימים
+const { buildShaarBlocks } = require('./shaar-content'); // **03.11(ד):** תוכן השערים — אותו מודל כמו ה-DOM
 
 /**
  * הקרנת עמוד בודד לגיאומטריה מפורשת.
@@ -9890,6 +10251,63 @@ function projectPage(page, settings, api) {
         out.lines.push(fakeLine(text, 18, y, tpl.width - 36, rowH, settings, measure));
       }
       yi++;
+    }
+  }
+
+  // **03.11(ד):** תוכן מובנה של עמודי השער — אותו מודל כמו ה-DOM (shaar-content).
+  // בלי זה ייצוא ה-PDF הציג עמודי שער ריקים. הפריסה משקפת את ה-flex של ה-DOM:
+  // 'between' — בלוק ראשון בראש התיבה, אחרון בתחתית, השאר מופצים ברווחים שווים
+  // (space-between); 'center' — מחסנית ממורכזת אנכית. עיטור הכתר גרפי — נדלג.
+  if (/^shaar-/.test(page.type)) {
+    const model = buildShaarBlocks(page, settings, page._metadata);
+    if (model && model.blocks.length) {
+      const b = model.box;
+      const boxX = b.left, boxW = Math.max(40, tpl.width - b.left - b.right);
+      const boxY = b.top, boxH = Math.max(60, tpl.height - b.top - b.bottom);
+      // גובה כל בלוק: גלישת שורות לרוחב התיבה + גובה שורה לפי הגודל
+      const blocks = model.blocks.map(bl => {
+        if (bl.graphic) return { ...bl, lines: [], h: 24 };
+        const words = String(bl.text || '').split(/\s+/).filter(Boolean);
+        const lines = [];
+        let cur = [], curW = 0;
+        for (const w of words) {
+          const ww = measure.measureTextWidth(w, bl.sizePt, 0);
+          const add = cur.length ? measure.measureTextWidth(' ', bl.sizePt, 0) + ww : ww;
+          if (cur.length && curW + add > boxW) { lines.push(cur); cur = [w]; curW = ww; }
+          else { cur.push(w); curW += add; }
+        }
+        if (cur.length) lines.push(cur);
+        const lh = Math.max(12, Math.round((bl.sizePt * (96 / 72)) * 1.25));
+        return { ...bl, lines, h: lines.length * lh };
+      });
+      let y;
+      if (model.mode === 'between') {
+        const total = blocks.reduce((a2, b2) => a2 + b2.h, 0);
+        const gaps = Math.max(0, blocks.length - 1);
+        const gap = gaps ? Math.max(0, (boxH - total) / gaps) : 0;
+        y = boxY;
+        for (const bl of blocks) {
+          if (bl.lines && bl.lines.length) pushCentered(bl, y);
+          y += bl.h + gap;
+        }
+      } else {
+        const total = blocks.reduce((a2, b2) => a2 + b2.h, 0);
+        y = boxY + Math.max(0, (boxH - total) / 2);
+        for (const bl of blocks) {
+          if (bl.lines && bl.lines.length) pushCentered(bl, y);
+          y += bl.h;
+        }
+      }
+      function pushCentered(bl, yTop) {
+        const lh = bl.h / bl.lines.length;
+        bl.lines.forEach((words, li) => {
+          const text = words.join(' ');
+          const tw = Math.max(1, measure.measureTextWidth(text, bl.sizePt, 0));
+          const lineH = Math.max(12, Math.round((bl.sizePt * (96 / 72)) * 1.25));
+          out.lines.push(centeredLine(text, boxX, yTop + li * lh, boxW, lineH, bl.sizePt, measure, bl.cls));
+          void tw;
+        });
+      }
     }
   }
 
@@ -10028,6 +10446,23 @@ function attachBaselines(page, settings, measure) {
 }
 
 /** שורה מלאכותית (TOC/עזר) — מילה אחת מימין לשמאל; מיקום מפורש. */
+/** **03.11(ד):** שורת שער ממורכזת — מילים ממוקמות מהמרכז החוצה (RTL). */
+function centeredLine(text, x, y, w, h, sizePt, measure, cls) {
+  const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));
+  const widths = words.map(w2 => measure.measureTextWidth(w2, sizePt, 0));
+  const gapW = measure.measureTextWidth(' ', sizePt, 0);
+  const totalW = widths.reduce((a, b2) => a + b2, 0) + gapW * Math.max(0, words.length - 1);
+  // RTL: המילה הראשונה בקצה הימני של הטקסט הממורכז, והשאר משמאל לה
+  let cursor = x + (w + totalW) / 2; // הקצה הימני של הטקסט
+  const wordPos = [];
+  for (let i = 0; i < words.length; i++) {
+    cursor -= widths[i];
+    wordPos.push({ text: words[i], x: cursor, w: widths[i] });
+    cursor -= gapW;
+  }
+  return { x, y, w, h, words: wordPos, align: 'center', kind: 'shaar-content', level: null, isLast: false, sizePt, baselineY: null, tokenId: null, cls: cls || '' };
+}
+
 function fakeLine(text, x, y, w, h, settings, measure) {
   const sizePt = 12;
   const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));

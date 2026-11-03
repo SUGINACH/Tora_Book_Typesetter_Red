@@ -90,9 +90,13 @@ function buildHeader(page, settings, ctx) {
   const physical = page.isRecto ? 'recto' : 'verso';
   // REQ-HDR-02: עמוד הנפתח ב‑H2/H3 + header-opening-dedicated ⇒ סלוטי מקור ייעודיים
   const dedicated = settings['header-opening-dedicated'] === true && pageOpensWithH2H3(page);
-  // **D-36 + REQ-HDR-02:** עמוד פתיחה (פרק/סימן) ללא כותרת עליונה — אלא אם הופעלה
-  // הכותרת הייעודית לפותחות H2/H3 (ברירת מחדל כבויה — התנהגות ≤S8 נשמרת).
-  if (page.chapterOpening && !dedicated) return null;
+  // **03.11(ד) — תיקון D-36 חלקי, נאמן למקור:** במקור (top-header-grid) הכותרת
+  // העליונה מוצגת בכל עמודי התוכן, כולל עמודי פתיחה של פרק/סימן. D-36 העלים
+  // אותה מכל עמודי הפתיחה — ובספרים עשירי כותרות (כל עמוד פתיחה) זה הסתיר
+  // את הכותרות לגמרי ("אין כותרות עליונות" — דיווח משתמש 3). עתה: כל עמוד
+  // תבניתו hasRunningHead מציג כותרת; שערים/תוכן־עניינים/הערות נשארים בלי
+  // (template.hasRunningHead=false שלהם). header-opening-dedicated נשמר כמצב
+  // סלוטים ייעודי לפותחות H2/H3.
   const sourceSide = dedicated ? 'opening' : resolveSameAs(physical, settings);
   // טקסט מותאם תמיד מהצד הפיזי של העמוד (סלוטי הפתיחה יורשים — D-61)
   const customSide = dedicated ? physical : sourceSide;

@@ -263,7 +263,9 @@ describe('S8.2 gate 5 — פאס העיטורים מוכח ניטרלי גיאו
   });
 
   it('שערים במסמך לא משנים שורות קיימות — רק מוסיפים עמודים (תוספת מוצהרת)', () => {
-    const base = typeset(CORPUS, getDefaultSettings());
+    // **03.11(ד):** שערים דלוקים כברירת מחדל (כמקור) — בסיס ההשוואה מכבה אותם
+    // מפורשות כדי לבודד את התוספת.
+    const base = typeset(CORPUS, { ...getDefaultSettings(), 'shaar-main-enabled': false, 'shaar-sub-enabled': false, 'shaar-back-enabled': false });
     const sets = groupThemeSets([{ name: '1 שער ראשי', svg: '<svg/>' }, { name: '1 שער משנה', svg: '<svg/>' }, { name: '1 שער אחורי', svg: '<svg/>' }]);
     const { updates } = activateThemeSet(sets[0], getDefaultSettings());
     const withShaar = typeset(CORPUS, { ...getDefaultSettings(), ...updates, 'show-shaar-sub': true });
@@ -508,9 +510,10 @@ describe('FWD-1/FWD-2 — סגירת קצוות פתוחים מ־ISSUE_REGISTRY'
       const used = pg.columns[0].reduce((s, l) => s + (l.heightPx || 0), 0);
       assert(used <= pg.template.contentBox.height - pg.spanning.heightPx + 0.5, 'columns respect the band');
     }
-    // שינוי לגיטימי מתועד: אירוע h2-spanning נרשם
-    const ev = r.events.events.filter(e => e.label === 'h2-spanning');
-    assert(ev.length === spanPages.length, 'spanning events recorded');
+    // שינוי לגיטימי מתועד: אירוע spanning נרשם לכל פס — H2 (h2-spanning) וגם
+    // H3–H6 במצב full-width (h3-spanning — 03.11(ד), span_1col של המקור).
+    const ev = r.events.events.filter(e => e.label === 'h2-spanning' || e.label === 'h3-spanning');
+    assert(ev.length === spanPages.length, `spanning events recorded (${ev.length} events / ${spanPages.length} bands)`);
   });
 
   it('FWD-2: shaar-sub לפני כל פתיחת חלק + איפוס מונים בגבולות (S7.1.6)', () => {
@@ -549,9 +552,13 @@ describe('FWD-1/FWD-2 — סגירת קצוות פתוחים מ־ISSUE_REGISTRY'
   it('טוגל "הצג שער משנה" כבוי (ברירת מחדל) — אין עמודי shaar-sub (U-C2)', () => {
     const sets = groupThemeSets([{ name: '1 שער ראשי', svg: '<svg/>' }, { name: '1 שער משנה', svg: '<svg/>' }]);
     const { updates } = activateThemeSet(sets[0], getDefaultSettings());
-    const r = typeset(CORPUS, { ...getDefaultSettings(), ...updates });
-    assertEq(r.pages.filter(p => p.type === 'shaar-sub').length, 0, 'off by default');
-    assert(r.pages.some(p => p.type === 'shaar-main'), 'main shaar still active');
+    // **03.11(ד):** כמקור — שערי־משנה דלוקים כברירת מחדל (show-sub-shaar=true שם);
+    // הכיבוי המפורש (shaar-sub-enabled=false / show-shaar-sub=false) מבטל.
+    const rOn = typeset(CORPUS, { ...getDefaultSettings(), ...updates });
+    assert(rOn.pages.some(p => p.type === 'shaar-sub'), 'on by default (03.11(ד), כמקור)');
+    const rOff = typeset(CORPUS, { ...getDefaultSettings(), ...updates, 'shaar-sub-enabled': false, 'show-shaar-sub': false });
+    assertEq(rOff.pages.filter(p => p.type === 'shaar-sub').length, 0, 'explicit off ⇒ none');
+    assert(rOn.pages.some(p => p.type === 'shaar-main'), 'main shaar still active');
   });
 });
 
@@ -580,9 +587,17 @@ describe('settings-effect (fx:) — לכל מפתח S8 אפקט אמיתי בפ�
     fx({ 'heading-dividers-h3-h6': true }, countSlots);
     fx({ 'shaar-main-divider': 'thin', 'theme-set-id': 'k1', 'shaar-main-image': 'm.png' }, countSlots);
     const pageTypes = (r) => r.pages.map(p => p.type);
-    fx({ 'theme-set-id': 'k1', 'shaar-main-image': 'm.png' }, pageTypes);
-    fx({ 'show-shaar-sub': true }, pageTypes);
-    fx({ 'shaar-back-enabled': false, 'theme-set-id': 'k1', 'shaar-main-image': 'm.png' }, pageTypes);
+    // **03.11(ד):** קיום השערים כבר ברירת מחדל — האפקט של ערכת־נושא הוא על
+    // הרקע המרונדר (deco--shaar-main), והאפקט של המתגים — על הרכב העמודים.
+    const shaarBgProbe = (r) => {
+      const target = r.pages.find(p => p.type === 'shaar-main');
+      const doc = makeDoc();
+      return target ? renderPage(target, r.settings, doc).outerHTML().includes('deco--shaar-main') : false;
+    };
+    fx({ 'theme-set-id': 'k1', 'shaar-main-image': 'm.png' }, shaarBgProbe);
+    fx({ 'shaar-sub-enabled': false }, pageTypes);
+    fx({ 'shaar-main-enabled': false, 'shaar-back-enabled': false }, pageTypes);
+    fx({ 'shaar-back-enabled': false }, pageTypes);
     // רקעים: האפקט הוא ברינדור — probe מרנדר מתוצר ההרצה (r.settings = ההגדרות בפועל)
     const bgProbe = (r) => {
       const target = r.pages.find(p => p.type === 'sign-open');

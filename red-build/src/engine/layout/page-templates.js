@@ -75,7 +75,9 @@ function buildPageTemplate(type, settings, isRecto = true) {
     numbered: ![PAGE_TYPES.SHAAR_MAIN, PAGE_TYPES.SHAAR_SUB, PAGE_TYPES.SHAAR_BACK, PAGE_TYPES.TOC_GENERAL, PAGE_TYPES.TOC_DETAIL, PAGE_TYPES.FILLER].includes(type)
       ? true : (type.startsWith('shaar') ? settings['count-shaar-pages'] : settings['count-toc-pages']),
     counts: ![PAGE_TYPES.FILLER].includes(type),
-    hasRunningHead: [PAGE_TYPES.REGULAR, PAGE_TYPES.SIGN_OPEN, PAGE_TYPES.H3_SPREAD, PAGE_TYPES.PREFACE].includes(type),
+    // **03.11(ד):** עמודי תוכן־העניינים מציגים כותרת עליונה כמו המקור
+    // (renderPaginatedTOC של המקור מרנדר top-header-grid בכל עמודי התוכן).
+    hasRunningHead: [PAGE_TYPES.REGULAR, PAGE_TYPES.SIGN_OPEN, PAGE_TYPES.H3_SPREAD, PAGE_TYPES.PREFACE, PAGE_TYPES.TOC_GENERAL, PAGE_TYPES.TOC_DETAIL].includes(type),
   };
 }
 

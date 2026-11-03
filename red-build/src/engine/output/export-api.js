@@ -55,9 +55,12 @@ function elementOuterHtml(el) {
 function exportHtml(result, settings, doc, meta = {}) {
   // **זהות בתים עם הרינדור החי:** כל עמוד מוקרן דרך dom-renderer בדיוק כמו
   // התצוגה — בלי מאפיינים נוספים (השוואת parity נעולה בבדיקות מילה־במילה).
+  // **03.11(ד):** בעבר הועבר result.metadata כארגומנט ה-header — טעות סוג:
+  // ההעברה הזו לא הציגה כותרת עליונה בייצוא (מטא־נתונים אינם header). מעתה
+  // renderPage נופל לברירת המחדל page.header שהצינור מצמיד לכל עמוד.
   const pagesHtml = [];
   for (const pg of result.pages) {
-    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc, result.metadata)));
+    pagesHtml.push(elementOuterHtml(renderPage(pg, settings, doc)));
   }
   const sizeMm = pageMmOf(settings);
   const pageRules = settings['export-html-page-rules'] !== false

@@ -388,6 +388,29 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     // תקציב הערות לפני מיקום (F-17 probe==reserved, כולל מדיניות הערה ארוכה)
     if (blk.kind === 'paragraph') reserveNotes(blk);
 
+    // **03.11(ד) — span_1col של המקור ל-H3–H6 (mode=full-width):** עד כאן כותרת
+    // שנמדדה ברוחב מלא (674px) הוצבה בטור של 270px — שורה ברוחב 471px בטור
+    // חצי-רוחב, נגררת בדפדפן לגלישה/חפיפה ("טקסטים אחד על השני" — דיווח משתמש 3).
+    // עתה היא מוצבת בפס חוצה־טורים כמו H2 (FWD-1) — בלי עמוד חדש (המקור:
+    // כותרת הענף ממשיכה באותו עמוד; עמוד חדש רק אם אין מקום לפס).
+    if (blk.kind === 'heading' && blk.level >= 3 && blk.level <= 6 && blk.fullWidth) {
+      if (cur.spanning || cur.columns.some(c => c.length)) {
+        flushPage();
+        cur = newPage(PAGE_TYPES.REGULAR);
+      }
+      if (!cur.spanning && cur.template.columns.length >= 2) {
+        const bandH3 = blk.lines.reduce((s, ln) => s + (ln.heightPx || 0), 0);
+        cur.spanning = {
+          lines: blk.lines.map((ln, i) => ({ ...ln, meta: { tokenId: blk.tokenId, firstOfBlock: i === 0, docPart: blk.part }, seq: seqCounter++ })),
+          heightPx: bandH3,
+          titleTopPadPx: 0,
+          orn: null
+        };
+        eventLog.emit('page-plan', 'h3-spanning', { token: blk.tokenId, level: blk.level, heightPx: bandH3 }, cur.index);
+        continue; // הכותרת בפס; הבלוקים הבאים ימלאו את הטורים מתחת
+      }
+    }
+
     if (blk.kind === 'heading' && blk.level === 2) {
       // PT-05: עמוד חדש תמיד + סימון פתיחת סימן (D-36) + בניית תבנית מלאה
       // (בעבר בענף ה־else הוחלף סוג העמוד בלי בניית תבנית SIGN_OPEN —

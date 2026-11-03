@@ -35,7 +35,17 @@ describe('S4.5-ד: מיפוי default_settings.json המקורי — 100% dispos
     assert(report.mapped + report.merged + report.uiState + report.removed === Object.keys(LEGACY).length, 'הספירה מכסה את כל המפתחות');
     // **S4.6 (ביקורת 3):** ערכי ui-state נשמרים — לא רק נספרים (בעבר אובדן שקט של 186 ערכים)
     assert(Object.keys(uiState).length === report.uiState, 'אובייקט uiState מכיל בדיוק את ערכי מצב ה-UI');
-    assert(settings['_legacy-ui-state'] && settings['_legacy-ui-state']['inp-book-desc'] === LEGACY['inp-book-desc'], 'ערכי UI מוטמעים ב-_legacy-ui-state');
+    // **03.11(ד):** inp-book-desc כבר לא ui-state — הוא ממופה ל-imud-book-desc
+    // (נתוני השער). לבדיקת ההטמעה נשתמש במפתח שנשאר ui-state אמיתי.
+    assert(settings['_legacy-ui-state'] && settings['_legacy-ui-state']['style-set-select'] === LEGACY['style-set-select'], 'ערכי UI מוטמעים ב-_legacy-ui-state');
+    assertEq(settings['imud-book-desc'], LEGACY['inp-book-desc'], '03.11(ד): inp-book-desc ⇒ imud-book-desc (נתוני השער)');
+    assertEq(settings['imud-book-author'], LEGACY['inp-book-author'], '03.11(ד): inp-book-author ⇒ imud-book-author');
+    assertEq(settings['imud-book-year'], LEGACY['inp-book-year'], '03.11(ד): inp-book-year ⇒ imud-book-year');
+    assertEq(settings['imud-book-sections'], LEGACY['inp-book-sections'], '03.11(ד): inp-book-sections ⇒ imud-book-sections');
+    assertEq(settings['shaar-main-enabled'], true, '03.11(ד): show-main-shaar=true ⇒ shaar-main-enabled');
+    assertEq(settings['shaar-sub-enabled'], true, '03.11(ד): show-sub-shaar=true ⇒ shaar-sub-enabled');
+    assertEq(settings['shaar-back-enabled'], true, '03.11(ד): show-back-shaar=true ⇒ shaar-back-enabled');
+    assertEq(settings['shaar-title-size-pt'], 46, '03.11(ד): s-sh-title=46 ⇒ shaar-title-size-pt');
   });
 
   it('ערכי המקור מוחלים במדויק (בדיקות נקודתיות מהביקורת)', () => {

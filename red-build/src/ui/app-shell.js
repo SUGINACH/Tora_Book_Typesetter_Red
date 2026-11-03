@@ -78,13 +78,41 @@ function createApp(doc, opts = {}) {
     // **03.11 (EXT-14):** ספריית IMUD — בוררי עיצובים + ברירות המקור + הודעות
     imudLibrary: opts.imudLibrary || null,
     onNotice: (msg) => status.setNotice(msg),
-    onApplyLegacyDefaults: (imported) => {
-      // החלה מלאה של ברירות המקור (מיזוג על ההגדרות) + ריענון + עימוד מפורש
-      Object.assign(settings, imported);
-      settingsPanel.refreshValues();
-      onExplicitRetypeset();
-    }
+    onApplyLegacyDefaults: (imported) => applyLegacyDefaults(imported, { source: 'panel' })
   });
+
+  /** **03.11(ד):** החלת ברירות המחדל המקוריות — נתיב יחיד לשני הקוראים:
+   * כפתור הפאנל והאתחול בעלייה (boot). אחרי ההחלה נטענים כל הגופנים
+   * שההגדרות החדשות דורשות (גוף/כותרות/כותרות-עליונות/שערים) — בלי זה
+   * הערכים נכונים אבל הדפדפן מציג גופן מערכת ו"החלפת גופן לא עושה כלום".
+   * @param {object} imported - הגדרות מיובאות (importImudSettings)
+   * @param {{source?:string, retypeset?:boolean}} [opts2] - panel: כן עימוד; boot: עימוד רק אם יש טקסט
+   */
+  async function applyLegacyDefaults(imported, opts2 = {}) {
+    Object.assign(settings, imported);
+    settingsPanel.refreshValues();
+    // טעינת כל הגופנים שההגדרות דורשות — גם מחסניות (loadFontStack פותר מול הקטלוג)
+    if (opts.imudLibrary && typeof opts.imudLibrary.loadFontStack === 'function') {
+      const fontKeys = [
+        'body-font', 'first-word-font', 'dh-font', 'f-note-body-font',
+        ...Array.from({ length: 8 }, (_, i) => `heading-${i}-font`),
+        'shaar-title-font', 'shaar-subtitle-font', 'shaar-desc-font', 'shaar-sections-font',
+        'shaar-author-font', 'shaar-year-font', 'shaar-back-text-font'
+      ];
+      for (const side of ['recto', 'verso']) {
+        for (const pos of ['right', 'center', 'left']) fontKeys.push(`header-${side}-${pos}-font`);
+      }
+      const seen = new Set();
+      for (const k of fontKeys) {
+        const v = settings[k];
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        try { await opts.imudLibrary.loadFontStack(v); } catch (e) { /* גופן חיצוני — fallback מערכת, מתועד */ }
+      }
+    }
+    const wantRetypeset = opts2.retypeset !== undefined ? opts2.retypeset : true;
+    if (wantRetypeset) onExplicitRetypeset();
+  }
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
   // שינוי הרחבות = כבד (F-06): אין עימוד אוטומטי — ⚡ בלבד.
@@ -537,6 +565,7 @@ function createApp(doc, opts = {}) {
     exportRequest: onExportRequest, // **S12:** ייצוא (html/pdf/zip) — קריאה בלבד
     refreshFontCatalog: (families) => settingsPanel.refreshFontCatalog && settingsPanel.refreshFontCatalog(families), // **03.11**
     imudLibrary: opts.imudLibrary || null, // **03.11:** ספריית IMUD לניפוי/הרחבות
+    applyLegacyDefaults, // **03.11(ד):** נתיב יחיד להחלת ברירות המקור (פאנל + אתחול)
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),

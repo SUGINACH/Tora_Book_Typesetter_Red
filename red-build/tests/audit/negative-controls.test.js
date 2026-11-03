@@ -68,15 +68,21 @@ describe('negative-controls (אסף הזהב — 0 findings by design)', () => {
     assertEq(persisted(r, 'page-underfill').length, 0, 'terminal residual is a non-finding');
   });
 
-  it('NC-04 (D-36): part-opening pages are NOT underfill/numbered/headered', () => {
+  it('NC-04 (D-36): part-opening pages are NOT underfill/numbered — running head YES (03.11(ד), כמקור)', () => {
     const r = typeset(read('nc04_part_opening.txt'), getDefaultSettings());
     assertEq(persisted(r, 'page-underfill').length, 0, 'openings are title pages by design');
     for (const pg of r.pages) {
       if (pg.chapterOpening) {
         assertEq(pg.folioDisplay, '', 'no folio display on openings');
-        assertEq(pg.header, null, 'no running head on openings');
+        // **03.11(ד):** במקור ה-top-header-grid מוצג בכל עמודי התוכן, כולל
+        // פתיחות — תיקון D-36 החלקי. הכותרת חיה; עמודי שער/תוכן־עניינים
+        // נשארים ללא כותרת (template.hasRunningHead=false).
+        if (pg.template && pg.template.hasRunningHead && settings_header_enabled()) {
+          assert(pg.header != null, `opening page ${pg.index} has running head (03.11(ד))`);
+        }
       }
     }
+    function settings_header_enabled() { return true; } // header-enabled=true בברירת המחדל
   });
 
   it('NC-05 (BRZ-11): marker bound to its anchor word is NOT marker-line-break', () => {

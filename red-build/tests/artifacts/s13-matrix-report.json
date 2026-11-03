@@ -4,124 +4,117 @@
   "configs": [
     {
       "config": "default",
-      "pages": 18,
-      "ms": 77,
+      "pages": 36,
+      "ms": 54,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
-      "findingsOpen": 59,
+      "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
+      "findingsOpen": 43,
       "findingsHigh": 0,
       "openByKind": {
-        "column-imbalance": 8,
         "runt-line": 10,
         "heading-escort": 8,
-        "note-marker-line-break": 32,
+        "note-marker-line-break": 24,
         "rollback-compromise": 1
       },
       "htmlDeterministic": true,
       "pdfDeterministic": true,
-      "pdfPages": 18
+      "pdfPages": 36
     },
     {
       "config": "ornaments",
-      "pages": 26,
+      "pages": 36,
       "ms": 26,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "4e939ac81923357762fa2cb31a4de6c5060d4294c717f6a8c27b0e18c06aa1e6",
-      "findingsOpen": 66,
+      "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
+      "findingsOpen": 43,
       "findingsHigh": 0,
       "openByKind": {
-        "column-imbalance": 8,
         "runt-line": 10,
         "heading-escort": 8,
-        "note-marker-line-break": 32,
-        "page-underfill": 7,
+        "note-marker-line-break": 24,
         "rollback-compromise": 1
       },
       "htmlDeterministic": true,
       "pdfDeterministic": true,
-      "pdfPages": 26
+      "pdfPages": 36
     },
     {
       "config": "aq-on",
-      "pages": 18,
-      "ms": 29,
+      "pages": 36,
+      "ms": 58,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
-      "findingsOpen": 59,
+      "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
+      "findingsOpen": 43,
       "findingsHigh": 0,
       "openByKind": {
-        "column-imbalance": 8,
         "runt-line": 10,
         "heading-escort": 8,
-        "note-marker-line-break": 32,
+        "note-marker-line-break": 24,
         "rollback-compromise": 1
       },
       "htmlDeterministic": true,
       "pdfDeterministic": true,
-      "pdfPages": 18
+      "pdfPages": 36
     },
     {
       "config": "continuous-notes",
-      "pages": 18,
-      "ms": 27,
+      "pages": 36,
+      "ms": 24,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
-      "findingsOpen": 59,
+      "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
+      "findingsOpen": 43,
       "findingsHigh": 0,
       "openByKind": {
-        "column-imbalance": 8,
         "runt-line": 10,
         "heading-escort": 8,
-        "note-marker-line-break": 32,
+        "note-marker-line-break": 24,
         "rollback-compromise": 1
       },
       "htmlDeterministic": true,
       "pdfDeterministic": true,
-      "pdfPages": 18
+      "pdfPages": 36
     },
     {
       "config": "verso-headers",
-      "pages": 18,
-      "ms": 19,
+      "pages": 36,
+      "ms": 43,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
-      "findingsOpen": 59,
+      "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
+      "findingsOpen": 43,
       "findingsHigh": 0,
       "openByKind": {
-        "column-imbalance": 8,
         "runt-line": 10,
         "heading-escort": 8,
-        "note-marker-line-break": 32,
+        "note-marker-line-break": 24,
         "rollback-compromise": 1
       },
       "htmlDeterministic": true,
       "pdfDeterministic": true,
-      "pdfPages": 18
+      "pdfPages": 36
     },
     {
       "config": "custom-styles",
-      "pages": 18,
-      "ms": 28,
+      "pages": 36,
+      "ms": 25,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "93dfbd3e5ba0fcb29c879ed51e134a829326eb247091c22fb637d031e392ecad",
-      "findingsOpen": 59,
+      "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
+      "findingsOpen": 43,
       "findingsHigh": 0,
       "openByKind": {
-        "column-imbalance": 8,
         "runt-line": 10,
         "heading-escort": 8,
-        "note-marker-line-break": 32,
+        "note-marker-line-break": 24,
         "rollback-compromise": 1
       },
       "htmlDeterministic": true,
       "pdfDeterministic": true,
-      "pdfPages": 18
+      "pdfPages": 36
     }
   ],
   "paths": [

@@ -35,7 +35,7 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}
 .column{position:absolute;top:0;bottom:0}
-.line{white-space:normal;text-align:right}
+.line{white-space:normal;text-align:justify;text-justify:inter-word}
 .line--last{text-align:center}
 .running-head{display:flex;width:100%}
 .head--sep-gray{border-bottom:1px solid #999}
@@ -93,6 +93,27 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .custom-image{position:absolute;background-repeat:no-repeat;background-size:100% 100%}
 .line--last-right{text-align:right}
 .line--last-stretch{text-align:justify}
+/* **03.11(ד) — יישור שורות הגוף לשני הצדדים כמו המקור:** .main-column/p במקור
+   הם text-align:justify; text-justify:inter-word ("טורים מיושרים באופן מושלם").
+   עד כאן היה text-align:right — שורה ברוחב טור מלא שהטקסט שלה קצר יותר השאירה
+   חור בצד שמאל ונתנה מראה "דחוק לימין" (דיווח משתמש 3). היישור סוגר את הפער
+   בדיוק כפי שמנוע הפסקאות תכנן (המנוע שובר שורות לרוחב המידה; הדפדפן
+   מותח רווחים לסגירת שארית). שורות אחרונות נשארות לפי body-last-line-align. */
+/* **03.11(ד) — תוכן מובנה של עמודי השער (פורט CSS המקור):** */
+.shaar-content{position:absolute;display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;z-index:20}
+.shaar-content--sub,.shaar-content--back{justify-content:center}
+.bsd-header{font-family:'David Libre',serif;font-size:15pt;letter-spacing:5px;font-weight:700;margin-bottom:40px}
+.book-title-main{line-height:1.1;margin:10px 0 40px 0;font-weight:400}
+.shaar-content--sub .book-title-main,.shaar-content--back .book-title-main{margin:10px 0 15px 0}
+.book-subtitle{font-weight:700;line-height:1.25}
+.shaar-crown{width:180px;height:24px;margin:12px auto}
+.shaar-crown svg{width:100%;height:100%;display:block}
+.book-description{line-height:1.5;max-width:65%;margin:10px auto}
+.book-sections-summary{line-height:1.5;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:6px 12px;margin:8px 0;font-weight:700}
+.author-block{line-height:1.3}
+.publication-footer{font-weight:700;letter-spacing:1px}
+.back-shaar-text-line{font-size:10.5pt;line-height:1.6;max-width:90%;margin:10px auto;color:#333}
+.book-title-main--back{font-size:36pt}
 .cs-counter{display:inline-block;min-width:1.4em;margin-inline-end:6px;font-weight:700;opacity:.7;font-size:.85em}
 .footnote{margin:1px 0}
 `;

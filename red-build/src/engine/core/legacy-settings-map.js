@@ -21,6 +21,23 @@ function firstFamily(css) {
   return m ? m[1] : String(css || '').split(',')[0].trim();
 }
 
+/** **03.11(ד):** פתרון מחסנית גופנים של המקור מול הספרייה הזמינה.
+ * ערכי המקור הם מחסניות CSS ("'AlphaBlack', 'David Libre', serif") — המשפחה
+ * הראשונה בדרך כלל אינה מותקנת והדפדפן נופל להמשך הרשימה. כאן מחליטים מראש:
+ * המשפחה הראשונה שקיימת ב-availableFonts (קטלוג הספרייה שהועבר ב-ctx) היא
+ * הערך; בלי קטלוג — מחזירים את הראשונה (התנהגות firstFamily הישנה). */
+function resolveStack(css, ctx) {
+  const raw = String(css || '').replace(/'/g, '');
+  const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+    .filter(p => !/^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(p));
+  if (!parts.length) return String(css || '');
+  const avail = ctx && ctx.availableFonts;
+  if (avail instanceof Set) {
+    for (const p of parts) if (avail.has(p)) return p;
+  }
+  return parts[0];
+}
+
 /** **S4.6 (ביקורת 3):** אחוזים ⇒ פיקסלים לפי גובה תיבת התוכן **בפועל** שנמסר
  * בהקשר הייבוא (ctx.contentHeightPx). ברירת המחדל 1040px (A4 של RED) נשמרת
  * לתאימות — אך מסלול הטעינה ב-UI מעביר את הגיאומטריה האמיתית של המסמך. */
@@ -100,14 +117,14 @@ const DISPOSITIONS = {
   // ============ **S4.6 (ביקורת 3):** הגדרות עיצוב אמיתיות שסווגו בטעות כ-ui-state ============
   // לא לסווג משפחה שלמה לפי קידומת בלבד — לכל מפתח עם יעד RED קיים יש מיפוי מפורש.
   // ההגדרות האלה מגיעות עכשיו למנוע בפועל (heading-N-font/size, header-slot, שער).
-  'f-h0': { kind: 'mapped', to: 'heading-0-font', transform: firstFamily, reason: 'S4.6: גופן כותרת H0 — קיים ברישום RED (heading-0-font)' },
-  'f-h1': { kind: 'mapped', to: 'heading-1-font', transform: firstFamily, reason: 'S4.6: גופן H1' },
-  'f-h2': { kind: 'mapped', to: 'heading-2-font', transform: firstFamily, reason: 'S4.6: גופן H2' },
-  'f-h3': { kind: 'mapped', to: 'heading-3-font', transform: firstFamily, reason: 'S4.6: גופן H3' },
-  'f-h4': { kind: 'mapped', to: 'heading-4-font', transform: firstFamily, reason: 'S4.6: גופן H4' },
-  'f-h5': { kind: 'mapped', to: 'heading-5-font', transform: firstFamily, reason: 'S4.6: גופן H5' },
-  'f-h6': { kind: 'mapped', to: 'heading-6-font', transform: firstFamily, reason: 'S4.6: גופן H6' },
-  'f-h7': { kind: 'mapped', to: 'heading-7-font', transform: firstFamily, reason: 'S4.6: גופן H7' },
+  'f-h0': { kind: 'mapped', to: 'heading-0-font', transform: resolveStack, reason: 'S4.6: גופן כותרת H0 — קיים ברישום RED (heading-0-font)' },
+  'f-h1': { kind: 'mapped', to: 'heading-1-font', transform: resolveStack, reason: 'S4.6: גופן H1' },
+  'f-h2': { kind: 'mapped', to: 'heading-2-font', transform: resolveStack, reason: 'S4.6: גופן H2' },
+  'f-h3': { kind: 'mapped', to: 'heading-3-font', transform: resolveStack, reason: 'S4.6: גופן H3' },
+  'f-h4': { kind: 'mapped', to: 'heading-4-font', transform: resolveStack, reason: 'S4.6: גופן H4' },
+  'f-h5': { kind: 'mapped', to: 'heading-5-font', transform: resolveStack, reason: 'S4.6: גופן H5' },
+  'f-h6': { kind: 'mapped', to: 'heading-6-font', transform: resolveStack, reason: 'S4.6: גופן H6' },
+  'f-h7': { kind: 'mapped', to: 'heading-7-font', transform: resolveStack, reason: 'S4.6: גופן H7' },
   's-h0': { kind: 'mapped', to: 'heading-0-size-pt', transform: parseFloat, reason: 'S4.6: גודל H0 (26 ⇒ 26pt; חריגת טווח מדווחת במיזוג ולא מושמטת)' },
   's-h1': { kind: 'mapped', to: 'heading-1-size-pt', transform: parseFloat, reason: 'S4.6: גודל H1 (50 במקור — נשמר נאמן למקור; חריגת טווח מדווחת)' },
   's-h2': { kind: 'mapped', to: 'heading-2-size-pt', transform: parseFloat, reason: 'S4.6: גודל H2' },
@@ -116,21 +133,45 @@ const DISPOSITIONS = {
   's-h5': { kind: 'mapped', to: 'heading-5-size-pt', transform: parseFloat, reason: 'S4.6: גודל H5' },
   's-h6': { kind: 'mapped', to: 'heading-6-size-pt', transform: parseFloat, reason: 'S4.6: גודל H6' },
   's-h7': { kind: 'mapped', to: 'heading-7-size-pt', transform: parseFloat, reason: 'S4.6: גודל H7 (6 במקור; חריגת טווח מדווחת)' },
-  'f-note-body': { kind: 'mapped', to: 'f-note-body-font', transform: firstFamily, reason: 'S4.6: גופן גוף ההערה — קיים ברישום RED' },
-  'f-hdr-r': { kind: 'mapped', to: ['header-recto-right-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט ימין בכותרת עליונה (recto)' },
-  'f-hdr-c': { kind: 'mapped', to: ['header-recto-center-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט מרכז (recto)' },
-  'f-hdr-l': { kind: 'mapped', to: ['header-recto-left-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט שמאל (recto)' },
+  'f-note-body': { kind: 'mapped', to: 'f-note-body-font', transform: resolveStack, reason: 'S4.6: גופן גוף ההערה — קיים ברישום RED' },
+  'f-hdr-r': { kind: 'mapped', to: ['header-recto-right-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט ימין בכותרת עליונה (recto)' },
+  'f-hdr-c': { kind: 'mapped', to: ['header-recto-center-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט מרכז (recto)' },
+  'f-hdr-l': { kind: 'mapped', to: ['header-recto-left-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט שמאל (recto)' },
   's-hdr-r': { kind: 'mapped', to: ['header-recto-right-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט ימין (recto)' },
   's-hdr-c': { kind: 'mapped', to: ['header-recto-center-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט מרכז (recto)' },
   's-hdr-l': { kind: 'mapped', to: ['header-recto-left-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט שמאל (recto)' },
-  'f-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט ימין (verso)' },
-  'f-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט מרכז (verso)' },
-  'f-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-font'], transform: firstFamily, reason: 'S4.6: גופן סלוט שמאל (verso)' },
+  'f-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט ימין (verso)' },
+  'f-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט מרכז (verso)' },
+  'f-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-font'], transform: resolveStack, reason: 'S4.6: גופן סלוט שמאל (verso)' },
   's-hdr-verso-r': { kind: 'mapped', to: ['header-verso-right-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט ימין (verso)' },
   's-hdr-verso-c': { kind: 'mapped', to: ['header-verso-center-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט מרכז (verso)' },
   's-hdr-verso-l': { kind: 'mapped', to: ['header-verso-left-size-pt'], transform: parseFloat, reason: 'S4.6: גודל סלוט שמאל (verso)' },
   'inp-book-title': { kind: 'mapped', to: 'imud-book-title', reason: 'S4.6: כותרת הספר — נצרכת בשער הראשי (dom-renderer)' },
   'inp-book-subtitle': { kind: 'mapped', to: 'imud-book-subtitle', reason: 'S4.6: כותרת־משנה — נצרכת בשער הראשי' },
+  // **03.11(ד) — דיווח משתמש 3 / בקשת על מה-01.11: "הטמע את כל ברירות המחדל
+  // של הפרויקט המקורי".** מתגי השערים ונתוני הספר נפלו ל-ui-state לפי כלל
+  // הקידומת הגס (^(show|inp)-) והושמטו מהמנוע — לכן "אין עמודי שער" גם אחרי
+  // ייבוא ברירות המחדל. עתה מיפוי מפורש למפתחות RED האמיתיים.
+  'show-main-shaar': { kind: 'mapped', to: 'shaar-main-enabled', transform: (v) => v !== false && v !== 'false', reason: '03.11(ד): מתג שער ראשי — ברירת המחדל במקור true (השער חלק ממבנה הספר, לא אופציה)' },
+  'show-sub-shaar': { kind: 'mapped', to: 'shaar-sub-enabled', transform: (v) => v !== false && v !== 'false', reason: '03.11(ד): מתג שער־משנה — ברירת מחדל true כמקור' },
+  'show-back-shaar': { kind: 'mapped', to: 'shaar-back-enabled', transform: (v) => v !== false && v !== 'false', reason: '03.11(ד): מתג שער אחורי — ברירת מחדל true כמקור' },
+  'f-sh-title': { kind: 'mapped', to: 'shaar-title-font', transform: resolveStack, reason: '03.11(ד): גופן כותרת השער (מקור: Lia Sgula → Bellefair המוטמע)' },
+  's-sh-title': { kind: 'mapped', to: 'shaar-title-size-pt', transform: parseFloat, reason: '03.11(ד): גודל כותרת השער (מקור: 46)' },
+  'f-sh-sub': { kind: 'mapped', to: 'shaar-subtitle-font', transform: resolveStack, reason: '03.11(ד): גופן כותרת־משנה בשער (מקור: Livorna → David Libre)' },
+  's-sh-sub': { kind: 'mapped', to: 'shaar-subtitle-size-pt', transform: parseFloat, reason: '03.11(ד): גודל כותרת־משנה (מקור: 21)' },
+  'f-sh-desc': { kind: 'mapped', to: 'shaar-desc-font', transform: resolveStack, reason: '03.11(ד): גופן התיאור (מקור: Livorna → Frank Ruhl Libre)' },
+  's-sh-desc': { kind: 'mapped', to: 'shaar-desc-size-pt', transform: parseFloat, reason: '03.11(ד): גודל התיאור (מקור: 12)' },
+  'f-sh-sec': { kind: 'mapped', to: 'shaar-sections-font', transform: resolveStack, reason: '03.11(ד): גופן פרטי המהדורא (מקור: David Libre)' },
+  's-sh-sec': { kind: 'mapped', to: 'shaar-sections-size-pt', transform: parseFloat, reason: '03.11(ד): גודל פרטי המהדורא (מקור: 11.5)' },
+  'f-sh-author': { kind: 'mapped', to: 'shaar-author-font', transform: resolveStack, reason: '03.11(ד): גופן שם המחבר (מקור: David Libre)' },
+  's-sh-author': { kind: 'mapped', to: 'shaar-author-size-pt', transform: parseFloat, reason: '03.11(ד): גודל שם המחבר (מקור: 15)' },
+  'f-sh-year': { kind: 'mapped', to: 'shaar-year-font', transform: resolveStack, reason: '03.11(ד): גופן השנה/בס״ד (מקור: David Libre)' },
+  's-sh-year': { kind: 'mapped', to: 'shaar-year-size-pt', transform: parseFloat, reason: '03.11(ד): גודל השנה (מקור: 12)' },
+  'inp-book-desc': { kind: 'mapped', to: 'imud-book-desc', reason: '03.11(ד): תיאור הספר בשער (מקור: inp-book-desc ← «נושא מפורט»)' },
+  'inp-book-sections': { kind: 'mapped', to: 'imud-book-sections', reason: '03.11(ד): פרטי מהדורא בשער (מקור: inp-book-sections ← «פרטי מהדורא»)' },
+  'inp-book-author': { kind: 'mapped', to: 'imud-book-author', reason: '03.11(ד): שם המחבר בשערים (מקור: inp-book-author ← «שם המחבר»)' },
+  'inp-book-year': { kind: 'mapped', to: 'imud-book-year', reason: '03.11(ד): מקום ושנה בשערים (מקור: inp-book-year ← «מקום ושנת הוצאה»)' },
+  'inp-back-shaar-text': { kind: 'mapped', to: 'shaar-back-text', reason: '03.11(ד): טקסט השער האחורי (שמירת זכויות)' },
 
   // ============ הערות שוליים ============
   'fn-columns': { kind: 'mapped', to: 'footnote-columns', transform: parseInt },
@@ -237,6 +278,11 @@ function importImudSettings(legacy, registryKeys, opts = {}) {
   const report = { mapped: 0, merged: 0, uiState: 0, removed: 0 };
   const valid = registryKeys instanceof Set ? registryKeys : (Array.isArray(registryKeys) ? new Set(registryKeys) : null);
   const ctx = { contentHeightPx: Number(opts.contentHeightPx) > 0 ? Number(opts.contentHeightPx) : 1040 };
+  // **03.11(ד):** קטלוג הגופנים הזמין (אם הועבר) — לפתרון מחסניות הגופן של המקור
+  // מול מה שבאמת קיים בספרייה המוטמעת (f-h0="'AlphaBlack', 'David Libre', serif"
+  // ⇒ David Libre כש-AlphaBlack אינה בספרייה — בדיוק כמו שהדפדפן היה נופל).
+  if (opts.availableFonts instanceof Set) ctx.availableFonts = opts.availableFonts;
+  else if (Array.isArray(opts.availableFonts)) ctx.availableFonts = new Set(opts.availableFonts);
   // **S4.6:** שני מעברים — ממירים מותנים (onlyIfAbsent, כגון h2-title-orn-mode)
   // מוחלים רק אם מפתח ישיר לא קבע כבר את היעד. קדימות מפורשת ולא תלוית-סדר.
   const deferred = [];
@@ -279,4 +325,4 @@ function importImudSettings(legacy, registryKeys, opts = {}) {
   return { settings, uiState, dispositions, unmapped, report };
 }
 
-module.exports = { DISPOSITIONS, dispositionOf, importImudSettings, firstFamily, pctToPx };
+module.exports = { DISPOSITIONS, dispositionOf, importImudSettings, firstFamily, resolveStack, pctToPx };

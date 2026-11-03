@@ -143,6 +143,22 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
     // ---------- 2. עיטורי צד H3 (REQ-ORN-01: התאמת גובה לשורה) ----------
     if ((settings['h3-side-orn'] || 'none') !== 'none') {
       const sideH = Math.round(Number(settings['h3-side-orn-height-em']) * fontPx);
+      // **03.11(ד):** H3 במצב full-width חיה בפס חוצה־טורים (span_1col של המקור) —
+      // עיטורי הצד נשתלים משני צדי שורת הפס ברוחב התוכן המלא.
+      if (page.spanning && page.spanning.lines.length) {
+        const bln = page.spanning.lines[0];
+        if (bln.kind === 'heading' && bln.level === 3 && bln.meta && bln.meta.firstOfBlock) {
+          const left = Math.min(...tpl.columns.map(c => c.x));
+          const right = Math.max(...tpl.columns.map(c => c.x + c.w));
+          const lineH = bln.heightPx || fontPx;
+          const lift = sideOrnamentLiftPx(fontPx);
+          const yy = tpl.contentBox.top + sideOrnamentOffsetY(lineH, sideH) + lift;
+          const wSide = Math.round(fontPx * 1.2);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-right', kindStyle: settings['h3-side-orn'], x: Math.round(right - wSide), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
+          pushOrnament(page, { kind: 'h3-side-ornament', slot: 'h3-side-left', kindStyle: settings['h3-side-orn'], x: Math.round(left), y: yy, w: wSide, h: Math.min(sideH, lineH) }, rejected, pi, settings);
+          planted.h3Side += 2;
+        }
+      }
       const nCols = Math.min(page.columns.length, tpl.columns.length); // יישור לתבנית (טור פנטום)
       for (let c = 0; c < nCols; c++) {
         const col = page.columns[c];
@@ -164,6 +180,31 @@ function planPageOrnaments(pages, settings, measureFn, io = {}) {
     }
 
     // ---------- 3. מפרידי כותרות H3–H6 (REQ-ORN-04: fits() בכל אתרי ההוספה) ----------
+    // **03.11(ד):** כותרת H3–H6 בפס חוצה־טורים (full-width) — מפריג מתחת לפס,
+    // ממורכז, ברוחב יחסי לרוחב התוכן (אותו סגנון כמו בטור).
+    if (settings['heading-dividers-h3-h6'] && page.spanning && page.spanning.lines.length) {
+      const bln = page.spanning.lines[page.spanning.lines.length - 1];
+      if (bln.kind === 'heading' && bln.level >= 3 && bln.level <= 6
+        && page.columns.every(c => !c.some(l => l.kind === 'heading' && l.tokenId === bln.tokenId))) {
+        const left = Math.min(...tpl.columns.map(c => c.x));
+        const right = Math.max(...tpl.columns.map(c => c.x + c.w));
+        const fullW = right - left;
+        const used = page.spanning.heightPx || 0;
+        const remaining = tpl.contentBox.height - used;
+        const dec = headingDividerDecision(settings, remaining, DIVIDER_H_PX, {
+          columnLinesBefore: [bln], colIdx: 0, pageIndex: pi, tokenId: (bln.meta && bln.meta.tokenId) || bln.tokenId, band: true
+        });
+        if (dec.insert) {
+          counters.record(dec.rollbackKey);
+          const wDiv = Math.min(Math.round(fullW * 0.5), Math.round(fontPx * 6));
+          const y = tpl.contentBox.top + used - Math.round((bln.heightPx || 0) / 2) - 1;
+          pushOrnament(page, { kind: 'heading-divider', slot: `hdr-div-l${bln.level}`, kindStyle: 'thin', x: Math.round(left + (fullW - wDiv) / 2), y, w: wDiv, h: DIVIDER_H_PX, rollbackKey: dec.rollbackKey }, rejected, pi, settings);
+          planted.headingDivider++;
+        } else if (dec.why !== 'disabled' && dec.why !== 'column-head-or-empty') {
+          rejected.push({ page: pi, kind: 'heading-divider', why: dec.why });
+        }
+      }
+    }
     if (settings['heading-dividers-h3-h6']) {
       const nColsD = Math.min(page.columns.length, tpl.columns.length); // יישור לתבנית
       for (let c = 0; c < nColsD; c++) {

@@ -4,12 +4,12 @@
   "private": true,
   "description": "Tora Book Typesetter RED — the definitive rebuild (engine core + full UI, zero runtime dependencies)",
   "scripts": {
-    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/integration/imud-migration.test.js && node tests/layout/s5-s6.test.js && node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/s8-decoration.test.js && node tests/e2e/s9-headers.test.js && node tests/e2e/s10-ui.test.js && node tests/e2e/s11-extensions.test.js && node tests/e2e/s12-export.test.js && node tests/e2e/pdf-targets.test.js && node tests/e2e/s13-acceptance.test.js && node tests/e2e/canonical.test.js && node tests/e2e/long-real-text.test.js && node tests/audit/negative-controls.test.js && node tests/audit/s13-security-a11y.test.js",
+    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/integration/imud-migration.test.js && node tests/layout/s5-s6.test.js && node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/s8-decoration.test.js && node tests/e2e/s9-headers.test.js && node tests/e2e/s10-ui.test.js && node tests/e2e/s11-extensions.test.js && node tests/e2e/s12-export.test.js && node tests/e2e/pdf-targets.test.js && node tests/e2e/s13-acceptance.test.js && node tests/e2e/s14-layout-audit.test.js && node tests/e2e/canonical.test.js && node tests/e2e/long-real-text.test.js && node tests/audit/negative-controls.test.js && node tests/audit/s13-security-a11y.test.js",
     "test:unit": "node tests/unit/parser.test.js && node tests/unit/typography.test.js",
     "test:settings": "node tests/integration/registry.test.js",
     "test:layout": "node tests/layout/s5-s6.test.js",
     "test:e2e": "node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/s8-decoration.test.js && node tests/e2e/s9-headers.test.js",
-    "test:audit": "node tests/audit/negative-controls.test.js",
+    "test:audit": "node tests/audit/negative-controls.test.js && node tests/e2e/s14-layout-audit.test.js",
     "test:ornaments": "node tests/e2e/s8-decoration.test.js",
     "test:headers": "node tests/e2e/s9-headers.test.js",
     "test:canonical": "node tests/e2e/canonical.test.js",
@@ -18,7 +18,8 @@
     "test:extensions": "node tests/e2e/s11-extensions.test.js",
     "test:scan": "node ../tools/scan-control-triggers.js",
     "test:export": "node tests/e2e/s12-export.test.js",
-    "test:acceptance": "node tests/e2e/s13-acceptance.test.js && node tests/audit/s13-security-a11y.test.js"
+    "test:acceptance": "node tests/e2e/s13-acceptance.test.js && node tests/audit/s13-security-a11y.test.js",
+    "audit:layout": "node tests/e2e/s14-layout-audit.test.js"
   },
   "license": "UNLICENSED",
   "engines": {

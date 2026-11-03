@@ -58,8 +58,10 @@ function columnDividerGeometry(page, settings) {
  */
 function headingDividerDecision(settings, remainingPx, dividerHeightPx, ctx = {}) {
   if (!settings['heading-dividers-h3-h6']) return { insert: false, why: 'disabled' };
-  // משמרות REQ-ORN-04: לא בראש טור, לא בטור ריק — נבדק באתר ההצבה בפועל
-  if (!dividerInsertable(ctx.columnLinesBefore, ctx.colIdx)) return { insert: false, why: 'column-head-or-empty' };
+  // משמרות REQ-ORN-04: לא בראש טור, לא בטור ריק — נבדק באתר ההצבה בפועל.
+  // **03.11(ד):** בפס חוצה־טורים (ctx.band) אין מושג "ראש טור" — הכותרת בראש
+  // הפס מעצם טבעה; נותרת רק בדיקת התקציב.
+  if (!ctx.band && !dividerInsertable(ctx.columnLinesBefore, ctx.colIdx)) return { insert: false, why: 'column-head-or-empty' };
   if (!fits(remainingPx, dividerHeightPx)) return { insert: false, why: 'no-fit-budget' };
   return {
     insert: true,
