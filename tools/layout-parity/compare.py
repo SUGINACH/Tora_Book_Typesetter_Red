@@ -509,6 +509,13 @@ def main():
         # לאשכול אחת וממוינות פנימית מימין לשמאל (x0 יורד — קריאת RTL:
         # טקסט הערך ואז הפוליו בקצה השמאלי). שורות גוף (פס ~16pt) אינן
         # מושפעות — האשכול לא יכול לשרשר מעבר לשכן אמיתי.
+        # **S4.16 (איחוי שורה ויזואלית):** האשכול כולו = **שורה אחת**. בייחוס,
+        # שורה עם מתיחת/מרכוז מילים (last-line-align, שורות תוכן-עניינים,
+        # כותרות ממורכזות) מחולצת על-ידי PyMuPDF כספאן נפרד לכל מילה —
+        # 4 "שורות" באותו y בעוד הצד שלנו שומר תיבת שורה אחת (229 ערכים
+        # עודפים בייחוס מול 150 אצלנו). איחוי טקסט האשכול (מימין לשמאל,
+        # סדר קריאת RTL) משווה שורות ויזואליות מול שורות ויזואליות — מדידת
+        # חלוקת המילים לשורות, לא את פיצול הספאנים של החילוץ.
         def cluster_sorted(rows):
             rows = sorted(rows, key=lambda l: l["y0"])
             out = []
@@ -517,7 +524,14 @@ def main():
                 j = i + 1
                 while j < len(rows) and rows[j]["y0"] - rows[j - 1]["y0"] <= 1.5:
                     j += 1
-                out.extend(sorted(rows[i:j], key=lambda l: -(l.get("x0") or 0)))
+                cluster = sorted(rows[i:j], key=lambda l: -(l.get("x0") or 0))
+                if len(cluster) == 1:
+                    out.append(cluster[0])
+                else:
+                    merged = dict(cluster[0])
+                    merged["text"] = " ".join(
+                        (r.get("text") or "").strip() for r in cluster if (r.get("text") or "").strip())
+                    out.append(merged)
                 i = j
             return out
         seq = []

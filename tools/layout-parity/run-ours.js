@@ -215,10 +215,14 @@ function main() {
       }
     });
 
-    // פסים (סימן/h2/h0/h3) — col=null
+    // פסים (סימן/h2/h0/h3) — col=null; **S4.16:** בעמוד חד-טורי (preface/
+    // פתיחת פרק) הפס מוגדר בתוך תיבת הטור היחיד — כמו הייחוס, שמסווג שם
+    // את כותרת ה-H0 (הקדמה) col=single (מתאימה לתיבת הטור) ולא col=None.
+    // בעמודי גוף דו-טוריים הפס חוצה את שני הטורים — col=None כמו הייחוס.
+    const bandCol = pg.type === 'preface' ? 'single' : null;
     for (const b of (pg.bands || [])) {
       lines.push({
-        col: null, text: b.text, font: 'GuttmanRashiNormal', size: b.sizePt,
+        col: bandCol, text: b.text, font: 'GuttmanRashiNormal', size: b.sizePt,
         x0: GEO.COL_L_X * PX, x1: (GEO.COL_L_X + 2 * GEO.COL_W + 13.48) * PX,
         y0: b.y * PX, y1: (b.y + b.h) * PX, kind: 'heading-band', justified: false
       });

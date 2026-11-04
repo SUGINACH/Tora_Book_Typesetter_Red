@@ -351,28 +351,47 @@ class LineBreaker {
     // כאלה נמדדו בגודל מלא (12pt במקום 10pt) ⇒ שורות קצרות יותר בשבירה
     // מול הייחוס. המקור סופר עומק סוגריים לכל אורך הטקסט (מקונן, חוצה
     // מילים); כאן: מילה שנמצאת בתוך עומק>0 או נוגעת בסוגר — מוקטנת.
-    const parenWords = new Set();
+    // **S4.16 (סוגריים ברמת תווים — מדידה מעורבת בתוך מילה אחת):** תוחם
+    // הסוגריים במקור הוא span על '(…)' **בדיוק** — ואילו תווים מחוץ לטווח
+    // בתוך אותה מילה (ה-'.' שב'מחשבת).' למשל) נמדדים בגודל הגוף. ההוכחה
+    // מהייחוס (עמ' 11, טור ימין, פסקת 'בחלק המעשה של האיסור'): השורה
+    // 'מעשה. … מחשבת). א. העבודה. ב.' נמדדת בדפדפן 269.9px > 269.4 — 'ב.'
+    // נדחה לשורה הבאה (כמו בייחוס); במדידת המילה 'מחשבת).' כולה ב-10pt
+    // השורה 269.0px ו-'ב.' נכנס — הפרש של 0.5px שהזיז את שבירת הפסקה
+    // וגרר דריפט עימוד. כעת כל מילה נמדדת כסכום מקטעים לפי שיוך התו
+    // לטווח הסוגריים, והרווח בין מילים הוא בגודל הסוגריים רק כששני
+    // קצוות השכנות בתוך הטווח (הרווח בתוך ה-span).
+    const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
+    const wordWs = new Array(out.length);
+    const endsInParen = new Array(out.length);
+    const startsInParen = new Array(out.length);
     {
       let depth = 0;
       for (let i = 0; i < out.length; i++) {
-        const wd = out[i];
+        const wd = disp[i];
+        let w = 0, seg = '', segParen = false;
         for (let c = 0; c < wd.length; c++) {
-          if (wd[c] === '(') depth++;
-          else if (wd[c] === ')' && depth > 0) depth--;
+          const ch = wd[c];
+          if (ch === '(') depth++;                 // '(' עצמו בתוך ה-span
+          const inParen = depth > 0;
+          if (c === 0) startsInParen[i] = inParen;
+          if (seg === '') { seg = ch; segParen = inParen; }
+          else if (inParen === segParen) { seg += ch; }
+          else { w += mw(seg, segParen ? parenSize : sizePt); seg = ch; segParen = inParen; }
+          endsInParen[i] = inParen;
+          if (ch === ')' && depth > 0) depth--;    // ')' עצמו בתוך ה-span
         }
-        if (depth > 0 || wd.includes('(') || wd.includes(')')) parenWords.add(i);
+        if (seg) w += mw(seg, segParen ? parenSize : sizePt);
+        wordWs[i] = w;
       }
     }
-    const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
-    const wordWs = disp.map((d, i) => mw(d, parenWords.has(i) ? parenSize : sizePt));
     // **S4.15 (רווחים בתוך סוגריים בגודל הסוגריים):** במקור הסוגריים הן span
     // עם font-size מוקטן — גם הרווחים הפנימיים שלו ב-10pt, לא בגודל הגוף.
     // ההוכחה מהייחוס (הקדמה, פסקה 2): 'שמציאות…התורה) חלק' נכנסת לשורה
     // המוצרת (511.4px) רק כשהרווחים הפנימיים ב-10pt — ברווחי 11.5 השורה
     // גולשת ב-~10px ו-'חלק' נופל לשורה הבאה (בניגוד לייחוס).
     const parenSpaceW = mw(' ', parenSize);
-    const isParenW = (i) => parenWords.has(i);
-    const spaceBetween = (i, j) => (isParenW(i) && isParenW(j)) ? parenSpaceW : spaceW;
+    const spaceBetween = (i, j) => (endsInParen[i] && startsInParen[j]) ? parenSpaceW : spaceW;
     if (!out.length) return { lines: [], hasWindow: false, windowWords: null, notes };
 
     // חלון מילה-ראשונה: אמדן שורות כמו המדידה הכפולה במקור

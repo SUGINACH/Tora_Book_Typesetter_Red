@@ -61,16 +61,34 @@ class MeasureAPI {
     return sizePt || this.settings['body-font-size-pt'];
   }
 
-  /** רוחב תו בודד ב־em לפי המימוש. */
+  /**
+   * **S4.16 (תיקון שורש — מדידת ניקוד):** סימן משולב הממופה בגופן עם advance=0
+   * (ניקוד עברי: דגש/תנועות/טעמים) הוא **שכבת-אפס אמיתית** — כך מודד אותו
+   * הדפדפן (hmtx=0, שכבת-גליף על הבסיס). בעבר נפל לסל העברי של הטבלה (0.5em
+   * = 6pt בגוף 12) ⇒ מילה מנוקדת כמו המצוּוֶה נמדדה רחבה ב~12pt, שבירת השורות
+   * נגררה מילה-מילה והדריפט הצטבר לכל העימוד (P7 0.919). מבחינים עתה בין
+   * "לא ממופה כלל" (fallback מכויל — מונה fontFallbacks) לבין "ממופה
+   * עם advance=0" (אפס אמיתי).
+   */
   _charEm(ch) {
     if (this.impl === 'font-metrics' && this.fontProfile) {
-      const units = fm.advanceUnitsOf(this.fontProfile, ch);
-      if (units !== 0) return (units / this.fontProfile.unitsPerEm) * this.fontFactor;
-      // 0 ללא מיפוי ⇒ fallback מכויל (גם ניקוד אמיתי=0 ייפול לסלולר 0.5 — זניח לרוחב)
+      const gid = fm.glyphIdOf(this.fontProfile, ch);
+      if (gid !== 0 && gid < this.fontProfile.numGlyphs) {
+        // ממופה בגופן — רוחב hmtx אמיתי (כולל 0 לניקוד)
+        return (fm.advanceUnitsOf(this.fontProfile, ch) / this.fontProfile.unitsPerEm) * this.fontFactor;
+      }
       this.stats.fontFallbacks++;
       return charWidthEm(ch);
     }
     return charWidthEm(ch);
+  }
+
+  /** סימן משולב ממופה עם advance=0 (ניקוד): שכבת-אפס — לא חלק מאשכול מדידה. */
+  _isMappedMark(ch) {
+    if (this.impl !== 'font-metrics' || !this.fontProfile) return false;
+    const gid = fm.glyphIdOf(this.fontProfile, ch);
+    return gid !== 0 && gid < this.fontProfile.numGlyphs
+      && fm.advanceUnitsOf(this.fontProfile, ch) === 0;
   }
 
   /** קרנינג בין תווים סמוכים ב־em (מימוש A: 0 תמיד — כמו S1–S11). */
@@ -95,6 +113,10 @@ class MeasureAPI {
     let w = 0;
     let prev = null;
     for (const ch of str) {
+      // **S4.16:** ניקוד ממופה (advance=0) — אין רוחב, אין tracking ואין קרנינג
+      // (הסימן נצמד לבסיס שלו; letter-spacing אינו חל על סימנים משולבים במדידת
+      // הדפדפן). prev נשאר הבסיס האחרון — קרנינג בין בסיסים דרך הניקוד נשמר.
+      if (this._isMappedMark(ch)) continue;
       if (prev !== null) w += this._kernEm(prev, ch);
       w += this._charEm(ch) + trackingEm;
       prev = ch;

@@ -9716,28 +9716,47 @@ class LineBreaker {
     // כאלה נמדדו בגודל מלא (12pt במקום 10pt) ⇒ שורות קצרות יותר בשבירה
     // מול הייחוס. המקור סופר עומק סוגריים לכל אורך הטקסט (מקונן, חוצה
     // מילים); כאן: מילה שנמצאת בתוך עומק>0 או נוגעת בסוגר — מוקטנת.
-    const parenWords = new Set();
+    // **S4.16 (סוגריים ברמת תווים — מדידה מעורבת בתוך מילה אחת):** תוחם
+    // הסוגריים במקור הוא span על '(…)' **בדיוק** — ואילו תווים מחוץ לטווח
+    // בתוך אותה מילה (ה-'.' שב'מחשבת).' למשל) נמדדים בגודל הגוף. ההוכחה
+    // מהייחוס (עמ' 11, טור ימין, פסקת 'בחלק המעשה של האיסור'): השורה
+    // 'מעשה. … מחשבת). א. העבודה. ב.' נמדדת בדפדפן 269.9px > 269.4 — 'ב.'
+    // נדחה לשורה הבאה (כמו בייחוס); במדידת המילה 'מחשבת).' כולה ב-10pt
+    // השורה 269.0px ו-'ב.' נכנס — הפרש של 0.5px שהזיז את שבירת הפסקה
+    // וגרר דריפט עימוד. כעת כל מילה נמדדת כסכום מקטעים לפי שיוך התו
+    // לטווח הסוגריים, והרווח בין מילים הוא בגודל הסוגריים רק כששני
+    // קצוות השכנות בתוך הטווח (הרווח בתוך ה-span).
+    const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
+    const wordWs = new Array(out.length);
+    const endsInParen = new Array(out.length);
+    const startsInParen = new Array(out.length);
     {
       let depth = 0;
       for (let i = 0; i < out.length; i++) {
-        const wd = out[i];
+        const wd = disp[i];
+        let w = 0, seg = '', segParen = false;
         for (let c = 0; c < wd.length; c++) {
-          if (wd[c] === '(') depth++;
-          else if (wd[c] === ')' && depth > 0) depth--;
+          const ch = wd[c];
+          if (ch === '(') depth++;                 // '(' עצמו בתוך ה-span
+          const inParen = depth > 0;
+          if (c === 0) startsInParen[i] = inParen;
+          if (seg === '') { seg = ch; segParen = inParen; }
+          else if (inParen === segParen) { seg += ch; }
+          else { w += mw(seg, segParen ? parenSize : sizePt); seg = ch; segParen = inParen; }
+          endsInParen[i] = inParen;
+          if (ch === ')' && depth > 0) depth--;    // ')' עצמו בתוך ה-span
         }
-        if (depth > 0 || wd.includes('(') || wd.includes(')')) parenWords.add(i);
+        if (seg) w += mw(seg, segParen ? parenSize : sizePt);
+        wordWs[i] = w;
       }
     }
-    const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
-    const wordWs = disp.map((d, i) => mw(d, parenWords.has(i) ? parenSize : sizePt));
     // **S4.15 (רווחים בתוך סוגריים בגודל הסוגריים):** במקור הסוגריים הן span
     // עם font-size מוקטן — גם הרווחים הפנימיים שלו ב-10pt, לא בגודל הגוף.
     // ההוכחה מהייחוס (הקדמה, פסקה 2): 'שמציאות…התורה) חלק' נכנסת לשורה
     // המוצרת (511.4px) רק כשהרווחים הפנימיים ב-10pt — ברווחי 11.5 השורה
     // גולשת ב-~10px ו-'חלק' נופל לשורה הבאה (בניגוד לייחוס).
     const parenSpaceW = mw(' ', parenSize);
-    const isParenW = (i) => parenWords.has(i);
-    const spaceBetween = (i, j) => (isParenW(i) && isParenW(j)) ? parenSpaceW : spaceW;
+    const spaceBetween = (i, j) => (endsInParen[i] && startsInParen[j]) ? parenSpaceW : spaceW;
     if (!out.length) return { lines: [], hasWindow: false, windowWords: null, notes };
 
     // חלון מילה-ראשונה: אמדן שורות כמו המדידה הכפולה במקור
@@ -10819,16 +10838,34 @@ class MeasureAPI {
     return sizePt || this.settings['body-font-size-pt'];
   }
 
-  /** רוחב תו בודד ב־em לפי המימוש. */
+  /**
+   * **S4.16 (תיקון שורש — מדידת ניקוד):** סימן משולב הממופה בגופן עם advance=0
+   * (ניקוד עברי: דגש/תנועות/טעמים) הוא **שכבת-אפס אמיתית** — כך מודד אותו
+   * הדפדפן (hmtx=0, שכבת-גליף על הבסיס). בעבר נפל לסל העברי של הטבלה (0.5em
+   * = 6pt בגוף 12) ⇒ מילה מנוקדת כמו המצוּוֶה נמדדה רחבה ב~12pt, שבירת השורות
+   * נגררה מילה-מילה והדריפט הצטבר לכל העימוד (P7 0.919). מבחינים עתה בין
+   * "לא ממופה כלל" (fallback מכויל — מונה fontFallbacks) לבין "ממופה
+   * עם advance=0" (אפס אמיתי).
+   */
   _charEm(ch) {
     if (this.impl === 'font-metrics' && this.fontProfile) {
-      const units = fm.advanceUnitsOf(this.fontProfile, ch);
-      if (units !== 0) return (units / this.fontProfile.unitsPerEm) * this.fontFactor;
-      // 0 ללא מיפוי ⇒ fallback מכויל (גם ניקוד אמיתי=0 ייפול לסלולר 0.5 — זניח לרוחב)
+      const gid = fm.glyphIdOf(this.fontProfile, ch);
+      if (gid !== 0 && gid < this.fontProfile.numGlyphs) {
+        // ממופה בגופן — רוחב hmtx אמיתי (כולל 0 לניקוד)
+        return (fm.advanceUnitsOf(this.fontProfile, ch) / this.fontProfile.unitsPerEm) * this.fontFactor;
+      }
       this.stats.fontFallbacks++;
       return charWidthEm(ch);
     }
     return charWidthEm(ch);
+  }
+
+  /** סימן משולב ממופה עם advance=0 (ניקוד): שכבת-אפס — לא חלק מאשכול מדידה. */
+  _isMappedMark(ch) {
+    if (this.impl !== 'font-metrics' || !this.fontProfile) return false;
+    const gid = fm.glyphIdOf(this.fontProfile, ch);
+    return gid !== 0 && gid < this.fontProfile.numGlyphs
+      && fm.advanceUnitsOf(this.fontProfile, ch) === 0;
   }
 
   /** קרנינג בין תווים סמוכים ב־em (מימוש A: 0 תמיד — כמו S1–S11). */
@@ -10853,6 +10890,10 @@ class MeasureAPI {
     let w = 0;
     let prev = null;
     for (const ch of str) {
+      // **S4.16:** ניקוד ממופה (advance=0) — אין רוחב, אין tracking ואין קרנינג
+      // (הסימן נצמד לבסיס שלו; letter-spacing אינו חל על סימנים משולבים במדידת
+      // הדפדפן). prev נשאר הבסיס האחרון — קרנינג בין בסיסים דרך הניקוד נשמר.
+      if (this._isMappedMark(ch)) continue;
       if (prev !== null) w += this._kernEm(prev, ch);
       w += this._charEm(ch) + trackingEm;
       prev = ch;
