@@ -9872,6 +9872,11 @@ const JUSTIFY_MAX_GAP = 9;        // v21: תקרת ריווח (padding) שמתו
 const JUSTIFY_MAX_LH_EXTRA = 3;   // v21: תקרת תוספת גובה-שורה במתיחת עמוד (px)
 const ORPHAN_RECLAIM_BUFFER = 12; // v21: באפר "חירום" בתחתית העמוד למשיכת יתום
 const RECLAIM_BELOW_BASE = 2;     // v21: היתר כיווץ מתחת לבסיס לשורה (px)
+// **S4.18:** רצפת מרווח-הפסקה בכיווץ משיכת-יתום — נמדד מהייחוס (עמ' 14 שמאל:
+// מרווחי פסקה 22.4-24.4px ⇒ gap 1-3px; הרצפה 2). דריסה: RED_GAP_COMPRESS_FLOOR.
+const GAP_COMPRESS_FLOOR = parseFloat(
+  (typeof process !== 'undefined' && process.env && process.env.RED_GAP_COMPRESS_FLOOR) || '2'
+);
 // **S4.17 (כיוול מהייחוס):** גג הכיווץ-מתחת-לבסיס למשיכת יתום. ההוכחות מהייחוס:
 // עמ' 14 שמאל — המשיכה הצליחה עם כיווץ של ~20px (19.9 נדרשו); עמ' 15 שמאל —
 // משיכה שדרשה ~44px כיווץ **נכשלה** במקור (הזנב עבר לעמ' 16 למרות שהקיבולת
@@ -10308,6 +10313,24 @@ function legacyTypeset(rawText, settings, env) {
       const compressColUnits = (units, neededPx, allowBelowBase, maxBelowTotal) => {
         if (!(neededPx > 0)) return 0;
         let freed = 0;
+        // **S4.18 (כיווץ מרווח-בסיס — ההוכחה מהייחוס):** המנוע המקורי דוחס את
+        // מרווח הפסקה הבסיסי עצמו, לא רק padding עודף: בעמ' 14 שמאל נמדדו
+        // מרווחי-פסקה 22.4-24.4px (בסיס 21.44 + ‏1-3px gap) מול 29px רגיל —
+        // כלומר gap 7→1-3. בלי שלב זה המשיכה של p14 דרשה 31.9px below-base
+        // (רק cap≥32 הצליח) בעוד המקור השלים אותה ב-gap ~16px + below ~16px.
+        // הרצפה 2px = התחתית הנמדדת בייחוס (מרווח 23.4px).
+        if (maxBelowTotal == null || !isFinite(maxBelowTotal) || maxBelowTotal > 0) {
+          for (const u of units) {
+            if (freed >= neededPx) break;
+            if (u.kind !== 'para') continue;
+            const curGap = u.gapPx != null ? u.gapPx : 7;
+            if (curGap > GAP_COMPRESS_FLOOR) {
+              const reduce = Math.min(curGap - GAP_COMPRESS_FLOOR, neededPx - freed);
+              u.gapPx = curGap - reduce;
+              freed += reduce;
+            }
+          }
+        }
         for (const u of units) {
           if (freed >= neededPx) break;
           if (u.kind !== 'para') continue;
@@ -10382,6 +10405,12 @@ function legacyTypeset(rawText, settings, env) {
         if (!pending) return false;
         const remaining = pending.lines.length - pending.lineIdx;
         if (remaining < 1 || remaining > 2) return false;
+        // **S4.18 (תנאי סוף-פסקה — ההוכחה מהייחוס):** המשיכה האמיתית היחידה
+        // של הייחוס (עמ' 14: 'ודיקא נמי' ×2) היא זנב **סוף פסקה** — השורות
+        // האחרונות של הפסקה חוזרות לעמוד. זנבות אמצע-פסקה (פסאודו-יתומים
+        // שנוצרים מהזזת גבול 1-2 שורות, כמו עמ' 22/33/39/43 שנצפו במודל)
+        // המקור אינו מושך — הפסקה ממשיכה לזרום בעמוד הבא כרגיל.
+        if (pending.lineIdx + remaining < pending.lines.length) return false;
         if (isH0) return false; // המקור מושך יתומים רק בבלוקים דו-טוריים
         const lastBlk = stack[stack.length - 1];
         if (!lastBlk || lastBlk.type === 'span') return false;
@@ -10395,15 +10424,20 @@ function legacyTypeset(rawText, settings, env) {
         // ~44px) הייתה מצליחה בזמן שהמקור דחה אותה (הוכחה: עמ' 15←16 בייחוס —
         // הזנב עבר עמוד למרות קיבולת נומינלית של 2px×44 שורות; לעומת זאת עמ' 14
         // שמאל נמשך עם כיווץ ~20px ועמ' 20 שמאל עם ~26-34px).
-        let undoStretchCap = 0, lineCount = 0;
+        let undoStretchCap = 0, lineCount = 0, gapCap = 0;
         for (const u of lCol) {
           if (u.kind !== 'para') continue;
           undoStretchCap += Math.max(0, (u.gapPx != null ? u.gapPx : 7) - 7);
           const lh = u.lhPx != null ? u.lhPx : u.pitch;
           if (lh > u.pitch) undoStretchCap += (lh - u.pitch) * u.lines.length;
           lineCount += u.lines.length;
+          // **S4.18:** קיבולת כיווץ מרווח-הבסיס (7→רצפה) — השלב הראשון של
+          // compressColUnits חייב להיכנס לשער הקיבולת, אחרת משיכות שהמקור
+          // מבצע (עמ' 14: gap ~20px + below ~16px) נדחות בשער לפני שמתחילות.
+          gapCap += Math.max(0, (u.gapPx != null ? u.gapPx : 7) - GAP_COMPRESS_FLOOR);
         }
-        const totalCap = undoStretchCap + Math.min(RECLAIM_BELOW_BASE * lineCount, RECLAIM_COMPRESS_MAX);
+        const totalCap = undoStretchCap + gapCap
+          + Math.min(RECLAIM_BELOW_BASE * lineCount, RECLAIM_COMPRESS_MAX);
         // סמני ההערות של שורות הזנב — נכנסים לתור ומגדילים את התקציב מיד
         const tok = pending.token;
         const emitted = emitLinesWithMarkers(tok, pending.lines, pending.lineIdx, remaining);
