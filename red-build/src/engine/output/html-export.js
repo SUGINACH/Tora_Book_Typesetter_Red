@@ -62,6 +62,12 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .col-divider--dashed{border-left:1px dashed #999}
 .col-divider--double{border-left:3px double #999}
 .w--paren{color:#333}
+/* **S4.15 (גופן מילת-החלון — כמו המקור):** .first-word-window של המקור —
+   FrankReal משקל 900 בגודל 1.5em. הגיאומטריה (רוחב החלון+צמצום שתי
+   השורות הראשונות) כבר במנוע (מדידת FrankReal-Bold.ttf — הוכח מסימון
+   הייחוס: התאמה מושלמת ל-116 מילות-חלון); כאן רק הגופן החזותי.
+   line-height:0.85 כמו המקור — תיבת השורה אינה מתנפחת (חפיפה אפס). */
+.w--window{font-family:'FrankReal','Frank Ruhl Libre',serif;font-weight:900;line-height:.85}
 .endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
 .endnote-list{font-size:.85em;padding:0 12px}
 .endnote-note{margin:2px 0}

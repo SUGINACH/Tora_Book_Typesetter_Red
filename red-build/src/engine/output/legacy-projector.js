@@ -118,7 +118,10 @@ function projectLegacyPage(pg, settings, api) {
       } else if (ln.window && ln.windowWords) {
         // שורת חלון: מילת החלון (1.5×) בשפה הימנית; הטקסט ברוחב מוקטן
         const winSz = ln.sizePt * 1.5;
-        const winW = api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6;
+        // **S4.15:** רוחב החלון מהמודל — המדידה שם ב-FrankReal-Bold 1.5×
+        // (גופן החלון של המקור), לא בגופן הגוף. מקור יחיד: בלי הערך על
+        // השורה (מודל ישן) — נפילה למדידה מקומית כמו קודם.
+        const winW = ln.windowW || (api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6);
         // **S4.9:** בסיס מילת-החלון צמוד לבסיס הטקסט (מוגבה מעט) — תיבת הגליפים
         // של 1.5× גודל אינה חודרת לשורה הבאה (חפיפה אפס, כמו line-height:0.85 במקור)
         const winBase = baseY - 2;

@@ -464,6 +464,44 @@ def main():
                       for t, i1, i2, j1, j2 in sm6.get_opcodes() if t != "equal"][:6])
 
     # ================= PARITY 7: שקילות שבירת שורות =================
+    # **S4.15 (נרמול שורת-חלון):** מילת-החלון ושורת הטקסט הראשונה של הפסקה
+    # הן שורה ויזואלית אחת (החלון מרחף לצד שורה 1). חילוץ הייחוס ממזג אותן
+    # לפעמים לשורה אחת (18pt, כשהמרווח בין הגליפים קטן) ולפעמים מפריד —
+    # ארטיפקט חילוץ, לא פריסה. נרמול אחיד בשני הצדדים: שורת חלון מתמזגת
+    # תמיד עם השורה העוקבת באותו טור.
+    def is_window_row(r, col_x0=None, col_x1=None):
+        # שלנו: דגל window=true במודל. בייחוס: שורה בגודל חלון (גדול מכל גודל
+        # גוף — 18pt בגוף 12, 17.25pt בהקדמה 11.5) שנוגעת בשפה הימנית של הטור
+        # ורחוקה מהשמאלית — מילת-חלון בלבד; שורת חלון ממוזגת (חלון+שורה 1,
+        # פורשת משפת שמאל) נשארת כמו שהיא. כותרת ממורכזת אינה נוגעת בשפה
+        # הימנית — לא חלון.
+        if r.get("window"):
+            return True
+        try:
+            sz = float(r.get("size") or 0)
+        except (TypeError, ValueError):
+            sz = 0.0
+        if sz > 13 and col_x0 is not None and col_x1 is not None:
+            x0 = r.get("x0") or 0
+            x1 = r.get("x1") or 0
+            return x0 > col_x0 + 40 and x1 >= col_x1 - 3
+        return False
+
+    def merge_window_rows(rows, col_x0=None, col_x1=None):
+        out = []
+        i = 0
+        while i < len(rows):
+            r = rows[i]
+            if is_window_row(r, col_x0, col_x1) and i + 1 < len(rows):
+                merged = dict(r)
+                merged["text"] = (r.get("text") or "") + " " + (rows[i + 1].get("text") or "")
+                out.append(merged)
+                i += 2
+                continue
+            out.append(r)
+            i += 1
+        return out
+
     def reading_lines(docjson):
         # **S4.13 (מיון מקובץ):** שורות תוכן-עניינים (ערך + פוליו) חולקות כמעט
         # את אותו y, עם ג'יטר חילוץ של ±0.5pt שמטה את הסדר בין הצדדים (אצל
@@ -502,7 +540,15 @@ def main():
                 else:
                     none_rows.append(ln)
             for name in ("right", "left", "single"):
-                for ln in cluster_sorted(by_col[name]):
+                col_x0 = None
+                col_x1 = None
+                for c in (p.get("columns") or []):
+                    if c.get("name") == name and c.get("x0") is not None:
+                        col_x0 = c["x0"]
+                        col_x1 = c.get("x1")
+                        break
+                col_rows = merge_window_rows(cluster_sorted(by_col[name]), col_x0, col_x1)
+                for ln in col_rows:
                     seq.append(norm(ln["text"]))
             for ln in cluster_sorted(none_rows):
                 seq.append(norm(ln["text"]))

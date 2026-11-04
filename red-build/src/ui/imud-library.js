@@ -165,7 +165,12 @@ function createImudLibrary(engine) {
   /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition.
    * **03.11(ד):** מועבר גם קטלוג הגופנים הזמין — כך שמחסניות הגופן של המקור
    * ("'AlphaBlack', 'David Libre', serif") נפתרות מיד למשפחה הזמינה בפועל
-   * (David Libre) וההגדרות שמתקבלות ניתנות לטעינה ולמדידה אמיתית. */
+   * (David Libre) וההגדרות שמתקבלות ניתנות לטעינה ולמדידה אמיתית.
+   * **S4.15 (גופן מילת-החלון):** בטעינת הברירות נרשם גם FrankReal-Bold תחת
+   * השם 'FrankReal' — גופן מילת-החלון של המקור (המשתמש המקורי הריץ עם
+   * הגופן מותקן במערכת; הוכח מסימון הייחוס: 116 מילות-חלון ברוחב
+   * FrankReal-Bold בדיוק 0.03px). בלי זה — המדידה והתצוגה נופלות לגופן
+   * הגוף ושורות 0–1 של כל פסקת-חלון נשברות אחרת. */
   async function loadLegacyDefaults() {
     if (!fontCatalog.loaded) await loadFontCatalog().catch(() => {});
     const legacy = await fetchJson(`${BASE}/default_settings.json`);
@@ -174,7 +179,42 @@ function createImudLibrary(engine) {
       new Set(getSettingDefs().map(r => r.id)),
       { availableFonts: fontCatalog.byFamily ? new Set(fontCatalog.byFamily.keys()) : undefined }
     );
+    // **S4.15:** רישום גופן החלון (מדידה ב-Worker + FontFace לתצוגה + base64
+    // לייצוא HTML) — בלי להיכשל אם הקובץ חסר (fallback מתועד).
+    try { await loadWindowFont(); } catch (e) { /* אין FrankReal-Bold — fallback */ }
     return { settings, unmapped, report };
+  }
+
+  /** **S4.15:** טעינת FrankReal-Bold.ttf תחת המשפחה 'FrankReal' (מדידה+
+   * תצוגה+ייצוא) — לגופן מילת-החלון, כמו 'FrankReal' במערכת של המקור. */
+  async function loadWindowFont() {
+    if (appliedFontsReady.has('FrankReal')) return appliedFontsReady.get('FrankReal');
+    const p = (async () => {
+      const r = await fetch(`${BASE}/fonts/FrankReal-Bold.ttf`);
+      if (!r.ok) return null;
+      const buf = await r.arrayBuffer();
+      const u8 = new Uint8Array(buf);
+      try {
+        let bin = '';
+        const CH = 0x8000;
+        for (let i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+        fontCatalog.bytesB64.set('FrankReal', btoa(bin));
+      } catch (e) { /* אין btoa — הייצוא ידלג */ }
+      try {
+        await engine.registerFont({ name: 'FrankReal', bytes: buf.slice(0) });
+      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      if (!fontCatalog.faces.has('FrankReal') && typeof FontFace !== 'undefined') {
+        try {
+          const face = new FontFace('FrankReal', buf);
+          await face.load();
+          document.fonts.add(face);
+          fontCatalog.faces.add('FrankReal');
+        } catch (e) { /* פונט תצוגה נכשל */ }
+      }
+      return buf;
+    })();
+    appliedFontsReady.set('FrankReal', p);
+    return p;
   }
 
   /** CSS של הפונטים שנטענו — להטמעה בייצוא HTML העצמאי (@font-face data-URI). */

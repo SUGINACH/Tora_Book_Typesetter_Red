@@ -8253,6 +8253,9 @@ function renderLegacyPage(pg, settings, doc) {
       el.style.textAlign = ln.kind === 'heading' ? 'center' : (ln.isLast ? 'center' : 'justify');
       if (ln.window && ln.windowWords && ln.windowWords.length) {
         // מילת-חלון (1.5×) בשפה הימנית + הטקסט — תיבה אחת, בסיס משותף
+        // **S4.15:** גופן החלון של המקור — FrankReal משקל 900 (הוכח מהייחוס:
+        // 116 מילות-חלון נמדדו — התאמה מושלמת ל-FrankReal-Bold.ttf). המשפחות
+        // הנופלות מגובוות ב-CSS (BASE_CSS: .w--window) — ברירת מחדל גוף.
         const win = doc.createElement('span');
         win.className = 'w w--window';
         win.textContent = scrubPUAText(ln.windowWords.join(' ')) + ' ';
@@ -9638,15 +9641,28 @@ function tokenizeDoc(rawText, cfg) {
  * שתי המילים האחרונות קשורות ברווח בלתי-שביר (מניעת מילה יתומה).
  */
 class LineBreaker {
-  constructor(api, cfg) {
+  constructor(api, cfg, windowApi = null) {
     this.api = api;
     this.cfg = cfg;
+    // **S4.15 (גופן מילת-החלון):** מילת-החלון נמדדת ב-FrankReal-Bold (כמו
+    // המקור — .first-word-window{font-family:'FrankReal';font-weight:900}),
+    // לא בגופן הגוף. אם לא נרשם — נפילה שקופה לגוף (התנהגות קודמת).
+    this.win = windowApi;
+    this.winCache = new Map();
     this.cache = new Map();
   }
   w(text, sizePt) {
     const key = sizePt + '|' + text;
     let v = this.cache.get(key);
     if (v === undefined) { v = this.api.measureTextWidth(text, sizePt, 0); this.cache.set(key, v); }
+    return v;
+  }
+  /** מדידת טקסט חלון (FrankReal-Bold 1.5×) — עם מטמון נפרד. */
+  wWin(text, sizePt) {
+    if (!this.win) return this.w(text, sizePt);
+    const key = sizePt + '|' + text;
+    let v = this.winCache.get(key);
+    if (v === undefined) { v = this.win.measureTextWidth(text, sizePt, 0); this.winCache.set(key, v); }
     return v;
   }
 
@@ -9680,12 +9696,19 @@ class LineBreaker {
    * **S4.9 (מדידת סוגריים):** מילים בתוך (...) נמדדות בגודל הסוגריים המוקטן
    * (size-body + s-paren, כלומר 12-2=10pt) — כך פסקאות עם סוגריים אצל המקור
    * מתקצרות בשורות (הרינדור עצמו ב-10pt ממילא).
+   * **S4.15 (גופן הקדמה):** measureApi — גופן מדידה חלופי לפסקה זו (גוף
+   * ההקדמה מרונדר במקור ב-'Frank Ruhl Libre' 11.5pt — --fn-h0-body — לא
+   * בגופן הגוף; הוכח מסימון הייחוס: שורות ההקדמה נשברות בדיוק לפי רוחבי
+   * FRL ולא Guttman — שורת 'לבאר… ואיזה' 482.9px בגוף מול 474 ב-FRL).
    * @returns {{lines:Array<{words:string[], window:boolean, heightPx:number}>, hasWindow:boolean, windowWords:string[]|null, notes:Array}}
    */
-  breakPara(text, colWidthPx, sizePt, allowWindow) {
+  breakPara(text, colWidthPx, sizePt, allowWindow, measureApi = null) {
     const cfg = this.cfg;
+    const mw = measureApi
+      ? (t, sz) => measureApi.measureTextWidth(t, sz, 0)
+      : (t, sz) => this.w(t, sz);
     const { disp, out, notes } = this.splitWords(text);
-    const spaceW = this.w(' ', sizePt);
+    const spaceW = mw(' ', sizePt);
     // טווחי סוגריים מאוזנים — מילים בתוכם נמדדות בגודל מוקטן
     // **S4.13 (תיקון שורש — זיהוי ברמת תווים כמו findParenMatches במקור):**
     // הזיהוי הקודם (מילה-שמתחילה-ב-( עד מילה-שמסתיימת-ב-)) החמיץ את המקרה
@@ -9706,7 +9729,7 @@ class LineBreaker {
       }
     }
     const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
-    const wordWs = disp.map((d, i) => this.w(d, parenWords.has(i) ? parenSize : sizePt));
+    const wordWs = disp.map((d, i) => mw(d, parenWords.has(i) ? parenSize : sizePt));
     if (!out.length) return { lines: [], hasWindow: false, windowWords: null, notes };
 
     // חלון מילה-ראשונה: אמדן שורות כמו המדידה הכפולה במקור
@@ -9723,13 +9746,24 @@ class LineBreaker {
     if (allowWindow && !startsWithParen && cfg.dropWordMode === 'window' && estLines >= cfg.dropWordMinLines && !firstHasNote) {
       useWindow = true;
       windowWords = out.slice(0, cfg.dropWordCount);
-      windowW = this.w(disp.slice(0, cfg.dropWordCount).join(' '), sizePt * 1.5) + 6;
+      // **S4.15:** המדידה בגופן החלון של המקור (FrankReal-Bold @ 900) — הוכח
+      // מהייחוס: 116 מילות-חלון בודדות נמדדו מול שבעה מועמדים ו-FrankReal-Bold
+      // התאים בשגיאה ממוצעת 0.03px ('וזה' 25.1/25.1, 'אך' 22.0/22.0, 'והיפך'
+      // 45.2 — מול 39px בגופן הגוף). רוחב שגוי = גלישה שונה של שתי השורות
+      // הראשונות של כל פסקת-חלון = הפרש P7/P6 הדומיננטי.
+      windowW = this.wWin(disp.slice(0, cfg.dropWordCount).join(' '), sizePt * 1.5) + 6;
     }
 
-    // קשיחת שתי המילים האחרונות
+    // **S4.15 (ביטול קשיחת-הזוג ברינדור):** קשיחת שתי המילים האחרונות (nbsp)
+    // קיימת בגרסת הארכיון v20.5 בלבד — ה-typesetter הראשי שיצר את הייחוס
+    // מרנדר ברווחים רגילים (createDropWord מחבר ב-' ' פשוט; ה-nbsp רק במדידת
+    // joinMeasuredLine). ההוכחה מהייחוס: פסקת ההקדמה הראשונה — '…מזה ואיזה'
+    // בשורה 2 ו-'מזה.' בשורה 3 — הזוג האחרון דווקא מפוצל, בדיוק כגלישה
+    // גרידה חופשית. הקשיחה הוצאה מהרינדור; היא נשארת רלוונטית רק לאמדן
+    // השורות במקור (שאינו משפיע על הפלט).
     const flowStart = useWindow ? cfg.dropWordCount : 0;
-    const pairStart = out.length - 2;
-    const bindPair = cfg.avoidRunt && (out.length - flowStart) >= 3 && pairStart >= flowStart;
+    const pairStart = -1; // אין קשיחה ברינדור (הוכחה לעיל)
+    const bindPair = false;
 
     const lines = [];
     let cur = [], curW = 0, lineNo = 0;
@@ -9757,7 +9791,7 @@ class LineBreaker {
     }
     if (cur.length) lines.push({ words: cur, window: useWindow && lineNo < 2 });
     for (const l of lines) l.heightPx = GEO.LINE_H;
-    return { lines, hasWindow: useWindow, windowWords, notes };
+    return { lines, hasWindow: useWindow, windowWords, windowW, notes };
   }
 }
 
@@ -9828,7 +9862,39 @@ function legacyTypeset(rawText, settings, env) {
   if (env && env.marginFontBytes && !registeredMeasureFonts.has('Hadassah Friedlaender')) {
     registerMeasureFont('Hadassah Friedlaender', env.marginFontBytes);
   }
+  // **S4.15 (גופן מילת-החלון — FrankReal-Bold):** env.windowFontBytes נרשם
+  // כאן (נתיב הפריטה/הייצוא); באפליקציה החיה הגופן נרשם דרך register-font
+  // תחת השם 'FrankReal' — שני הנתיבים מזוהים כאן. בלי גופן רשום: המדידה
+  // נופלת לגופן הגוף (התנהגות קודמת, בדיקות קיימות לא נשברות).
+  if (env && env.windowFontBytes && !registeredMeasureFonts.has('FrankReal-Bold')) {
+    registerMeasureFont('FrankReal-Bold', env.windowFontBytes);
+  }
+  // **S4.15 (גופן ההקדמה — Frank Ruhl Libre 11.5pt):** גוף ההקדמה במקור
+  // (--fn-h0-body) מרונדר ב-'Frank Ruhl Libre', לא בגופן הגוף — הוכח
+  // מסימון הייחוס: אילוצי שבירת שורות ההקדמה מתקיימים ברוחבי FRL
+  // (שורת 'לבאר… ואיזה' נכנסת ב-474px ב-FRL מול 482.9px בגוף — והייחוס
+  // הכניס אותה). באפליקציה החיה הגופן נרשם דרך register-font (המשפחה
+  // 'Frank Ruhl Libre' בקטלוג). בלי גופן רשום — נפילה לגופן הגוף.
+  if (env && env.prefaceFontBytes && !registeredMeasureFonts.has('Frank Ruhl Libre')) {
+    registerMeasureFont('Frank Ruhl Libre', env.prefaceFontBytes);
+  }
+  let prefaceApi = null;
+  if (impl === 'font-metrics' && registeredMeasureFonts.has('Frank Ruhl Libre')) {
+    prefaceApi = new MeasureAPI(
+      { 'body-font': 'Frank Ruhl Libre', 'body-font-size-pt': SZ.h0Body, 'body-line-height': 1.45 },
+      'font-metrics'
+    );
+  }
   const api = new MeasureAPI(settings, impl);
+  let windowApi = null;
+  const windowFontName = registeredMeasureFonts.has('FrankReal-Bold') ? 'FrankReal-Bold'
+    : (registeredMeasureFonts.has('FrankReal') ? 'FrankReal' : null);
+  if (impl === 'font-metrics' && windowFontName) {
+    windowApi = new MeasureAPI(
+      { 'body-font': windowFontName, 'body-font-size-pt': SZ.body, 'body-line-height': 1.34 },
+      'font-metrics'
+    );
+  }
   // **S4.13 (גופן הערות-צד — כמו המקור):** הערות הצד מודפסות בגופן
   // HadassahFriedlaender (מוכח מהייחוס: שורות השוליים sz=6 בפונט
   // 'HadassahFriedlaender', לא GuttmanRashi). הגלישה שלהן חייבת למדוד
@@ -9842,7 +9908,7 @@ function legacyTypeset(rawText, settings, env) {
       'font-metrics'
     );
   }
-  const brk = new LineBreaker(api, cfg);
+  const brk = new LineBreaker(api, cfg, windowApi);
   const { meta, tokens } = tokenizeDoc(rawText, cfg);
 
   const bookTitle = (meta.bookTitle || 'ספר').trim();
@@ -10098,7 +10164,7 @@ function legacyTypeset(rawText, settings, env) {
         const bodySz = isH0Body ? SZ.h0Body : SZ.body;
         const pitch = isH0Body ? H0_LINE_H : GEO.LINE_H;
         const colW = isH0Body ? SINGLE_W : GEO.COL_W;
-        let lines, hasWindow = false, windowWords = null;
+        let lines, hasWindow = false, windowWords = null, windowW = 0;
         const isCont = !!pending;
         if (pending) {
           lines = pending.lines;
@@ -10106,8 +10172,11 @@ function legacyTypeset(rawText, settings, env) {
           requeueParaNotes(tok.id);
         } else {
           tokPages.set(tok.id, new Set([pages.length - 1]));
-          const r = brk.breakPara(tok.text, colW, bodySz, true);
+          const r = brk.breakPara(tok.text, colW, bodySz, true, isH0Body ? prefaceApi : null);
           lines = r.lines; hasWindow = r.hasWindow; windowWords = r.windowWords;
+          // **S4.15:** רוחב החלון המדוד (FrankReal-Bold 1.5× + 6px) נשמר על
+          // החתיקה — מקור יחיד לפרויקטור (בלי מדידה חוזרת בגופן אחר).
+          windowW = r.windowW || 0;
         }
         const startIdx = pending ? pending.lineIdx : 0;
         const total = lines.length - startIdx;
@@ -10218,7 +10287,7 @@ function legacyTypeset(rawText, settings, env) {
         const isEnd = startIdx + fit >= lines.length;
         block.cols[block.fill].push({
           kind: 'para', tokenId: tok.id, lines: emitted, from: startIdx,
-          isEnd, isCont, hasWindow: hasWindow && !isCont, windowWords,
+          isEnd, isCont, hasWindow: hasWindow && !isCont, windowWords, windowW,
           pitch, sizePt: bodySz, sideNote: (!isCont && tok.sideNote) ? tok.sideNote : null
         });
         block.cursor[block.fill] += fit * pitch;
@@ -10467,6 +10536,7 @@ function legacyTypeset(rawText, settings, env) {
         tokenId: u.tokenId,
         window: !!(u.hasWindow && lineIdxGlobal < 2),
         windowWords: (u.hasWindow && lineIdxGlobal === 0) ? u.windowWords : null,
+        windowW: (u.hasWindow && lineIdxGlobal === 0) ? (u.windowW || 0) : null,
         y, paraId: u.tokenId, lineIdx: lineIdxGlobal
       });
       y += u.pitch;
@@ -13878,9 +13948,11 @@ function exportHtml(result, settings, doc, meta = {}) {
  * @param {object} settingsIn — הגדרות המשתמש
  * @param {Buffer} fontBytes — קובץ TTF להטמעה (למשל DejaVu)
  * @param {string} [fontName] — שם פרופיל (ברירת מחדל: body-font של ההגדרות)
+ * @param {object} [env] — סביבת המנוע (S4.15: windowFontBytes/marginFontBytes — גופני
+ *   מילת-החלון/הערות-הצד של המקור; בלעדיהם המדידה נופלת לגופן הגוף)
  * @returns {{ok:boolean, error?:string, bytes?:Buffer, result?:object, projected?:object, info?:object}}
  */
-function exportPdf(text, settingsIn, fontBytes, fontName) {
+function exportPdf(text, settingsIn, fontBytes, fontName, env) {
   if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' }; // דפדפן — נתיב Node בלבד (מתועד)
   /* node-only */ const { typeset } = require('../core/pipeline');
   /* node-only */ const { registerFont, unregisterFont } = require('../typography/measure-api');
@@ -13902,7 +13974,7 @@ function exportPdf(text, settingsIn, fontBytes, fontName) {
       'body-font': profileName,
       'measure-impl': 'font-metrics'
     };
-    const result = typeset(text, settings, { noRecommendations: true });
+    const result = typeset(text, settings, { noRecommendations: true, ...(env || {}) });
     // **S4.9:** פרופיל IMUD — הקרנה ממקרן ה-legacy (גיאומטריה מפורשת מהייחוס)
     const projected = result.legacyProfile
       ? require('./legacy-projector').projectLegacyDocument(result, settings)
@@ -14168,6 +14240,12 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .col-divider--dashed{border-left:1px dashed #999}
 .col-divider--double{border-left:3px double #999}
 .w--paren{color:#333}
+/* **S4.15 (גופן מילת-החלון — כמו המקור):** .first-word-window של המקור —
+   FrankReal משקל 900 בגודל 1.5em. הגיאומטריה (רוחב החלון+צמצום שתי
+   השורות הראשונות) כבר במנוע (מדידת FrankReal-Bold.ttf — הוכח מסימון
+   הייחוס: התאמה מושלמת ל-116 מילות-חלון); כאן רק הגופן החזותי.
+   line-height:0.85 כמו המקור — תיבת השורה אינה מתנפחת (חפיפה אפס). */
+.w--window{font-family:'FrankReal','Frank Ruhl Libre',serif;font-weight:900;line-height:.85}
 .endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
 .endnote-list{font-size:.85em;padding:0 12px}
 .endnote-note{margin:2px 0}
@@ -14374,7 +14452,10 @@ function projectLegacyPage(pg, settings, api) {
       } else if (ln.window && ln.windowWords) {
         // שורת חלון: מילת החלון (1.5×) בשפה הימנית; הטקסט ברוחב מוקטן
         const winSz = ln.sizePt * 1.5;
-        const winW = api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6;
+        // **S4.15:** רוחב החלון מהמודל — המדידה שם ב-FrankReal-Bold 1.5×
+        // (גופן החלון של המקור), לא בגופן הגוף. מקור יחיד: בלי הערך על
+        // השורה (מודל ישן) — נפילה למדידה מקומית כמו קודם.
+        const winW = ln.windowW || (api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6);
         // **S4.9:** בסיס מילת-החלון צמוד לבסיס הטקסט (מוגבה מעט) — תיבת הגליפים
         // של 1.5× גודל אינה חודרת לשורה הבאה (חפיפה אפס, כמו line-height:0.85 במקור)
         const winBase = baseY - 2;
@@ -15048,7 +15129,12 @@ function createImudLibrary(engine) {
   /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition.
    * **03.11(ד):** מועבר גם קטלוג הגופנים הזמין — כך שמחסניות הגופן של המקור
    * ("'AlphaBlack', 'David Libre', serif") נפתרות מיד למשפחה הזמינה בפועל
-   * (David Libre) וההגדרות שמתקבלות ניתנות לטעינה ולמדידה אמיתית. */
+   * (David Libre) וההגדרות שמתקבלות ניתנות לטעינה ולמדידה אמיתית.
+   * **S4.15 (גופן מילת-החלון):** בטעינת הברירות נרשם גם FrankReal-Bold תחת
+   * השם 'FrankReal' — גופן מילת-החלון של המקור (המשתמש המקורי הריץ עם
+   * הגופן מותקן במערכת; הוכח מסימון הייחוס: 116 מילות-חלון ברוחב
+   * FrankReal-Bold בדיוק 0.03px). בלי זה — המדידה והתצוגה נופלות לגופן
+   * הגוף ושורות 0–1 של כל פסקת-חלון נשברות אחרת. */
   async function loadLegacyDefaults() {
     if (!fontCatalog.loaded) await loadFontCatalog().catch(() => {});
     const legacy = await fetchJson(`${BASE}/default_settings.json`);
@@ -15057,7 +15143,42 @@ function createImudLibrary(engine) {
       new Set(getSettingDefs().map(r => r.id)),
       { availableFonts: fontCatalog.byFamily ? new Set(fontCatalog.byFamily.keys()) : undefined }
     );
+    // **S4.15:** רישום גופן החלון (מדידה ב-Worker + FontFace לתצוגה + base64
+    // לייצוא HTML) — בלי להיכשל אם הקובץ חסר (fallback מתועד).
+    try { await loadWindowFont(); } catch (e) { /* אין FrankReal-Bold — fallback */ }
     return { settings, unmapped, report };
+  }
+
+  /** **S4.15:** טעינת FrankReal-Bold.ttf תחת המשפחה 'FrankReal' (מדידה+
+   * תצוגה+ייצוא) — לגופן מילת-החלון, כמו 'FrankReal' במערכת של המקור. */
+  async function loadWindowFont() {
+    if (appliedFontsReady.has('FrankReal')) return appliedFontsReady.get('FrankReal');
+    const p = (async () => {
+      const r = await fetch(`${BASE}/fonts/FrankReal-Bold.ttf`);
+      if (!r.ok) return null;
+      const buf = await r.arrayBuffer();
+      const u8 = new Uint8Array(buf);
+      try {
+        let bin = '';
+        const CH = 0x8000;
+        for (let i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+        fontCatalog.bytesB64.set('FrankReal', btoa(bin));
+      } catch (e) { /* אין btoa — הייצוא ידלג */ }
+      try {
+        await engine.registerFont({ name: 'FrankReal', bytes: buf.slice(0) });
+      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      if (!fontCatalog.faces.has('FrankReal') && typeof FontFace !== 'undefined') {
+        try {
+          const face = new FontFace('FrankReal', buf);
+          await face.load();
+          document.fonts.add(face);
+          fontCatalog.faces.add('FrankReal');
+        } catch (e) { /* פונט תצוגה נכשל */ }
+      }
+      return buf;
+    })();
+    appliedFontsReady.set('FrankReal', p);
+    return p;
   }
 
   /** CSS של הפונטים שנטענו — להטמעה בייצוא HTML העצמאי (@font-face data-URI). */

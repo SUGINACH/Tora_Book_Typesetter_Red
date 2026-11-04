@@ -653,6 +653,9 @@ function renderLegacyPage(pg, settings, doc) {
       el.style.textAlign = ln.kind === 'heading' ? 'center' : (ln.isLast ? 'center' : 'justify');
       if (ln.window && ln.windowWords && ln.windowWords.length) {
         // מילת-חלון (1.5×) בשפה הימנית + הטקסט — תיבה אחת, בסיס משותף
+        // **S4.15:** גופן החלון של המקור — FrankReal משקל 900 (הוכח מהייחוס:
+        // 116 מילות-חלון נמדדו — התאמה מושלמת ל-FrankReal-Bold.ttf). המשפחות
+        // הנופלות מגובוות ב-CSS (BASE_CSS: .w--window) — ברירת מחדל גוף.
         const win = doc.createElement('span');
         win.className = 'w w--window';
         win.textContent = scrubPUAText(ln.windowWords.join(' ')) + ' ';

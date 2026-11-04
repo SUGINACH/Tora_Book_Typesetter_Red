@@ -85,9 +85,11 @@ function exportHtml(result, settings, doc, meta = {}) {
  * @param {object} settingsIn — הגדרות המשתמש
  * @param {Buffer} fontBytes — קובץ TTF להטמעה (למשל DejaVu)
  * @param {string} [fontName] — שם פרופיל (ברירת מחדל: body-font של ההגדרות)
+ * @param {object} [env] — סביבת המנוע (S4.15: windowFontBytes/marginFontBytes — גופני
+ *   מילת-החלון/הערות-הצד של המקור; בלעדיהם המדידה נופלת לגופן הגוף)
  * @returns {{ok:boolean, error?:string, bytes?:Buffer, result?:object, projected?:object, info?:object}}
  */
-function exportPdf(text, settingsIn, fontBytes, fontName) {
+function exportPdf(text, settingsIn, fontBytes, fontName, env) {
   if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' }; // דפדפן — נתיב Node בלבד (מתועד)
   /* node-only */ const { typeset } = require('../core/pipeline');
   /* node-only */ const { registerFont, unregisterFont } = require('../typography/measure-api');
@@ -109,7 +111,7 @@ function exportPdf(text, settingsIn, fontBytes, fontName) {
       'body-font': profileName,
       'measure-impl': 'font-metrics'
     };
-    const result = typeset(text, settings, { noRecommendations: true });
+    const result = typeset(text, settings, { noRecommendations: true, ...(env || {}) });
     // **S4.9:** פרופיל IMUD — הקרנה ממקרן ה-legacy (גיאומטריה מפורשת מהייחוס)
     const projected = result.legacyProfile
       ? require('./legacy-projector').projectLegacyDocument(result, settings)

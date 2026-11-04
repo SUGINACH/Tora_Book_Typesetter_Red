@@ -107,6 +107,17 @@ function main() {
   const reg = registerFont('Guttman Rashi', fontBytes);
   if (!reg.ok) { console.error('registerFont failed:', reg.error); process.exit(2); }
 
+  // **S4.15 (גופן מילת-החלון):** FrankReal-Bold — גופן מילת-החלון של המקור
+  // (.first-word-window{font-family:'FrankReal';font-weight:900}). מדידת
+  // החלון בגופן הגוף הייתה צרה מדי ושברה את שורות 0–1 של כל פסקת-חלון
+  // אחרת מהמקור (הוכח מסימון הייחוס: 'והיפך' 45.2px בפועל מול 39px בגוף).
+  const windowFontPath = path.join(RB, 'ui/assets/imud/fonts/FrankReal-Bold.ttf');
+  const windowFontBytes = fs.existsSync(windowFontPath) ? fs.readFileSync(windowFontPath) : null;
+  // **S4.15 (גופן ההקדמה):** Frank Ruhl Libre 11.5pt — --fn-h0-body של המקור
+  // (הוכח מסימון הייחוס: אילוצי שבירת השורות מתקיימים ברוחבי FRL).
+  const prefaceFontPath = path.join(RB, 'ui/assets/imud/fonts/FrankRuhlLibre-VF.ttf');
+  const prefaceFontBytes = fs.existsSync(prefaceFontPath) ? fs.readFileSync(prefaceFontPath) : null;
+
   const settings = {
     ...getDefaultSettings(),
     ...liveSettings(),
@@ -119,13 +130,13 @@ function main() {
   // המנוע נרשם אותם וגולש את הערות במטריקות הנכונות.
   const marginFontPath = path.join(RB, 'ui/assets/imud/fonts/Hadassah-Friedlaender-Regular.ttf');
   const marginFontBytes = fs.existsSync(marginFontPath) ? fs.readFileSync(marginFontPath) : null;
-  const result = typeset(text, settings, { noRecommendations: true, marginFontBytes });
+  const result = typeset(text, settings, { noRecommendations: true, marginFontBytes, windowFontBytes, prefaceFontBytes });
   console.error(`typeset: ${result.pages.length} pages in ${Date.now() - t0}ms (hash ${String(result.layoutHash).slice(0, 12)}) [profile: ${result.legacyProfile ? 'imud-legacy' : 'dp'}]`);
 
   // ---------- דטרמיניזם: הרצה שנייה חייבת לתת hash ועמודים זהים ----------
   if (wantDeterminism) {
     const t1 = Date.now();
-    const again = typeset(text, settings, { noRecommendations: true, marginFontBytes });
+    const again = typeset(text, settings, { noRecommendations: true, marginFontBytes, windowFontBytes, prefaceFontBytes });
     const ok = again.layoutHash === result.layoutHash && again.pages.length === result.pages.length;
     console.error(`determinism: run2 ${again.pages.length} pages in ${Date.now() - t1}ms (hash ${String(again.layoutHash).slice(0, 12)}) — ${ok ? 'OK (identical)' : 'MISMATCH'}`);
     if (!ok) { console.error('determinism FAILED — hash or page count differs between runs'); process.exit(3); }
@@ -331,6 +342,9 @@ function main() {
   // כאן: חתיכה = רצף רציף של שורות אותה פסקה באותו טור; סוף-פסקה = שורת
   // ה-line--last (isLast). מילת-החלון ממוזגת לשורה הראשונה (לא נספרת בנפרד).
   for (const p of pages) {
+    // **S4.15 (אבחון):** pages[].paragraphs — אותה סכמה כמו הייחוס
+    // ({col, end, lines, words, head}) להשוואה עמוד-אחר-עמוד (דריפט P6/P7).
+    p.paragraphs = [];
     for (const cn of ['right', 'left', 'single']) {
       const colLines = p.lines.filter(l => l.col === cn && l.kind === 'body' && l._ln && l._ln.paraId != null)
         .sort((a, b) => a.y0 - b.y0);
@@ -353,6 +367,7 @@ function main() {
           for (const w of ws) { if (headWords.length < 6) headWords.push(w); }
           if (l._ln.isLast) ended = true;
         }
+        p.paragraphs.push({ col: cn, end: ended, lines, words, head: headWords.join(' ') });
         if (openPara == null) {
           openPara = { lines, words, head: headWords.join(' ') };
         } else {
@@ -391,7 +406,8 @@ function main() {
   console.error(`model: ${modelPath} — ${paraSeq.length} paragraphs, ${pages.length} pages`);
 
   // ---------- PDF באותן הגדרות בדיוק ----------
-  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi');
+  // **S4.15:** env החלון גם לייצוא — שבירת השורות ב-PDF חייבת להיות זהה למודל
+  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes });
   if (!pdf.ok) { console.error('exportPdf failed:', pdf.error); process.exit(2); }
   const pdfPath = path.join(outDir, 'ours.pdf');
   fs.writeFileSync(pdfPath, Buffer.from(pdf.bytes));
