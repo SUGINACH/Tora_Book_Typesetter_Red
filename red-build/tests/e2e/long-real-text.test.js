@@ -95,6 +95,55 @@ describe('D-83 — ספרי־אמת ארוכים: עימוד מלא ללא קר�
     console.log(`  [real] very_long: words=${raw.split(/\s+/).filter(Boolean).length} pages=${result.pages.length} hash=${result.layoutHash.slice(0, 12)} ${dt}ms`);
   });
 
+  // **FWD-4 (05.11 — הקורפוס ההיסטורי של Orange התקבל ויובא):** הקובץ המקורי
+  // מ-IMUD_TORANI/text_files_for_typesetter_tests/very_long_test_text.txt —
+  // 5,702 שורות, בתים-בתים (md5 ‏d961a8cad4e31df592d80828b36a490d). שונה מהעותק
+  // שב-audits/ (שנערך: נוסף "מספר N" לכותרות כפולות ורווחים כפולים נורמלו) —
+  // כאן הקלט ההיסטורי האמיתי: כותרות עם טקסט זהה חוזר (בלי מספור מבדיל),
+  // רווחים כפולים, סוף-שורה LF. המנוע חייב להתמודד עם שניהם בלי קריסה ובלי
+  // איבוד — הבדלי העריכה אינם רשות להתנהגות שונה.
+  it('FWD-4: הקורפוס ההיסטורי של Orange (5,702 שורות, בתים-בתים) — שני הנתיבים, שימור, דטרמיניזם', () => {
+    const HIST = path.join(REAL_DIR, 'orange_very_long_test_text.txt');
+    const raw = fs.readFileSync(HIST, 'utf8');
+    // זהות היסטורית: המאפיינים המבדילים מהעותק הנורמל
+    assertEq(raw.split('\n').length, 5703, '5,702 שורות + שורת סיום (המקור)');
+    const lines = raw.split('\n');
+    assertEq(lines[0], 'שם הספר - מקום בינה', 'כותרת המקור');
+    // כותרות כפולות בלי מספור מבדיל — המאפיין שנערך מחוץ לקורפוס ההיסטורי
+    // (בעותק שב-audits/ קיבלו כל הכותרות החוזרות "מספר N"; במקור הן חוזרות זהות)
+    const dupHead = lines.filter(l => l === 'כותרת 6 - *').length;
+    assert(dupHead === 6, `כותרת 6 - * חוזרת 6 פעמים במקור (מצאנו ${dupHead})`);
+    const dupSum = lines.filter(l => l === 'כותרת 4 - סיכום').length;
+    assert(dupSum === 4, `כותרת 4 - סיכום חוזרת 4 פעמים (מצאנו ${dupSum})`);
+    assert(/  /.test(raw), 'רוושים כפולים נשמרים כבמקור');
+    // בעותק הנורמל שב-audits/ כל כותרת חוזרת קיבלה "מספר N" — שם "כותרת 6 - *"
+    // מופיעה פעם אחת לכל היותר; כאן היא חוזרת זהה 6 פעמים (המקור ההיסטורי).
+
+    const words = raw.split(/\s+/).filter(Boolean).length;
+    // נתיב ה-DP (העימוד הכללי)
+    const t0 = Date.now();
+    const r1 = typeset(raw, getDefaultSettings(), { noRecommendations: true });
+    const dt = Date.now() - t0;
+    assert(r1.contentPreserved === true, 'שימור תוכן — הקורפוס ההיסטורי, נתיב DP');
+    assert(r1.pages.length > 1000, `ספר שלם במדדי הקורפוס ההיסטורי (קיבלנו ${r1.pages.length})`);
+    assert(dt < 120000, `זמן סביר (${dt}ms)`);
+    const r1b = typeset(raw, getDefaultSettings(), { noRecommendations: true });
+    assertEq(r1.layoutHash, r1b.layoutHash, 'דטרמיניזם — נתיב DP, הקורפוס ההיסטורי');
+    assertEq(r1.pages.length, r1b.pages.length, 'מספר עמודים יציב');
+
+    // נתיב המורשת (פרופיל המקור — importImudSettings)
+    const { importImudSettings } = require('../../src/engine/core/legacy-settings-map');
+    const { getSettingDefs } = require('../../src/engine/core/settings-registry');
+    const LEGACY = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'assets', 'imud', 'default_settings.json'), 'utf8'));
+    const imp = importImudSettings(LEGACY, new Set(getSettingDefs().map(r => r.id)));
+    const r2 = typeset(raw, imp.settings, { noRecommendations: true });
+    assert(r2.contentPreserved === true, 'שימור תוכן — הקורפוס ההיסטורי, פרופיל המורשת');
+    assert(r2.legacyProfile === true, 'פרופיל המורשת הופעל');
+    const r2b = typeset(raw, imp.settings, { noRecommendations: true });
+    assertEq(r2.layoutHash, r2b.layoutHash, 'דטרמיניזם — פרופיל המורשת, הקורפוס ההיסטורי');
+    console.log(`  [real] orange-historical: words=${words} DP=${r1.pages.length}pages/${r1.layoutHash.slice(0, 10)} legacy=${r2.pages.length}pages/${r2.layoutHash.slice(0, 10)} ${dt}ms`);
+  });
+
 });
 
 report('long-real-text');

@@ -77,7 +77,7 @@ const NUMPOS_MAP = {
  */
 const DISPOSITIONS = {
   // ============ טיפוגרפיה של הגוף ============
-  'font-body': { kind: 'mapped', to: 'body-font', transform: firstFamily, reason: 'משפחה ראשונה מרשימת ה-fallback של המקור' },
+  'font-body': { kind: 'mapped', to: 'body-font', transform: resolveStack, reason: 'מחסנית CSS של המקור — נפתרת מול הקטלוג המוטמע כשהוא זמין (EXT-9: גוף המקור "\'Guttman Rashi\', \'Frank Ruhl Libre\'" ⇒ Frank Ruhl Libre המוטמע); בלי קטלוג — המשפחה הראשונה (התנהגות היסטורית). בלי זה המדידה נפלה לטבלה בעוד התצוגה בגופן אמיתי — סחף live↔ייצוא מסוג EXT-13' },
   'size-body': { kind: 'mapped', to: 'body-font-size-pt', transform: parseFloat, reason: 'pt (המקור 12; RED 14 — ההפרש מתועד כהחלטת RED)' },
   'line-height-body': { kind: 'mapped', to: 'body-line-height', transform: parseFloat },
   'body-last-line-align': { kind: 'mapped', to: 'body-last-line-align' },
@@ -254,6 +254,13 @@ const FAMILY_RULES = [
   { re: /^prop-/, kind: 'ui-state', reason: 'מאפייני עיצוב בבורר הישן' },
   { re: /^page-/, kind: 'ui-state', reason: 'הגדרות עמוד בפאנל הישן' },
   { re: /^(show|enable|select|main|back|sub|shaar|general|detailed|font|size|mode)-/, kind: 'ui-state', reason: 'מצבי UI של האפליקציה הישנה' },
+  // **EXT-14 (05.11, ערכות הסגנון):** שדות העלאת-קבצים של האפליקציה הישנה — קיימים
+  // ב-setting_sets (תלמוד/פרשנות/קונטרס) אך לא ב-default_settings (הועלו רק בערכות):
+  // קבצי SVG של בונה השערים, תמונות רקע לפי מחלקת עמוד, תמונת מרכז-הכותרת,
+  // תמונת מפריד הסעיפים ותיקיית הנכסים. ב-RED: הפניות imud: מהספרייה המוטמעת
+  // (asset-registry) או נכסי משתמש — ערך הקובץ עצמו אינו מצב מנוע.
+  { re: /^file-/, kind: 'ui-state', reason: 'שדה העלאת קובץ באפליקציה הישנה (builder/cbg/hdr/sec-div) — ב-RED: הפניות imud: מהספרייה' },
+  { re: /^assets-folder-/, kind: 'ui-state', reason: 'תיקיית נכסים חיצונית באפליקציה הישנה — ב-RED: הספרייה המוטמעת' },
   { re: /^heading-divider-h[3-9]$/, kind: 'mapped', to: 'heading-dividers-h3-h6', transform: (v) => v !== 'none', reason: 'מפרידי כותרות H3–H6 — RED מפעיל/מכבה את המשפחה כולה' }
 ];
 

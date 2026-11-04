@@ -52,14 +52,18 @@ function buildControl(doc, b, value, onChange) {
     el.addEventListener('change', () => onChange(el.value));
   } else if (b.type === 'font') {
     // font-picker preserve-missing-value (IMUD port): ערך שאינו ברשימה נשמר כאפשרות.
-    // **03.11:** כשקטלוג IMUD נטען — 439 המשפחות מופיעות בכל בוררי הגופנים.
-    const families = fontCatalogFamilies || KNOWN_FONTS;
+    // **03.11:** כשקטלוג IMUD נטען — 443 המשפחות המוטמעות בכל בוררי הגופנים.
+    // **EXT-14 (05.11):** הקטלוג המורחב (1,315 משפחות המקור) מוצג אף הוא — עם
+    // סימון ברור "(קטלוג — לא מוטמע)": בחירתו תדווח במפורש ותיפול לגופן מערכת.
+    const raw = fontCatalogFamilies || KNOWN_FONTS;
+    const entries = raw.map((f) => (typeof f === 'string' ? { value: f, label: f } : f));
+    const values = entries.map((e) => e.value);
     el = doc.createElement('select');
-    const opts = families.includes(value) ? families : [String(value), ...families];
-    for (const f of opts) {
+    const opts = values.includes(value) ? entries : [{ value: String(value), label: String(value) }, ...entries];
+    for (const e of opts) {
       const o = doc.createElement('option');
-      o.setAttribute('value', f);
-      o.textContent = f;
+      o.setAttribute('value', e.value);
+      o.textContent = e.label || e.value;
       el.appendChild(o);
     }
     el.value = String(value);
@@ -318,6 +322,34 @@ function buildImudPicker(doc, opts) {
     selects.push({ pick, sel });
   }
 
+  // בורר סגנון-ספר מהמקור (setting_sets/) — **EXT-14:** תלמוד/פרשנות/קונטרס,
+  // תצורות מלאות (249 מפתחות) שהמקור החליף ביניהן דרך הדרופדאון style-set-select.
+  // אותה טבלת disposition כמו ברירות המחדל — אין מסלול מיוחד; ההחלפה מעמדת
+  // את ההגדרות וטוענת את הגופנים שהערכה דורשת (onApplyLegacyDefaults — נתיב יחיד).
+  const setsWrap = doc.createElement('div');
+  setsWrap.className = 'row';
+  const setsLbl = doc.createElement('label');
+  setsLbl.textContent = 'סגנון ספר (מהמקור):';
+  setsWrap.appendChild(setsLbl);
+  const setsSel = doc.createElement('select');
+  setsSel.className = 'ctl';
+  setsSel.setAttribute('aria-label', 'בחירת ערכת סגנון ספר מהמקור');
+  setsSel.appendChild(Object.assign(doc.createElement('option'), { textContent: '— ברירת המחדל המלאה —', value: '' }));
+  setsSel.addEventListener('change', async () => {
+    const name = setsSel.value;
+    if (!name) return; // ברירת המחדל המלאה — דרך הכפתור הייעודי למעלה
+    try {
+      const { settings, report } = await opts.imudLibrary.loadSettingSet(name);
+      if (opts.onApplyLegacyDefaults) opts.onApplyLegacyDefaults(settings);
+      if (opts.onNotice) opts.onNotice(`ערכת «${name}» הוחלה — ${report.mapped} הגדרות מופו, ${report.uiState} ערכי UI נשמרו.`);
+    } catch (e) {
+      setsSel.value = '';
+      if (opts.onNotice) opts.onNotice('טעינת הערכה נכשלה: ' + (e && e.message ? e.message : e));
+    }
+  });
+  setsWrap.appendChild(setsSel);
+  wrap.appendChild(setsWrap);
+
   // כפתור ברירות המחדל המקוריות — ייבוא 264 המפתחות דרך טבלת ה-disposition
   const defaultsBtn = doc.createElement('button');
   defaultsBtn.type = 'button'; defaultsBtn.className = 'btn';
@@ -334,9 +366,15 @@ function buildImudPicker(doc, opts) {
   });
   wrap.appendChild(defaultsBtn);
 
-  // טעינת רשימות העיצובים (עצלה — לפי אוסף)
+  // טעינת רשימות העיצובים (עצלה — לפי אוסף) + אוכלוס ערכות הסגנון
   (async () => {
     try {
+      // ערכות סגנון-ספר (setting_sets) — אוכלוס הבורר
+      try {
+        for (const name of opts.imudLibrary.listSettingSets()) {
+          setsSel.appendChild(Object.assign(doc.createElement('option'), { textContent: name, value: name }));
+        }
+      } catch (e) { /* אין ספריית ערכות — הבורר נשאר עם ברירת המחדל */ }
       const byCollection = new Map();
       for (const { pick, sel } of selects) {
         if (!byCollection.has(pick.collection)) {

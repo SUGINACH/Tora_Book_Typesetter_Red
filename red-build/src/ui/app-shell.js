@@ -268,9 +268,17 @@ function createApp(doc, opts = {}) {
     // **03.11 (EXT-14):** בחירת גופן מהספרייה — טעינה חיה (FontFace לתצוגה +
     // registerFont במנוע למדידת font-metrics ולייצוא PDF). כישלון טעינה אינו
     // חוסם: המערכת נופלת לגופן המערכת (מתועד בהודעה).
+    // **EXT-14 (05.11):** הודעה מדויקת לפי סיווג האמת — משפחה מהקטלוג המורחב
+    // (קובץ WOFF2 במקור, לא מוטמע) מדווחת בשמה הנכון; לא כל "מחוץ לספרייה".
     if (/-(font)$/.test(key) && value && opts.imudLibrary) {
+      const fontSt = typeof opts.imudLibrary.fontStatus === 'function' ? opts.imudLibrary.fontStatus(value) : null;
       opts.imudLibrary.loadFont(value).then((buf) => {
-        if (!buf) status.setNotice(`הגופן «${value}» אינו בספרייה המוטמעת — נעשה שימוש בגופן חלופי.`);
+        if (!buf) {
+          const msg = fontSt === 'extended-catalog'
+            ? `הגופן «${value}» מהקטלוג המורחב של המקור — קובץ הגופן (WOFF2) אינו מוטמע בריפו; נעשה שימוש בגופן מערכת.`
+            : `הגופן «${value}» אינו בספרייה המוטמעת — נעשה שימוש בגופן חלופי.`;
+          status.setNotice(msg);
+        }
       }).catch(() => { /* כבר דווח בהודעה */ });
     }
     if (classifyChange(key) === 'light') scheduleLightRefresh();
@@ -503,7 +511,15 @@ function createApp(doc, opts = {}) {
     }
     let legacySettings = {};
     if (Object.keys(legacyKeys).length) {
-      const imp = importImudSettings(legacyKeys, regKeys, { contentHeightPx: currentContentHeightPx() });
+      // **EXT-9:** הקטלוג המוטמע (אם נטען) מועבר לפתרון מחסניות הגופן —
+      // "Guttman Rashi, Frank Ruhl Libre" ⇒ המשפחה המוטמעת בפועל, כך שהמדידה
+      // (font-metrics) והתצוגה משתמשות באותו גופן (מונע סחף live↔ייצוא EXT-13).
+      const availableFonts = (opts.imudLibrary && typeof opts.imudLibrary.catalogFamilies === 'function')
+        ? opts.imudLibrary.catalogFamilies() : undefined;
+      const imp = importImudSettings(legacyKeys, regKeys, {
+        contentHeightPx: currentContentHeightPx(),
+        ...(availableFonts ? { availableFonts } : {})
+      });
       legacySettings = imp.settings; // כולל _legacy-ui-state (ערכי UI נשמרים)
     }
     const { merged, unknownKeys, issues } = mergeWithDefaults({ ...legacySettings, ...known });

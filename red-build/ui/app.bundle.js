@@ -816,9 +816,17 @@ function createApp(doc, opts = {}) {
     // **03.11 (EXT-14):** בחירת גופן מהספרייה — טעינה חיה (FontFace לתצוגה +
     // registerFont במנוע למדידת font-metrics ולייצוא PDF). כישלון טעינה אינו
     // חוסם: המערכת נופלת לגופן המערכת (מתועד בהודעה).
+    // **EXT-14 (05.11):** הודעה מדויקת לפי סיווג האמת — משפחה מהקטלוג המורחב
+    // (קובץ WOFF2 במקור, לא מוטמע) מדווחת בשמה הנכון; לא כל "מחוץ לספרייה".
     if (/-(font)$/.test(key) && value && opts.imudLibrary) {
+      const fontSt = typeof opts.imudLibrary.fontStatus === 'function' ? opts.imudLibrary.fontStatus(value) : null;
       opts.imudLibrary.loadFont(value).then((buf) => {
-        if (!buf) status.setNotice(`הגופן «${value}» אינו בספרייה המוטמעת — נעשה שימוש בגופן חלופי.`);
+        if (!buf) {
+          const msg = fontSt === 'extended-catalog'
+            ? `הגופן «${value}» מהקטלוג המורחב של המקור — קובץ הגופן (WOFF2) אינו מוטמע בריפו; נעשה שימוש בגופן מערכת.`
+            : `הגופן «${value}» אינו בספרייה המוטמעת — נעשה שימוש בגופן חלופי.`;
+          status.setNotice(msg);
+        }
       }).catch(() => { /* כבר דווח בהודעה */ });
     }
     if (classifyChange(key) === 'light') scheduleLightRefresh();
@@ -1051,7 +1059,15 @@ function createApp(doc, opts = {}) {
     }
     let legacySettings = {};
     if (Object.keys(legacyKeys).length) {
-      const imp = importImudSettings(legacyKeys, regKeys, { contentHeightPx: currentContentHeightPx() });
+      // **EXT-9:** הקטלוג המוטמע (אם נטען) מועבר לפתרון מחסניות הגופן —
+      // "Guttman Rashi, Frank Ruhl Libre" ⇒ המשפחה המוטמעת בפועל, כך שהמדידה
+      // (font-metrics) והתצוגה משתמשות באותו גופן (מונע סחף live↔ייצוא EXT-13).
+      const availableFonts = (opts.imudLibrary && typeof opts.imudLibrary.catalogFamilies === 'function')
+        ? opts.imudLibrary.catalogFamilies() : undefined;
+      const imp = importImudSettings(legacyKeys, regKeys, {
+        contentHeightPx: currentContentHeightPx(),
+        ...(availableFonts ? { availableFonts } : {})
+      });
       legacySettings = imp.settings; // כולל _legacy-ui-state (ערכי UI נשמרים)
     }
     const { merged, unknownKeys, issues } = mergeWithDefaults({ ...legacySettings, ...known });
@@ -1946,14 +1962,18 @@ function buildControl(doc, b, value, onChange) {
     el.addEventListener('change', () => onChange(el.value));
   } else if (b.type === 'font') {
     // font-picker preserve-missing-value (IMUD port): ערך שאינו ברשימה נשמר כאפשרות.
-    // **03.11:** כשקטלוג IMUD נטען — 439 המשפחות מופיעות בכל בוררי הגופנים.
-    const families = fontCatalogFamilies || KNOWN_FONTS;
+    // **03.11:** כשקטלוג IMUD נטען — 443 המשפחות המוטמעות בכל בוררי הגופנים.
+    // **EXT-14 (05.11):** הקטלוג המורחב (1,315 משפחות המקור) מוצג אף הוא — עם
+    // סימון ברור "(קטלוג — לא מוטמע)": בחירתו תדווח במפורש ותיפול לגופן מערכת.
+    const raw = fontCatalogFamilies || KNOWN_FONTS;
+    const entries = raw.map((f) => (typeof f === 'string' ? { value: f, label: f } : f));
+    const values = entries.map((e) => e.value);
     el = doc.createElement('select');
-    const opts = families.includes(value) ? families : [String(value), ...families];
-    for (const f of opts) {
+    const opts = values.includes(value) ? entries : [{ value: String(value), label: String(value) }, ...entries];
+    for (const e of opts) {
       const o = doc.createElement('option');
-      o.setAttribute('value', f);
-      o.textContent = f;
+      o.setAttribute('value', e.value);
+      o.textContent = e.label || e.value;
       el.appendChild(o);
     }
     el.value = String(value);
@@ -2212,6 +2232,34 @@ function buildImudPicker(doc, opts) {
     selects.push({ pick, sel });
   }
 
+  // בורר סגנון-ספר מהמקור (setting_sets/) — **EXT-14:** תלמוד/פרשנות/קונטרס,
+  // תצורות מלאות (249 מפתחות) שהמקור החליף ביניהן דרך הדרופדאון style-set-select.
+  // אותה טבלת disposition כמו ברירות המחדל — אין מסלול מיוחד; ההחלפה מעמדת
+  // את ההגדרות וטוענת את הגופנים שהערכה דורשת (onApplyLegacyDefaults — נתיב יחיד).
+  const setsWrap = doc.createElement('div');
+  setsWrap.className = 'row';
+  const setsLbl = doc.createElement('label');
+  setsLbl.textContent = 'סגנון ספר (מהמקור):';
+  setsWrap.appendChild(setsLbl);
+  const setsSel = doc.createElement('select');
+  setsSel.className = 'ctl';
+  setsSel.setAttribute('aria-label', 'בחירת ערכת סגנון ספר מהמקור');
+  setsSel.appendChild(Object.assign(doc.createElement('option'), { textContent: '— ברירת המחדל המלאה —', value: '' }));
+  setsSel.addEventListener('change', async () => {
+    const name = setsSel.value;
+    if (!name) return; // ברירת המחדל המלאה — דרך הכפתור הייעודי למעלה
+    try {
+      const { settings, report } = await opts.imudLibrary.loadSettingSet(name);
+      if (opts.onApplyLegacyDefaults) opts.onApplyLegacyDefaults(settings);
+      if (opts.onNotice) opts.onNotice(`ערכת «${name}» הוחלה — ${report.mapped} הגדרות מופו, ${report.uiState} ערכי UI נשמרו.`);
+    } catch (e) {
+      setsSel.value = '';
+      if (opts.onNotice) opts.onNotice('טעינת הערכה נכשלה: ' + (e && e.message ? e.message : e));
+    }
+  });
+  setsWrap.appendChild(setsSel);
+  wrap.appendChild(setsWrap);
+
   // כפתור ברירות המחדל המקוריות — ייבוא 264 המפתחות דרך טבלת ה-disposition
   const defaultsBtn = doc.createElement('button');
   defaultsBtn.type = 'button'; defaultsBtn.className = 'btn';
@@ -2228,9 +2276,15 @@ function buildImudPicker(doc, opts) {
   });
   wrap.appendChild(defaultsBtn);
 
-  // טעינת רשימות העיצובים (עצלה — לפי אוסף)
+  // טעינת רשימות העיצובים (עצלה — לפי אוסף) + אוכלוס ערכות הסגנון
   (async () => {
     try {
+      // ערכות סגנון-ספר (setting_sets) — אוכלוס הבורר
+      try {
+        for (const name of opts.imudLibrary.listSettingSets()) {
+          setsSel.appendChild(Object.assign(doc.createElement('option'), { textContent: name, value: name }));
+        }
+      } catch (e) { /* אין ספריית ערכות — הבורר נשאר עם ברירת המחדל */ }
       const byCollection = new Map();
       for (const { pick, sel } of selects) {
         if (!byCollection.has(pick.collection)) {
@@ -16066,7 +16120,7 @@ const NUMPOS_MAP = {
  */
 const DISPOSITIONS = {
   // ============ טיפוגרפיה של הגוף ============
-  'font-body': { kind: 'mapped', to: 'body-font', transform: firstFamily, reason: 'משפחה ראשונה מרשימת ה-fallback של המקור' },
+  'font-body': { kind: 'mapped', to: 'body-font', transform: resolveStack, reason: 'מחסנית CSS של המקור — נפתרת מול הקטלוג המוטמע כשהוא זמין (EXT-9: גוף המקור "\'Guttman Rashi\', \'Frank Ruhl Libre\'" ⇒ Frank Ruhl Libre המוטמע); בלי קטלוג — המשפחה הראשונה (התנהגות היסטורית). בלי זה המדידה נפלה לטבלה בעוד התצוגה בגופן אמיתי — סחף live↔ייצוא מסוג EXT-13' },
   'size-body': { kind: 'mapped', to: 'body-font-size-pt', transform: parseFloat, reason: 'pt (המקור 12; RED 14 — ההפרש מתועד כהחלטת RED)' },
   'line-height-body': { kind: 'mapped', to: 'body-line-height', transform: parseFloat },
   'body-last-line-align': { kind: 'mapped', to: 'body-last-line-align' },
@@ -16243,6 +16297,13 @@ const FAMILY_RULES = [
   { re: /^prop-/, kind: 'ui-state', reason: 'מאפייני עיצוב בבורר הישן' },
   { re: /^page-/, kind: 'ui-state', reason: 'הגדרות עמוד בפאנל הישן' },
   { re: /^(show|enable|select|main|back|sub|shaar|general|detailed|font|size|mode)-/, kind: 'ui-state', reason: 'מצבי UI של האפליקציה הישנה' },
+  // **EXT-14 (05.11, ערכות הסגנון):** שדות העלאת-קבצים של האפליקציה הישנה — קיימים
+  // ב-setting_sets (תלמוד/פרשנות/קונטרס) אך לא ב-default_settings (הועלו רק בערכות):
+  // קבצי SVG של בונה השערים, תמונות רקע לפי מחלקת עמוד, תמונת מרכז-הכותרת,
+  // תמונת מפריד הסעיפים ותיקיית הנכסים. ב-RED: הפניות imud: מהספרייה המוטמעת
+  // (asset-registry) או נכסי משתמש — ערך הקובץ עצמו אינו מצב מנוע.
+  { re: /^file-/, kind: 'ui-state', reason: 'שדה העלאת קובץ באפליקציה הישנה (builder/cbg/hdr/sec-div) — ב-RED: הפניות imud: מהספרייה' },
+  { re: /^assets-folder-/, kind: 'ui-state', reason: 'תיקיית נכסים חיצונית באפליקציה הישנה — ב-RED: הספרייה המוטמעת' },
   { re: /^heading-divider-h[3-9]$/, kind: 'mapped', to: 'heading-dividers-h3-h6', transform: (v) => v !== 'none', reason: 'מפרידי כותרות H3–H6 — RED מפעיל/מכבה את המשפחה כולה' }
 ];
 
@@ -16364,7 +16425,7 @@ const DESIGN_FILES = {
 };
 
 function createImudLibrary(engine) {
-  const fontCatalog = { loaded: false, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set() };
+  const fontCatalog = { loaded: false, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set(), extended: [], extendedByFamily: new Map() };
   const designs = new Map(); // collection → {loaded, items:[{id,name,box}]}
   const appliedFontsReady = new Map(); // family → Promise<ArrayBuffer|null>
 
@@ -16374,14 +16435,45 @@ function createImudLibrary(engine) {
     return r.json();
   }
 
-  /** קטלוג הפונטים (439 משפחות). @returns {Promise<string[]>} */
+  /** קטלוג הפונטים (443 משפחות מוטמעות + 1,315 משפחות הקטלוג המורחב).
+   * **EXT-14 (05.11):** fonts-extended.json של המקור מוטמע כקטלוג-שמות בלבד —
+   * קובצי ה-WOFF2 (115MB) אינם מוטמעים (החלטת גודל מתועדת ב-PROVENANCE).
+   * הפיקרים מציגים את מלוא הקטלוג ההיסטורי עם סיווג אמת: משפחה מוטמעת
+   * (עם קובץ) או קטלוג-בלבד (בחירתה ⇒ הודעה מפורשת + נפילה לגופן מערכת).
+   * @returns {Promise<Array<{value:string,label:string,embedded:boolean}>>} */
   async function loadFontCatalog() {
-    if (fontCatalog.loaded) return fontCatalog.families;
+    if (fontCatalog.loaded) return catalogEntries();
     const list = await fetchJson(`${BASE}/imud-fonts.json`);
     fontCatalog.families = list.map(e => e.family);
     for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
     fontCatalog.loaded = true;
-    return fontCatalog.families;
+    // הקטלוג המורחב — קטלוג-שמות בלבד (הכשלון אינו חוסם: הפיקרים יציגו את
+    // המוטמעות בלבד, כמו קודם)
+    try {
+      const ext = await fetchJson(`${BASE}/fonts-extended.json`);
+      fontCatalog.extended = ext.map(e => e.family);
+      fontCatalog.extendedByFamily = new Map(ext.map(e => [e.family, e]));
+    } catch (e) { fontCatalog.extended = []; fontCatalog.extendedByFamily = new Map(); }
+    return catalogEntries();
+  }
+
+  /** רשימת הפיקרים: מוטמעות ראשונות, אחר-כך הקטלוג המורחב עם סימון ברור. */
+  function catalogEntries() {
+    const entries = fontCatalog.families.map(f => ({ value: f, label: f, embedded: true }));
+    for (const f of fontCatalog.extended) {
+      entries.push({ value: f, label: `${f} (קטלוג — לא מוטמע)`, embedded: false });
+    }
+    return entries;
+  }
+
+  /** **EXT-14: סיווג אמת למשפחה** — 'embedded' | 'extended-catalog' | 'unknown'.
+   * משפחה מוטמעת ⇒ נטענת (מדידה+תצוגה+ייצוא); מהקטלוג המורחב ⇒ הודעה
+   * מפורשת ונפילה לגופן מערכת; לא ידועה ⇒ כמו קודם. */
+  function fontStatus(family) {
+    const f = String(family || '').trim();
+    if (fontCatalog.byFamily.has(f)) return 'embedded';
+    if (fontCatalog.extendedByFamily && fontCatalog.extendedByFamily.has(f)) return 'extended-catalog';
+    return 'unknown';
   }
 
   /** טעינת פונט TTF: בתים ל-Worker (מדידה+ייצוא) + FontFace לתצוגה. @returns {Promise<ArrayBuffer|null>} */
@@ -16497,6 +16589,30 @@ function createImudLibrary(engine) {
     return resolved ? loadFont(resolved) : Promise.resolve(null);
   }
 
+  /** **EXT-14 (05.11): ערכות סגנון-ספר מהמקור (setting_sets/):** תלמוד/פרשנות/קונטרס —
+   * תצורות מלאות (249 מפתחות) שהמקור טען דרך הדרופדאון style-set-select
+   * (settings-manager.js: loadSettingsFromFile('setting_sets/<name>')). כאן אותה
+   * חוזה: כל ערכה עוברת את אותה טבלת disposition כמו ברירות המחדל — אין מסלול
+   * מיוחד; ההבדלים חייבים לשרוד את הייבוא (בדיקה מחייבת ב-setting-sets.test.js). */
+  const SETTING_SETS = ['תלמוד', 'פרשנות', 'קונטרס'];
+
+  /** רשימת הערכות המוטמעות (שמות קבצים בלבד — לא נטענות עד בחירה). */
+  function listSettingSets() { return SETTING_SETS.slice(); }
+
+  /** טעינת ערכה וייבוא מלא דרך importImudSettings (עם קטלוג הגופנים —
+   * כמו loadLegacyDefaults: מחסניות הגופן נפתרות למשפחות מוטמעות). */
+  async function loadSettingSet(name) {
+    if (!SETTING_SETS.includes(name)) throw new Error(`ערכה לא מוכרת: ${name}`);
+    if (!fontCatalog.loaded) await loadFontCatalog().catch(() => {});
+    const legacy = await fetchJson(`${BASE}/setting_sets/${encodeURIComponent(name)}.json`);
+    const { settings, unmapped, report } = importImudSettings(
+      legacy,
+      new Set(getSettingDefs().map(r => r.id)),
+      { availableFonts: fontCatalog.byFamily ? new Set(fontCatalog.byFamily.keys()) : undefined }
+    );
+    return { name, settings, unmapped, report };
+  }
+
   /** ברירות המחדל המקוריות — ייבוא מלא דרך טבלת ה-disposition.
    * **03.11(ד):** מועבר גם קטלוג הגופנים הזמין — כך שמחסניות הגופן של המקור
    * ("'AlphaBlack', 'David Libre', serif") נפתרות מיד למשפחה הזמינה בפועל
@@ -16561,7 +16677,14 @@ function createImudLibrary(engine) {
     return css;
   }
 
-  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss, resolveFamily, loadFontStack };
+  /** **EXT-9:** משפחות הקטלוג שנטענו (סינכרוני) — לפתרון מחסניות גופן בייבוא
+   * הגדרות/תבניות (importImudSettings ctx.availableFonts). null אם הקטלוג
+   * עוד לא נטען — הייבוא ייפול למשפחה הראשונה (התנהגות היסטורית, מתועדת). */
+  function catalogFamilies() {
+    return fontCatalog.loaded ? new Set(fontCatalog.byFamily.keys()) : null;
+  }
+
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };
