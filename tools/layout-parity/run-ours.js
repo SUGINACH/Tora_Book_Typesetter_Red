@@ -26,7 +26,7 @@ const { getSettingDefs, getDefaultSettings } = require(path.join(RB, 'src/engine
 const { importImudSettings } = require(path.join(RB, 'src/engine/core/legacy-settings-map'));
 const { registerFont, unregisterFont } = require(path.join(RB, 'src/engine/typography/measure-api'));
 const { exportPdf, exportHtml } = require(path.join(RB, 'src/engine/output/export-api'));
-const { GEO } = require(path.join(RB, 'src/engine/layout/legacy-imud-flow'));
+const { GEO, FLOW_BOTTOM } = require(path.join(RB, 'src/engine/layout/legacy-imud-flow'));
 
 // **S4.11 (--html):** מימוש DOM מינימלי ל-serialize של ייצוא ה-HTML ב-Node (אותו
 // חוזה כמו ה-shim של הבדיקות: createElement + outerHTML כפונקציה). העמודים
@@ -247,24 +247,45 @@ function main() {
     // מפריד הערות — הוסר (הגופן המוטמע חסר גליפי כוכבים; ראה legacy-projector)
 
     // הערות שוליים (תחתית) — col=null; טקסט ללא סמן לצרכי H1
+    // **S4.15 (סיווק שורה אחרונה):** כמו חילוץ הייחוס — שורת ההערה האחרונה
+    // (קצרה, מיושרת לשפה הימנית ב-RTL) נופלת בתיבת הטור הימני ⇒ col=right
+    // (הוכח מהייחוס: עמ' 11/30/36/46 — השורה האחרונה x1=504.8, col=right;
+    // השאר פורשות מ-x0=90.5 ⇒ col=None). בלי זה שורת ההערה האחרונה נקראת
+    // בזרם none_rows במקום בסוף הטור הימני — הפרש סדר קריאה ב-P7.
     const fnStruct = [];
     for (const fn of (pg.footnotes || [])) {
       let first = true;
       const joined = [];
-      for (const l of fn.lines) {
+      const nLines = fn.lines.length;
+      fn.lines.forEach((l, li) => {
         const ws = Array.isArray(l.words) ? l.words : String(l.words).split(' ');
         const fullText = (first ? fn.marker + ' ' : '') + ws.join(' ');
         joined.push(ws.join(' '));
+        const isLastRagged = (li === nLines - 1) && ws.join(' ').length < 60;
         lines.push({
-          col: null, text: fullText, font: 'GuttmanRashiNormal', size: 8.5,
-          x0: GEO.COL_L_X * PX, x1: (GEO.COL_L_X + 2 * GEO.COL_W + 13.48) * PX,
+          col: isLastRagged ? 'right' : null, text: fullText, font: 'GuttmanRashiNormal', size: 8.5,
+          x0: isLastRagged ? 380 : GEO.COL_L_X * PX,
+          x1: isLastRagged ? 504.8 : (GEO.COL_L_X + 2 * GEO.COL_W + 13.48) * PX,
           y0: l.y * PX, y1: (l.y + GEO.FN_PITCH) * PX, kind: 'footnote',
           textNoMarkers: ws.join(' '), justified: false, fnMarker: first ? fn.marker : null
         });
         first = false;
-      }
+      });
       // מבנה לאימות מתמטי (verify-corpus.py): סמן + טקסט מלא מאוחד
       fnStruct.push({ marker: fn.marker, text: joined.join(' ') });
+    }
+    // **S4.15 (מפריד הערות):** המקור מצייר מפריד (✧✧✧, SegoeUISymbol 6.75pt,
+    // ממורכז) מעל בלוק ההערות בכל עמוד הערות — הוכח מהייחוס (9 עמודים).
+    // נציג אותו במודל כשורת קריאה לפני שורות ההערות (כמו בייחוס); הציור
+    // בפועל ב-PDF יבוא כווקטור (לגופן המוטמע אין גליף ✧) — תיעוד בעבודה.
+    if (fnStruct.length) {
+      const firstFnY = (pg.footnotes && pg.footnotes[0] && pg.footnotes[0].lines[0]) ? pg.footnotes[0].lines[0].y : FLOW_BOTTOM;
+      lines.push({
+        col: null, text: '✧✧✧', font: 'SegoeUISymbol', size: 6.75,
+        x0: 286.02, x1: 307.04,
+        y0: (firstFnY - 12) * PX, y1: (firstFnY - 3) * PX,
+        kind: 'fn-divider', justified: false
+      });
     }
 
     // שורות תוכן-עניינים — כמו בייחוס: שורת כותרת (חד-פעולתית — החילוץ מחזיר

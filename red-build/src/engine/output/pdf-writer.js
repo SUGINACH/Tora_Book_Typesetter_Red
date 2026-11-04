@@ -130,13 +130,15 @@ function buildToUnicode(font) {
  * @param {Array} opts.pages — תוצר projectPage() לכל עמוד
  * @param {{w:number,h:number}} opts.pageSizeMm — גודל עמוד במ״מ (מרישום גדלי העמוד)
  * @param {object} opts.font — {subsetBytes, widthsUnits:Map(gid→units), unitsPerEm, cidOf:(ch)=>gid, charToGidEntries:()=>[ch,gid][]}
+ * @param {object} [opts.font2] — **S4.15:** גופן משני (FrankReal-Bold — מילות-חלון):
+ *   אותה צורה; מילים עם fontKey==='window' נציירות בו (/F2). בלעדיו — הכל ב-/F1.
  * @param {object} opts.settings — pdf-crop-marks, export-bleed-mm
  * @param {Array} [opts.outline] — [{title, page, level}] — סימניות מכותרות
  * @param {Array} [opts.tocLinks] — [{page, x, y, w, h, targetPage}] — קישורי TOC (px מהמקרן)
  * @returns {Buffer}
  */
 function writePdf(opts) {
-  const { pages, pageSizeMm, font, settings, outline, tocLinks } = opts;
+  const { pages, pageSizeMm, font, font2, settings, outline, tocLinks } = opts;
   const pdf = new PdfBuilder();
 
   const wPt = pageSizeMm.w * MM_TO_PT;
@@ -152,6 +154,15 @@ function writePdf(opts) {
     catalog: 1, pages: 2, type0: 3, cidFont: 4, fontDescriptor: 5, fontFile: 6, toUnicode: 7, outlines: 8
   };
   pdf.nextId = 10;
+  // **S4.15:** מזהי הגופן המשני (קבועים — דטרמיניזם): 9 היה שמור; 4 נוספים דינמיים
+  // מיד אחריו, לפני הדפים — סדר קבוע לכל הרצות.
+  if (font2) {
+    ID.type0b = 9;
+    ID.cidFontb = pdf.reserve();
+    ID.fontDescriptorb = pdf.reserve();
+    ID.fontFileb = pdf.reserve();
+    ID.toUnicodeb = pdf.reserve();
+  }
   const pageIds = pages.map(() => pdf.reserve());
   const contentIds = pages.map(() => pdf.reserve());
   const linkIds = new Map(); // pageIndex → [ids]
@@ -181,17 +192,21 @@ function writePdf(opts) {
   // ---- תוכן לכל עמוד (content streams) ----
   const contents = pages.map((pg) => {
     const ops = [];
-    const emitWord = (text, xPx, yPx, sizePt) => {
-      const gidHex = cidHex(text, font);
+    const emitWord = (text, xPx, yPx, sizePt, fontKey) => {
+      // **S4.15:** מילת-חלון בגופן המשני (FrankReal-Bold) — כמו המקור;
+      // בלי font2 (ייצוא כללי) — הכל בגוף הראשי כמו קודם.
+      const useF2 = font2 && fontKey === 'window';
+      const f = useF2 ? font2 : font;
+      const gidHex = cidHex(text, f);
       if (!gidHex) return;
-      ops.push(`BT /F1 ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
+      ops.push(`BT ${useF2 ? '/F2' : '/F1'} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
     };
     const emitLines = (lines) => {
       for (const ln of lines) {
         // **S12 (parity):** בסיס השורה מהמקרן (מודל תיבת שורה CSS — half-leading+ascent)
         const baselineY = ln.baselineY != null ? ln.baselineY : ln.y + ln.h - ln.sizePt * (96 / 72) * 0.78;
         // **S4.9 (legacy IMUD):** מילים עם גודל/בסיס משלהן (מילת-חלון 1.5×, סמני הערות)
-        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt);
+        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt, w.fontKey);
       }
     };
     if (pg.spanning) emitLines(pg.spanning.lines);
@@ -276,13 +291,40 @@ function writePdf(opts) {
   const toUni = buildToUnicode(font);
   pdf.put(ID.toUnicode, `<< /Length ${toUni.length} >>\nstream\n${toUni}\nendstream`); // 6
 
+  // **S4.15:** הגופן המשני (FrankReal-Bold — מילות-חלון) — אותם אובייקטים בשמות שונים
+  if (font2) {
+    const wArray2 = [];
+    let run2 = null;
+    let prevGid2 = -10;
+    for (const g of [...font2.widthsUnits.keys()].sort((a, b) => a - b)) {
+      const wv = Math.round((font2.widthsUnits.get(g) / font2.unitsPerEm) * 1000);
+      if (g === prevGid2 + 1 && run2) run2.push(wv);
+      else { if (run2) wArray2.push(run2); run2 = [g, wv]; }
+      prevGid2 = g;
+    }
+    if (run2) wArray2.push(run2);
+    const wStr2 = wArray2.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+    pdf.put(ID.type0b, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraWin /Encoding /Identity-H /DescendantFonts [${ID.cidFontb} 0 R] /ToUnicode ${ID.toUnicodeb} 0 R >>`);
+    pdf.put(ID.cidFontb, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraWin /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptorb} 0 R /DW 1000 /W [${wStr2}] >>`);
+    pdf.put(ID.fontDescriptorb, `<< /Type /FontDescriptor /FontName /ToraWin /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 751 /Descent -135 /CapHeight 700 /StemV 120 /FontFile2 ${ID.fontFileb} 0 R >>`);
+    const ff2 = Buffer.concat([
+      Buffer.from(`<< /Length ${font2.subsetBytes.length} /Length1 ${font2.subsetBytes.length} >>\nstream\n`, 'latin1'),
+      font2.subsetBytes,
+      Buffer.from('\nendstream', 'latin1')
+    ]);
+    pdf.put(ID.fontFileb, ff2);
+    const toUni2 = buildToUnicode(font2);
+    pdf.put(ID.toUnicodeb, `<< /Length ${toUni2.length} >>\nstream\n${toUni2}\nendstream`);
+  }
+
   // ---- עמודים ----
   const mediabox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
   const bleedbox = `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`;
   pages.forEach((pg, i) => {
     const annots = linkIds.get(i) || [];
     const annotsStr = annots.length ? ` /Annots [${annots.map(id => `${id} 0 R`).join(' ')}]` : '';
-    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << /Font << /F1 ${ID.type0} 0 R >> >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
+    const fontRes = font2 ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R >>` : `/Font << /F1 ${ID.type0} 0 R >>`;
+    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << ${fontRes} >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
     pdf.put(contentIds[i], Buffer.concat([
       Buffer.from(`<< /Length ${contents[i].length} >>\nstream\n`, 'latin1'),
       contents[i],

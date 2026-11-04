@@ -5796,6 +5796,14 @@ class LineBreaker {
     }
     const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
     const wordWs = disp.map((d, i) => mw(d, parenWords.has(i) ? parenSize : sizePt));
+    // **S4.15 (רווחים בתוך סוגריים בגודל הסוגריים):** במקור הסוגריים הן span
+    // עם font-size מוקטן — גם הרווחים הפנימיים שלו ב-10pt, לא בגודל הגוף.
+    // ההוכחה מהייחוס (הקדמה, פסקה 2): 'שמציאות…התורה) חלק' נכנסת לשורה
+    // המוצרת (511.4px) רק כשהרווחים הפנימיים ב-10pt — ברווחי 11.5 השורה
+    // גולשת ב-~10px ו-'חלק' נופל לשורה הבאה (בניגוד לייחוס).
+    const parenSpaceW = mw(' ', parenSize);
+    const isParenW = (i) => parenWords.has(i);
+    const spaceBetween = (i, j) => (isParenW(i) && isParenW(j)) ? parenSpaceW : spaceW;
     if (!out.length) return { lines: [], hasWindow: false, windowWords: null, notes };
 
     // חלון מילה-ראשונה: אמדן שורות כמו המדידה הכפולה במקור
@@ -5832,7 +5840,7 @@ class LineBreaker {
     const bindPair = false;
 
     const lines = [];
-    let cur = [], curW = 0, lineNo = 0;
+    let cur = [], curW = 0, lineNo = 0, lastIdx = -1;
     const limitOf = () => (useWindow && lineNo < 2) ? colWidthPx - windowW : colWidthPx;
 
     if (useWindow) {
@@ -5841,17 +5849,20 @@ class LineBreaker {
     for (let i = flowStart; i < out.length; i++) {
       const bindHere = bindPair && i === pairStart; // המילה הלפני-אחרונה — נבדקת עם יורשתה
       const w1 = wordWs[i];
-      const w2 = bindHere ? wordWs[i + 1] + spaceW : 0;
-      const addW = (cur.length ? spaceW : 0) + w1 + (bindHere ? w2 : 0);
+      const spBefore = cur.length ? spaceBetween(lastIdx, i) : 0;
+      const w2 = bindHere ? wordWs[i + 1] + spaceBetween(i, i + 1) : 0;
+      const addW = spBefore + w1 + (bindHere ? w2 : 0);
       if (cur.length && curW + addW > limitOf() + 0.01) {
         lines.push({ words: cur, window: useWindow && lineNo < 2 });
         cur = []; curW = 0; lineNo++;
       }
       cur.push(out[i]);
-      curW += (cur.length > 1 ? spaceW : 0) + w1;
+      curW += (cur.length > 1 ? spaceBetween(lastIdx, i) : 0) + w1;
+      lastIdx = i;
       if (bindHere) {
         cur.push(out[i + 1]);
-        curW += spaceW + wordWs[i + 1];
+        curW += spaceBetween(i, i + 1) + wordWs[i + 1];
+        lastIdx = i + 1;
         i++;
       }
     }
@@ -5945,13 +5956,24 @@ function legacyTypeset(rawText, settings, env) {
     registerMeasureFont('Frank Ruhl Libre', env.prefaceFontBytes);
   }
   let prefaceApi = null;
+  let fnApi = null; // **S4.15:** גוף ההערות — FRL 8.5pt; נפילה לגוף אם לא נרשם
   if (impl === 'font-metrics' && registeredMeasureFonts.has('Frank Ruhl Libre')) {
     prefaceApi = new MeasureAPI(
       { 'body-font': 'Frank Ruhl Libre', 'body-font-size-pt': SZ.h0Body, 'body-line-height': 1.45 },
       'font-metrics'
     );
+    // **S4.15 (גופן גוף ההערות):** --fn-note-body של המקור = 'Frank Ruhl
+    // Libre' 8.5pt — לא גופן הגוף. הוכחה מהייחוס: ההערה הארוכה של עמ' 11
+    // ('חלוקת המלאכות…') — הייחוס שובר את השורה לפני 'כלולה' ואנחנו אחרי
+    // ('…בדבר' / 'כלולה ההוצאה…') — הפרשי רוחב FRL מול גוף. אותו גופן
+    // כמו ההקדמה — אותו API עם גודל שונה.
+    fnApi = new MeasureAPI(
+      { 'body-font': 'Frank Ruhl Libre', 'body-font-size-pt': SZ.fnBody, 'body-line-height': 1.5 },
+      'font-metrics'
+    );
   }
   const api = new MeasureAPI(settings, impl);
+  if (!fnApi) fnApi = api; // בלי FRL רשום — הערות בגופן הגוף (התנהגות קודמת)
   let windowApi = null;
   const windowFontName = registeredMeasureFonts.has('FrankReal-Bold') ? 'FrankReal-Bold'
     : (registeredMeasureFonts.has('FrankReal') ? 'FrankReal' : null);
@@ -6399,8 +6421,8 @@ function legacyTypeset(rawText, settings, env) {
         // גולשות מעבר לשפה השמאלית של הדף.
         const items = fnQueue.map((n, i) => {
           const marker = LineBreaker.markerWord(i + 1); // מספור עמודי מ־א ואילך (כמקור)
-          const mkW = api.measureTextWidth(marker, SZ.fnBody, 0) + api.measureTextWidth(' ', SZ.fnBody, 0);
-          const lines = wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody);
+          const mkW = fnApi.measureTextWidth(marker, SZ.fnBody, 0) + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+          const lines = wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody);
           return { marker, lines, mkW };
         });
         const totalH = items.reduce((a, n) => a + n.lines.length * GEO.FN_PITCH, 0);
@@ -6420,9 +6442,9 @@ function legacyTypeset(rawText, settings, env) {
     for (const n of queue) {
       // **S4.13 (כיול מהייחוס):** אותה נוסחת גלישה כמו הרינדור בפועל (השורה
       // הראשונה קצרה ברוחב הסמן) — הצדדים חייבים להסכים על מספר השורות.
-      const mkW = api.measureTextWidth(LineBreaker.markerWord(1), SZ.fnBody, 0)
-        + api.measureTextWidth(' ', SZ.fnBody, 0);
-      total += wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody).length * GEO.FN_PITCH;
+      const mkW = fnApi.measureTextWidth(LineBreaker.markerWord(1), SZ.fnBody, 0)
+        + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+      total += wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody).length * GEO.FN_PITCH;
     }
     // **S4.14 (תקרה מגובה הזרימה של הייחוס):** גובה body-flow בפועל לכל עמוד
     // עם הערות, מתוויות הייחוס: ‏4 שורות→810 (שמורה 105), 2→843 (72),
@@ -9621,7 +9643,7 @@ function exportHtml(result, settings, doc, meta = {}) {
 function exportPdf(text, settingsIn, fontBytes, fontName, env) {
   if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' }; // דפדפן — נתיב Node בלבד (מתועד)
   /* node-only */ const { typeset } = require('../core/pipeline');
-  /* node-only */ const { registerFont, unregisterFont } = require('../typography/measure-api');
+  /* node-only */ const { registerFont, unregisterFont, registeredFonts: registeredFontsRef } = require('../typography/measure-api');
   /* node-only */ const { parseFont, glyphIdOf } = require('../typography/font-metrics');
   /* node-only */ const { buildSubset, charInventory } = require('../typography/font-subset');
   /* node-only */ const { projectDocument } = require('./geometry-projector');
@@ -9702,10 +9724,43 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
       },
       charToGidEntries: () => [...subsetNewCmap(subset).entries()]
     };
+    // **S4.15 (גופן משני — מילות-חלון FrankReal-Bold):** המקרן מסמן את
+    // מילות-החלון (fontKey='window'); כאן נבנה תת-גופן שלהן ונעביר לכותב
+    // ה-PDF (/F2) — ציור בגופן המקור + רוחב אמיתי (מונע חריגה מהשקע).
+    // הגופן נרשם ע"י typeset מ-env.windowFontBytes באותו תהליך.
+    let fontForWriter2 = null;
+    {
+      const winProfile = registeredFontsRef.get('FrankReal-Bold') || registeredFontsRef.get('FrankReal');
+      if (winProfile) {
+        const winParts = [];
+        for (const pg of projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+            for (const w of ln.words) if (w.fontKey === 'window') winParts.push(w.text);
+          }
+        }
+        if (winParts.length) {
+          const winSubset = buildSubset(winProfile, charInventory(winParts.join(' ')));
+          if (winSubset.ok) {
+            const winC2g = subsetNewCmap(winSubset);
+            fontForWriter2 = {
+              subsetBytes: winSubset.bytes,
+              widthsUnits: winSubset.widthsUnits,
+              unitsPerEm: winSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = winC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(winSubset), ch);
+              },
+              charToGidEntries: () => [...winC2g.entries()]
+            };
+          }
+        }
+      }
+    }
     const bytes = writePdf({
       pages: projected.pages,
       pageSizeMm,
       font: fontForWriter,
+      font2: fontForWriter2,
       settings,
       outline,
       tocLinks
@@ -12295,13 +12350,15 @@ function buildToUnicode(font) {
  * @param {Array} opts.pages — תוצר projectPage() לכל עמוד
  * @param {{w:number,h:number}} opts.pageSizeMm — גודל עמוד במ״מ (מרישום גדלי העמוד)
  * @param {object} opts.font — {subsetBytes, widthsUnits:Map(gid→units), unitsPerEm, cidOf:(ch)=>gid, charToGidEntries:()=>[ch,gid][]}
+ * @param {object} [opts.font2] — **S4.15:** גופן משני (FrankReal-Bold — מילות-חלון):
+ *   אותה צורה; מילים עם fontKey==='window' נציירות בו (/F2). בלעדיו — הכל ב-/F1.
  * @param {object} opts.settings — pdf-crop-marks, export-bleed-mm
  * @param {Array} [opts.outline] — [{title, page, level}] — סימניות מכותרות
  * @param {Array} [opts.tocLinks] — [{page, x, y, w, h, targetPage}] — קישורי TOC (px מהמקרן)
  * @returns {Buffer}
  */
 function writePdf(opts) {
-  const { pages, pageSizeMm, font, settings, outline, tocLinks } = opts;
+  const { pages, pageSizeMm, font, font2, settings, outline, tocLinks } = opts;
   const pdf = new PdfBuilder();
 
   const wPt = pageSizeMm.w * MM_TO_PT;
@@ -12317,6 +12374,15 @@ function writePdf(opts) {
     catalog: 1, pages: 2, type0: 3, cidFont: 4, fontDescriptor: 5, fontFile: 6, toUnicode: 7, outlines: 8
   };
   pdf.nextId = 10;
+  // **S4.15:** מזהי הגופן המשני (קבועים — דטרמיניזם): 9 היה שמור; 4 נוספים דינמיים
+  // מיד אחריו, לפני הדפים — סדר קבוע לכל הרצות.
+  if (font2) {
+    ID.type0b = 9;
+    ID.cidFontb = pdf.reserve();
+    ID.fontDescriptorb = pdf.reserve();
+    ID.fontFileb = pdf.reserve();
+    ID.toUnicodeb = pdf.reserve();
+  }
   const pageIds = pages.map(() => pdf.reserve());
   const contentIds = pages.map(() => pdf.reserve());
   const linkIds = new Map(); // pageIndex → [ids]
@@ -12346,17 +12412,21 @@ function writePdf(opts) {
   // ---- תוכן לכל עמוד (content streams) ----
   const contents = pages.map((pg) => {
     const ops = [];
-    const emitWord = (text, xPx, yPx, sizePt) => {
-      const gidHex = cidHex(text, font);
+    const emitWord = (text, xPx, yPx, sizePt, fontKey) => {
+      // **S4.15:** מילת-חלון בגופן המשני (FrankReal-Bold) — כמו המקור;
+      // בלי font2 (ייצוא כללי) — הכל בגוף הראשי כמו קודם.
+      const useF2 = font2 && fontKey === 'window';
+      const f = useF2 ? font2 : font;
+      const gidHex = cidHex(text, f);
       if (!gidHex) return;
-      ops.push(`BT /F1 ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
+      ops.push(`BT ${useF2 ? '/F2' : '/F1'} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
     };
     const emitLines = (lines) => {
       for (const ln of lines) {
         // **S12 (parity):** בסיס השורה מהמקרן (מודל תיבת שורה CSS — half-leading+ascent)
         const baselineY = ln.baselineY != null ? ln.baselineY : ln.y + ln.h - ln.sizePt * (96 / 72) * 0.78;
         // **S4.9 (legacy IMUD):** מילים עם גודל/בסיס משלהן (מילת-חלון 1.5×, סמני הערות)
-        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt);
+        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt, w.fontKey);
       }
     };
     if (pg.spanning) emitLines(pg.spanning.lines);
@@ -12441,13 +12511,40 @@ function writePdf(opts) {
   const toUni = buildToUnicode(font);
   pdf.put(ID.toUnicode, `<< /Length ${toUni.length} >>\nstream\n${toUni}\nendstream`); // 6
 
+  // **S4.15:** הגופן המשני (FrankReal-Bold — מילות-חלון) — אותם אובייקטים בשמות שונים
+  if (font2) {
+    const wArray2 = [];
+    let run2 = null;
+    let prevGid2 = -10;
+    for (const g of [...font2.widthsUnits.keys()].sort((a, b) => a - b)) {
+      const wv = Math.round((font2.widthsUnits.get(g) / font2.unitsPerEm) * 1000);
+      if (g === prevGid2 + 1 && run2) run2.push(wv);
+      else { if (run2) wArray2.push(run2); run2 = [g, wv]; }
+      prevGid2 = g;
+    }
+    if (run2) wArray2.push(run2);
+    const wStr2 = wArray2.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+    pdf.put(ID.type0b, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraWin /Encoding /Identity-H /DescendantFonts [${ID.cidFontb} 0 R] /ToUnicode ${ID.toUnicodeb} 0 R >>`);
+    pdf.put(ID.cidFontb, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraWin /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptorb} 0 R /DW 1000 /W [${wStr2}] >>`);
+    pdf.put(ID.fontDescriptorb, `<< /Type /FontDescriptor /FontName /ToraWin /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 751 /Descent -135 /CapHeight 700 /StemV 120 /FontFile2 ${ID.fontFileb} 0 R >>`);
+    const ff2 = Buffer.concat([
+      Buffer.from(`<< /Length ${font2.subsetBytes.length} /Length1 ${font2.subsetBytes.length} >>\nstream\n`, 'latin1'),
+      font2.subsetBytes,
+      Buffer.from('\nendstream', 'latin1')
+    ]);
+    pdf.put(ID.fontFileb, ff2);
+    const toUni2 = buildToUnicode(font2);
+    pdf.put(ID.toUnicodeb, `<< /Length ${toUni2.length} >>\nstream\n${toUni2}\nendstream`);
+  }
+
   // ---- עמודים ----
   const mediabox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
   const bleedbox = `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`;
   pages.forEach((pg, i) => {
     const annots = linkIds.get(i) || [];
     const annotsStr = annots.length ? ` /Annots [${annots.map(id => `${id} 0 R`).join(' ')}]` : '';
-    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << /Font << /F1 ${ID.type0} 0 R >> >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
+    const fontRes = font2 ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R >>` : `/Font << /F1 ${ID.type0} 0 R >>`;
+    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << ${fontRes} >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
     pdf.put(contentIds[i], Buffer.concat([
       Buffer.from(`<< /Length ${contents[i].length} >>\nstream\n`, 'latin1'),
       contents[i],
@@ -12517,7 +12614,7 @@ __modules["src/engine/output/legacy-projector.js"] = function (require, module, 
  */
 
 const { GEO, SZ } = require('../layout/legacy-imud-flow');
-const { MeasureAPI } = require('../typography/measure-api');
+const { MeasureAPI, registeredFonts } = require('../typography/measure-api');
 
 const COL_R = { x: GEO.COL_R_X, w: GEO.COL_W };
 const COL_L = { x: GEO.COL_L_X, w: GEO.COL_W };
@@ -12530,7 +12627,7 @@ function baselineOf(yTop, h, sizePt, ascentEm) {
   return yTop + half + ascentEm * sizePx;
 }
 
-/** מיקום מילים RTL מיושרות ברוחב נתון. מחזיר words:[{text,x,w,sizePt,baselineY}] */
+/** מיקום מילים RTL מיושרות ברוחב נתון. מחזיר words:[{text,x,w,sizePt,baselineY,fontKey?}] */
 function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
   const spaceW = api.measureTextWidth(' ', sizePt, 0);
   const placed = words.map((w, i) => {
@@ -12564,7 +12661,7 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
 }
 
 /** הקרנת עמוד legacy בודד. */
-function projectLegacyPage(pg, settings, api) {
+function projectLegacyPage(pg, settings, api, winApi) {
   const ascent = api.ascentEm();
   const out = {
     width: GEO.PAGE_W, height: GEO.PAGE_H,
@@ -12629,10 +12726,30 @@ function projectLegacyPage(pg, settings, api) {
         // (גופן החלון של המקור), לא בגופן הגוף. מקור יחיד: בלי הערך על
         // השורה (מודל ישן) — נפילה למדידה מקומית כמו קודם.
         const winW = ln.windowW || (api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6);
-        // **S4.9:** בסיס מילת-החלון צמוד לבסיס הטקסט (מוגבה מעט) — תיבת הגליפים
-        // של 1.5× גודל אינה חודרת לשורה הבאה (חפיפה אפס, כמו line-height:0.85 במקור)
-        const winBase = baseY - 2;
-        const winWords = placeWords(ln.windowWords, api, col.x + col.w - winW, winW, winSz, 'right', winBase);
+        // **S4.9→S4.15 (בסיס מילת-החלון כמו הייחוס):** בייחוס בסיס החלון יושב
+        // כ-1.5pt מתחת לבסיס שורת הטקסט (עמ' 14: חלון 155.25 מול שורה 153.75)
+        // — ולא מעליה. עם עליית הבסיס, תיבת 18pt (asc 751/desc 135 של
+        // FrankReal) חורגת מחלון המיזוג של C2 (Δtop>7pt ⇒ שתי שורות נפרדות
+        // ⇒ חפיפה מדומה 10.2pt). בסיס +2px מיישר את הגליפים כמקור ומנקה את C2.
+        const winBase = baseY + 2;
+        // **S4.15:** מילת-החלון נמדדת ומסומנת בגופן החלון (FrankReal-Bold —
+        // כמו המקור) — הציור ב-PDF ב-/F2. המדידה במטריקות האמיתיות מונעת
+        // חריגה מהשקע (גופן הגוף רחב ממנה בחלק מהמילים ⇒ חפיפות C2).
+        const winMeasure = winApi || api;
+        const winWords = ln.windowWords.map(w => ({
+          text: w,
+          w: winMeasure.measureTextWidth(w, winSz, 0),
+          sizePt: winSz, fontKey: 'window'
+        }));
+        // מיקום מימין לשמאל בתוך השקע (ישור לשפה הימנית — כמקור)
+        {
+          let cx = col.x + col.w;
+          for (const ww of winWords) {
+            cx -= ww.w;
+            ww.x = cx;
+            ww.baselineY = winBase;
+          }
+        }
         const textW = col.w - winW;
         const textWords = placeWords(ln.words, api, col.x, textW, ln.sizePt,
           ln.isLast ? 'center' : 'justify', baseY);
@@ -12785,7 +12902,17 @@ const TOC_TITLE_Y_OFFSET = 136; // כותרת ה-TOC ב-309px = FLOW_TOP+212.4 �
 function projectLegacyDocument(result, settings) {
   const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
   const api = new MeasureAPI(settings, impl);
-  const pages = result.pages.map(p => projectLegacyPage(p, settings, api));
+  // **S4.15 (גופן מילת-החלון בהקרנה):** מילות-החלון נמדדות ומסומנות בגופן
+  // המקור (FrankReal-Bold) — הציור ב-PDF ב-/F2 והרוחב האמיתי (בלי זה הגליפים
+  // של גוף הטקסט רחבים מהשקע שנשמר וחודרים לשורה — 1886 חפיפות בקורפוס).
+  // הגופן נרשם ע"י legacyTypeset מ-env.windowFontBytes באותו תהליך.
+  let winApi = null;
+  const winName = registeredFonts.has('FrankReal-Bold') ? 'FrankReal-Bold'
+    : (registeredFonts.has('FrankReal') ? 'FrankReal' : null);
+  if (impl === 'font-metrics' && winName) {
+    winApi = new MeasureAPI({ 'body-font': winName, 'body-font-size-pt': SZ.body }, 'font-metrics');
+  }
+  const pages = result.pages.map(p => projectLegacyPage(p, settings, api, winApi));
   return { pages, inkBounds: pages.map(() => null), layoutHash: result.layoutHash };
 }
 

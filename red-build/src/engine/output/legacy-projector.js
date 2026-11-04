@@ -10,7 +10,7 @@
  */
 
 const { GEO, SZ } = require('../layout/legacy-imud-flow');
-const { MeasureAPI } = require('../typography/measure-api');
+const { MeasureAPI, registeredFonts } = require('../typography/measure-api');
 
 const COL_R = { x: GEO.COL_R_X, w: GEO.COL_W };
 const COL_L = { x: GEO.COL_L_X, w: GEO.COL_W };
@@ -23,7 +23,7 @@ function baselineOf(yTop, h, sizePt, ascentEm) {
   return yTop + half + ascentEm * sizePx;
 }
 
-/** מיקום מילים RTL מיושרות ברוחב נתון. מחזיר words:[{text,x,w,sizePt,baselineY}] */
+/** מיקום מילים RTL מיושרות ברוחב נתון. מחזיר words:[{text,x,w,sizePt,baselineY,fontKey?}] */
 function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
   const spaceW = api.measureTextWidth(' ', sizePt, 0);
   const placed = words.map((w, i) => {
@@ -57,7 +57,7 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
 }
 
 /** הקרנת עמוד legacy בודד. */
-function projectLegacyPage(pg, settings, api) {
+function projectLegacyPage(pg, settings, api, winApi) {
   const ascent = api.ascentEm();
   const out = {
     width: GEO.PAGE_W, height: GEO.PAGE_H,
@@ -122,10 +122,30 @@ function projectLegacyPage(pg, settings, api) {
         // (גופן החלון של המקור), לא בגופן הגוף. מקור יחיד: בלי הערך על
         // השורה (מודל ישן) — נפילה למדידה מקומית כמו קודם.
         const winW = ln.windowW || (api.measureTextWidth(ln.windowWords.join(' '), winSz, 0) + 6);
-        // **S4.9:** בסיס מילת-החלון צמוד לבסיס הטקסט (מוגבה מעט) — תיבת הגליפים
-        // של 1.5× גודל אינה חודרת לשורה הבאה (חפיפה אפס, כמו line-height:0.85 במקור)
-        const winBase = baseY - 2;
-        const winWords = placeWords(ln.windowWords, api, col.x + col.w - winW, winW, winSz, 'right', winBase);
+        // **S4.9→S4.15 (בסיס מילת-החלון כמו הייחוס):** בייחוס בסיס החלון יושב
+        // כ-1.5pt מתחת לבסיס שורת הטקסט (עמ' 14: חלון 155.25 מול שורה 153.75)
+        // — ולא מעליה. עם עליית הבסיס, תיבת 18pt (asc 751/desc 135 של
+        // FrankReal) חורגת מחלון המיזוג של C2 (Δtop>7pt ⇒ שתי שורות נפרדות
+        // ⇒ חפיפה מדומה 10.2pt). בסיס +2px מיישר את הגליפים כמקור ומנקה את C2.
+        const winBase = baseY + 2;
+        // **S4.15:** מילת-החלון נמדדת ומסומנת בגופן החלון (FrankReal-Bold —
+        // כמו המקור) — הציור ב-PDF ב-/F2. המדידה במטריקות האמיתיות מונעת
+        // חריגה מהשקע (גופן הגוף רחב ממנה בחלק מהמילים ⇒ חפיפות C2).
+        const winMeasure = winApi || api;
+        const winWords = ln.windowWords.map(w => ({
+          text: w,
+          w: winMeasure.measureTextWidth(w, winSz, 0),
+          sizePt: winSz, fontKey: 'window'
+        }));
+        // מיקום מימין לשמאל בתוך השקע (ישור לשפה הימנית — כמקור)
+        {
+          let cx = col.x + col.w;
+          for (const ww of winWords) {
+            cx -= ww.w;
+            ww.x = cx;
+            ww.baselineY = winBase;
+          }
+        }
         const textW = col.w - winW;
         const textWords = placeWords(ln.words, api, col.x, textW, ln.sizePt,
           ln.isLast ? 'center' : 'justify', baseY);
@@ -278,7 +298,17 @@ const TOC_TITLE_Y_OFFSET = 136; // כותרת ה-TOC ב-309px = FLOW_TOP+212.4 �
 function projectLegacyDocument(result, settings) {
   const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
   const api = new MeasureAPI(settings, impl);
-  const pages = result.pages.map(p => projectLegacyPage(p, settings, api));
+  // **S4.15 (גופן מילת-החלון בהקרנה):** מילות-החלון נמדדות ומסומנות בגופן
+  // המקור (FrankReal-Bold) — הציור ב-PDF ב-/F2 והרוחב האמיתי (בלי זה הגליפים
+  // של גוף הטקסט רחבים מהשקע שנשמר וחודרים לשורה — 1886 חפיפות בקורפוס).
+  // הגופן נרשם ע"י legacyTypeset מ-env.windowFontBytes באותו תהליך.
+  let winApi = null;
+  const winName = registeredFonts.has('FrankReal-Bold') ? 'FrankReal-Bold'
+    : (registeredFonts.has('FrankReal') ? 'FrankReal' : null);
+  if (impl === 'font-metrics' && winName) {
+    winApi = new MeasureAPI({ 'body-font': winName, 'body-font-size-pt': SZ.body }, 'font-metrics');
+  }
+  const pages = result.pages.map(p => projectLegacyPage(p, settings, api, winApi));
   return { pages, inkBounds: pages.map(() => null), layoutHash: result.layoutHash };
 }
 

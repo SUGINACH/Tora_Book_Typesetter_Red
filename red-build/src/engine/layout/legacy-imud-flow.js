@@ -365,6 +365,14 @@ class LineBreaker {
     }
     const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
     const wordWs = disp.map((d, i) => mw(d, parenWords.has(i) ? parenSize : sizePt));
+    // **S4.15 (רווחים בתוך סוגריים בגודל הסוגריים):** במקור הסוגריים הן span
+    // עם font-size מוקטן — גם הרווחים הפנימיים שלו ב-10pt, לא בגודל הגוף.
+    // ההוכחה מהייחוס (הקדמה, פסקה 2): 'שמציאות…התורה) חלק' נכנסת לשורה
+    // המוצרת (511.4px) רק כשהרווחים הפנימיים ב-10pt — ברווחי 11.5 השורה
+    // גולשת ב-~10px ו-'חלק' נופל לשורה הבאה (בניגוד לייחוס).
+    const parenSpaceW = mw(' ', parenSize);
+    const isParenW = (i) => parenWords.has(i);
+    const spaceBetween = (i, j) => (isParenW(i) && isParenW(j)) ? parenSpaceW : spaceW;
     if (!out.length) return { lines: [], hasWindow: false, windowWords: null, notes };
 
     // חלון מילה-ראשונה: אמדן שורות כמו המדידה הכפולה במקור
@@ -401,7 +409,7 @@ class LineBreaker {
     const bindPair = false;
 
     const lines = [];
-    let cur = [], curW = 0, lineNo = 0;
+    let cur = [], curW = 0, lineNo = 0, lastIdx = -1;
     const limitOf = () => (useWindow && lineNo < 2) ? colWidthPx - windowW : colWidthPx;
 
     if (useWindow) {
@@ -410,17 +418,20 @@ class LineBreaker {
     for (let i = flowStart; i < out.length; i++) {
       const bindHere = bindPair && i === pairStart; // המילה הלפני-אחרונה — נבדקת עם יורשתה
       const w1 = wordWs[i];
-      const w2 = bindHere ? wordWs[i + 1] + spaceW : 0;
-      const addW = (cur.length ? spaceW : 0) + w1 + (bindHere ? w2 : 0);
+      const spBefore = cur.length ? spaceBetween(lastIdx, i) : 0;
+      const w2 = bindHere ? wordWs[i + 1] + spaceBetween(i, i + 1) : 0;
+      const addW = spBefore + w1 + (bindHere ? w2 : 0);
       if (cur.length && curW + addW > limitOf() + 0.01) {
         lines.push({ words: cur, window: useWindow && lineNo < 2 });
         cur = []; curW = 0; lineNo++;
       }
       cur.push(out[i]);
-      curW += (cur.length > 1 ? spaceW : 0) + w1;
+      curW += (cur.length > 1 ? spaceBetween(lastIdx, i) : 0) + w1;
+      lastIdx = i;
       if (bindHere) {
         cur.push(out[i + 1]);
-        curW += spaceW + wordWs[i + 1];
+        curW += spaceBetween(i, i + 1) + wordWs[i + 1];
+        lastIdx = i + 1;
         i++;
       }
     }
@@ -514,13 +525,24 @@ function legacyTypeset(rawText, settings, env) {
     registerMeasureFont('Frank Ruhl Libre', env.prefaceFontBytes);
   }
   let prefaceApi = null;
+  let fnApi = null; // **S4.15:** גוף ההערות — FRL 8.5pt; נפילה לגוף אם לא נרשם
   if (impl === 'font-metrics' && registeredMeasureFonts.has('Frank Ruhl Libre')) {
     prefaceApi = new MeasureAPI(
       { 'body-font': 'Frank Ruhl Libre', 'body-font-size-pt': SZ.h0Body, 'body-line-height': 1.45 },
       'font-metrics'
     );
+    // **S4.15 (גופן גוף ההערות):** --fn-note-body של המקור = 'Frank Ruhl
+    // Libre' 8.5pt — לא גופן הגוף. הוכחה מהייחוס: ההערה הארוכה של עמ' 11
+    // ('חלוקת המלאכות…') — הייחוס שובר את השורה לפני 'כלולה' ואנחנו אחרי
+    // ('…בדבר' / 'כלולה ההוצאה…') — הפרשי רוחב FRL מול גוף. אותו גופן
+    // כמו ההקדמה — אותו API עם גודל שונה.
+    fnApi = new MeasureAPI(
+      { 'body-font': 'Frank Ruhl Libre', 'body-font-size-pt': SZ.fnBody, 'body-line-height': 1.5 },
+      'font-metrics'
+    );
   }
   const api = new MeasureAPI(settings, impl);
+  if (!fnApi) fnApi = api; // בלי FRL רשום — הערות בגופן הגוף (התנהגות קודמת)
   let windowApi = null;
   const windowFontName = registeredMeasureFonts.has('FrankReal-Bold') ? 'FrankReal-Bold'
     : (registeredMeasureFonts.has('FrankReal') ? 'FrankReal' : null);
@@ -968,8 +990,8 @@ function legacyTypeset(rawText, settings, env) {
         // גולשות מעבר לשפה השמאלית של הדף.
         const items = fnQueue.map((n, i) => {
           const marker = LineBreaker.markerWord(i + 1); // מספור עמודי מ־א ואילך (כמקור)
-          const mkW = api.measureTextWidth(marker, SZ.fnBody, 0) + api.measureTextWidth(' ', SZ.fnBody, 0);
-          const lines = wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody);
+          const mkW = fnApi.measureTextWidth(marker, SZ.fnBody, 0) + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+          const lines = wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody);
           return { marker, lines, mkW };
         });
         const totalH = items.reduce((a, n) => a + n.lines.length * GEO.FN_PITCH, 0);
@@ -989,9 +1011,9 @@ function legacyTypeset(rawText, settings, env) {
     for (const n of queue) {
       // **S4.13 (כיול מהייחוס):** אותה נוסחת גלישה כמו הרינדור בפועל (השורה
       // הראשונה קצרה ברוחב הסמן) — הצדדים חייבים להסכים על מספר השורות.
-      const mkW = api.measureTextWidth(LineBreaker.markerWord(1), SZ.fnBody, 0)
-        + api.measureTextWidth(' ', SZ.fnBody, 0);
-      total += wrapText(n.text, api, SINGLE_W - mkW, SZ.fnBody).length * GEO.FN_PITCH;
+      const mkW = fnApi.measureTextWidth(LineBreaker.markerWord(1), SZ.fnBody, 0)
+        + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+      total += wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody).length * GEO.FN_PITCH;
     }
     // **S4.14 (תקרה מגובה הזרימה של הייחוס):** גובה body-flow בפועל לכל עמוד
     // עם הערות, מתוויות הייחוס: ‏4 שורות→810 (שמורה 105), 2→843 (72),
