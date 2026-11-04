@@ -717,4 +717,82 @@ describe('EXT-4 — צביעת עיטורים: הדיו קיים בכל שלוש
   });
 });
 
+// =====================================================================
+describe('EXT-4 (שארית, S4.21) — חיבור ornament-plan לנתיב ה-legacy', () => {
+  const { importImudSettings } = require('../../src/engine/core/legacy-settings-map');
+  const { projectLegacyPage } = require('../../src/engine/output/legacy-projector');
+  const { MeasureAPI } = require('../../src/engine/typography/measure-api');
+  const IMUD_RAW = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'assets', 'imud', 'default_settings.json'), 'utf8'));
+  const regKeys = new Set(Object.keys(getDefaultSettings()));
+  const base = importImudSettings(IMUD_RAW, regKeys, {}).settings;
+  const DOC = 'כותרת 1 - חלק ראשון\nכותרת 2 - סימן ראשון\nפסקה ראשונה של מבחן. טקסט לדוגמה לבדיקת החיבור של עיטורים בנתיב המורשת. עוד כמה מילים כאן למילוי.\nכותרת 3 - תת סימן\nפסקה שנייה עם עוד תוכן למילוי העמוד בשורות גוף תקינות לחלוטין וללא בעיות כלשהן.\n';
+
+  it('ברירות המקור (none) ⇒ אפס עיטורים — אפס התערבות בפרופיל המורשת', () => {
+    const r = typeset(DOC, base);
+    assertEq(r.legacyProfile, true, 'legacy profile active');
+    assertEq(r.ornaments, null, 'no ornaments planned (source defaults = none)');
+    assertEq(r.pages.filter(p => p.decorations && p.decorations.length).length, 0, 'zero decoration rects');
+  });
+
+  it('h2-orn-* ⇒ rectים על עמוד פתיחת-הסימן במקומות הנכונים (עליון/תחתון/צדדים)', () => {
+    const withOrn = { ...base, 'h2-orn-top': 'pyramid', 'h2-orn-bottom': 'lance', 'h2-orn-side': 'thin' };
+    const r = typeset(DOC, withOrn);
+    const h2pg = r.pages.find(p => (p.bands || []).some(b => b.kind === 'h2-title'));
+    assert(h2pg, 'h2 sign page exists');
+    const deco = h2pg.decorations || [];
+    assertEq(deco.length, 4, 'top + bottom + 2 sides');
+    const title = h2pg.bands.find(b => b.kind === 'h2-title');
+    const siman = h2pg.bands.find(b => b.kind === 'h2-siman');
+    const topBand = siman || title;
+    const bySlot = Object.fromEntries(deco.map(d => [d.slot, d]));
+    // עליון: מעל הפס העליון (סימן/כותרת)
+    assert(bySlot['sign-top'] && bySlot['sign-top'].y + bySlot['sign-top'].h <= topBand.y + 0.01, 'top ornament above the siman/title band');
+    // תחתון: מתחת לכותרת ובתוך אזור ה-h2 (לפני זרימת הגוף) — שיעור F-08
+    const flowTop = 107.2 + (h2pg._h2SpanExempt ? 261.3 : 284.25);
+    assert(bySlot['sign-bottom'] && bySlot['sign-bottom'].y >= title.y + title.h, 'bottom ornament below the title');
+    assert(bySlot['sign-bottom'].y + bySlot['sign-bottom'].h <= flowTop - 1, 'bottom ornament stays inside the h2 area (never into body flow)');
+    // צדדים: משני צדי הכותרת, ממורכזים אנכית לפס
+    assert(bySlot['side-r'] && bySlot['side-l'], 'both side ornaments');
+    const cy = (s) => bySlot[s].y + bySlot[s].h / 2;
+    assert(Math.abs(cy('side-r') - (title.y + title.h / 2)) <= 1, 'side ornament vertically centered on the title band');
+    assert(bySlot['side-r'].x > bySlot['side-l'].x, 'r is right of l (RTL flanking)');
+  });
+
+  it('ניטרליות T1: ה-hash של המורשת זהה עם ובלי עיטורים (overlay בלבד)', () => {
+    const withOrn = { ...base, 'h2-orn-top': 'pyramid', 'h2-orn-bottom': 'lance', 'h2-orn-side': 'thin' };
+    const r0 = typeset(DOC, base);
+    const r1 = typeset(DOC, withOrn);
+    assertEq(r0.layoutHash, r1.layoutHash, 'layout hash unchanged by ornaments (D-47)');
+  });
+
+  it('הקרנה: pdfOps לעיטורי SVG וכלל-rule דרך אותו דיו (ornament-ink) כמו נתיב ה-DP', () => {
+    const withOrn = { ...base, 'h2-orn-top': 'pyramid', 'h2-orn-bottom': 'lance', 'h2-orn-side': 'thin' };
+    const r = typeset(DOC, withOrn);
+    const h2pg = r.pages.find(p => p.decorations && p.decorations.length);
+    const proj = projectLegacyPage(h2pg, r.settings, new MeasureAPI(r.settings));
+    const pd = proj.decorations || [];
+    assertEq(pd.length, 4, 'all 4 projected');
+    const svgTop = pd.find(d => d.slot === 'sign-top');
+    const ruleSide = pd.find(d => d.slot === 'side-r');
+    assert(svgTop && svgTop.inkType === 'svg' && svgTop.pdfOps && svgTop.pdfOps.length > 5, 'SVG ornament → real PDF drawing ops');
+    assert(svgTop.paint, 'SVG paint parsed for DOM');
+    assert(ruleSide && ruleSide.inkType === 'rule' && ruleSide.pdfOps && ruleSide.pdfOps.length === 1, 'thin side → single rule op');
+  });
+
+  it('עיטור imud: מספריית העיצובים המוטמעת מתפענחת לדיו אמיתי', () => {
+    // רישום הספרייה המוטמעת כמו באפליקציה החיה (imud-library → registerAssets)
+    const { registerAssets } = require('../../src/engine/decoration/asset-registry');
+    const lib = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'assets', 'imud', 'ornaments_up_down.json'), 'utf8'));
+    registerAssets('ornaments_up_down', lib.map(x => ({ id: x.id, name: x.name, svg: x.svg, box: x.box })));
+    const withImud = { ...base, 'h2-orn-top': 'imud:ornaments_up_down:orn_ud_022' };
+    const r = typeset(DOC, withImud);
+    const h2pg = r.pages.find(p => p.decorations && p.decorations.length);
+    assert(h2pg, 'ornament planned from the embedded library');
+    const d = h2pg.decorations.find(x => x.slot === 'sign-top');
+    const { ornamentInk } = require('../../src/engine/decoration/ornament-ink');
+    const ink = ornamentInk(d.kindStyle);
+    assert(ink && ink.type === 'svg' && ink.svg.length > 100, 'imud: reference resolves to a real SVG');
+  });
+});
+
 report('s8-decoration');

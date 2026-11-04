@@ -1,6 +1,6 @@
 // ui/engine-worker.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת ה־Worker (המנוע המלא — אין לטעון בחוט ה־UI)
-// מודולים: 62 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 63 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -343,9 +343,10 @@ var __paths = {
   "src/engine/layout/dp-planner.js|../typography/protectors": "src/engine/typography/protectors.js",
   "src/engine/layout/dp-planner.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/layout/dp-planner.js|./ordering": "src/engine/layout/ordering.js",
+  "src/engine/layout/dp-planner.js|./balancing": "src/engine/layout/balancing.js",
   "src/engine/layout/dp-planner.js|./footnote-budget": "src/engine/layout/footnote-budget.js",
   "src/engine/layout/protections-matrix.js|./balancing": "src/engine/layout/balancing.js",
-  "src/engine/layout/balancing.js|./ordering": "src/engine/layout/ordering.js",
+  "src/engine/layout/protections-matrix.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
   "src/engine/audit/editing-recommendations.js|../core/pipeline": "src/engine/core/pipeline.js",
@@ -355,6 +356,8 @@ var __paths = {
   "src/engine/layout/legacy-imud-flow.js|../typography/measure-api": "src/engine/typography/measure-api.js",
   "src/engine/layout/legacy-imud-flow.js|../core/events": "src/engine/core/events.js",
   "src/engine/layout/legacy-imud-flow.js|../core/ledger": "src/engine/core/ledger.js",
+  "src/engine/layout/legacy-imud-flow.js|../decoration/legacy-ornaments": "src/engine/decoration/legacy-ornaments.js",
+  "src/engine/decoration/legacy-ornaments.js|./ornament-fit": "src/engine/decoration/ornament-fit.js",
   "src/engine/extensions/apply-styles.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/decoration/shaar-pages.js|../layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/decoration/shaar-pages.js|./custom-pages": "src/engine/decoration/custom-pages.js",
@@ -602,6 +605,18 @@ function columnWidthFor(block, settings) {
   return Math.max(...tpl.columns.map(c => c.w));
 }
 
+/**
+ * **S4.21 (EXT-11):** הטבעת מידת-השבירה בפועל על כל שורה (`measureW`).
+ * הרקע: פסקת ההקדמה (H0) נמדדת במידת טור-הגוף (~330px) אך מוצבת בעמוד
+ * פתיחה חד-טורי רחב (674px) — בדיקת ה-runt שהשוותה מול רוחב התבנית סימנה
+ * שורה תקינה בת 82% מהמידה כ"קצרה מדי". השוואה מול המידה שבה השורה נשברה
+ * היא האמת הגיאומטרית. שדה פסיבי — לא נצרך על ידי המנוע, ההיפוך (hash)
+ * מבוסס מילים+seq בלבד.
+ */
+function stampMeasureW(lines, w) {
+  for (const ln of lines) ln.measureW = w;
+}
+
 function fullWidthWidth(settings) {
   const tpl = buildPageTemplate(PAGE_TYPES.PREFACE, settings, true);
   return tpl.columns[0].w;
@@ -797,6 +812,7 @@ function typeset(rawText, settingsIn, env = {}) {
         : columnWidthFor({ kind: 'heading', level: t.level }, settings);
       const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => widthFor(x, hSize, hFont), wLimit);
       const lines = api.layoutLines(words, wLimit, hSize, {}, (x) => widthFor(x, hSize, hFont));
+      stampMeasureW(lines, wLimit); // **S4.21:** המידה שבה השורה נשברה בפועל (runt-check אמת)
       blocks.push({
         kind: 'heading', level: t.level, tokenId: t.id, part: currentPart, mode: hMode, font: hFont,
         forceNewPage: hMode === 'new-page', sideNote: hMode === 'side-note',
@@ -846,6 +862,7 @@ function typeset(rawText, settingsIn, env = {}) {
       const w = columnWidthFor({ kind: 'paragraph' }, settings);
       const words = protectWords(t.text.split(/\s+/).filter(Boolean), (x) => api.measureTextWidth(x), w);
       const lines = api.layoutLines(words, w, null, { runts: settings['runt-min-width-pct'] });
+      stampMeasureW(lines, w); // **S4.21:** המידה שבה השורה נשברה בפועל (runt-check אמת)
       blocks.push({
         kind: 'paragraph', tokenId: t.id, parts: [{ kind: 'text', value: t.text }],
         notes: [], bodyMarkers: [], lines, part: currentPart, dh: null, isEndnoteSource: true
@@ -916,6 +933,7 @@ function typeset(rawText, settingsIn, env = {}) {
       const fnWords = bindMarkersToNeighbors([fnMark], new Set([fnMark]));
       const fnWLimit = columnWidthFor({ kind: 'paragraph' }, settings);
       const fnLines = api.layoutLines(fnWords, fnWLimit, null, { runts: settings['runt-min-width-pct'] });
+      stampMeasureW(fnLines, fnWLimit); // **S4.21:** המידה שבה השורה נשברה בפועל
       const fnBlk = {
         kind: 'paragraph', tokenId: t.id, parts: t.parts, notes: fnNotes, bodyMarkers: fnBodyMarkers,
         lines: fnLines, unmatchedClosers: t.unmatchedClosers || [], part: currentPart, dh: null,
@@ -1002,6 +1020,7 @@ function typeset(rawText, settingsIn, env = {}) {
     };
     const protectedWords = protectWords(boundWords, measureWithParen, colW);
     const lines = api.layoutLines(protectedWords, colW, null, { runts: settings['runt-min-width-pct'] }, measureWithParen);
+    stampMeasureW(lines, colW); // **S4.21:** המידה שבה השורה נשברה בפועל (runt-check אמת) — פסקת ההקדמה נמדדת במידת טור הגוף, לא ברוחב העמוד החד-טורי
 
     // Cleaning the sentinels from the lines + tagging parenSpans/customSpans for rendering
     for (const ln of lines) {
@@ -3319,6 +3338,7 @@ const { blockGapPx } = require('./column-flow');
 const { fixDropWordInColumns } = require('../typography/protectors');
 const { MARK_TAG } = require('../notes/markers');
 const { moveLineForward } = require('./ordering');
+const { optimalSplit } = require('./balancing'); // **EXT-8:** חלוקה גלובלית אופטימלית
 const { getFootnotesReservedHeight, noteHeight } = require('./footnote-budget');
 
 /** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism).
@@ -3463,21 +3483,27 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   }
 
   function flushPage() {
-    // איזון טורים: Δ≤5px (BRZ-3) — **שמירת סדר קריאה בכל הזזה (תיקון P0-3)**
+    // איזון טורים: Δ≤5px (BRZ-3) — **EXT-8: החלוקה הגלובלית האופטימלית**
+    // (פיצול רציף ממזער |lH−rH| בכפוף לקיבולת; סדר קריאה נשמר מבנית — תיקון P0-3
+    // מובנה בהגדרת מרחב המצבים; הוכחת מינימליות ב-balancing.optimalSplit)
     if (cur.columns.length === 2) {
-      let a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
-      let guard = 0;
-      while (Math.abs(a - b) > imbMax && guard++ < 200) {
-        const hi = a >= b ? 0 : 1, lo = 1 - hi;
-        if (!moveLineForward(cur.columns, hi, lo)) break;
-        a = usedHeight(cur.columns[0], cur); b = usedHeight(cur.columns[1], cur);
+      const a0 = usedHeight(cur.columns[0], cur), b0 = usedHeight(cur.columns[1], cur);
+      if (Math.abs(a0 - b0) > imbMax) {
+        const cap = colCapacity(cur.template, cur);
+        const best = optimalSplit(cur.columns, { cap, extraLast: cur.fnReservedHeightPx || 0 });
+        if (best && best.k !== cur.columns[0].length) {
+          const seq = [...cur.columns[0], ...cur.columns[1]];
+          cur.columns[0] = seq.slice(0, best.k);
+          cur.columns[1] = seq.slice(best.k);
+        }
       }
       // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
       if (fixDropWordInColumns(cur.columns) ) {
         eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
       }
-      cur.balanceInfo = { before: [a, b], after: [usedHeight(cur.columns[0], cur), usedHeight(cur.columns[1], cur)] };
-      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(usedHeight(cur.columns[0], cur) - usedHeight(cur.columns[1], cur)) }, cur.index);
+      const a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
+      cur.balanceInfo = { before: [a0, b0], after: [a, b] };
+      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(a - b) }, cur.index);
     }
     // Invariant BRZ-14: scrollHeight ≤ clientHeight (בכפוף לפס החוצה־טורים — FWD-1)
     for (const col of cur.columns) {
@@ -3849,23 +3875,48 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 }
 
 /** איזון בטוח עם rollback (REQ-BAL-09): snapshot כולל footnotes/sideNotes.
- * תיקון P0-3: הזזות קדימה בסדר הקריאה בלבד (moveLineForward).
- * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו**. */
+ * **EXT-8 — חלוקה גלובלית אופטימלית** (במקום טיפוס גרידי שורה-שורה):
+ * מרחב המצבים החוקי = פיצולים רציפים של רצף הקריאה; המינימום הגלובלי של |lH−rH|
+ * נמצא ב-O(n) (הוכחה ב-balancing.optimalSplit). סדר קריאה נשמר מבנית.
+ * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו** (על הטור האחרון). */
 function balancePageSafe(page, settings, ledger) {
+  const deltaOf = () => {
+    const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0)
+      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
+    return Math.abs(hh(page.columns[0]) - hh(page.columns[1]));
+  };
+  const maxDelta = settings['imbalance-max-delta-px'];
+  if (deltaOf() <= maxDelta) return true; // כבר מאוזן — אין התערבות (יציבות פריסה)
+  if (!page.columns || page.columns.length < 2) return false;
+  const cap = page.template.contentBox.height;
+  const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
+  if (!best || best.k === page.columns[0].length) {
+    // **EXT-8:** אין פיצול חוקי, או שהנוכחי כבר האופטימלי הגלובלי — הפרש שנותר
+    // מעל הסף הוא **פשרה מתועדת**: שלמות פסקה (הימנעות מיתום/ווידוא בגבול
+    // התפר) גוברת על Δ≤5px (למשל: פסקה בת 15 שורות שנכנסת שלמה לטור אחד).
+    const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index,
+      { reason: best ? 'at-optimum' : 'capacity', delta: Math.round(deltaOf()), bestK: best ? best.k : null },
+      'balance');
+    ledger.transition(rec.issue_id, 'correction-blocked', 'balance',
+      best ? 'global optimum reached: any further move creates widow/orphan at the seam (paragraph integrity preferred over Δ-threshold)'
+           : 'hard reject: no capacity-legal split exists');
+    return false;
+  }
   const snapshot = { cols: page.columns.map(c => c.slice()), fn: page.footnotes.slice(), sn: page.sideNotes.slice() };
-  const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0) + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
-  let guard = 0;
-  while (Math.abs(hh(page.columns[0]) - hh(page.columns[1])) > settings['imbalance-max-delta-px'] && guard++ < 200) {
-    const a = hh(page.columns[0]), b = hh(page.columns[1]);
-    const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break;
-    const cap = page.template.contentBox.height;
-    if (page.columns.some(cl => hh(cl) > cap + 0.5)) {
-      page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
-      const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
-      ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
-      return false;
-    }
+  const seq = [...page.columns[0], ...page.columns[1]];
+  page.columns[0] = seq.slice(0, best.k);
+  page.columns[1] = seq.slice(best.k);
+  // hard reject: חריגת קיבולת אחרי ההחלפה (הגנה כפולה — optimalSplit כבר מסנן) → rollback מלא
+  const overflows = (c) => {
+    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0)
+      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
+    return hh > cap + 0.5;
+  };
+  if (page.columns.some(overflows)) {
+    page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
+    const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
+    ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
+    return false;
   }
   return true;
 }
@@ -4087,6 +4138,15 @@ __modules["src/engine/layout/protections-matrix.js"] = function (require, module
  */
 
 const { usedHeight, pageImbalance } = require('./balancing');
+const { MARK_TAG } = require('../notes/markers');
+
+/** עמודים מבניים שאינם זרימת-תוכן — כותרת בודדת בהם היא מכוונת-עיצוב,
+ * לא הפרת ליווי (S4.21/EXT-11: פותחי-החלקים H1 על עמוד פתיחה ייעודי — D-36/PT-04). */
+function isStructuralPage(page) {
+  return Boolean(page.chapterOpening) ||
+    page.type === 'shaar-main' || page.type === 'shaar-sub' || page.type === 'shaar-back' ||
+    page.type === 'toc-general' || page.type === 'toc-detail';
+}
 
 /** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **. */
 function isNoteMarkerWord(w) {
@@ -4140,6 +4200,11 @@ const CHECKS = {
   },
 
   headingEscort(page, settings, ledger) {
+    // **S4.21 (EXT-11):** עמודי פתיחה/שער/תוכן-עניינים מדולגים — כותרת החלק
+    // עומדת לבדה בעמוד הפתיחה שלה **בתכנון** (D-36, PT-04: "כותרת 1 — עמוד
+    // חדש תמיד"); דרישת 2 שורות ליווי אינה חלה שם. בזרימת התוכן הכללית
+    // הכלל נותר כחוק קשה.
+    if (isStructuralPage(page)) return [];
     const violations = [];
     for (let c = 0; c < page.columns.length; c++) {
       const col = page.columns[c];
@@ -4159,9 +4224,20 @@ const CHECKS = {
   runtLines(page, settings, ledger) {
     const violations = [];
     const seenRunt = new Set();
-    const minPx = (page.template.columns[0].w * settings['runt-min-width-pct']) / 100;
+    // **S4.21 (EXT-11):** שתי האמות של בדיקת ה-runt —
+    //  (א) runt הוא מושג של שורת-פסקה: כותרת קצרה ("פתח דבר", "חלק 1") היא
+    //      תקינה מיסודה ואינה נמדדת כלל; בעבר 9 מתוך 10 הממצאים בקורפוס הקנוני
+    //      היו כותרות.
+    //  (ב) ההשוואה היא מול **המידה שבה השורה נשברה** (ln.measureW — מוטבע
+    //      ב-pipeline), לא מול רוחב התבנית: פסקת הקדמה שנמדדה במידת טור-הגוף
+    //      ~330px והוצבה בעמוד חד-טורי בן 674px — שורת-סיום בת 82% מהמידה
+    //      סומנה בטעות כקצרה.
+    const colW = page.template.columns[0].w;
     for (const col of page.columns) {
       for (const ln of col) {
+        if (ln.kind === 'heading') continue;
+        const base = ln.measureW || colW;
+        const minPx = (base * settings['runt-min-width-pct']) / 100;
         if (ln.isLast && ln.widthPx < minPx) {
           const key = `${lineToken(ln)}|${(ln.words || []).join(' ')}`;
           if (seenRunt.has(key)) continue;
@@ -4183,18 +4259,26 @@ const CHECKS = {
 
   /**
    * סמן הערה אינו יחידה האחרונה בשורה (BRZ-11) — **לכל הסגנונות** (P1-3).
-   * בעבר רק א׳ היה מוגן; הסמנים בפועל ([1] וכד') לא.
+   * **S4.21 (EXT-11) — זיהוי לפי תג D-53 בלבד, לא לפי ניחוש מבנה:**
+   * סמן אמיתי מתויג תמיד ב-MARK_TAG (\uE102) ומודבק לעוגנו ב-NBSP
+   * (`עוגן\u00A0\uE102סמן` — מקור יחיד bindMarkersToNeighbors). היוריסטיקת
+   * הרג'קס הקודמת סימנה כל מספר בודד בטקסט ("…של חלק 1") כסמן — 24
+   * אבחוני-שקר בקורפוס הקנוני ו-420 בספר האמת, אפס מהם סמנים אמיתיים.
+   * הפרת BRZ-11 האמיתית שנותרה לזיהוי: יחידת סמן **בודדת** (תג בלי עוגן —
+   * בלי NBSP) שנותרה בסוף שורה.
    */
   markerLineBreak(page, settings, ledger) {
     const violations = [];
     for (const col of page.columns) {
       for (const ln of col) {
         const words = ln.words || [];
-        if (words.length && isNoteMarkerWord(words[words.length - 1])) {
+        if (!words.length) continue;
+        const last = String(words[words.length - 1]);
+        if (last.includes(MARK_TAG) && !last.includes('\u00A0')) {
           violations.push({
             kind: 'note-marker-line-break', target: `line@${lineToken(ln)}`, page: page.index,
-            evidence: { lastWord: words[words.length - 1] },
-            ledgerRef: ledger.create('note-marker-line-break', lineToken(ln) || 'unknown', page.index, { lastWord: words[words.length - 1] }, 'protections').issue_id
+            evidence: { lastWord: last.split(MARK_TAG).join('') },
+            ledgerRef: ledger.create('note-marker-line-break', lineToken(ln) || 'unknown', page.index, { lastWord: last.split(MARK_TAG).join('') }, 'protections').issue_id
           });
         }
       }
@@ -4301,7 +4385,7 @@ module.exports = { runProtections, CHECKS, isNoteMarkerWord };
 
 };
 __modules["src/engine/layout/balancing.js"] = function (require, module, exports) {
-// src/engine/layout/balancing.js — AutoQuality (Gold port, שלוש שכבות) + StretchPageToBottom clamp + chapter-end modes
+// src/engine/layout/balancing.js — AutoQuality (Gold port, שלוש שכבות) + איזון גלובלי אופטימלי (EXT-8) + chapter-end modes
 'use strict';
 
 /**
@@ -4309,7 +4393,7 @@ __modules["src/engine/layout/balancing.js"] = function (require, module, exports
  * Clamp overshoot 20px (REQ-BAL-07); balance-chapter-end {balance|stretch|natural} (REQ-BAL-03).
  */
 
-const { moveLineForward } = require('./ordering');
+// (moveLineForward אינו נדרש עוד באיזון: optimalSplit מכסה את מרחב המצבים כולו — EXT-8)
 
 function usedHeight(col) {
   // **EXT-20:** גובה בפועל — כולל מקדם ה-AQ האנכי (לפני ה-AQ כל המקדמים 1).
@@ -4323,33 +4407,93 @@ function pageImbalance(page) {
 }
 
 /**
- * איזון מלא של עמוד: הזזת שורות עד Δ≤maxDelta; נסיגה אם נוצרה חריגת תקציב
- * (rollback integrity REQ-BAL-09).
- * **תיקון P0-3:** הזזות קדימה בסדר הקריאה בלבד (moveLineForward) — בעבר
- * האיזון העביר שורה אחורה בסדר הקריאה (הצגת סוף פסקה לפני תחילתה).
+ * **EXT-8 — חלוקה גלובלית אופטימלית של טורי העמוד (הוכחה מתמטית):**
+ * כל מצב חוקי של שני טורים — אחרי כל רצף הזזות moveLineForward חוקיות —
+ * הוא **פיצול רציף** של רצף הקריאה: col0 = seq[0..k), col1 = seq[k..n).
+ * (הוכחה: moveLineForward מעביר אך ורק את סוף col0 לראש col1 או את ראש col1
+ * לסוף col0; אינדוקציה על מספר המהלכים שומרת על רציפות ועל סדר seq.)
+ * לכן מרחב המצבים החוקי הוא בדיוק k ∈ [0..n], והמינימום הגלובלי של
+ * ‏|H0(k) − H1(k)| בכפוף לקיבולת שני הטורים נמצא בזמן O(n) בסכומי קידום —
+ * במקום הטיפוס הגרידי שורה-שורה שנעצר במינימום מקומי/בקיבולת.
+ * סדר העדפות לקסיקוגרפי: (1) גבול-תפר נקי מ-widow/orphan, (2) |Δ| מינימלי,
+ * (3) תנועה מינימלית מהפיצול הנוכחי (יציבות/דטרמיניזם).
+ * @returns {{k:number, delta:number, clean:boolean}|null} — null אם אין פיצול חוקי-קיבולת
+ */
+function optimalSplit(cols, opts = {}) {
+  const cap = opts.cap != null ? opts.cap : Number.POSITIVE_INFINITY;
+  const extraLast = opts.extraLast || 0; // תקציב הערות של העמוד — על הטור האחרון (P1-8)
+  const c0 = cols[0] || [], c1 = cols[1] || [];
+  const seq = [...c0, ...c1];
+  const n = seq.length;
+  if (!n) return null;
+  const h = (ln) => (ln.heightPx || 0) * (ln.aqStretch || 1);
+  const pre = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + h(seq[i]);
+  const total = pre[n];
+  const k0 = c0.length;
+
+  // גבול-תפר נקי (ווידוא/יתום קלאסיים, מבוסס ריצות tokenId):
+  //  - widow-bottom: לבלוק שחוצה את הגבול יש **שורה אחת בדיוק** בתחתית col0
+  //    (השורה שלפני הגבול היא ראשונת הריצה שלו ב-seq).
+  //  - widow-top: לבלוק שחוצה את הגבול יש **שורה אחת בדיוק** בראש col1 והיא
+  //    גם אחרונת הבלוק (הריצה מסתיימת מיד אחריה).
+  // לא נעזר בדגלי part ('first'/'rest') — הם מוטבעים לכל שורות הצ'אנק
+  // ב-pushLinks ואינם מעידים על מיקום בבלוק (נלכד בניפוי EXT-8: כל 39
+  // שורות הפיצול נשאו part='first' וסימנו כל גבול פנימי כ-widow).
+  const cleanBoundary = (k) => {
+    if (k > 0 && k < n) {
+      const lt = seq[k - 1].meta && seq[k - 1].meta.tokenId;
+      const rt = seq[k].meta && seq[k].meta.tokenId;
+      if (lt != null && lt === rt) { // הבלוק ממשיך מעבר לגבול
+        if (k - 2 < 0 || (seq[k - 2].meta && seq[k - 2].meta.tokenId) !== lt) return false; // widow-bottom
+        if (k + 1 >= n || (seq[k + 1].meta && seq[k + 1].meta.tokenId) !== rt) return false; // widow-top
+      }
+    }
+    return true;
+  };
+
+  let best = null;
+  for (let k = 0; k <= n; k++) {
+    const H0 = pre[k];
+    const H1 = total - pre[k] + extraLast;
+    if (H0 > cap + 0.5 || H1 > cap + 0.5) continue; // קיבולת קשה (REQ-BAL-09)
+    const delta = Math.abs(H0 - H1);
+    const clean = cleanBoundary(k);
+    const score = (clean ? 0 : 1) * 1e9 + delta;
+    if (
+      !best ||
+      score < best.score - 1e-9 ||
+      (Math.abs(score - best.score) <= 1e-9 && Math.abs(k - k0) < Math.abs(best.k - k0))
+    ) {
+      best = { k, delta, clean, score };
+    }
+  }
+  return best;
+}
+
+/**
+ * איזון מלא של עמוד — **החלוקה הגלובללית האופטימלית (EXT-8)**: אם Δ>maxDelta
+ * נבחר פיצול הממזער את |Δ| על כל הפיצולים החוקיים-קיבולתית (הוכחה ב-optimalSplit),
+ * בהעדפת גבול-תפר נקי ובתנועה מינימלית. שמירת סדר הקריאה מובנית (פיצול רציף).
+ * נסיגה אם אין פיצול חוקי (rollback integrity REQ-BAL-09).
  * @returns {{changed:boolean, before:number, after:number}}
  */
 function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
-  const snapshot = page.columns.map(c => c.slice());
-  let guard = 0;
-  let moves = 0; // **03.11 (ביקורת):** אמינות הדיווח — changed אמיתי רק אם הוזזה שורה
-  while (pageImbalance(page) > maxDelta && guard++ < 500) {
-    const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
-    const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break; // אין מהלך חוקי — עוצרים בלי לדווח על שינוי
-    moves++;
-    // hard reject: אם נוצרה חריגת cap → rollback מלא
-    const cap = page.template.contentBox.height;
-    if (page.columns.some(c => usedHeight(c) > cap + 0.5)) {
-      page.columns = snapshot;
-      return { changed: false, before, after: before, rollback_reason: 'capacity' };
-    }
+  if (before <= maxDelta) return { changed: false, before, after: before, moves: 0 };
+  if (!page.columns || page.columns.length < 2) return { changed: false, before, after: before };
+  const cap = page.template.contentBox.height;
+  const best = optimalSplit(page.columns, { cap });
+  if (!best || best.k === page.columns[0].length) {
+    // אין פיצול חוקי-קיבולת, או שהנוכחי כבר האופטימלי — לא מדווח שינוי
+    return { changed: false, before, after: before, rollback_reason: best ? 'at-optimum' : 'capacity' };
   }
-  // **03.11 (ביקורת):** בעבר הוחזר changed:true גם כשהלולאה נעצרה בלי שורה אחת —
-  // דיווח מטעה של אבחון האיזון. כעת: שינוי אמיתי = הוזזה בפועל והפרש שהשתנה.
+  const seq = [...page.columns[0], ...page.columns[1]];
+  const k0 = page.columns[0].length;
+  page.columns[0] = seq.slice(0, best.k);
+  page.columns[1] = seq.slice(best.k);
   const after = pageImbalance(page);
-  return { changed: moves > 0 && after !== before, moves, before, after };
+  return { changed: true, moves: Math.abs(best.k - k0), before, after, optimal: true, cleanBoundary: best.clean };
 }
 
 /**
@@ -4442,39 +4586,83 @@ function autoQualityPass(pages, settings, eventLog) {
   return { applied };
 }
 
-module.exports = { balancePage, pageImbalance, applyChapterEndMode, autoQualityPass, usedHeight };
+module.exports = { balancePage, optimalSplit, pageImbalance, applyChapterEndMode, autoQualityPass, usedHeight };
 
 };
-__modules["src/engine/layout/ordering.js"] = function (require, module, exports) {
-// src/engine/layout/ordering.js — Reading-order-preserving column moves (P0-3; D-49)
+__modules["src/engine/notes/markers.js"] = function (require, module, exports) {
+// src/engine/notes/markers.js — Unified note-marker module (S7.1.5/6, REQ-FN-05/06; D-30/D-41)
 'use strict';
 
 /**
- * הזזת שורה בין טורים תוך **שמירת סדר הקריאה בלבד** (תיקון P0-3):
- * סדר קריאה: col0 (ימני, נקרא ראשון) מלמעלה למטה, ואז col1.
- *  - טור מוקדם (col0) גבוה יותר ⇒ pop מסופו → unshift לראש col1 (הזזת הגבול קדימה).
- *  - טור מאוחר (col1) גבוה יותר ⇒ shift מראשו → push לסוף col0 (הזזת הגבול אחורה —
- *    השורה עדיין אחרי כל col0 ולפני שאר col1).
- * שתי ההזזות שומרות את סדר המילים בדיוק; בעבר האיזון העביר שורה **אחורה**
- * בסדר הקריאה (הצגת סוף פסקה לפני תחילתה) — רגרסיה שלא הייתה באף גרסה קודמת.
- * מודול עצמאי ללא תלויות — נצרך ע"י dp-planner וגם balancing (מניעת תלות מעגלית).
+ * מקור־הסמכות היחיד לסמני הערות בכל המוצר: גוף, מרזב, עמודי הערות.
+ * לפני האיחוד היו שלושה ממירים שונים (pipeline `[n]` קשיח, dom-renderer markerFor,
+ * endnote-pages formatMarker) — מה שגרם לאי־עקביות מספור בין גוף לעמודי הערות (P1-3).
+ * כל שינוי סגנון/מדיניות נעשה כאן בלבד; כל הצרכנים קוראים מכאן (single source).
  */
-function moveLineForward(cols, hi, lo) {
-  if (hi === lo || cols.length < 2) return false;
-  if (hi === 0 && lo === 1) {           // col0 גבוה: סוף col0 → ראש col1
-    if (!cols[0] || !cols[0].length) return false;
-    cols[1].unshift(cols[0].pop());
-    return true;
+
+const HEB_LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת'];
+
+/** סמן בודד לפי סגנון הרישום (footnote-marker-style). */
+function markerFor(index1Based, style) {
+  switch (style) {
+    case 'decimal': return String(index1Based);
+    case 'parenthesis': return `(${index1Based})`;
+    case 'asterisk': {
+      const n = ((index1Based - 1) % 3) + 1; // *,**,*** ואז חוזר — policy מקובלת
+      return '*'.repeat(n) + (index1Based > 3 ? String(Math.ceil(index1Based / 3)) : '');
+    }
+    case 'hebrew-geresh':
+    default: {
+      let i = index1Based - 1, s = '';
+      if (i < 0) return 'א׳';
+      do { s = HEB_LETTERS[i % 22] + s; i = Math.floor(i / 22) - 1; } while (i >= 0);
+      return `${s}\u05F3`; // גרש — סמן (לא מספר עמוד); תמיד אות+גרש
+    }
   }
-  if (hi === 1 && lo === 0) {           // col1 גבוה: ראש col1 → סוף col0
-    if (!cols[1] || !cols[1].length) return false;
-    cols[0].push(cols[1].shift());
-    return true;
-  }
-  return false;
 }
 
-module.exports = { moveLineForward };
+/**
+ * מספור לפי מדיניות איפוס (footnote-reset-policy):
+ *  - continuous: מונה כלל־מסמך אחד.
+ *  - page:       איפוס בכל עמוד (מרזב).
+ *  - section/part: איפוס בכל חלק (H1) — ברירת מחדל לעמודי הערות; shaar-sub ייתמך ב‑S8.
+ * מחזיר פונקציית next() שמקבלת הקשר {page, part} ומנפיקה מספור 1‑based.
+ */
+function makeCounter(policy, start = 0) {
+  let counter = start;
+  let lastKey = null;
+  const scopeKey = (ctx) => {
+    switch (policy) {
+      case 'page': return `p${ctx && ctx.page != null ? ctx.page : '?'}`;
+      case 'section':
+      case 'part': return `b${ctx && ctx.part != null ? ctx.part : '?'}`;
+      default: return 'doc'; // continuous
+    }
+  };
+  return function next(ctx = {}) {
+    const key = scopeKey(ctx);
+    if (policy === 'page' || policy === 'section' || policy === 'part') {
+      if (lastKey !== null && key !== lastKey) counter = 0; // איפוס בהחלפת היקף
+    }
+    lastKey = key;
+    counter++;
+    return counter;
+  };
+}
+
+/**
+ * פיצול placeholder `סמן:טקסט` לייצוג מנייה (D-30): הסמן נספר פעם אחת (בגוף,
+ * בעוגן), טקסט ההערה נספר פעם אחת ממקום הצגתו. הפורמט בגוף: `${marker}:${text}`
+ * עם \uE000 בין המרכיבים — מדידה אטומית, ופיצול בניתוח לשם זהות צדדים.
+ */
+function splitPlaceholder(word) {
+  const s = String(word).replace(/\u00A0/g, ' ');
+  const at = s.indexOf(':');
+  if (at > 0 && !s.startsWith('http')) return { marker: s.slice(0, at), text: s.slice(at + 1) };
+  return null;
+}
+
+module.exports = { markerFor, makeCounter, splitPlaceholder, HEB_LETTERS, MARK_TAG: '\uE102' };
 
 };
 __modules["src/engine/layout/retreat-loop.js"] = function (require, module, exports) {
@@ -4713,80 +4901,36 @@ function isFullWidthBlock(block, settings) {
 module.exports = { columnWidths, blockGapPx, isFullWidthBlock, buildPageTemplate };
 
 };
-__modules["src/engine/notes/markers.js"] = function (require, module, exports) {
-// src/engine/notes/markers.js — Unified note-marker module (S7.1.5/6, REQ-FN-05/06; D-30/D-41)
+__modules["src/engine/layout/ordering.js"] = function (require, module, exports) {
+// src/engine/layout/ordering.js — Reading-order-preserving column moves (P0-3; D-49)
 'use strict';
 
 /**
- * מקור־הסמכות היחיד לסמני הערות בכל המוצר: גוף, מרזב, עמודי הערות.
- * לפני האיחוד היו שלושה ממירים שונים (pipeline `[n]` קשיח, dom-renderer markerFor,
- * endnote-pages formatMarker) — מה שגרם לאי־עקביות מספור בין גוף לעמודי הערות (P1-3).
- * כל שינוי סגנון/מדיניות נעשה כאן בלבד; כל הצרכנים קוראים מכאן (single source).
+ * הזזת שורה בין טורים תוך **שמירת סדר הקריאה בלבד** (תיקון P0-3):
+ * סדר קריאה: col0 (ימני, נקרא ראשון) מלמעלה למטה, ואז col1.
+ *  - טור מוקדם (col0) גבוה יותר ⇒ pop מסופו → unshift לראש col1 (הזזת הגבול קדימה).
+ *  - טור מאוחר (col1) גבוה יותר ⇒ shift מראשו → push לסוף col0 (הזזת הגבול אחורה —
+ *    השורה עדיין אחרי כל col0 ולפני שאר col1).
+ * שתי ההזזות שומרות את סדר המילים בדיוק; בעבר האיזון העביר שורה **אחורה**
+ * בסדר הקריאה (הצגת סוף פסקה לפני תחילתה) — רגרסיה שלא הייתה באף גרסה קודמת.
+ * מודול עצמאי ללא תלויות — נצרך ע"י dp-planner וגם balancing (מניעת תלות מעגלית).
  */
-
-const HEB_LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת'];
-
-/** סמן בודד לפי סגנון הרישום (footnote-marker-style). */
-function markerFor(index1Based, style) {
-  switch (style) {
-    case 'decimal': return String(index1Based);
-    case 'parenthesis': return `(${index1Based})`;
-    case 'asterisk': {
-      const n = ((index1Based - 1) % 3) + 1; // *,**,*** ואז חוזר — policy מקובלת
-      return '*'.repeat(n) + (index1Based > 3 ? String(Math.ceil(index1Based / 3)) : '');
-    }
-    case 'hebrew-geresh':
-    default: {
-      let i = index1Based - 1, s = '';
-      if (i < 0) return 'א׳';
-      do { s = HEB_LETTERS[i % 22] + s; i = Math.floor(i / 22) - 1; } while (i >= 0);
-      return `${s}\u05F3`; // גרש — סמן (לא מספר עמוד); תמיד אות+גרש
-    }
+function moveLineForward(cols, hi, lo) {
+  if (hi === lo || cols.length < 2) return false;
+  if (hi === 0 && lo === 1) {           // col0 גבוה: סוף col0 → ראש col1
+    if (!cols[0] || !cols[0].length) return false;
+    cols[1].unshift(cols[0].pop());
+    return true;
   }
+  if (hi === 1 && lo === 0) {           // col1 גבוה: ראש col1 → סוף col0
+    if (!cols[1] || !cols[1].length) return false;
+    cols[0].push(cols[1].shift());
+    return true;
+  }
+  return false;
 }
 
-/**
- * מספור לפי מדיניות איפוס (footnote-reset-policy):
- *  - continuous: מונה כלל־מסמך אחד.
- *  - page:       איפוס בכל עמוד (מרזב).
- *  - section/part: איפוס בכל חלק (H1) — ברירת מחדל לעמודי הערות; shaar-sub ייתמך ב‑S8.
- * מחזיר פונקציית next() שמקבלת הקשר {page, part} ומנפיקה מספור 1‑based.
- */
-function makeCounter(policy, start = 0) {
-  let counter = start;
-  let lastKey = null;
-  const scopeKey = (ctx) => {
-    switch (policy) {
-      case 'page': return `p${ctx && ctx.page != null ? ctx.page : '?'}`;
-      case 'section':
-      case 'part': return `b${ctx && ctx.part != null ? ctx.part : '?'}`;
-      default: return 'doc'; // continuous
-    }
-  };
-  return function next(ctx = {}) {
-    const key = scopeKey(ctx);
-    if (policy === 'page' || policy === 'section' || policy === 'part') {
-      if (lastKey !== null && key !== lastKey) counter = 0; // איפוס בהחלפת היקף
-    }
-    lastKey = key;
-    counter++;
-    return counter;
-  };
-}
-
-/**
- * פיצול placeholder `סמן:טקסט` לייצוג מנייה (D-30): הסמן נספר פעם אחת (בגוף,
- * בעוגן), טקסט ההערה נספר פעם אחת ממקום הצגתו. הפורמט בגוף: `${marker}:${text}`
- * עם \uE000 בין המרכיבים — מדידה אטומית, ופיצול בניתוח לשם זהות צדדים.
- */
-function splitPlaceholder(word) {
-  const s = String(word).replace(/\u00A0/g, ' ');
-  const at = s.indexOf(':');
-  if (at > 0 && !s.startsWith('http')) return { marker: s.slice(0, at), text: s.slice(at + 1) };
-  return null;
-}
-
-module.exports = { markerFor, makeCounter, splitPlaceholder, HEB_LETTERS, MARK_TAG: '\uE102' };
+module.exports = { moveLineForward };
 
 };
 __modules["src/engine/layout/footnote-budget.js"] = function (require, module, exports) {
@@ -7293,6 +7437,21 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('folio', 'legacy-imud: folios + TOC', {});
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
   const ledger = new Ledger();
+
+  // **EXT-4 (שארית — S4.21): חיבור ornament-plan לנתיב ה-legacy.** רץ אחרי
+  // חישוב ה-hash — overlay בלבד (אינווריאנט T1; דפוס D-47). ברירות המחדל
+  // של המקור = 'none' לכל עיטור ⇒ אפס rectים ואפס השפעה; החיבור מוכיח את
+  // עצמו רק כשההגדרות מזמנות עיטורים (בדיקות s8). ההקרנה כבר מוכנה:
+  // legacy-projector מצייר pg.decorations באותו דיו (ornament-ink) כמו
+  // נתיב ה-DP — pdfOps ל-PDF, data-URI ל-DOM.
+  const { planLegacyOrnaments } = require('../decoration/legacy-ornaments');
+  const ornPass = planLegacyOrnaments(pages, settings,
+    (t, s2) => api.measureTextWidth(t, s2), {
+    ledger, eventLog: events,
+    bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
+    flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
+  });
+
   return {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
@@ -7300,7 +7459,8 @@ function legacyTypeset(rawText, settings, env) {
     contentPreserved: true,
     layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
-    ornaments: null, retreat: null, sideNotes: null, endnotePages: null,
+    ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
+    retreat: null, sideNotes: null, endnotePages: null,
     endnotePagesInfo: { count: 0, pages: [] },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true
@@ -7324,6 +7484,306 @@ module.exports = {
   GEO, SZ, HEADING_MODES, toGematria, stripEditorialNotes, parseMetadata,
   tokenizeDoc, LineBreaker, findNotes, readConfig, legacyTypeset,
   FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH, legacyLayoutHashDigest
+};
+
+};
+__modules["src/engine/decoration/legacy-ornaments.js"] = function (require, module, exports) {
+// src/engine/decoration/legacy-ornaments.js — **EXT-4 (שארית): חיבור ornament-plan לנתיב ה-legacy**
+'use strict';
+
+/**
+ * הפאס שמשלים את החוליה החסרה בשרשרת העיטורים של פרופיל ה-IMUD:
+ * הדיו קיים (ornament-ink — כולל פענוח imud: מספריות העיצובים המוטמעות),
+ * ההקרנה קיימת (legacy-projector: pdfOps + data-URI מ-pg.decorations) —
+ * ומה שחסר הוא ה**תכנון**: הפקת rectים של עיטורים על עמודי פתיחת-הסימן
+ * של מנוע המורשת, לפי אותם מפתחות h2-orn-* שמיפוי ההגדרות מתרגם מהמקור
+ * (h2-ornament-top-style וכו').
+ *
+ * **ברירות המחדל של המקור = 'none' לכל העיטורים** — בפרופיל ברירת-המחדל
+ * הפאס הזה לא מייצר דבר (אפס שינוי; ה-parity וה-hash מוכחים כזהים).
+ * החיבור מופעל רק כשההגדרות מזמנות עיטורים בפועל — ואז הוא מוכח בבדיקות.
+ *
+ * **אינווריאנט T1 (ניטרליות גיאומטרית):** הפאס רץ אחרי חישוב ה-layoutHash
+ * של המורשת ואינו נוגע בטורים/בפסים — overlay-rects בלבד (דפוס D-47).
+ * גובה העיטור אינו "מתגלה" בדיעבד (שיעור F-08): עיטור שאין לו מקום
+ * חוקי בתוך אזור ה-h2 נדחה ונרשם — לא נדחק לתוך זרימת הגוף.
+ */
+
+const {
+  h2OrnamentScope, h2OrnamentReservedHeight
+} = require('./ornament-fit');
+
+/** רוחב הפס (שני טורים + מרזב) — מקור: legacy-imud-flow GEO. */
+const BAND_W = 552;
+const BAND_X = 48.7; // GEO.COL_L_X — מרכז העמוד (A5 16x16... ליתר דיוק מוזרק מהקריאה)
+
+/**
+ * @param {Array} pages - עמודי המורשת (אחרי ההרכבה; pg.bands/pg.columns מוכנים)
+ * @param {object} settings - הגדרות RED (כולל h2-orn-* הממופות מהמקור)
+ * @param {Function} measureFn - (text, sizePx?) => widthPx
+ * @param {object} io - { ledger, eventLog, bandX, bandW }
+ * @returns {{planted:number, rejected:Array}}
+ */
+function planLegacyOrnaments(pages, settings, measureFn, io = {}) {
+  const ledger = io.ledger, eventLog = io.eventLog;
+  const bandX = io.bandX != null ? io.bandX : BAND_X;
+  const bandW = io.bandW != null ? io.bandW : BAND_W;
+  // ראש זרימת הגוף של עמוד h2 — מחושב בצד הזרימה (FLOW_TOP + גובה אזור-h2
+  // לפי פטור-span); ברירת מחדל שמרנית: מתחת לפס הכותרת.
+  const flowTopOf = io.flowTopOf || ((pg, title) => title.y + title.h);
+  const out = { planted: 0, rejected: [] };
+  const scope = h2OrnamentScope(settings);
+  if (!scope.any) return out; // ברירות המחדל של המקור — אין עיטורים (אפס התערבות)
+
+  for (const pg of pages) {
+    const title = (pg.bands || []).find(b => b.kind === 'h2-title');
+    if (!title) continue; // עיטורי h2 בלבד בחיבור זה (עמודי פתיחת סימן)
+    const siman = (pg.bands || []).find(b => b.kind === 'h2-siman');
+    const topBand = siman || title;
+
+    const h2FontPx = title.sizePt * (96 / 72);
+    let titleW = 0;
+    try { titleW = measureFn(title.text, title.sizePt); } catch { titleW = 0; }
+    const titleWpx = Math.max(40, titleW || 0);
+    const { scale, ornW, ornH, margins } = h2OrnamentReservedHeight(titleWpx, settings, h2FontPx);
+    if (ornW <= 0 || ornH <= 0) continue;
+
+    pg.decorations = pg.decorations || [];
+    const centerX = bandX + bandW / 2;
+    const kindTop = settings['h2-orn-top'];
+    const kindBottom = settings['h2-orn-bottom'];
+    const kindSide = settings['h2-orn-side'];
+
+    // גבולות אזור-h2 חוקיים: מעל הפס העליון, ועד ראש זרימת הגוף של העמוד
+    const flowTop = flowTopOf(pg, title);
+
+    // ---------- עיטור עליון (מעל הסימן/הכותרת; REQ-ORN-01/02) ----------
+    if (scope.signTop && kindTop && kindTop !== 'none') {
+      const y = topBand.y - margins.top - ornH;
+      if (y >= 60) { // לא מטפס מעל אזור הכותרת העליונה של העמוד
+        const x = centerX - ornW / 2;
+        pg.decorations.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-top', slot: 'sign-top', kindStyle: kindTop });
+        out.planted++;
+      } else {
+        out.rejected.push({ page: pg.folioDisplay || pg.index, slot: 'sign-top', reason: 'no-room-above', ornH });
+        if (ledger) ledger.create('ornament-rejected', `legacy-h2-top@${pg.index}`, pg.index, { reason: 'no-room-above', ornH }, 'ornaments');
+      }
+    }
+
+    // ---------- עיטור תחתון (מתחת לכותרת; בתוך אזור ה-h2 בלבד — שיעור F-08) ----------
+    if (scope.signBottom && kindBottom && kindBottom !== 'none') {
+      const y = title.y + title.h + margins.bottom;
+      if (y + ornH <= flowTop - 1) { // חייב להיכנס לאזור — לא לחדור לזרימת הגוף
+        const x = centerX - ornW / 2;
+        pg.decorations.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-bottom', slot: 'sign-bottom', kindStyle: kindBottom });
+        out.planted++;
+      } else {
+        out.rejected.push({ page: pg.folioDisplay || pg.index, slot: 'sign-bottom', reason: 'no-room-below', ornH, flowTop });
+        if (ledger) ledger.create('ornament-rejected', `legacy-h2-bottom@${pg.index}`, pg.index, { reason: 'no-room-below', ornH }, 'ornaments');
+      }
+    }
+
+    // ---------- עיטורי צד (משני צדי הכותרת; ממורכזים אנכית לפס) ----------
+    if (scope.titleSide && kindSide && kindSide !== 'none') {
+      const gap = Math.max(4, Math.round(h2FontPx * 0.15));
+      const y = title.y + (title.h - ornH) / 2;
+      const halfTitle = (titleWpx * (scale > 0 ? 1 : 1)) / 2;
+      const rightX = centerX + halfTitle + gap;
+      const leftX = centerX - halfTitle - gap - ornW;
+      if (rightX + ornW <= bandX + bandW && leftX >= bandX) {
+        pg.decorations.push({ x: Math.round(rightX * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-side', slot: 'side-r', kindStyle: kindSide });
+        pg.decorations.push({ x: Math.round(leftX * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-side', slot: 'side-l', kindStyle: kindSide });
+        out.planted += 2;
+      } else {
+        out.rejected.push({ page: pg.folioDisplay || pg.index, slot: 'side', reason: 'title-too-wide', titleW: titleWpx });
+        if (ledger) ledger.create('ornament-rejected', `legacy-h2-side@${pg.index}`, pg.index, { reason: 'title-too-wide', titleW: titleWpx }, 'ornaments');
+      }
+    }
+  }
+  if (eventLog && out.planted) {
+    eventLog.emit('ornaments', 'legacy-h2-ornaments', { planted: out.planted, rejected: out.rejected.length });
+  }
+  return out;
+}
+
+module.exports = { planLegacyOrnaments };
+
+};
+__modules["src/engine/decoration/ornament-fit.js"] = function (require, module, exports) {
+// src/engine/decoration/ornament-fit.js — fit-to-text JS measurement + divider height rules (REQ-ORN-01..04)
+'use strict';
+
+/**
+ * מדידת DOM/JS בלבד (CSS fit-content נכשל — V3/V4). מקור שליטה אחד: אין !important מול inline (F-09).
+ *
+ * **S8:** הרחבה מלאה — התאמת עיטורי H2 לרוחב הטקסט, התאמת גובה צדדיים H3 לשורת הכותרת,
+ * עיטור סיום־פרק בתקציב הפנוי (REQ-ORN-03), שמירת סימטריית מרווחים אפקטיביים (F-21),
+ * הרמה אופטית −0.08em לעיטורי צד (שיעור V4), ומשמרות התאמה למפרידי כותרות (REQ-ORN-04).
+ */
+
+/** התאמת עיטור H2 לרוחב הטקסט: מחזיר scalePx; sync re-fit בלי shift. */
+function fitOrnamentToText(ornamentWidthPx, textWidthPx, maxScale = 3) {
+  if (!ornamentWidthPx || ornamentWidthPx <= 0) return 1;
+  const scale = Math.min(maxScale, textWidthPx / ornamentWidthPx);
+  return Math.max(0.25, Number(scale.toFixed(4)));
+}
+
+/**
+ * REQ-ORN-01: re-fit סינכרוני ללא הזזה — לאחר החלת הסקאלה רוחב העיטור
+ * כבר שווה לרוחב הטקסט, ולכן ריצה חוזרת מחזירה סקאלה 1 (מתייצבת מיד —
+ * שיעור F-08: אין פוסט־פרוסס מאוחר שמגלה גובה שלא תוקצב).
+ */
+function refitStable(ornamentWidthPx, textWidthPx, maxScale) {
+  const s1 = fitOrnamentToText(ornamentWidthPx, textWidthPx, maxScale);
+  const appliedWidth = ornamentWidthPx * s1;
+  const s2 = fitOrnamentToText(appliedWidth, textWidthPx, maxScale);
+  return Math.abs(s2 - 1) <= 0.0001; // אחרי ההחלה — אין שינוי נוסף
+}
+
+/** גובה מפריד טורים = Math.min(גובה שני הטורים) − 8px (V4 rule). */
+function columnDividerHeightPx(colUsedHeights) {
+  return Math.max(0, Math.min(...colUsedHeights) - 8);
+}
+
+/**
+ * fits() — בדיקת התאמה לפני הוספת עיטור **בכל** אתרי ההוספה (לקח Orange):
+ * האם לעיטור יש מקום מתחת/מעל הבלוק בלי לגלוש מהטור?
+ */
+function fits(budgetRemainingPx, ornamentHeightPx) {
+  return ornamentHeightPx > 0 && budgetRemainingPx >= ornamentHeightPx;
+}
+
+/** עיטורי H3 צדדיים: יישור למרכז־גופן (cap-height centering), לא baseline. */
+function sideOrnamentOffsetY(lineHeightPx, ornamentHeightPx) {
+  return Math.round((lineHeightPx - ornamentHeightPx) / 2);
+}
+
+/**
+ * F-21 (שיעור מרווחים): מרווחי עיטורי H2 עליון/תחתון **שווים אפקטיבית**.
+ * בזרימת flex-column אין התמטטות שוליים — השוואה חייבת להיעשות על הסכום
+ * המצטבר (שולי כותרת + שולי עיטור), לא על ערכי CSS בודדים. כאן מקור אחד:
+ * שני המרווחים נקבעים מאותה פונקציה ⇒ שווים מבנית.
+ * @param {number} fontPx - גודל גופן הכותרת בפיקסלים
+ * @returns {{top:number, bottom:number}} מרווחים אפקטיביים שווים (px)
+ */
+function h2OrnamentMarginsPx(fontPx) {
+  const m = Math.max(2, Math.round(fontPx * 0.1)); // 0.1em — מרווח נשימה מינימלי
+  return { top: m, bottom: m }; // שווים מבנית — מקור אחד, אין צבירה לא־סימטרית
+}
+
+/**
+ * שיעור V4 (F-09/H3): הרמה אופטית של עיטורי צד — margin-top: −0.08em.
+ * עיטורים שממורכזים גיאומטרית נראים נמוכים לעין; ההרמה מפצה.
+ * @param {number} fontPx - גודל גופן השורה המארחת
+ */
+function sideOrnamentLiftPx(fontPx) {
+  return -Math.round(fontPx * 0.08 * 100) / 100; // −0.08em — שיעור מתועד (Handoff 2.12)
+}
+
+/**
+ * **F-08 (שיעור הלב):** גובה שעיטורי H2 צורך חייב להיות **מוזמן בזמן הפריסה**
+ * (L4) בגודלו הסופי — לא כ‑overlay מאוחר שמגלה גובה שלא תוקצב (זה שורש
+ * "עמוד פתיחת כותרת 2 ארוך מדי"). מחשב את ההזמנה הנדרשת מעל/מתחת לכותרת
+ * לפי הממדים הסופיים (אחרי fit-to-text) — מקור יחיד למידות ולהזמנה.
+ * @param {number} titleWidthPx - רוחב הכותרת הנמדד (JS — לא CSS)
+ * @param {object} settings
+ * @param {number} h2FontPx - גוף הכותרת בפיקסלים
+ */
+function h2OrnamentReservedHeight(titleWidthPx, settings, h2FontPx) {
+  const scope = h2OrnamentScope(settings);
+  if (!scope.any) return { topPx: 0, bottomPx: 0, scale: 1, ornW: 0, ornH: 0, margins: h2OrnamentMarginsPx(h2FontPx), scope };
+  const naturalW = H2_ORN_W_EM * h2FontPx, naturalH = H2_ORN_H_EM * h2FontPx;
+  const scale = settings['h2-orn-fit-to-text'] !== false ? fitOrnamentToText(naturalW, titleWidthPx) : 1;
+  const ornH = naturalH * scale, ornW = naturalW * scale;
+  const margins = h2OrnamentMarginsPx(h2FontPx);
+  const topPx = scope.signTop ? Math.round(ornH + margins.top) : 0;
+  const bottomPx = scope.signBottom ? Math.round(ornH + margins.bottom) : 0;
+  return { topPx, bottomPx, scale, ornW: Math.round(ornW), ornH: Math.round(ornH), margins, scope };
+}
+
+/**
+ * REQ-ORN-02: היקף עיטורי H2 — סימן בלבד / כותרת בלבד / שניהם.
+ * מצבי עיטור עצמאיים: עליון/תחתון לסימן + צדדיים לכותרת (V4).
+ * @returns {{signTop:boolean, signBottom:boolean, titleSide:boolean, any:boolean, why:string}}
+ */
+function h2OrnamentScope(settings) {
+  const scope = settings['h2-orn-scope'] || 'both';
+  const top = settings['h2-orn-top'] || 'none';
+  const bottom = settings['h2-orn-bottom'] || 'none';
+  const side = settings['h2-orn-side'] || 'none';
+  const sign = scope === 'sign' || scope === 'both';
+  const title = scope === 'title' || scope === 'both';
+  const signTop = sign && top !== 'none';
+  const signBottom = sign && bottom !== 'none';
+  const titleSide = title && side !== 'none';
+  return {
+    signTop, signBottom, titleSide,
+    any: signTop || signBottom || titleSide,
+    why: !sign && !title ? 'scope-off' : (signTop || signBottom || titleSide) ? 'on' : 'kinds-all-none'
+  };
+}
+
+/** סוגי עיטור סיום־פרק (REQ-ORN-03; Spec §6.7). */
+const CHAPTER_END_KINDS = ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'];
+
+/** ממדים טבעיים של עיטורי H2 (em של גופן הכותרת). */
+const H2_ORN_W_EM = 3, H2_ORN_H_EM = 0.6;
+
+/**
+ * REQ-ORN-03: התאמת עיטור סיום־פרק לתקציב הפנוי שנותר בטור.
+ * - אף פעם לא דוחף תוכן ולא חוסם שער גאומטרי (invariant T1): אין מקום ⇒ לא מוצב + סיבה.
+ * - scale יורד עד רצפה (0.5); מתחת לרצפה ⇒ דחייה מתועדת (לא כיווץ עיוור).
+ * @returns {{placed:boolean, scale:number, wPx:number, hPx:number, reason:string}}
+ */
+function chapterEndOrnamentFit(kind, wPx, hPx, budgetPx) {
+  if (!kind || kind === 'none') return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'kind-none' };
+  if (!CHAPTER_END_KINDS.includes(kind)) return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'kind-unknown' };
+  const w = Math.max(0, Number(wPx) || 0), h = Math.max(0, Number(hPx) || 0);
+  if (w <= 0 || h <= 0) return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'dims-invalid' };
+  const budget = Math.max(0, Number(budgetPx) || 0);
+  if (budget <= 0) return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'no-budget' };
+  // התאמה: סקאלה אחידה על שני הממדים, עד רצפה 0.5
+  const scale = Math.min(1, budget / h);
+  if (scale < 0.5) return { placed: false, scale, wPx: 0, hPx: 0, reason: 'below-min-scale' };
+  return { placed: true, scale: Number(scale.toFixed(4)), wPx: Math.round(w * scale), hPx: Math.round(h * scale), reason: 'fit' };
+}
+
+/**
+ * REQ-ORN-04 משמרות מפרידי כותרות (שידרוג Orange): מפריד H3–H6 מוצב רק
+ * כשהכותרת אינה בראש טור (אין עיטור תלוי מעל לא־כלום) והטור אינו ריק
+ * (אין מפריד בעמוד ריק), ויש תקציב נמדד בפועל באתר ההצבה.
+ * @param {Array} columnLines - השורות בטור שבו הכותרת הוצבה (לפניה)
+ * @param {number} colIdx - אינדקס הטור
+ * @returns {boolean} מותר להציב מפריד מתחת לכותרת זו
+ */
+function dividerInsertable(columnLines, colIdx) {
+  void colIdx; // משמרת אחידה לכל הטורים — ראש טור 0 נדחה כמו ראש טור 1
+  if (!Array.isArray(columnLines) || columnLines.length === 0) return false; // טור ריק / עמוד ריק
+  if (columnLines.length <= 1) return false; // הכותרת היא ראש הטור — אין עיטור בראש טור
+  const last = columnLines[columnLines.length - 1];
+  return Boolean(last && last.kind === 'heading'); // מפריד רק מתחת לכותרת שהוצבה זה עתה
+}
+
+/**
+ * F-09 single-source: הצהרת מקור־יחיד לממדי עיטור. הגודל נקבע במודל הגיאומטריה
+ * בלבד (כאן); הרנדרר מצייר מה־rect ואסור לו לקבוע ממדים משלו (אין !important מול inline).
+ * @returns {{ok:boolean, reason:string}} אמת כשלעיטור יש מקור יחיד תקין
+ */
+function assertSingleSourceSizing(orn) {
+  if (!orn || typeof orn !== 'object') return { ok: false, reason: 'not-an-ornament' };
+  const hasRect = orn.w != null && orn.h != null && Number.isFinite(orn.w) && Number.isFinite(orn.h);
+  if (!hasRect) return { ok: false, reason: 'missing-rect' };
+  if (orn.cssWidthPx != null || orn.cssHeightPx != null) {
+    return { ok: false, reason: 'dual-source-sizing' }; // שני מקורות — אסור (F-09)
+  }
+  return { ok: true, reason: 'single-source' };
+}
+
+module.exports = {
+  fitOrnamentToText, refitStable, columnDividerHeightPx, fits, sideOrnamentOffsetY,
+  h2OrnamentMarginsPx, sideOrnamentLiftPx, h2OrnamentScope, chapterEndOrnamentFit,
+  h2OrnamentReservedHeight,
+  dividerInsertable, assertSingleSourceSizing, CHAPTER_END_KINDS, H2_ORN_W_EM, H2_ORN_H_EM
 };
 
 };
@@ -7771,184 +8231,6 @@ function inlineSizeFactor(styleSpec, bodySizePt) {
 module.exports = {
   matchBlockStyle, matchInlineStyles, matchTriggerSpec, inlineRanges,
   CustomStyleCounters, inlineSizeFactor
-};
-
-};
-__modules["src/engine/decoration/ornament-fit.js"] = function (require, module, exports) {
-// src/engine/decoration/ornament-fit.js — fit-to-text JS measurement + divider height rules (REQ-ORN-01..04)
-'use strict';
-
-/**
- * מדידת DOM/JS בלבד (CSS fit-content נכשל — V3/V4). מקור שליטה אחד: אין !important מול inline (F-09).
- *
- * **S8:** הרחבה מלאה — התאמת עיטורי H2 לרוחב הטקסט, התאמת גובה צדדיים H3 לשורת הכותרת,
- * עיטור סיום־פרק בתקציב הפנוי (REQ-ORN-03), שמירת סימטריית מרווחים אפקטיביים (F-21),
- * הרמה אופטית −0.08em לעיטורי צד (שיעור V4), ומשמרות התאמה למפרידי כותרות (REQ-ORN-04).
- */
-
-/** התאמת עיטור H2 לרוחב הטקסט: מחזיר scalePx; sync re-fit בלי shift. */
-function fitOrnamentToText(ornamentWidthPx, textWidthPx, maxScale = 3) {
-  if (!ornamentWidthPx || ornamentWidthPx <= 0) return 1;
-  const scale = Math.min(maxScale, textWidthPx / ornamentWidthPx);
-  return Math.max(0.25, Number(scale.toFixed(4)));
-}
-
-/**
- * REQ-ORN-01: re-fit סינכרוני ללא הזזה — לאחר החלת הסקאלה רוחב העיטור
- * כבר שווה לרוחב הטקסט, ולכן ריצה חוזרת מחזירה סקאלה 1 (מתייצבת מיד —
- * שיעור F-08: אין פוסט־פרוסס מאוחר שמגלה גובה שלא תוקצב).
- */
-function refitStable(ornamentWidthPx, textWidthPx, maxScale) {
-  const s1 = fitOrnamentToText(ornamentWidthPx, textWidthPx, maxScale);
-  const appliedWidth = ornamentWidthPx * s1;
-  const s2 = fitOrnamentToText(appliedWidth, textWidthPx, maxScale);
-  return Math.abs(s2 - 1) <= 0.0001; // אחרי ההחלה — אין שינוי נוסף
-}
-
-/** גובה מפריד טורים = Math.min(גובה שני הטורים) − 8px (V4 rule). */
-function columnDividerHeightPx(colUsedHeights) {
-  return Math.max(0, Math.min(...colUsedHeights) - 8);
-}
-
-/**
- * fits() — בדיקת התאמה לפני הוספת עיטור **בכל** אתרי ההוספה (לקח Orange):
- * האם לעיטור יש מקום מתחת/מעל הבלוק בלי לגלוש מהטור?
- */
-function fits(budgetRemainingPx, ornamentHeightPx) {
-  return ornamentHeightPx > 0 && budgetRemainingPx >= ornamentHeightPx;
-}
-
-/** עיטורי H3 צדדיים: יישור למרכז־גופן (cap-height centering), לא baseline. */
-function sideOrnamentOffsetY(lineHeightPx, ornamentHeightPx) {
-  return Math.round((lineHeightPx - ornamentHeightPx) / 2);
-}
-
-/**
- * F-21 (שיעור מרווחים): מרווחי עיטורי H2 עליון/תחתון **שווים אפקטיבית**.
- * בזרימת flex-column אין התמטטות שוליים — השוואה חייבת להיעשות על הסכום
- * המצטבר (שולי כותרת + שולי עיטור), לא על ערכי CSS בודדים. כאן מקור אחד:
- * שני המרווחים נקבעים מאותה פונקציה ⇒ שווים מבנית.
- * @param {number} fontPx - גודל גופן הכותרת בפיקסלים
- * @returns {{top:number, bottom:number}} מרווחים אפקטיביים שווים (px)
- */
-function h2OrnamentMarginsPx(fontPx) {
-  const m = Math.max(2, Math.round(fontPx * 0.1)); // 0.1em — מרווח נשימה מינימלי
-  return { top: m, bottom: m }; // שווים מבנית — מקור אחד, אין צבירה לא־סימטרית
-}
-
-/**
- * שיעור V4 (F-09/H3): הרמה אופטית של עיטורי צד — margin-top: −0.08em.
- * עיטורים שממורכזים גיאומטרית נראים נמוכים לעין; ההרמה מפצה.
- * @param {number} fontPx - גודל גופן השורה המארחת
- */
-function sideOrnamentLiftPx(fontPx) {
-  return -Math.round(fontPx * 0.08 * 100) / 100; // −0.08em — שיעור מתועד (Handoff 2.12)
-}
-
-/**
- * **F-08 (שיעור הלב):** גובה שעיטורי H2 צורך חייב להיות **מוזמן בזמן הפריסה**
- * (L4) בגודלו הסופי — לא כ‑overlay מאוחר שמגלה גובה שלא תוקצב (זה שורש
- * "עמוד פתיחת כותרת 2 ארוך מדי"). מחשב את ההזמנה הנדרשת מעל/מתחת לכותרת
- * לפי הממדים הסופיים (אחרי fit-to-text) — מקור יחיד למידות ולהזמנה.
- * @param {number} titleWidthPx - רוחב הכותרת הנמדד (JS — לא CSS)
- * @param {object} settings
- * @param {number} h2FontPx - גוף הכותרת בפיקסלים
- */
-function h2OrnamentReservedHeight(titleWidthPx, settings, h2FontPx) {
-  const scope = h2OrnamentScope(settings);
-  if (!scope.any) return { topPx: 0, bottomPx: 0, scale: 1, ornW: 0, ornH: 0, margins: h2OrnamentMarginsPx(h2FontPx), scope };
-  const naturalW = H2_ORN_W_EM * h2FontPx, naturalH = H2_ORN_H_EM * h2FontPx;
-  const scale = settings['h2-orn-fit-to-text'] !== false ? fitOrnamentToText(naturalW, titleWidthPx) : 1;
-  const ornH = naturalH * scale, ornW = naturalW * scale;
-  const margins = h2OrnamentMarginsPx(h2FontPx);
-  const topPx = scope.signTop ? Math.round(ornH + margins.top) : 0;
-  const bottomPx = scope.signBottom ? Math.round(ornH + margins.bottom) : 0;
-  return { topPx, bottomPx, scale, ornW: Math.round(ornW), ornH: Math.round(ornH), margins, scope };
-}
-
-/**
- * REQ-ORN-02: היקף עיטורי H2 — סימן בלבד / כותרת בלבד / שניהם.
- * מצבי עיטור עצמאיים: עליון/תחתון לסימן + צדדיים לכותרת (V4).
- * @returns {{signTop:boolean, signBottom:boolean, titleSide:boolean, any:boolean, why:string}}
- */
-function h2OrnamentScope(settings) {
-  const scope = settings['h2-orn-scope'] || 'both';
-  const top = settings['h2-orn-top'] || 'none';
-  const bottom = settings['h2-orn-bottom'] || 'none';
-  const side = settings['h2-orn-side'] || 'none';
-  const sign = scope === 'sign' || scope === 'both';
-  const title = scope === 'title' || scope === 'both';
-  const signTop = sign && top !== 'none';
-  const signBottom = sign && bottom !== 'none';
-  const titleSide = title && side !== 'none';
-  return {
-    signTop, signBottom, titleSide,
-    any: signTop || signBottom || titleSide,
-    why: !sign && !title ? 'scope-off' : (signTop || signBottom || titleSide) ? 'on' : 'kinds-all-none'
-  };
-}
-
-/** סוגי עיטור סיום־פרק (REQ-ORN-03; Spec §6.7). */
-const CHAPTER_END_KINDS = ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'];
-
-/** ממדים טבעיים של עיטורי H2 (em של גופן הכותרת). */
-const H2_ORN_W_EM = 3, H2_ORN_H_EM = 0.6;
-
-/**
- * REQ-ORN-03: התאמת עיטור סיום־פרק לתקציב הפנוי שנותר בטור.
- * - אף פעם לא דוחף תוכן ולא חוסם שער גאומטרי (invariant T1): אין מקום ⇒ לא מוצב + סיבה.
- * - scale יורד עד רצפה (0.5); מתחת לרצפה ⇒ דחייה מתועדת (לא כיווץ עיוור).
- * @returns {{placed:boolean, scale:number, wPx:number, hPx:number, reason:string}}
- */
-function chapterEndOrnamentFit(kind, wPx, hPx, budgetPx) {
-  if (!kind || kind === 'none') return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'kind-none' };
-  if (!CHAPTER_END_KINDS.includes(kind)) return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'kind-unknown' };
-  const w = Math.max(0, Number(wPx) || 0), h = Math.max(0, Number(hPx) || 0);
-  if (w <= 0 || h <= 0) return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'dims-invalid' };
-  const budget = Math.max(0, Number(budgetPx) || 0);
-  if (budget <= 0) return { placed: false, scale: 1, wPx: 0, hPx: 0, reason: 'no-budget' };
-  // התאמה: סקאלה אחידה על שני הממדים, עד רצפה 0.5
-  const scale = Math.min(1, budget / h);
-  if (scale < 0.5) return { placed: false, scale, wPx: 0, hPx: 0, reason: 'below-min-scale' };
-  return { placed: true, scale: Number(scale.toFixed(4)), wPx: Math.round(w * scale), hPx: Math.round(h * scale), reason: 'fit' };
-}
-
-/**
- * REQ-ORN-04 משמרות מפרידי כותרות (שידרוג Orange): מפריד H3–H6 מוצב רק
- * כשהכותרת אינה בראש טור (אין עיטור תלוי מעל לא־כלום) והטור אינו ריק
- * (אין מפריד בעמוד ריק), ויש תקציב נמדד בפועל באתר ההצבה.
- * @param {Array} columnLines - השורות בטור שבו הכותרת הוצבה (לפניה)
- * @param {number} colIdx - אינדקס הטור
- * @returns {boolean} מותר להציב מפריד מתחת לכותרת זו
- */
-function dividerInsertable(columnLines, colIdx) {
-  void colIdx; // משמרת אחידה לכל הטורים — ראש טור 0 נדחה כמו ראש טור 1
-  if (!Array.isArray(columnLines) || columnLines.length === 0) return false; // טור ריק / עמוד ריק
-  if (columnLines.length <= 1) return false; // הכותרת היא ראש הטור — אין עיטור בראש טור
-  const last = columnLines[columnLines.length - 1];
-  return Boolean(last && last.kind === 'heading'); // מפריד רק מתחת לכותרת שהוצבה זה עתה
-}
-
-/**
- * F-09 single-source: הצהרת מקור־יחיד לממדי עיטור. הגודל נקבע במודל הגיאומטריה
- * בלבד (כאן); הרנדרר מצייר מה־rect ואסור לו לקבוע ממדים משלו (אין !important מול inline).
- * @returns {{ok:boolean, reason:string}} אמת כשלעיטור יש מקור יחיד תקין
- */
-function assertSingleSourceSizing(orn) {
-  if (!orn || typeof orn !== 'object') return { ok: false, reason: 'not-an-ornament' };
-  const hasRect = orn.w != null && orn.h != null && Number.isFinite(orn.w) && Number.isFinite(orn.h);
-  if (!hasRect) return { ok: false, reason: 'missing-rect' };
-  if (orn.cssWidthPx != null || orn.cssHeightPx != null) {
-    return { ok: false, reason: 'dual-source-sizing' }; // שני מקורות — אסור (F-09)
-  }
-  return { ok: true, reason: 'single-source' };
-}
-
-module.exports = {
-  fitOrnamentToText, refitStable, columnDividerHeightPx, fits, sideOrnamentOffsetY,
-  h2OrnamentMarginsPx, sideOrnamentLiftPx, h2OrnamentScope, chapterEndOrnamentFit,
-  h2OrnamentReservedHeight,
-  dividerInsertable, assertSingleSourceSizing, CHAPTER_END_KINDS, H2_ORN_W_EM, H2_ORN_H_EM
 };
 
 };

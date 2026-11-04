@@ -34,6 +34,13 @@ if (!fs.existsSync(CORPUS_PATH)) {
   execSync(`node ${path.join(__dirname, '..', 'fixtures', 'generate_canonical_corpus.js')}`, { stdio: 'inherit' });
 }
 const CORPUS = fs.readFileSync(CORPUS_PATH, 'utf8');
+// **S4.21 (EXT-11) — אמת הבודקים:** אחרי תיקון שלושת האבחונים-כוזבים (סמני-מספרים
+// רגילים, כותרות פותחי-חלקים על עמוד פתיחה, runt-של-כותרת/מדידה) הקורפוס הקנוני
+// מפיק **אפס** ממצאים פתוחים — כולם היו באגים של הבודק, לא של הפריסה.
+// למבחן ההדגשה דרוש מסמך שמפיק ממצא **אמיתי**: פסקה ששורתה האחרונה runt
+// גנויני בלתי-נמנע (מילה ארוכה אחת בלתי-ניתנת-לשבירה + מילה קצרה —
+// אין שבירה חוקית אחרת; מאומת: runt-line@p24 + rollback-compromise בלבד).
+const CORPUS_WITH_FINDING = CORPUS + '\nההתקשרותההתעלותההשגחההתביעה ב.';
 
 // ================= DOM shim (עשיר — לכל מודולי ה־UI; מבוסס דפוס s9) =================
 function makeDoc() {
@@ -538,7 +545,7 @@ describe('S10.2 שער 5 — דיבאג פר־עמוד + highlightIssue נראה
     transport: inlineTransport.createInlineTransport(),
     onDebugDownload: (json, pageIndex) => downloads.push({ json, pageIndex })
   });
-  fire(app.editor.textarea, 'paste', { clipboardData: { getData: () => CORPUS } });
+  fire(app.editor.textarea, 'paste', { clipboardData: { getData: () => CORPUS_WITH_FINDING } });
   const done = settle();
 
   it('הורדת דיבאג: JSON עם גיאומטריית עמוד + פרוסת ledger + מסלול', async () => {

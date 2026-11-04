@@ -23,12 +23,12 @@ function hasTool(name) {
 }
 const HAS_PDFTOOLS = hasTool('pdfinfo') && hasTool('pdftotext') && hasTool('pdftoppm');
 
-const CANONICAL_HASH_PREFIX = 'ad1161a9'; // ננעל מחדש 03.11(ד) (S4.7 — שקיפות עימוד מהקוד):
+const CANONICAL_HASH_PREFIX = '53ea73e3'; // ננעל מחדש 05.11 (S4.21/EXT-8 — איזון טורים גלובלי אופטימלי):
 // עמודי השער חלק ממבנה הספר כברירת מחדל (show-*-shaar=true של המקור ממופים
 // למתגי shaar-*-enabled; השער האחורי אחרי הראשי — סדר המקור), כותרות עליונות
 // בעמודי פתיחה (תיקון D-36 החלקי — כמקור, top-header-grid בכל עמודי התוכן),
 // תוכן שערים מובנה (shaar-content), ותוכן השער מוקרן גם ל-PDF. שרשרת הנעילות:
-// 75b8c605 (גרידי) → 7ccad899 (החייאת KP) → 93dfbd3e (S4.5) → ef2e7a14 (S4.7) → ad1161a9 (S4.7-ב: פס חוצה־טורים לכותרות H3–H6 במצב full-width — span_1col של המקור; בעבר שורת כותרת ברוחב 471px הוצבה בטור 270px).
+// 75b8c605 (גרידי) → 7ccad899 (החייאת KP) → 93dfbd3e (S4.5) → ef2e7a14 (S4.7) → ad1161a9 (S4.7-ב: פס חוצה-טורים) → 53ea73e3 (S4.21/EXT-8: החלפת הטיפוס הגרידי שורה-שורה בחלוקה הגלובלית האופטימלית — פיצול רציף ממזער |lH-rH| בכפוף לקיבולת ולגבול-תפר נקי; עמודים שהגרידי השאיר ב-Δ≤5px שאינו המינימום מאוזנים כעת עד המינימום המוכח; הוכחה: tests/layout/ext8-optimal-balance.test.js — מיצוי-כוח 400 מופעים).
 // ההוכחה הבין־קומיטית מתחילה מחדש מכאן.
 
 // DOM shim מינימלי לרינדור
@@ -151,7 +151,7 @@ describe('S13.2 — דטרמיניזם משולש (repeat / inter-commit / cross
     assertEq(a.layoutHash, b.layoutHash, 'hash זהה');
   });
 
-  it('inter-commit: הקנוני נעול מחדש (ad1161a9…) — ראה תיעוד הקבוע למעלה; המנוע לא הוסט מאז הנעילה מחדש', () => {
+  it('inter-commit: הקנוני נעול מחדש (53ea73e3…) — ראה תיעוד הקבוע למעלה; המנוע לא הוסט מאז הנעילה מחדש', () => {
     const r = typeset(CORPUS, getDefaultSettings(), { noRecommendations: true });
     assert(r.layoutHash.startsWith(CANONICAL_HASH_PREFIX), `hash ${r.layoutHash.slice(0, 16)} — נעול ${CANONICAL_HASH_PREFIX}`);
   });

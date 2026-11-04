@@ -12,7 +12,8 @@ const { getDefaultSettings } = require('../../src/engine/core/settings-registry'
 const { renderPage } = require('../../src/engine/output/dom-renderer');
 const { tokenize } = require('../../src/engine/parser/block-tokenizer');
 const { toHebrewNumber } = require('../../src/engine/decoration/folio');
-const { isNoteMarkerWord } = require('../../src/engine/layout/protections-matrix');
+const { isNoteMarkerWord, runProtections } = require('../../src/engine/layout/protections-matrix');
+const { Ledger } = require('../../src/engine/core/ledger');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const read = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -177,6 +178,57 @@ describe('negative-controls (אסף הזהב — 0 findings by design)', () => {
     const doc = makeDoc();
     const html = r.pages.map(pg => renderPage(pg, getDefaultSettings(), doc, pg.header || null).outerHTML()).join('\n');
     assert(!/https?:\/\/(?!localhost)/i.test(html), 'no external refs');
+  });
+
+  // ===== S4.21 (EXT-11) — אמת הבודקים אחרי טיהור אבחוני-השקר: בקרות-כפול =====
+  // שלושת התיקונים (סמן לפי תג D-53, escort מדלג עמודי פתיחה, runt לפי המידה
+  // ולא כותרות) חייבים להישאר **קוטלי הפרות אמיתיות** — לא כיבוי בדיקות.
+
+  it('NC-17 (S4.21): סמן אמיתי מתויג בודד בסוף שורה כן נתפס; מספר רגיל לא', () => {
+    const S = getDefaultSettings();
+    const mkPage = (words) => ({
+      index: 0, type: 'regular', chapterOpening: false,
+      columns: [[{ heightPx: 20, isLast: true, words, meta: { tokenId: 'x1' } }]],
+      template: { contentBox: { height: 500 }, columns: [{ x: 0, w: 300 }] }
+    });
+    const fired = (p) => runProtections(p, S, new Ledger()).violations.some(v => v.kind === 'note-marker-line-break');
+    // חיובי: סמן מתויג בודד (בלי עוגן NBSP) בסוף שורה — הפרת BRZ-11 אמיתית
+    assert(fired(mkPage(['מילה', '\uE102א׳'])), 'bare tagged marker at line end IS a violation');
+    // שלילי: סמן מודבק לעוגנו (עוגן\u00A0תג-סמן) — זוג שלם, חוקי
+    assert(!fired(mkPage(['מילה', 'עוגן\u00A0\uE102א׳'])), 'glued anchor+marker pair is legal');
+    // שלילי: מספר סידורי רגיל ("של חלק 1") — 24 אבחוני-שקר בקורפוס הקנוני לפני התיקון
+    assert(!fired(mkPage(['של', 'חלק', '1'])), 'plain ordinal number is NOT a marker');
+    assert(!fired(mkPage(['של', 'חלק', '12'])), 'plain two-digit number is NOT a marker');
+  });
+
+  it('NC-18 (S4.21): runt אמיתי לפי מידת השבירה; כותרת קצרה אינה runt', () => {
+    const S = getDefaultSettings(); // runt-min-width-pct = 50
+    const mkPage = (lines) => ({
+      index: 0, type: 'regular',
+      columns: [lines],
+      template: { contentBox: { height: 500 }, columns: [{ x: 0, w: 600 }] }
+    });
+    const fired = (p) => runProtections(p, S, new Ledger()).violations.some(v => v.kind === 'runt-line');
+    // חיובי: שורת-סיום של פסקה ברוחב 100 מתוך מידה 300 (33% < 50%) — runt אמיתי
+    assert(fired(mkPage([{ heightPx: 20, isLast: true, widthPx: 100, measureW: 300, words: ['קצר'], meta: { tokenId: 'p1' } }])), 'genuine paragraph runt fires');
+    // שלילי: אותה שורה מול המידה שבה נשברה בפועל בעמוד פתיחה רחב — 271/330 = 82%
+    assert(!fired(mkPage([{ heightPx: 20, isLast: true, widthPx: 271, measureW: 330, words: ['תורה', 'דעת'], meta: { tokenId: 'p2' } }])), '82% of its own measure is not a runt');
+    // שלילי: כותרת קצרה ("פתח דבר" 114px) — runt מוגדר לשורות פסקה בלבד
+    assert(!fired(mkPage([{ heightPx: 24, isLast: true, kind: 'heading', widthPx: 114, words: ['פתח', 'דבר'], meta: { tokenId: 'h1' } }])), 'short heading is not a runt');
+  });
+
+  it('NC-19 (S4.21): escort כן נורה בזרימת תוכן; עמוד פתיחת-חלק פטור מעיצוב', () => {
+    const S = getDefaultSettings();
+    const heading = { kind: 'heading', level: 4, heightPx: 24, words: ['כותרת'], tokenId: 'h9' };
+    const one = { heightPx: 20, words: ['שורה'], meta: { tokenId: 'p9' } };
+    const tpl = { contentBox: { height: 500 }, columns: [{ x: 0, w: 300 }] };
+    const fired = (p) => runProtections(p, S, new Ledger()).violations.some(v => v.kind === 'heading-escort');
+    // חיובי: כותרת בתחתית טור בזרימה רגילה עם שורה אחת בלבד אחריה
+    assert(fired({ index: 3, type: 'regular', columns: [[one, one, heading, one]], template: tpl }), 'mid-flow heading at column bottom fires');
+    // שלילי: כותרת-חלק (H1) לבדה בעמוד הפתיחה שלה — מכוון-עיצוב (D-36/PT-04)
+    assert(!fired({ index: 4, type: 'preface', chapterOpening: true, columns: [[heading]], template: tpl }), 'part-opener page is exempt');
+    // שלילי: עמוד שער
+    assert(!fired({ index: 5, type: 'shaar-main', columns: [[heading]], template: tpl }), 'shaar page is exempt');
   });
 });
 

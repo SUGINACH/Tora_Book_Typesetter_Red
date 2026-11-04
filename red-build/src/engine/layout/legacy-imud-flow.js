@@ -1815,6 +1815,21 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('folio', 'legacy-imud: folios + TOC', {});
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
   const ledger = new Ledger();
+
+  // **EXT-4 (שארית — S4.21): חיבור ornament-plan לנתיב ה-legacy.** רץ אחרי
+  // חישוב ה-hash — overlay בלבד (אינווריאנט T1; דפוס D-47). ברירות המחדל
+  // של המקור = 'none' לכל עיטור ⇒ אפס rectים ואפס השפעה; החיבור מוכיח את
+  // עצמו רק כשההגדרות מזמנות עיטורים (בדיקות s8). ההקרנה כבר מוכנה:
+  // legacy-projector מצייר pg.decorations באותו דיו (ornament-ink) כמו
+  // נתיב ה-DP — pdfOps ל-PDF, data-URI ל-DOM.
+  const { planLegacyOrnaments } = require('../decoration/legacy-ornaments');
+  const ornPass = planLegacyOrnaments(pages, settings,
+    (t, s2) => api.measureTextWidth(t, s2), {
+    ledger, eventLog: events,
+    bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
+    flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
+  });
+
   return {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
@@ -1822,7 +1837,8 @@ function legacyTypeset(rawText, settings, env) {
     contentPreserved: true,
     layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
-    ornaments: null, retreat: null, sideNotes: null, endnotePages: null,
+    ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
+    retreat: null, sideNotes: null, endnotePages: null,
     endnotePagesInfo: { count: 0, pages: [] },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true

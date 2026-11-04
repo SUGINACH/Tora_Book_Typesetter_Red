@@ -16,6 +16,15 @@
  */
 
 const { usedHeight, pageImbalance } = require('./balancing');
+const { MARK_TAG } = require('../notes/markers');
+
+/** עמודים מבניים שאינם זרימת-תוכן — כותרת בודדת בהם היא מכוונת-עיצוב,
+ * לא הפרת ליווי (S4.21/EXT-11: פותחי-החלקים H1 על עמוד פתיחה ייעודי — D-36/PT-04). */
+function isStructuralPage(page) {
+  return Boolean(page.chapterOpening) ||
+    page.type === 'shaar-main' || page.type === 'shaar-sub' || page.type === 'shaar-back' ||
+    page.type === 'toc-general' || page.type === 'toc-detail';
+}
 
 /** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **. */
 function isNoteMarkerWord(w) {
@@ -69,6 +78,11 @@ const CHECKS = {
   },
 
   headingEscort(page, settings, ledger) {
+    // **S4.21 (EXT-11):** עמודי פתיחה/שער/תוכן-עניינים מדולגים — כותרת החלק
+    // עומדת לבדה בעמוד הפתיחה שלה **בתכנון** (D-36, PT-04: "כותרת 1 — עמוד
+    // חדש תמיד"); דרישת 2 שורות ליווי אינה חלה שם. בזרימת התוכן הכללית
+    // הכלל נותר כחוק קשה.
+    if (isStructuralPage(page)) return [];
     const violations = [];
     for (let c = 0; c < page.columns.length; c++) {
       const col = page.columns[c];
@@ -88,9 +102,20 @@ const CHECKS = {
   runtLines(page, settings, ledger) {
     const violations = [];
     const seenRunt = new Set();
-    const minPx = (page.template.columns[0].w * settings['runt-min-width-pct']) / 100;
+    // **S4.21 (EXT-11):** שתי האמות של בדיקת ה-runt —
+    //  (א) runt הוא מושג של שורת-פסקה: כותרת קצרה ("פתח דבר", "חלק 1") היא
+    //      תקינה מיסודה ואינה נמדדת כלל; בעבר 9 מתוך 10 הממצאים בקורפוס הקנוני
+    //      היו כותרות.
+    //  (ב) ההשוואה היא מול **המידה שבה השורה נשברה** (ln.measureW — מוטבע
+    //      ב-pipeline), לא מול רוחב התבנית: פסקת הקדמה שנמדדה במידת טור-הגוף
+    //      ~330px והוצבה בעמוד חד-טורי בן 674px — שורת-סיום בת 82% מהמידה
+    //      סומנה בטעות כקצרה.
+    const colW = page.template.columns[0].w;
     for (const col of page.columns) {
       for (const ln of col) {
+        if (ln.kind === 'heading') continue;
+        const base = ln.measureW || colW;
+        const minPx = (base * settings['runt-min-width-pct']) / 100;
         if (ln.isLast && ln.widthPx < minPx) {
           const key = `${lineToken(ln)}|${(ln.words || []).join(' ')}`;
           if (seenRunt.has(key)) continue;
@@ -112,18 +137,26 @@ const CHECKS = {
 
   /**
    * סמן הערה אינו יחידה האחרונה בשורה (BRZ-11) — **לכל הסגנונות** (P1-3).
-   * בעבר רק א׳ היה מוגן; הסמנים בפועל ([1] וכד') לא.
+   * **S4.21 (EXT-11) — זיהוי לפי תג D-53 בלבד, לא לפי ניחוש מבנה:**
+   * סמן אמיתי מתויג תמיד ב-MARK_TAG (\uE102) ומודבק לעוגנו ב-NBSP
+   * (`עוגן\u00A0\uE102סמן` — מקור יחיד bindMarkersToNeighbors). היוריסטיקת
+   * הרג'קס הקודמת סימנה כל מספר בודד בטקסט ("…של חלק 1") כסמן — 24
+   * אבחוני-שקר בקורפוס הקנוני ו-420 בספר האמת, אפס מהם סמנים אמיתיים.
+   * הפרת BRZ-11 האמיתית שנותרה לזיהוי: יחידת סמן **בודדת** (תג בלי עוגן —
+   * בלי NBSP) שנותרה בסוף שורה.
    */
   markerLineBreak(page, settings, ledger) {
     const violations = [];
     for (const col of page.columns) {
       for (const ln of col) {
         const words = ln.words || [];
-        if (words.length && isNoteMarkerWord(words[words.length - 1])) {
+        if (!words.length) continue;
+        const last = String(words[words.length - 1]);
+        if (last.includes(MARK_TAG) && !last.includes('\u00A0')) {
           violations.push({
             kind: 'note-marker-line-break', target: `line@${lineToken(ln)}`, page: page.index,
-            evidence: { lastWord: words[words.length - 1] },
-            ledgerRef: ledger.create('note-marker-line-break', lineToken(ln) || 'unknown', page.index, { lastWord: words[words.length - 1] }, 'protections').issue_id
+            evidence: { lastWord: last.split(MARK_TAG).join('') },
+            ledgerRef: ledger.create('note-marker-line-break', lineToken(ln) || 'unknown', page.index, { lastWord: last.split(MARK_TAG).join('') }, 'protections').issue_id
           });
         }
       }

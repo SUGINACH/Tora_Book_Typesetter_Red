@@ -11,6 +11,7 @@ const { blockGapPx } = require('./column-flow');
 const { fixDropWordInColumns } = require('../typography/protectors');
 const { MARK_TAG } = require('../notes/markers');
 const { moveLineForward } = require('./ordering');
+const { optimalSplit } = require('./balancing'); // **EXT-8:** חלוקה גלובלית אופטימלית
 const { getFootnotesReservedHeight, noteHeight } = require('./footnote-budget');
 
 /** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism).
@@ -155,21 +156,27 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   }
 
   function flushPage() {
-    // איזון טורים: Δ≤5px (BRZ-3) — **שמירת סדר קריאה בכל הזזה (תיקון P0-3)**
+    // איזון טורים: Δ≤5px (BRZ-3) — **EXT-8: החלוקה הגלובלית האופטימלית**
+    // (פיצול רציף ממזער |lH−rH| בכפוף לקיבולת; סדר קריאה נשמר מבנית — תיקון P0-3
+    // מובנה בהגדרת מרחב המצבים; הוכחת מינימליות ב-balancing.optimalSplit)
     if (cur.columns.length === 2) {
-      let a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
-      let guard = 0;
-      while (Math.abs(a - b) > imbMax && guard++ < 200) {
-        const hi = a >= b ? 0 : 1, lo = 1 - hi;
-        if (!moveLineForward(cur.columns, hi, lo)) break;
-        a = usedHeight(cur.columns[0], cur); b = usedHeight(cur.columns[1], cur);
+      const a0 = usedHeight(cur.columns[0], cur), b0 = usedHeight(cur.columns[1], cur);
+      if (Math.abs(a0 - b0) > imbMax) {
+        const cap = colCapacity(cur.template, cur);
+        const best = optimalSplit(cur.columns, { cap, extraLast: cur.fnReservedHeightPx || 0 });
+        if (best && best.k !== cur.columns[0].length) {
+          const seq = [...cur.columns[0], ...cur.columns[1]];
+          cur.columns[0] = seq.slice(0, best.k);
+          cur.columns[1] = seq.slice(best.k);
+        }
       }
       // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
       if (fixDropWordInColumns(cur.columns) ) {
         eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
       }
-      cur.balanceInfo = { before: [a, b], after: [usedHeight(cur.columns[0], cur), usedHeight(cur.columns[1], cur)] };
-      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(usedHeight(cur.columns[0], cur) - usedHeight(cur.columns[1], cur)) }, cur.index);
+      const a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
+      cur.balanceInfo = { before: [a0, b0], after: [a, b] };
+      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(a - b) }, cur.index);
     }
     // Invariant BRZ-14: scrollHeight ≤ clientHeight (בכפוף לפס החוצה־טורים — FWD-1)
     for (const col of cur.columns) {
@@ -541,23 +548,48 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 }
 
 /** איזון בטוח עם rollback (REQ-BAL-09): snapshot כולל footnotes/sideNotes.
- * תיקון P0-3: הזזות קדימה בסדר הקריאה בלבד (moveLineForward).
- * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו**. */
+ * **EXT-8 — חלוקה גלובלית אופטימלית** (במקום טיפוס גרידי שורה-שורה):
+ * מרחב המצבים החוקי = פיצולים רציפים של רצף הקריאה; המינימום הגלובלי של |lH−rH|
+ * נמצא ב-O(n) (הוכחה ב-balancing.optimalSplit). סדר קריאה נשמר מבנית.
+ * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו** (על הטור האחרון). */
 function balancePageSafe(page, settings, ledger) {
+  const deltaOf = () => {
+    const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0)
+      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
+    return Math.abs(hh(page.columns[0]) - hh(page.columns[1]));
+  };
+  const maxDelta = settings['imbalance-max-delta-px'];
+  if (deltaOf() <= maxDelta) return true; // כבר מאוזן — אין התערבות (יציבות פריסה)
+  if (!page.columns || page.columns.length < 2) return false;
+  const cap = page.template.contentBox.height;
+  const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
+  if (!best || best.k === page.columns[0].length) {
+    // **EXT-8:** אין פיצול חוקי, או שהנוכחי כבר האופטימלי הגלובלי — הפרש שנותר
+    // מעל הסף הוא **פשרה מתועדת**: שלמות פסקה (הימנעות מיתום/ווידוא בגבול
+    // התפר) גוברת על Δ≤5px (למשל: פסקה בת 15 שורות שנכנסת שלמה לטור אחד).
+    const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index,
+      { reason: best ? 'at-optimum' : 'capacity', delta: Math.round(deltaOf()), bestK: best ? best.k : null },
+      'balance');
+    ledger.transition(rec.issue_id, 'correction-blocked', 'balance',
+      best ? 'global optimum reached: any further move creates widow/orphan at the seam (paragraph integrity preferred over Δ-threshold)'
+           : 'hard reject: no capacity-legal split exists');
+    return false;
+  }
   const snapshot = { cols: page.columns.map(c => c.slice()), fn: page.footnotes.slice(), sn: page.sideNotes.slice() };
-  const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0) + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
-  let guard = 0;
-  while (Math.abs(hh(page.columns[0]) - hh(page.columns[1])) > settings['imbalance-max-delta-px'] && guard++ < 200) {
-    const a = hh(page.columns[0]), b = hh(page.columns[1]);
-    const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break;
-    const cap = page.template.contentBox.height;
-    if (page.columns.some(cl => hh(cl) > cap + 0.5)) {
-      page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
-      const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
-      ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
-      return false;
-    }
+  const seq = [...page.columns[0], ...page.columns[1]];
+  page.columns[0] = seq.slice(0, best.k);
+  page.columns[1] = seq.slice(best.k);
+  // hard reject: חריגת קיבולת אחרי ההחלפה (הגנה כפולה — optimalSplit כבר מסנן) → rollback מלא
+  const overflows = (c) => {
+    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0)
+      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
+    return hh > cap + 0.5;
+  };
+  if (page.columns.some(overflows)) {
+    page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
+    const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
+    ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
+    return false;
   }
   return true;
 }

@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 57 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 58 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -342,9 +342,11 @@ var __paths = {
   "src/engine/layout/legacy-imud-flow.js|../typography/measure-api": "src/engine/typography/measure-api.js",
   "src/engine/layout/legacy-imud-flow.js|../core/events": "src/engine/core/events.js",
   "src/engine/layout/legacy-imud-flow.js|../core/ledger": "src/engine/core/ledger.js",
+  "src/engine/layout/legacy-imud-flow.js|../decoration/legacy-ornaments": "src/engine/decoration/legacy-ornaments.js",
   "src/engine/typography/measure-api.js|./measure-table": "src/engine/typography/measure-table.js",
   "src/engine/typography/measure-api.js|./font-metrics": "src/engine/typography/font-metrics.js",
   "src/engine/typography/measure-api.js|./kp-linebreak": "src/engine/typography/kp-linebreak.js",
+  "src/engine/decoration/legacy-ornaments.js|./ornament-fit": "src/engine/decoration/ornament-fit.js",
   "src/ui/testing-tab.js|../audit/report-schema": "src/audit/report-schema.js",
   "src/ui/testing-tab.js|../engine/core/ledger": "src/engine/core/ledger.js",
   "src/audit/report-schema.js|../engine/layout/dp-planner": "src/engine/layout/dp-planner.js",
@@ -358,9 +360,10 @@ var __paths = {
   "src/engine/layout/dp-planner.js|../typography/protectors": "src/engine/typography/protectors.js",
   "src/engine/layout/dp-planner.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/layout/dp-planner.js|./ordering": "src/engine/layout/ordering.js",
+  "src/engine/layout/dp-planner.js|./balancing": "src/engine/layout/balancing.js",
   "src/engine/layout/dp-planner.js|./footnote-budget": "src/engine/layout/footnote-budget.js",
   "src/engine/layout/protections-matrix.js|./balancing": "src/engine/layout/balancing.js",
-  "src/engine/layout/balancing.js|./ordering": "src/engine/layout/ordering.js",
+  "src/engine/layout/protections-matrix.js|../notes/markers": "src/engine/notes/markers.js",
   "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
   "src/ui/caret-map.js|../engine/parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
@@ -11637,6 +11640,21 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('folio', 'legacy-imud: folios + TOC', {});
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
   const ledger = new Ledger();
+
+  // **EXT-4 (שארית — S4.21): חיבור ornament-plan לנתיב ה-legacy.** רץ אחרי
+  // חישוב ה-hash — overlay בלבד (אינווריאנט T1; דפוס D-47). ברירות המחדל
+  // של המקור = 'none' לכל עיטור ⇒ אפס rectים ואפס השפעה; החיבור מוכיח את
+  // עצמו רק כשההגדרות מזמנות עיטורים (בדיקות s8). ההקרנה כבר מוכנה:
+  // legacy-projector מצייר pg.decorations באותו דיו (ornament-ink) כמו
+  // נתיב ה-DP — pdfOps ל-PDF, data-URI ל-DOM.
+  const { planLegacyOrnaments } = require('../decoration/legacy-ornaments');
+  const ornPass = planLegacyOrnaments(pages, settings,
+    (t, s2) => api.measureTextWidth(t, s2), {
+    ledger, eventLog: events,
+    bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
+    flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
+  });
+
   return {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
@@ -11644,7 +11662,8 @@ function legacyTypeset(rawText, settings, env) {
     contentPreserved: true,
     layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
-    ornaments: null, retreat: null, sideNotes: null, endnotePages: null,
+    ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
+    retreat: null, sideNotes: null, endnotePages: null,
     endnotePagesInfo: { count: 0, pages: [] },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true
@@ -12617,6 +12636,128 @@ class Ledger {
 module.exports = { Ledger, LIFECYCLE_STATES };
 
 };
+__modules["src/engine/decoration/legacy-ornaments.js"] = function (require, module, exports) {
+// src/engine/decoration/legacy-ornaments.js — **EXT-4 (שארית): חיבור ornament-plan לנתיב ה-legacy**
+'use strict';
+
+/**
+ * הפאס שמשלים את החוליה החסרה בשרשרת העיטורים של פרופיל ה-IMUD:
+ * הדיו קיים (ornament-ink — כולל פענוח imud: מספריות העיצובים המוטמעות),
+ * ההקרנה קיימת (legacy-projector: pdfOps + data-URI מ-pg.decorations) —
+ * ומה שחסר הוא ה**תכנון**: הפקת rectים של עיטורים על עמודי פתיחת-הסימן
+ * של מנוע המורשת, לפי אותם מפתחות h2-orn-* שמיפוי ההגדרות מתרגם מהמקור
+ * (h2-ornament-top-style וכו').
+ *
+ * **ברירות המחדל של המקור = 'none' לכל העיטורים** — בפרופיל ברירת-המחדל
+ * הפאס הזה לא מייצר דבר (אפס שינוי; ה-parity וה-hash מוכחים כזהים).
+ * החיבור מופעל רק כשההגדרות מזמנות עיטורים בפועל — ואז הוא מוכח בבדיקות.
+ *
+ * **אינווריאנט T1 (ניטרליות גיאומטרית):** הפאס רץ אחרי חישוב ה-layoutHash
+ * של המורשת ואינו נוגע בטורים/בפסים — overlay-rects בלבד (דפוס D-47).
+ * גובה העיטור אינו "מתגלה" בדיעבד (שיעור F-08): עיטור שאין לו מקום
+ * חוקי בתוך אזור ה-h2 נדחה ונרשם — לא נדחק לתוך זרימת הגוף.
+ */
+
+const {
+  h2OrnamentScope, h2OrnamentReservedHeight
+} = require('./ornament-fit');
+
+/** רוחב הפס (שני טורים + מרזב) — מקור: legacy-imud-flow GEO. */
+const BAND_W = 552;
+const BAND_X = 48.7; // GEO.COL_L_X — מרכז העמוד (A5 16x16... ליתר דיוק מוזרק מהקריאה)
+
+/**
+ * @param {Array} pages - עמודי המורשת (אחרי ההרכבה; pg.bands/pg.columns מוכנים)
+ * @param {object} settings - הגדרות RED (כולל h2-orn-* הממופות מהמקור)
+ * @param {Function} measureFn - (text, sizePx?) => widthPx
+ * @param {object} io - { ledger, eventLog, bandX, bandW }
+ * @returns {{planted:number, rejected:Array}}
+ */
+function planLegacyOrnaments(pages, settings, measureFn, io = {}) {
+  const ledger = io.ledger, eventLog = io.eventLog;
+  const bandX = io.bandX != null ? io.bandX : BAND_X;
+  const bandW = io.bandW != null ? io.bandW : BAND_W;
+  // ראש זרימת הגוף של עמוד h2 — מחושב בצד הזרימה (FLOW_TOP + גובה אזור-h2
+  // לפי פטור-span); ברירת מחדל שמרנית: מתחת לפס הכותרת.
+  const flowTopOf = io.flowTopOf || ((pg, title) => title.y + title.h);
+  const out = { planted: 0, rejected: [] };
+  const scope = h2OrnamentScope(settings);
+  if (!scope.any) return out; // ברירות המחדל של המקור — אין עיטורים (אפס התערבות)
+
+  for (const pg of pages) {
+    const title = (pg.bands || []).find(b => b.kind === 'h2-title');
+    if (!title) continue; // עיטורי h2 בלבד בחיבור זה (עמודי פתיחת סימן)
+    const siman = (pg.bands || []).find(b => b.kind === 'h2-siman');
+    const topBand = siman || title;
+
+    const h2FontPx = title.sizePt * (96 / 72);
+    let titleW = 0;
+    try { titleW = measureFn(title.text, title.sizePt); } catch { titleW = 0; }
+    const titleWpx = Math.max(40, titleW || 0);
+    const { scale, ornW, ornH, margins } = h2OrnamentReservedHeight(titleWpx, settings, h2FontPx);
+    if (ornW <= 0 || ornH <= 0) continue;
+
+    pg.decorations = pg.decorations || [];
+    const centerX = bandX + bandW / 2;
+    const kindTop = settings['h2-orn-top'];
+    const kindBottom = settings['h2-orn-bottom'];
+    const kindSide = settings['h2-orn-side'];
+
+    // גבולות אזור-h2 חוקיים: מעל הפס העליון, ועד ראש זרימת הגוף של העמוד
+    const flowTop = flowTopOf(pg, title);
+
+    // ---------- עיטור עליון (מעל הסימן/הכותרת; REQ-ORN-01/02) ----------
+    if (scope.signTop && kindTop && kindTop !== 'none') {
+      const y = topBand.y - margins.top - ornH;
+      if (y >= 60) { // לא מטפס מעל אזור הכותרת העליונה של העמוד
+        const x = centerX - ornW / 2;
+        pg.decorations.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-top', slot: 'sign-top', kindStyle: kindTop });
+        out.planted++;
+      } else {
+        out.rejected.push({ page: pg.folioDisplay || pg.index, slot: 'sign-top', reason: 'no-room-above', ornH });
+        if (ledger) ledger.create('ornament-rejected', `legacy-h2-top@${pg.index}`, pg.index, { reason: 'no-room-above', ornH }, 'ornaments');
+      }
+    }
+
+    // ---------- עיטור תחתון (מתחת לכותרת; בתוך אזור ה-h2 בלבד — שיעור F-08) ----------
+    if (scope.signBottom && kindBottom && kindBottom !== 'none') {
+      const y = title.y + title.h + margins.bottom;
+      if (y + ornH <= flowTop - 1) { // חייב להיכנס לאזור — לא לחדור לזרימת הגוף
+        const x = centerX - ornW / 2;
+        pg.decorations.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-bottom', slot: 'sign-bottom', kindStyle: kindBottom });
+        out.planted++;
+      } else {
+        out.rejected.push({ page: pg.folioDisplay || pg.index, slot: 'sign-bottom', reason: 'no-room-below', ornH, flowTop });
+        if (ledger) ledger.create('ornament-rejected', `legacy-h2-bottom@${pg.index}`, pg.index, { reason: 'no-room-below', ornH }, 'ornaments');
+      }
+    }
+
+    // ---------- עיטורי צד (משני צדי הכותרת; ממורכזים אנכית לפס) ----------
+    if (scope.titleSide && kindSide && kindSide !== 'none') {
+      const gap = Math.max(4, Math.round(h2FontPx * 0.15));
+      const y = title.y + (title.h - ornH) / 2;
+      const halfTitle = (titleWpx * (scale > 0 ? 1 : 1)) / 2;
+      const rightX = centerX + halfTitle + gap;
+      const leftX = centerX - halfTitle - gap - ornW;
+      if (rightX + ornW <= bandX + bandW && leftX >= bandX) {
+        pg.decorations.push({ x: Math.round(rightX * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-side', slot: 'side-r', kindStyle: kindSide });
+        pg.decorations.push({ x: Math.round(leftX * 100) / 100, y: Math.round(y * 100) / 100, w: ornW, h: ornH, kind: 'h2-orn-side', slot: 'side-l', kindStyle: kindSide });
+        out.planted += 2;
+      } else {
+        out.rejected.push({ page: pg.folioDisplay || pg.index, slot: 'side', reason: 'title-too-wide', titleW: titleWpx });
+        if (ledger) ledger.create('ornament-rejected', `legacy-h2-side@${pg.index}`, pg.index, { reason: 'title-too-wide', titleW: titleWpx }, 'ornaments');
+      }
+    }
+  }
+  if (eventLog && out.planted) {
+    eventLog.emit('ornaments', 'legacy-h2-ornaments', { planted: out.planted, rejected: out.rejected.length });
+  }
+  return out;
+}
+
+module.exports = { planLegacyOrnaments };
+
+};
 __modules["src/ui/testing-tab.js"] = function (require, module, exports) {
 // src/ui/testing-tab.js — לשונית הבדיקה (REQ-UI-06: ממצאים, trace, כיסוי, highlightIssue)
 'use strict';
@@ -13088,6 +13229,7 @@ const { blockGapPx } = require('./column-flow');
 const { fixDropWordInColumns } = require('../typography/protectors');
 const { MARK_TAG } = require('../notes/markers');
 const { moveLineForward } = require('./ordering');
+const { optimalSplit } = require('./balancing'); // **EXT-8:** חלוקה גלובלית אופטימלית
 const { getFootnotesReservedHeight, noteHeight } = require('./footnote-budget');
 
 /** חתימת פריסה דטרמיניסטית — ללא Date/random (REQ-GOV determinism).
@@ -13232,21 +13374,27 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   }
 
   function flushPage() {
-    // איזון טורים: Δ≤5px (BRZ-3) — **שמירת סדר קריאה בכל הזזה (תיקון P0-3)**
+    // איזון טורים: Δ≤5px (BRZ-3) — **EXT-8: החלוקה הגלובלית האופטימלית**
+    // (פיצול רציף ממזער |lH−rH| בכפוף לקיבולת; סדר קריאה נשמר מבנית — תיקון P0-3
+    // מובנה בהגדרת מרחב המצבים; הוכחת מינימליות ב-balancing.optimalSplit)
     if (cur.columns.length === 2) {
-      let a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
-      let guard = 0;
-      while (Math.abs(a - b) > imbMax && guard++ < 200) {
-        const hi = a >= b ? 0 : 1, lo = 1 - hi;
-        if (!moveLineForward(cur.columns, hi, lo)) break;
-        a = usedHeight(cur.columns[0], cur); b = usedHeight(cur.columns[1], cur);
+      const a0 = usedHeight(cur.columns[0], cur), b0 = usedHeight(cur.columns[1], cur);
+      if (Math.abs(a0 - b0) > imbMax) {
+        const cap = colCapacity(cur.template, cur);
+        const best = optimalSplit(cur.columns, { cap, extraLast: cur.fnReservedHeightPx || 0 });
+        if (best && best.k !== cur.columns[0].length) {
+          const seq = [...cur.columns[0], ...cur.columns[1]];
+          cur.columns[0] = seq.slice(0, best.k);
+          cur.columns[1] = seq.slice(best.k);
+        }
       }
       // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
       if (fixDropWordInColumns(cur.columns) ) {
         eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
       }
-      cur.balanceInfo = { before: [a, b], after: [usedHeight(cur.columns[0], cur), usedHeight(cur.columns[1], cur)] };
-      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(usedHeight(cur.columns[0], cur) - usedHeight(cur.columns[1], cur)) }, cur.index);
+      const a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
+      cur.balanceInfo = { before: [a0, b0], after: [a, b] };
+      eventLog.emit('balance', 'column-balance', { page: cur.index, delta: Math.abs(a - b) }, cur.index);
     }
     // Invariant BRZ-14: scrollHeight ≤ clientHeight (בכפוף לפס החוצה־טורים — FWD-1)
     for (const col of cur.columns) {
@@ -13618,23 +13766,48 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
 }
 
 /** איזון בטוח עם rollback (REQ-BAL-09): snapshot כולל footnotes/sideNotes.
- * תיקון P0-3: הזזות קדימה בסדר הקריאה בלבד (moveLineForward).
- * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו**. */
+ * **EXT-8 — חלוקה גלובלית אופטימלית** (במקום טיפוס גרידי שורה-שורה):
+ * מרחב המצבים החוקי = פיצולים רציפים של רצף הקריאה; המינימום הגלובלי של |lH−rH|
+ * נמצא ב-O(n) (הוכחה ב-balancing.optimalSplit). סדר קריאה נשמר מבנית.
+ * תיקון P1-8: גובה כולל את תקציב ההערות של **העמוד המאוזן עצמו** (על הטור האחרון). */
 function balancePageSafe(page, settings, ledger) {
+  const deltaOf = () => {
+    const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0)
+      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
+    return Math.abs(hh(page.columns[0]) - hh(page.columns[1]));
+  };
+  const maxDelta = settings['imbalance-max-delta-px'];
+  if (deltaOf() <= maxDelta) return true; // כבר מאוזן — אין התערבות (יציבות פריסה)
+  if (!page.columns || page.columns.length < 2) return false;
+  const cap = page.template.contentBox.height;
+  const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
+  if (!best || best.k === page.columns[0].length) {
+    // **EXT-8:** אין פיצול חוקי, או שהנוכחי כבר האופטימלי הגלובלי — הפרש שנותר
+    // מעל הסף הוא **פשרה מתועדת**: שלמות פסקה (הימנעות מיתום/ווידוא בגבול
+    // התפר) גוברת על Δ≤5px (למשל: פסקה בת 15 שורות שנכנסת שלמה לטור אחד).
+    const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index,
+      { reason: best ? 'at-optimum' : 'capacity', delta: Math.round(deltaOf()), bestK: best ? best.k : null },
+      'balance');
+    ledger.transition(rec.issue_id, 'correction-blocked', 'balance',
+      best ? 'global optimum reached: any further move creates widow/orphan at the seam (paragraph integrity preferred over Δ-threshold)'
+           : 'hard reject: no capacity-legal split exists');
+    return false;
+  }
   const snapshot = { cols: page.columns.map(c => c.slice()), fn: page.footnotes.slice(), sn: page.sideNotes.slice() };
-  const hh = (c) => c.reduce((s, ln) => s + (ln.heightPx || 0), 0) + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
-  let guard = 0;
-  while (Math.abs(hh(page.columns[0]) - hh(page.columns[1])) > settings['imbalance-max-delta-px'] && guard++ < 200) {
-    const a = hh(page.columns[0]), b = hh(page.columns[1]);
-    const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break;
-    const cap = page.template.contentBox.height;
-    if (page.columns.some(cl => hh(cl) > cap + 0.5)) {
-      page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
-      const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
-      ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
-      return false;
-    }
+  const seq = [...page.columns[0], ...page.columns[1]];
+  page.columns[0] = seq.slice(0, best.k);
+  page.columns[1] = seq.slice(best.k);
+  // hard reject: חריגת קיבולת אחרי ההחלפה (הגנה כפולה — optimalSplit כבר מסנן) → rollback מלא
+  const overflows = (c) => {
+    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0)
+      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
+    return hh > cap + 0.5;
+  };
+  if (page.columns.some(overflows)) {
+    page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
+    const rec = ledger.create('rollback-compromise', `balance@p${page.index}`, page.index, { reason: 'capacity' }, 'balance');
+    ledger.transition(rec.issue_id, 'correction-reverted', 'balance', 'hard reject: overflow after move (not soft ×2000)');
+    return false;
   }
   return true;
 }
@@ -13679,6 +13852,15 @@ __modules["src/engine/layout/protections-matrix.js"] = function (require, module
  */
 
 const { usedHeight, pageImbalance } = require('./balancing');
+const { MARK_TAG } = require('../notes/markers');
+
+/** עמודים מבניים שאינם זרימת-תוכן — כותרת בודדת בהם היא מכוונת-עיצוב,
+ * לא הפרת ליווי (S4.21/EXT-11: פותחי-החלקים H1 על עמוד פתיחה ייעודי — D-36/PT-04). */
+function isStructuralPage(page) {
+  return Boolean(page.chapterOpening) ||
+    page.type === 'shaar-main' || page.type === 'shaar-sub' || page.type === 'shaar-back' ||
+    page.type === 'toc-general' || page.type === 'toc-detail';
+}
 
 /** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **. */
 function isNoteMarkerWord(w) {
@@ -13732,6 +13914,11 @@ const CHECKS = {
   },
 
   headingEscort(page, settings, ledger) {
+    // **S4.21 (EXT-11):** עמודי פתיחה/שער/תוכן-עניינים מדולגים — כותרת החלק
+    // עומדת לבדה בעמוד הפתיחה שלה **בתכנון** (D-36, PT-04: "כותרת 1 — עמוד
+    // חדש תמיד"); דרישת 2 שורות ליווי אינה חלה שם. בזרימת התוכן הכללית
+    // הכלל נותר כחוק קשה.
+    if (isStructuralPage(page)) return [];
     const violations = [];
     for (let c = 0; c < page.columns.length; c++) {
       const col = page.columns[c];
@@ -13751,9 +13938,20 @@ const CHECKS = {
   runtLines(page, settings, ledger) {
     const violations = [];
     const seenRunt = new Set();
-    const minPx = (page.template.columns[0].w * settings['runt-min-width-pct']) / 100;
+    // **S4.21 (EXT-11):** שתי האמות של בדיקת ה-runt —
+    //  (א) runt הוא מושג של שורת-פסקה: כותרת קצרה ("פתח דבר", "חלק 1") היא
+    //      תקינה מיסודה ואינה נמדדת כלל; בעבר 9 מתוך 10 הממצאים בקורפוס הקנוני
+    //      היו כותרות.
+    //  (ב) ההשוואה היא מול **המידה שבה השורה נשברה** (ln.measureW — מוטבע
+    //      ב-pipeline), לא מול רוחב התבנית: פסקת הקדמה שנמדדה במידת טור-הגוף
+    //      ~330px והוצבה בעמוד חד-טורי בן 674px — שורת-סיום בת 82% מהמידה
+    //      סומנה בטעות כקצרה.
+    const colW = page.template.columns[0].w;
     for (const col of page.columns) {
       for (const ln of col) {
+        if (ln.kind === 'heading') continue;
+        const base = ln.measureW || colW;
+        const minPx = (base * settings['runt-min-width-pct']) / 100;
         if (ln.isLast && ln.widthPx < minPx) {
           const key = `${lineToken(ln)}|${(ln.words || []).join(' ')}`;
           if (seenRunt.has(key)) continue;
@@ -13775,18 +13973,26 @@ const CHECKS = {
 
   /**
    * סמן הערה אינו יחידה האחרונה בשורה (BRZ-11) — **לכל הסגנונות** (P1-3).
-   * בעבר רק א׳ היה מוגן; הסמנים בפועל ([1] וכד') לא.
+   * **S4.21 (EXT-11) — זיהוי לפי תג D-53 בלבד, לא לפי ניחוש מבנה:**
+   * סמן אמיתי מתויג תמיד ב-MARK_TAG (\uE102) ומודבק לעוגנו ב-NBSP
+   * (`עוגן\u00A0\uE102סמן` — מקור יחיד bindMarkersToNeighbors). היוריסטיקת
+   * הרג'קס הקודמת סימנה כל מספר בודד בטקסט ("…של חלק 1") כסמן — 24
+   * אבחוני-שקר בקורפוס הקנוני ו-420 בספר האמת, אפס מהם סמנים אמיתיים.
+   * הפרת BRZ-11 האמיתית שנותרה לזיהוי: יחידת סמן **בודדת** (תג בלי עוגן —
+   * בלי NBSP) שנותרה בסוף שורה.
    */
   markerLineBreak(page, settings, ledger) {
     const violations = [];
     for (const col of page.columns) {
       for (const ln of col) {
         const words = ln.words || [];
-        if (words.length && isNoteMarkerWord(words[words.length - 1])) {
+        if (!words.length) continue;
+        const last = String(words[words.length - 1]);
+        if (last.includes(MARK_TAG) && !last.includes('\u00A0')) {
           violations.push({
             kind: 'note-marker-line-break', target: `line@${lineToken(ln)}`, page: page.index,
-            evidence: { lastWord: words[words.length - 1] },
-            ledgerRef: ledger.create('note-marker-line-break', lineToken(ln) || 'unknown', page.index, { lastWord: words[words.length - 1] }, 'protections').issue_id
+            evidence: { lastWord: last.split(MARK_TAG).join('') },
+            ledgerRef: ledger.create('note-marker-line-break', lineToken(ln) || 'unknown', page.index, { lastWord: last.split(MARK_TAG).join('') }, 'protections').issue_id
           });
         }
       }
@@ -13893,7 +14099,7 @@ module.exports = { runProtections, CHECKS, isNoteMarkerWord };
 
 };
 __modules["src/engine/layout/balancing.js"] = function (require, module, exports) {
-// src/engine/layout/balancing.js — AutoQuality (Gold port, שלוש שכבות) + StretchPageToBottom clamp + chapter-end modes
+// src/engine/layout/balancing.js — AutoQuality (Gold port, שלוש שכבות) + איזון גלובלי אופטימלי (EXT-8) + chapter-end modes
 'use strict';
 
 /**
@@ -13901,7 +14107,7 @@ __modules["src/engine/layout/balancing.js"] = function (require, module, exports
  * Clamp overshoot 20px (REQ-BAL-07); balance-chapter-end {balance|stretch|natural} (REQ-BAL-03).
  */
 
-const { moveLineForward } = require('./ordering');
+// (moveLineForward אינו נדרש עוד באיזון: optimalSplit מכסה את מרחב המצבים כולו — EXT-8)
 
 function usedHeight(col) {
   // **EXT-20:** גובה בפועל — כולל מקדם ה-AQ האנכי (לפני ה-AQ כל המקדמים 1).
@@ -13915,33 +14121,93 @@ function pageImbalance(page) {
 }
 
 /**
- * איזון מלא של עמוד: הזזת שורות עד Δ≤maxDelta; נסיגה אם נוצרה חריגת תקציב
- * (rollback integrity REQ-BAL-09).
- * **תיקון P0-3:** הזזות קדימה בסדר הקריאה בלבד (moveLineForward) — בעבר
- * האיזון העביר שורה אחורה בסדר הקריאה (הצגת סוף פסקה לפני תחילתה).
+ * **EXT-8 — חלוקה גלובלית אופטימלית של טורי העמוד (הוכחה מתמטית):**
+ * כל מצב חוקי של שני טורים — אחרי כל רצף הזזות moveLineForward חוקיות —
+ * הוא **פיצול רציף** של רצף הקריאה: col0 = seq[0..k), col1 = seq[k..n).
+ * (הוכחה: moveLineForward מעביר אך ורק את סוף col0 לראש col1 או את ראש col1
+ * לסוף col0; אינדוקציה על מספר המהלכים שומרת על רציפות ועל סדר seq.)
+ * לכן מרחב המצבים החוקי הוא בדיוק k ∈ [0..n], והמינימום הגלובלי של
+ * ‏|H0(k) − H1(k)| בכפוף לקיבולת שני הטורים נמצא בזמן O(n) בסכומי קידום —
+ * במקום הטיפוס הגרידי שורה-שורה שנעצר במינימום מקומי/בקיבולת.
+ * סדר העדפות לקסיקוגרפי: (1) גבול-תפר נקי מ-widow/orphan, (2) |Δ| מינימלי,
+ * (3) תנועה מינימלית מהפיצול הנוכחי (יציבות/דטרמיניזם).
+ * @returns {{k:number, delta:number, clean:boolean}|null} — null אם אין פיצול חוקי-קיבולת
+ */
+function optimalSplit(cols, opts = {}) {
+  const cap = opts.cap != null ? opts.cap : Number.POSITIVE_INFINITY;
+  const extraLast = opts.extraLast || 0; // תקציב הערות של העמוד — על הטור האחרון (P1-8)
+  const c0 = cols[0] || [], c1 = cols[1] || [];
+  const seq = [...c0, ...c1];
+  const n = seq.length;
+  if (!n) return null;
+  const h = (ln) => (ln.heightPx || 0) * (ln.aqStretch || 1);
+  const pre = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + h(seq[i]);
+  const total = pre[n];
+  const k0 = c0.length;
+
+  // גבול-תפר נקי (ווידוא/יתום קלאסיים, מבוסס ריצות tokenId):
+  //  - widow-bottom: לבלוק שחוצה את הגבול יש **שורה אחת בדיוק** בתחתית col0
+  //    (השורה שלפני הגבול היא ראשונת הריצה שלו ב-seq).
+  //  - widow-top: לבלוק שחוצה את הגבול יש **שורה אחת בדיוק** בראש col1 והיא
+  //    גם אחרונת הבלוק (הריצה מסתיימת מיד אחריה).
+  // לא נעזר בדגלי part ('first'/'rest') — הם מוטבעים לכל שורות הצ'אנק
+  // ב-pushLinks ואינם מעידים על מיקום בבלוק (נלכד בניפוי EXT-8: כל 39
+  // שורות הפיצול נשאו part='first' וסימנו כל גבול פנימי כ-widow).
+  const cleanBoundary = (k) => {
+    if (k > 0 && k < n) {
+      const lt = seq[k - 1].meta && seq[k - 1].meta.tokenId;
+      const rt = seq[k].meta && seq[k].meta.tokenId;
+      if (lt != null && lt === rt) { // הבלוק ממשיך מעבר לגבול
+        if (k - 2 < 0 || (seq[k - 2].meta && seq[k - 2].meta.tokenId) !== lt) return false; // widow-bottom
+        if (k + 1 >= n || (seq[k + 1].meta && seq[k + 1].meta.tokenId) !== rt) return false; // widow-top
+      }
+    }
+    return true;
+  };
+
+  let best = null;
+  for (let k = 0; k <= n; k++) {
+    const H0 = pre[k];
+    const H1 = total - pre[k] + extraLast;
+    if (H0 > cap + 0.5 || H1 > cap + 0.5) continue; // קיבולת קשה (REQ-BAL-09)
+    const delta = Math.abs(H0 - H1);
+    const clean = cleanBoundary(k);
+    const score = (clean ? 0 : 1) * 1e9 + delta;
+    if (
+      !best ||
+      score < best.score - 1e-9 ||
+      (Math.abs(score - best.score) <= 1e-9 && Math.abs(k - k0) < Math.abs(best.k - k0))
+    ) {
+      best = { k, delta, clean, score };
+    }
+  }
+  return best;
+}
+
+/**
+ * איזון מלא של עמוד — **החלוקה הגלובללית האופטימלית (EXT-8)**: אם Δ>maxDelta
+ * נבחר פיצול הממזער את |Δ| על כל הפיצולים החוקיים-קיבולתית (הוכחה ב-optimalSplit),
+ * בהעדפת גבול-תפר נקי ובתנועה מינימלית. שמירת סדר הקריאה מובנית (פיצול רציף).
+ * נסיגה אם אין פיצול חוקי (rollback integrity REQ-BAL-09).
  * @returns {{changed:boolean, before:number, after:number}}
  */
 function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
-  const snapshot = page.columns.map(c => c.slice());
-  let guard = 0;
-  let moves = 0; // **03.11 (ביקורת):** אמינות הדיווח — changed אמיתי רק אם הוזזה שורה
-  while (pageImbalance(page) > maxDelta && guard++ < 500) {
-    const a = usedHeight(page.columns[0]), b = usedHeight(page.columns[1]);
-    const hi = a >= b ? 0 : 1, lo = 1 - hi;
-    if (!moveLineForward(page.columns, hi, lo)) break; // אין מהלך חוקי — עוצרים בלי לדווח על שינוי
-    moves++;
-    // hard reject: אם נוצרה חריגת cap → rollback מלא
-    const cap = page.template.contentBox.height;
-    if (page.columns.some(c => usedHeight(c) > cap + 0.5)) {
-      page.columns = snapshot;
-      return { changed: false, before, after: before, rollback_reason: 'capacity' };
-    }
+  if (before <= maxDelta) return { changed: false, before, after: before, moves: 0 };
+  if (!page.columns || page.columns.length < 2) return { changed: false, before, after: before };
+  const cap = page.template.contentBox.height;
+  const best = optimalSplit(page.columns, { cap });
+  if (!best || best.k === page.columns[0].length) {
+    // אין פיצול חוקי-קיבולת, או שהנוכחי כבר האופטימלי — לא מדווח שינוי
+    return { changed: false, before, after: before, rollback_reason: best ? 'at-optimum' : 'capacity' };
   }
-  // **03.11 (ביקורת):** בעבר הוחזר changed:true גם כשהלולאה נעצרה בלי שורה אחת —
-  // דיווח מטעה של אבחון האיזון. כעת: שינוי אמיתי = הוזזה בפועל והפרש שהשתנה.
+  const seq = [...page.columns[0], ...page.columns[1]];
+  const k0 = page.columns[0].length;
+  page.columns[0] = seq.slice(0, best.k);
+  page.columns[1] = seq.slice(best.k);
   const after = pageImbalance(page);
-  return { changed: moves > 0 && after !== before, moves, before, after };
+  return { changed: true, moves: Math.abs(best.k - k0), before, after, optimal: true, cleanBoundary: best.clean };
 }
 
 /**
@@ -14034,39 +14300,7 @@ function autoQualityPass(pages, settings, eventLog) {
   return { applied };
 }
 
-module.exports = { balancePage, pageImbalance, applyChapterEndMode, autoQualityPass, usedHeight };
-
-};
-__modules["src/engine/layout/ordering.js"] = function (require, module, exports) {
-// src/engine/layout/ordering.js — Reading-order-preserving column moves (P0-3; D-49)
-'use strict';
-
-/**
- * הזזת שורה בין טורים תוך **שמירת סדר הקריאה בלבד** (תיקון P0-3):
- * סדר קריאה: col0 (ימני, נקרא ראשון) מלמעלה למטה, ואז col1.
- *  - טור מוקדם (col0) גבוה יותר ⇒ pop מסופו → unshift לראש col1 (הזזת הגבול קדימה).
- *  - טור מאוחר (col1) גבוה יותר ⇒ shift מראשו → push לסוף col0 (הזזת הגבול אחורה —
- *    השורה עדיין אחרי כל col0 ולפני שאר col1).
- * שתי ההזזות שומרות את סדר המילים בדיוק; בעבר האיזון העביר שורה **אחורה**
- * בסדר הקריאה (הצגת סוף פסקה לפני תחילתה) — רגרסיה שלא הייתה באף גרסה קודמת.
- * מודול עצמאי ללא תלויות — נצרך ע"י dp-planner וגם balancing (מניעת תלות מעגלית).
- */
-function moveLineForward(cols, hi, lo) {
-  if (hi === lo || cols.length < 2) return false;
-  if (hi === 0 && lo === 1) {           // col0 גבוה: סוף col0 → ראש col1
-    if (!cols[0] || !cols[0].length) return false;
-    cols[1].unshift(cols[0].pop());
-    return true;
-  }
-  if (hi === 1 && lo === 0) {           // col1 גבוה: ראש col1 → סוף col0
-    if (!cols[1] || !cols[1].length) return false;
-    cols[0].push(cols[1].shift());
-    return true;
-  }
-  return false;
-}
-
-module.exports = { moveLineForward };
+module.exports = { balancePage, optimalSplit, pageImbalance, applyChapterEndMode, autoQualityPass, usedHeight };
 
 };
 __modules["src/engine/layout/retreat-loop.js"] = function (require, module, exports) {
@@ -14385,6 +14619,38 @@ function fixDropWordInColumns(columnLines, minLen = 3) {
 }
 
 module.exports = { protectWords, glueNoteMarkers, glueAbbreviations, fixDropWordInColumns };
+
+};
+__modules["src/engine/layout/ordering.js"] = function (require, module, exports) {
+// src/engine/layout/ordering.js — Reading-order-preserving column moves (P0-3; D-49)
+'use strict';
+
+/**
+ * הזזת שורה בין טורים תוך **שמירת סדר הקריאה בלבד** (תיקון P0-3):
+ * סדר קריאה: col0 (ימני, נקרא ראשון) מלמעלה למטה, ואז col1.
+ *  - טור מוקדם (col0) גבוה יותר ⇒ pop מסופו → unshift לראש col1 (הזזת הגבול קדימה).
+ *  - טור מאוחר (col1) גבוה יותר ⇒ shift מראשו → push לסוף col0 (הזזת הגבול אחורה —
+ *    השורה עדיין אחרי כל col0 ולפני שאר col1).
+ * שתי ההזזות שומרות את סדר המילים בדיוק; בעבר האיזון העביר שורה **אחורה**
+ * בסדר הקריאה (הצגת סוף פסקה לפני תחילתה) — רגרסיה שלא הייתה באף גרסה קודמת.
+ * מודול עצמאי ללא תלויות — נצרך ע"י dp-planner וגם balancing (מניעת תלות מעגלית).
+ */
+function moveLineForward(cols, hi, lo) {
+  if (hi === lo || cols.length < 2) return false;
+  if (hi === 0 && lo === 1) {           // col0 גבוה: סוף col0 → ראש col1
+    if (!cols[0] || !cols[0].length) return false;
+    cols[1].unshift(cols[0].pop());
+    return true;
+  }
+  if (hi === 1 && lo === 0) {           // col1 גבוה: ראש col1 → סוף col0
+    if (!cols[1] || !cols[1].length) return false;
+    cols[0].push(cols[1].shift());
+    return true;
+  }
+  return false;
+}
+
+module.exports = { moveLineForward };
 
 };
 __modules["src/engine/layout/footnote-budget.js"] = function (require, module, exports) {
