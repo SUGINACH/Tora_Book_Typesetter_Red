@@ -102,11 +102,15 @@ const DISPOSITIONS = {
   'mode-h5': { kind: 'mapped', to: 'heading-5-mode', transform: (v) => OPEN_MODE_MAP[v] || 'regular' },
   'mode-h6': { kind: 'mapped', to: 'heading-6-mode', transform: (v) => OPEN_MODE_MAP[v] || 'regular' },
   'mode-h7': { kind: 'mapped', to: 'heading-7-mode', transform: (v) => OPEN_MODE_MAP[v] || 'side-note' },
-  'odd-h0': { kind: 'removed', reason: 'פתיחה בעמוד אי-זוגי לפי רמה — תכנון העמודים של RED מיישר פתיחות חלקים ל-recto אוטומטית; בקרה פר-רמה טרם נדרשה', issue: 'EXT-15' },
-  'odd-h1': { kind: 'removed', reason: 'פתיחת H1 בעמוד אי-זוגי — RED מיישר פתיחות חלקים ל-recto אוטומטית', issue: 'EXT-15' },
-  'odd-h2': { kind: 'removed', reason: 'פתיחת H2 בעמוד אי-זוגי — בקרה פר-רמה טרם נדרשה ב-RED', issue: 'EXT-15' },
-  'h2-auto-siman': { kind: 'removed', reason: 'מספור סימן אוטומטי (א-ב-ג בראשי סימנים) — מנגנון לא קיים ב-RED; נרשם כפער', issue: 'EXT-16' },
-  'h2-reset-siman': { kind: 'removed', reason: 'איפוס מונה סימנים לכל פרק — תלוי ב-EXT-16', issue: 'EXT-16' },
+  // **S4.20 (סגירת EXT-15/16):** שלושת המפתחות ממומשים עתה בפרופיל ה-legacy
+  // (legacy-imud-flow): ‏ensureOddPageStart כללי (הליכה על הסדר הסופי לפני
+  // עמוד פתיחת-מקטע מסומן שנוחת בגב) + המונה האוטומטי והאיפוס (autoSimanH2/
+  // resetSimanOnH1) — היו קיימים ב-flow אך סומנו בטעות כ-removed.
+  'odd-h0': { kind: 'ui-state', reason: 'פתיחת H0 בעמוד אי-זוגי — ensureOddPageStart של המקור, מיושם בהרכבת ה-legacy (עמוד ריק לפני פתיחת מקטע בגב) — S4.20', issue: 'EXT-15' },
+  'odd-h1': { kind: 'ui-state', reason: 'פתיחת H1 בעמוד אי-זוגי — כמו odd-h0 (החליף את המקרה הפרטי של שער-המשנה) — S4.20', issue: 'EXT-15' },
+  'odd-h2': { kind: 'ui-state', reason: 'פתיחת H2 בעמוד אי-זוגי — ברירת המחדל של המקור כבויה — S4.20', issue: 'EXT-15' },
+  'h2-auto-siman': { kind: 'ui-state', reason: 'מספור סימן אוטומטי (א-ב-ג) — מיושם ב-legacy-imud-flow (autoSimanH2) — S4.20/EXT-16' },
+  'h2-reset-siman': { kind: 'ui-state', reason: 'איפוס מונה סימנים לכל פרק — מיושם ב-legacy-imud-flow (resetSimanOnH1) — S4.20/EXT-16' },
   'h2-top-distance': { kind: 'mapped', to: 'h2-top-offset', transform: pctToPx, reason: '22% מגובה תיבת התוכן (1040px ב-A4 של RED) ⇒ פיקסלים' },
 
   // ============ מזהי הערות (S4.5-ג — הוטמעו זה עתה) ============
@@ -180,9 +184,9 @@ const DISPOSITIONS = {
   'fn-title-text': { kind: 'mapped', to: 'endnote-title-text' },
   'note-numbering-style': { kind: 'mapped', to: 'footnote-marker-style', transform: (v) => ({ 'gematria': 'hebrew-geresh', 'hebrew': 'hebrew-geresh', 'decimal': 'decimal', 'asterisk': 'asterisk', 'parenthesis': 'parenthesis' }[v] || 'hebrew-geresh') },
   'note-marker-type': { kind: 'merged', to: 'footnote-marker-style', reason: 'סוג הסמן (super) נגזר מהסגנון ב-RED; אין עילוי-נפרד נפרד' },
-  'note-marker-size': { kind: 'removed', reason: 'גודל סמן נפרד — RED מגזר מגודל הגוף; נרשם כפער', issue: 'EXT-17' },
-  'note-listing-num-size': { kind: 'removed', reason: 'כנ"ל — גודל מספור ברשימת ההערות', issue: 'EXT-17' },
-  'note-num-separator': { kind: 'removed', reason: 'מפריד בין מספר לטקסט בהערה — RED משתמש ברווח; נרשם כפער', issue: 'EXT-17' },
+  'note-marker-size': { kind: 'ui-state', reason: 'גודל מילת-הסמן בגוף (ברירת מחדל 8) — מיושם בפרויקטור ה-legacy (S4.20/EXT-17)', issue: 'EXT-17' },
+  'note-listing-num-size': { kind: 'ui-state', reason: 'גודל סמן הרישום ברשימת ההערות — מיושם בפרויקטור ה-legacy — S4.20/EXT-17' },
+  'note-num-separator': { kind: 'ui-state', reason: 'המפריד אחרי מספר ההערה (ברירת מחדל .) — מיושם ב-markerWord — S4.20/EXT-17' },
   'note-rule-style': { kind: 'mapped', to: 'footnote-separator-rule', reason: 'star ⇒ star (enum זהה ב-RED)' },
   'note-header-orn-r': { kind: 'removed', reason: 'עיטור בצד ימין של כותרת עמודי-ההערות — טרם ממומש ב-RED', issue: 'EXT-4' },
   'note-header-orn-l': { kind: 'removed', reason: 'עיטור בצד שמאל של כותרת עמודי-ההערות — טרם ממומש ב-RED', issue: 'EXT-4' },
@@ -232,8 +236,8 @@ const DISPOSITIONS = {
   'active-theme-select': { kind: 'ui-state', reason: 'ערכת נושא פעילה — ב-RED: theme-set-id / imud-shaar-*' },
 
   // ============ כותרות עליונות (25 מפתחות hdr-*) ============
-  'hdr-title-split': { kind: 'removed', reason: 'פיצול כותרת עליונה לשניים (ראש|שני) — RED מציג מקור אחד לכל מיקום; פיצול דינמי טרם ממומש', issue: 'EXT-19' },
-  'hdr-alternating': { kind: 'removed', reason: 'החלפה אוטומטית recto/verso — RED מגדיר recto/verso בנפרד (header-verso-*/header-recto-*) ולכן אין צורך במתג; נשמר במעקב לצורך קיצור', issue: 'EXT-19' }
+  'hdr-title-split': { kind: 'ui-state', reason: 'פיצול שם הספר לחצאים בכותרת העליונה — מיושם תמידית ב-legacy (hdrR/hdrL) כמו בייחוס — S4.20/EXT-19' },
+  'hdr-alternating': { kind: 'ui-state', reason: 'החלפת החצאים בעמודים זוגיים-פיזיים — מיושם בהרכבת ה-legacy (S4.20/EXT-19)', issue: 'EXT-19' },
 };
 
 /** כללי משפחה — מצבי UI של האפליקציה הישנה (נשמרים כנתונים, אין אפקט מנועתי). */

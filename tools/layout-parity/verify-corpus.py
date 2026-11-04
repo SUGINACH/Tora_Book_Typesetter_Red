@@ -290,8 +290,17 @@ def main():
         problems.append("toc-detailed אינו רציף")
     if td and ss and td[0] != ss[0] + 1:
         problems.append(f"toc-detailed (p{td[0]}) אינו מיד אחרי שער-המשנה הראשון (p{ss[0]})")
-    if bl and len(bl) > 1:
-        problems.append(f"{len(bl)} עמודים ריקים (מותר אחד)")
+    # **S4.20/EXT-15:** עמודים ריקים לפי כלל המקור (ensureOddPageStart) —
+    # עמוד ריק לפני פתיחת מקטע h0/h1 שנחתה בגב (אינדקס אי-זוגי). מותרים
+    # כמה (אחד לכל פתיחה כזו), אך רק במקומם: מיד לפני shaar-sub/chapter-open,
+    # ולעולם לא שניים רצופים ולא בראש המסמך.
+    for i in bl:
+        if i == 0:
+            problems.append("עמוד ריק בראש המסמך")
+        elif seq[i - 1] == "blank":
+            problems.append(f"שני ריקים רצופים ב-p{i}")
+        elif i + 1 >= len(seq) or seq[i + 1] not in ("shaar-sub", "chapter-open"):
+            problems.append(f"עמוד ריק ב-p{i} שאינו לפני פתיחת מקטע (אחריו {seq[i + 1] if i + 1 < len(seq) else 'סוף'})")
     if ss and len(ss) != h1_count:
         problems.append(f"שערי-משנה {len(ss)} ≠ כותרות h1 במקור {h1_count}")
     co = [i for i, t in enumerate(seq) if t == "chapter-open"]
@@ -299,7 +308,7 @@ def main():
         problems.append(f"פתיחות-פרק {len(co)} ≠ כותרות h0 במקור {h0_count}")
     # אחרי בלוק ה-toc-detailed: רק shaar-sub/chapter-open/body
     if td:
-        after = set(seq[td[-1] + 1:]) - {"shaar-sub", "chapter-open", "body"}
+        after = set(seq[td[-1] + 1:]) - {"shaar-sub", "chapter-open", "body", "blank"}
         if after:
             problems.append(f"סוגים זרים אחרי ה-TOC: {sorted(after)}")
     elif body_first is not None and tg:

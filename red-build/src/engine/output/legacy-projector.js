@@ -31,7 +31,10 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
     if (typeof w === 'object') return w; // כבר ממוקם (חלון/סמן)
     const isMarker = opts.markers && opts.markers[i];
     const isParen = opts.parenIdx && opts.parenIdx.has(i);
-    const sz = isMarker ? SZ.fnMarker : (isParen ? SZ.body + SZ.parenDelta : sizePt);
+    // **EXT-17:** גודל מילת-הסמן בגוף — הגדרת המקור (note-marker-size, ברירת
+    // מחדל 8) ולא נגזרת מגודל הגוף.
+    const markerSz = opts.markerSize != null ? opts.markerSize : SZ.fnMarker;
+    const sz = isMarker ? markerSz : (isParen ? SZ.body + SZ.parenDelta : sizePt);
     return { text: w, w: api.measureTextWidth(w, sz, 0), sizePt: sz };
   });
   const sumW = placed.reduce((a, w) => a + w.w, 0);
@@ -59,6 +62,13 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
 
 /** הקרנת עמוד legacy בודד. */
 function projectLegacyPage(pg, settings, api, winApi) {
+  // **EXT-17:** גדלי סמני ההערות מהגדרות המקור (ברירות המחדל: 8/8). ההגדרות
+  // של פרופיל IMUD מגיעות ב-_imudRaw (כמו readConfig של העימוד עצמו).
+  const imudSet = (settings && settings._imudRaw) || settings || {};
+  const projCfg = {
+    markerSize: Number(imudSet['note-marker-size']) || 8,
+    listingSize: Number(imudSet['note-listing-num-size']) || 8
+  };
   const ascent = api.ascentEm();
   const out = {
     width: GEO.PAGE_W, height: GEO.PAGE_H,
@@ -181,7 +191,8 @@ function projectLegacyPage(pg, settings, api, winApi) {
           });
         }
         words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
-          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx });
+          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx,
+            markerSize: projCfg.markerSize });
       }
       out.lines.push({
         x: col.x, y: ln.y, w: col.w, h: ln.heightPx, words,
@@ -216,9 +227,11 @@ function projectLegacyPage(pg, settings, api, winApi) {
     let baseY = null;
     const words = [];
     if (fn.marker) {
-      const mw = api.measureTextWidth(fn.marker, SZ.fnBody, 0);
+      // **EXT-17:** סמן הרישום בגודל עצמאי (note-listing-num-size, ברירת מחדל 8).
+      const msz = projCfg.listingSize;
+      const mw = api.measureTextWidth(fn.marker, msz, 0);
       x -= mw;
-      words.push({ text: fn.marker, x, w: mw, sizePt: SZ.fnBody });
+      words.push({ text: fn.marker, x, w: mw, sizePt: msz });
       x -= api.measureTextWidth(' ', SZ.fnBody, 0);
     }
     for (const l of fn.lines) {

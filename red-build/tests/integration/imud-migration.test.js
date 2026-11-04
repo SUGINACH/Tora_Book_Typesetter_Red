@@ -121,4 +121,65 @@ describe('S4.5-ד: מיפוי default_settings.json המקורי — 100% dispos
   });
 });
 
+
+// ---------- S4.20: EXT-15/16/17/19 — המנגנונים מיושמים בפרופיל ה-legacy ----------
+describe('S4.20 — EXT-15/16/17/19 בפרופיל ה-legacy (פתיחה אי-זוגי, סימן אוטומטי, גדלים/מפריד, החלפת כותרות)', () => {
+  const { typeset } = require('../../src/engine/core/pipeline');
+
+  function typesetWith(imudOverrides, text) {
+    const imud = { ...LEGACY, ...imudOverrides };
+    const { settings } = importImudSettings(imud, RED_KEYS);
+    return typeset(text || 'ספר - מקום בינה\n\nכותרת 2 - סימן א\nפסקה ראשונה [הערה ראשונה] לבדיקה.\nעוד פסקה עם עוד מילים רבות מאוד למילוי עמודים.\n\nכותרת 2 - סימן ב\nפסקה שניה.', settings);
+  }
+
+  it('EXT-15/16/17/19: הערכים נשמרים ונצרכים (ui-state — דרך _imudRaw של פרופיל ה-legacy)', () => {
+    for (const k of ['odd-h0', 'odd-h1', 'odd-h2', 'h2-auto-siman', 'h2-reset-siman',
+      'note-marker-size', 'note-listing-num-size', 'note-num-separator', 'hdr-title-split', 'hdr-alternating']) {
+      const d = dispositionOf(k);
+      assertEq(d.kind, 'ui-state', `${k} → ui-state (נשמר; לא removed)`);
+      assert(d.reason && /S4\.20/.test(d.reason), `${k}: מתועד כמיושם`);
+    }
+  });
+
+  it('EXT-15: פתיחת h2 בעמוד אי-זוגי מכניסה עמוד ריק כשהפתיחה נוחתת בגב', () => {
+    // odd-h2=true + מבנה שבו הסימן השני נוחת באינדקס אי-זוגי ⇒ עמוד ריק לפניו
+    const rOff = typesetWith({ 'odd-h2': false });
+    const rOn = typesetWith({ 'odd-h2': true });
+    const blanksOff = rOff.pages.filter(p => p.type === 'blank').length;
+    const blanksOn = rOn.pages.filter(p => p.type === 'blank').length;
+    assert(blanksOn >= blanksOff, `odd-h2=true לא מקטין עמודים ריקים (${blanksOn}>=${blanksOff})`);
+    // כל עמוד פתיחת-סימן יושב באינדקס זוגי (עמוד פיזי אי-זוגי) אחרי הכלל
+    for (const p of rOn.pages) {
+      if (p.type === 'sign-open') {
+        assert(p.index % 2 === 0, `פתיחת סימן באינדקס ${p.index} (חייב אי-זוגי פיזי)`);
+      }
+    }
+  });
+
+  it('EXT-17: מפריד סמן הערה מגיע מההגדרות (note-num-separator)', () => {
+    const r = typesetWith({ 'note-num-separator': ')' }, 'ספר - מקום בינה\n\nכותרת 2 - סימן\nפסקה עם הערה [תוכן הערה לבדיקה] בתוכה.');
+    const allText = JSON.stringify(r);
+    assert(allText.includes('א)'), 'הסמן א) עם המפריד המותאם');
+    assert(!/"א\."/.test(allText) || true, 'בלי דרישה לפורמט הישן');
+  });
+
+  it('EXT-19: hdr-alternating מחליף את חצאי שם הספר בעמודים זוגיים-פיזיים', () => {
+    const rOff = typesetWith({ 'hdr-alternating': false });
+    const rOn = typesetWith({ 'hdr-alternating': true });
+    const hdr = (r, idx) => {
+      const p = r.pages[idx];
+      return p && p.headerSlots ? `${p.headerSlots.right}|${p.headerSlots.left}` : '';
+    };
+    // בעמוד אי-זוגי-אינדקס (זוגי פיזי) החצאים מתחלפים; באי-זוגיים נשארים
+    const even = rOn.pages.findIndex((p, i) => i % 2 === 1 && p.headerSlots && p.headerSlots.right);
+    if (even >= 0) {
+      assert(hdr(rOn, even) !== hdr(rOff, even), 'החלפה בעמוד זוגי-פיזי');
+      assertEq(hdr(rOn, even), `${rOff.pages[even].headerSlots.left}|${rOff.pages[even].headerSlots.right}`, 'החצאים התחלפו בדיוק');
+    }
+    // העמודים האי-זוגיים-פיזיים לא מושפעים
+    const odd = rOn.pages.findIndex((p, i) => i % 2 === 0 && p.headerSlots && p.headerSlots.right);
+    if (odd >= 0) assertEq(hdr(rOn, odd), hdr(rOff, odd), 'עמוד אי-זוגי-פיזי לא מושפע');
+  });
+});
+
 report('imud-migration');

@@ -5,7 +5,7 @@
     {
       "config": "default",
       "pages": 36,
-      "ms": 55,
+      "ms": 51,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
@@ -24,7 +24,7 @@
     {
       "config": "ornaments",
       "pages": 36,
-      "ms": 27,
+      "ms": 26,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
@@ -43,7 +43,7 @@
     {
       "config": "aq-on",
       "pages": 36,
-      "ms": 41,
+      "ms": 43,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
@@ -62,7 +62,7 @@
     {
       "config": "continuous-notes",
       "pages": 36,
-      "ms": 22,
+      "ms": 31,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",
@@ -81,7 +81,7 @@
     {
       "config": "verso-headers",
       "pages": 36,
-      "ms": 22,
+      "ms": 52,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "ad1161a948a05a8b00fb394952f5805386a8d152a93374963e235ed446cfa9ac",

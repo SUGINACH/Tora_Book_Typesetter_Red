@@ -5666,6 +5666,16 @@ function readConfig(imud) {
     oddH0: b('odd-h0', true),
     oddH1: b('odd-h1', true),
     oddH2: b('odd-h2', false),
+    // **EXT-17 (גדלים נפרדים לסמן הערה/מספור ברשימה/מפריד):** במקור שלוש
+    // הגדרות עצמאיות — אצלנו היו נגזרות מגודל הגוף. ברירות המחדל של המקור:
+    // ‏8/‏8/'.' (מילה-סמן בגוף, סמן ברשימת ההערות, המפריד אחרי המספר).
+    fnMarkerSize: n('note-marker-size', 8),
+    fnListingNumSize: n('note-listing-num-size', 8),
+    fnNumSeparator: String(g('note-num-separator', '.')),
+    // **EXT-19 (כותרות מתחלפות):** החלפת החצאים בעמודים זוגיים (ברירת
+    // המחדל במקור: כבוי — שני החצאים קבועים; hdr-title-split כבר ממומש
+    // בפיצול שם הספר לחצאים ב-setHeader).
+    hdrAlternating: b('hdr-alternating', false),
     hdrRType: String(g('hdr-r-type', 'book_title_split_r')),
     hdrCType: String(g('hdr-c-type', 'h2_without_siman')),
     hdrLType: String(g('hdr-l-type', 'book_title_split_l')),
@@ -5802,7 +5812,7 @@ class LineBreaker {
   }
 
   /** החלפת מילת-הערה בסמן הגימטריה (בפלט בלבד). */
-  static markerWord(n) { return toGematria(n) + '.'; }
+  static markerWord(n, sep) { return toGematria(n) + (sep != null ? sep : '.'); }
 
   /**
    * שבירה גרידה של פסקה.
@@ -6261,6 +6271,7 @@ function legacyTypeset(rawText, settings, env) {
       const pageIsSectionOpen = sectionFirst && !!sec.newPage; // **S4.19:** להזזת אזור-h2/h0 בסוף העמוד
       const pg = newPage(isH0 ? (sectionFirst ? 'preface' : 'regular')
         : (sectionFirst && isH2 ? 'sign-open' : 'regular'));
+      if (pageIsSectionOpen) pg._secStartLevel = sec.newPage.level; // **EXT-15:** פתיחת מקטע — לכלל העמוד האי-זוגי
       let top = GEO.FLOW_TOP;
       if (sectionFirst && sec.newPage) {
         if (isH0) {
@@ -6307,7 +6318,8 @@ function legacyTypeset(rawText, settings, env) {
       const enqueueNote = (text, dup) => {
         let idx = fnQueue.findIndex(q => q.text === text);
         if (idx < 0) { fnQueue.push({ text, dup }); idx = fnQueue.length - 1; }
-        return LineBreaker.markerWord(idx + 1);
+        // **EXT-17:** המפריד אחרי המספר — הגדרת המקור (note-num-separator).
+        return LineBreaker.markerWord(idx + 1, cfg.fnNumSeparator);
       };
       // **S4.9 (התנהגות המקור הנצפית):** הערות של פסקה מופיעות ומוזרמות לתקציב
       // בכל עמוד שבו לפסקה שורות — גם בהמשכים (הייחוס מציג את הערה-א בעמודים
@@ -6860,8 +6872,9 @@ function legacyTypeset(rawText, settings, env) {
         // **S4.9:** השורה הראשונה של כל הערה קצרה ברוחב הסמן — אחרת המילים
         // גולשות מעבר לשפה השמאלית של הדף.
         const items = fnQueue.map((n, i) => {
-          const marker = LineBreaker.markerWord(i + 1); // מספור עמודי מ־א ואילך (כמקור)
-          const mkW = fnApi.measureTextWidth(marker, SZ.fnBody, 0) + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+          const marker = LineBreaker.markerWord(i + 1, cfg.fnNumSeparator); // מספור עמודי מ־א ואילך (כמקור)
+          // **EXT-17:** רוחב הסמן בגודל הרישום (note-listing-num-size) — כמו שמוצג.
+          const mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0) + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
           const lines = wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody);
           return { marker, lines, mkW };
         });
@@ -6899,7 +6912,7 @@ function legacyTypeset(rawText, settings, env) {
     for (const n of queue) {
       // **S4.13 (כיול מהייחוס):** אותה נוסחת גלישה כמו הרינדור בפועל (השורה
       // הראשונה קצרה ברוחב הסמן) — הצדדים חייבים להסכים על מספר השורות.
-      const mkW = fnApi.measureTextWidth(LineBreaker.markerWord(1), SZ.fnBody, 0)
+      const mkW = fnApi.measureTextWidth(LineBreaker.markerWord(1, cfg.fnNumSeparator), cfg.fnListingNumSize, 0)
         + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
       total += wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody).length * GEO.FN_PITCH;
     }
@@ -7125,6 +7138,7 @@ function legacyTypeset(rawText, settings, env) {
       const t = sec.subShaar;
       if (cfg.resetSimanOnH1) simanCounter = 0;
       const pg = newPage('shaar-sub');
+      pg._secStartLevel = 1; // **EXT-15:** שער-משנה נפתח כמקטע h1
       pg._h1Token = t;
       pg.gateLines = gateLinesFor('shaar-sub', t);
       currentH1 = t.text.split(/[-–—]/)[0].trim();
@@ -7200,17 +7214,28 @@ function legacyTypeset(rawText, settings, env) {
   const bodies = [];
   for (const p of pages) ((p.type === 'shaar-main' || p.type === 'shaar-back') ? gates : bodies).push(p);
   const genPages = cfg.enableGeneralToc && genEntries.length ? makeTocPages('toc-general', genEntries, 'תוכן עניינים כללי') : [];
-  const gCount = genPages.length;
-  const needBlank = cfg.oddH1 && ((1 + gCount) % 2 === 0);
-  const blank = needBlank ? blankPageObj('blank') : null;
   const detPages = cfg.enableDetailedToc && detEntries.length ? makeTocPages('toc-detailed', detEntries, 'תוכן עניינים מפורט') : [];
   const subIdx = bodies.findIndex(p => p.type === 'shaar-sub');
   const before = subIdx >= 0 ? bodies.slice(0, subIdx + 1) : [];
   const after = subIdx >= 0 ? bodies.slice(subIdx + 1) : bodies;
 
-  const final = [...gates, ...genPages];
-  if (blank) final.push(blank);
-  final.push(...before, ...detPages, ...after);
+  // **EXT-15 (פתיחה בעמוד אי-זוגי לפי רמת כותרת — ensureOddPageStart של
+  // המקור):** הליכה על הסדר הסופי (ההרכבה מזיזה עמודי TOC — מצב הזרימה
+  // אינו המקום); לפני עמוד פתיחת-מקטע מסומן (h0/h1/h2) שהיה נוחת באינדקס
+  // אי-זוגי (עמוד זוגי פיזי = גב) — מוכנס עמוד ריק. מחליף את המקרה הפרטי
+  // של שער-המשנה (needBlank) בכלל הכללי; ברירות המחדל של המקור:
+  // odd-h0=true, odd-h1=true, odd-h2=false.
+  const seq = [...gates, ...genPages, ...before, ...detPages, ...after];
+  const final = [];
+  for (const p of seq) {
+    if (p._secStartLevel != null) {
+      const need = p._secStartLevel === 0 ? cfg.oddH0
+        : p._secStartLevel === 1 ? cfg.oddH1
+        : p._secStartLevel === 2 ? cfg.oddH2 : false;
+      if (need && final.length % 2 === 1) final.push(blankPageObj('blank'));
+    }
+    final.push(p);
+  }
 
   // מספור סופי + folios + אינדקסים
   let pn = 1;
@@ -7221,6 +7246,17 @@ function legacyTypeset(rawText, settings, env) {
     p.folioDisplay = shows && p.pageNumber ? toGematria(p.pageNumber) : '';
   }
   final.forEach((p, i) => { p.index = i; });
+  // **EXT-19 (כותרות מתחלפות — hdr-alternating):** בעמודים זוגיים-פיזיים
+  // (אינדקס אי-זוגי) חצאי שם הספר מתחלפים בין הצדדים — כמו buildHeaderGridHTML
+  // של המקור (isEven ⇒ החלפה). ברירת המחדל כבויה — החצאים קבועים.
+  if (cfg.hdrAlternating) {
+    for (const p of final) {
+      if (p.index % 2 === 1 && p.headerSlots) {
+        const h = p.headerSlots;
+        p.headerSlots = { right: h.left, center: h.center, left: h.right };
+      }
+    }
+  }
 
   // folio של כל כותרת = העמוד שבו היא הוצבה
   const folioByToken = new Map();
@@ -13608,7 +13644,10 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
     if (typeof w === 'object') return w; // כבר ממוקם (חלון/סמן)
     const isMarker = opts.markers && opts.markers[i];
     const isParen = opts.parenIdx && opts.parenIdx.has(i);
-    const sz = isMarker ? SZ.fnMarker : (isParen ? SZ.body + SZ.parenDelta : sizePt);
+    // **EXT-17:** גודל מילת-הסמן בגוף — הגדרת המקור (note-marker-size, ברירת
+    // מחדל 8) ולא נגזרת מגודל הגוף.
+    const markerSz = opts.markerSize != null ? opts.markerSize : SZ.fnMarker;
+    const sz = isMarker ? markerSz : (isParen ? SZ.body + SZ.parenDelta : sizePt);
     return { text: w, w: api.measureTextWidth(w, sz, 0), sizePt: sz };
   });
   const sumW = placed.reduce((a, w) => a + w.w, 0);
@@ -13636,6 +13675,13 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
 
 /** הקרנת עמוד legacy בודד. */
 function projectLegacyPage(pg, settings, api, winApi) {
+  // **EXT-17:** גדלי סמני ההערות מהגדרות המקור (ברירות המחדל: 8/8). ההגדרות
+  // של פרופיל IMUD מגיעות ב-_imudRaw (כמו readConfig של העימוד עצמו).
+  const imudSet = (settings && settings._imudRaw) || settings || {};
+  const projCfg = {
+    markerSize: Number(imudSet['note-marker-size']) || 8,
+    listingSize: Number(imudSet['note-listing-num-size']) || 8
+  };
   const ascent = api.ascentEm();
   const out = {
     width: GEO.PAGE_W, height: GEO.PAGE_H,
@@ -13758,7 +13804,8 @@ function projectLegacyPage(pg, settings, api, winApi) {
           });
         }
         words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
-          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx });
+          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx,
+            markerSize: projCfg.markerSize });
       }
       out.lines.push({
         x: col.x, y: ln.y, w: col.w, h: ln.heightPx, words,
@@ -13793,9 +13840,11 @@ function projectLegacyPage(pg, settings, api, winApi) {
     let baseY = null;
     const words = [];
     if (fn.marker) {
-      const mw = api.measureTextWidth(fn.marker, SZ.fnBody, 0);
+      // **EXT-17:** סמן הרישום בגודל עצמאי (note-listing-num-size, ברירת מחדל 8).
+      const msz = projCfg.listingSize;
+      const mw = api.measureTextWidth(fn.marker, msz, 0);
       x -= mw;
-      words.push({ text: fn.marker, x, w: mw, sizePt: SZ.fnBody });
+      words.push({ text: fn.marker, x, w: mw, sizePt: msz });
       x -= api.measureTextWidth(' ', SZ.fnBody, 0);
     }
     for (const l of fn.lines) {
