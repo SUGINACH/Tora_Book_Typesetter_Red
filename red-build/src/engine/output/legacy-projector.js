@@ -10,7 +10,8 @@
  */
 
 const { GEO, SZ } = require('../layout/legacy-imud-flow');
-const { MeasureAPI, registeredFonts } = require('../typography/measure-api');
+const { MeasureAPI, registeredFonts, resolveMeasureImpl } = require('../typography/measure-api');
+const { ornamentInk, parseSvgPaint, svgToPdfOps } = require('../decoration/ornament-ink'); // **EXT-4:** הדיו — מקור יחיד
 
 const COL_R = { x: GEO.COL_R_X, w: GEO.COL_W };
 const COL_L = { x: GEO.COL_L_X, w: GEO.COL_W };
@@ -302,6 +303,32 @@ function projectLegacyPage(pg, settings, api, winApi) {
     }
   }
 
+  // **EXT-4 (הדיו — נתיב legacy):** אם למודל ה-legacy יש rectים של עיטורים
+  // (טרם מיוצרים כברירת מחדל — הגדרות המקור ללא עיטורים; התשתית מוכנה
+  // לחיבור ornament-plan בעתיד) — הם מוקרנים עם אותו דיו (ornament-ink)
+  // כמו בנתיב ה-DP: pdfOps לכותב ה-PDF ו-data-URI ל-DOM.
+  if (pg.decorations && pg.decorations.length) {
+    const hPt = out.height * (72 / 96);
+    const PX_TO_PT = 72 / 96;
+    const r2 = (v) => Math.round(v * 100) / 100;
+    out.decorations = pg.decorations.map((d) => {
+      const ink = d.image ? { type: 'image', uri: d.image } : ornamentInk(d.kindStyle);
+      let paint = null, pdfOps = null;
+      if (ink && ink.type === 'svg') {
+        paint = parseSvgPaint(ink.svg);
+        if (paint) pdfOps = svgToPdfOps(paint, d, hPt, PX_TO_PT);
+      } else if (ink && ink.type === 'rule') {
+        const yTop = hPt - (d.y + d.h) * PX_TO_PT;
+        pdfOps = [`0 0 0 rg ${r2(d.x * PX_TO_PT)} ${r2(yTop)} ${r2(d.w * PX_TO_PT)} ${Math.max(0.5, r2(d.h * PX_TO_PT))} re f`];
+      }
+      return {
+        x: d.x, y: d.y, w: d.w, h: d.h, kind: d.kind || null, slot: d.slot || null,
+        kindStyle: d.kindStyle || null, inkType: ink ? ink.type : null,
+        inkUri: ink && ink.uri ? ink.uri : null, paint, pdfOps
+      };
+    });
+  }
+
   return out;
 }
 
@@ -310,7 +337,9 @@ const TOC_TITLE_Y_OFFSET = 136; // כותרת ה-TOC ב-309px = FLOW_TOP+212.4 �
 
 /** הקרנת מסמך legacy שלם. */
 function projectLegacyDocument(result, settings) {
-  const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
+  // **EXT-13:** אותו מקור מדידה כמו העימוד (legacyTypeset) — הקרנה ומילוי
+  // לא יכולים להתפצל: רוחב שורה שונה ביניהם = חפיפות/גלישות מדומות.
+  const impl = resolveMeasureImpl(settings);
   const api = new MeasureAPI(settings, impl);
   // **S4.15 (גופן מילת-החלון בהקרנה):** מילות-החלון נמדדות ומסומנות בגופן
   // המקור (FrankReal-Bold) — הציור ב-PDF ב-/F2 והרוחב האמיתי (בלי זה הגליפים

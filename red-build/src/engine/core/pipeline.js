@@ -21,7 +21,7 @@ const { getDefaultSettings, derivePlacementFlags } = require('./settings-registr
 const { lexDocument } = require('../parser/dfa-lexer');
 const { tokenize, contentHash, normalizeText } = require('../parser/block-tokenizer');
 const { scanBrackets } = require('../parser/bracket-scanner');
-const { MeasureAPI } = require('../typography/measure-api');
+const { MeasureAPI, resolveMeasureImpl } = require('../typography/measure-api');
 const { protectWords } = require('../typography/protectors');
 const { applyDropWord } = require('../typography/dropword');
 const { planPages, layoutHash, bodyGeometryHash } = require('../layout/dp-planner');
@@ -163,7 +163,7 @@ function typeset(rawText, settingsIn, env = {}) {
   // ---- measure + line-plan (L2) ----
   // **S12 (REQ-LB-01 impl B):** measure-impl = table (ברירת מחדל — רציפות S1–S11) | font-metrics
   // (טבלאות אמת מגופן רשום — hmtx/cmap/kern/GPOS; registerFont מפורש, אין רשת).
-  const api = new MeasureAPI(settings, settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table');
+  const api = new MeasureAPI(settings, resolveMeasureImpl(settings));
   void env;
 
   const FONT_WIDTH_PROFILES = {

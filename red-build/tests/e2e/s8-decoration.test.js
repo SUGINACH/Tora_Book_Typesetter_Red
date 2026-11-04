@@ -629,4 +629,92 @@ describe('דטרמיניזם וניטרליות תחת עיטורים', () => {
   });
 });
 
+
+// ---------- EXT-4: הדיו של העיטורים — אותו מקור ב-DOM, בפרויקטור וב-PDF ----------
+describe('EXT-4 — צביעת עיטורים: הדיו קיים בכל שלושת הנתיבים', () => {
+  const { ornamentInk, parseSvgPaint, svgToPdfOps, BUILTIN_SVGS } = require('../../src/engine/decoration/ornament-ink');
+  const { registerAssets, resetAssets } = require('../../src/engine/decoration/asset-registry');
+  const { projectPage } = require('../../src/engine/output/geometry-projector');
+
+  it('ornamentInk — צורות מובנות → SVG, imud: → מהרישום, none → כלום, thin → קו', () => {
+    assertEq(ornamentInk('none'), null, 'none → אין דיו');
+    assertEq(ornamentInk(''), null, 'ריק → אין דיו');
+    for (const k of Object.keys(BUILTIN_SVGS)) {
+      const ink = ornamentInk(k);
+      assert(ink && ink.type === 'svg', `${k}: סוג svg`);
+      assert(ink.svg.includes('<svg'), `${k}: תוכן SVG`);
+      assert(ink.uri.startsWith('data:image/svg+xml'), `${k}: data-URI ל-DOM`);
+    }
+    assertEq(ornamentInk('thin').type, 'rule', 'thin → קו');
+    registerAssets('orn-ud', [{ id: 'x1', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10 Z" fill="#000"/></svg>' }]);
+    const ink2 = ornamentInk('imud:orn-ud:x1');
+    assert(ink2 && ink2.type === 'svg' && ink2.svg.includes('<svg'), 'imud: נפתר מהרישום');
+    resetAssets();
+    assertEq(ornamentInk('imud:orn-ud:x1'), null, 'אחרי איפוס הרישום — אין דיו');
+  });
+
+  it('parseSvgPaint — viewBox + transform של הקטלוג (translate/scale + M/m/l/c/z)', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 122"><g transform="translate(0,122) scale(0.1,-0.1)" fill="#0" stroke="none"><path d="M193 1213 c9 -2 25 -2 35 0 9 3 1 5 -18 5 -19 0 -27 -2 -17 -5z"/></g></svg>';
+    const p = parseSvgPaint(svg);
+    assert(p, 'פענוח הצליח');
+    assertEq(p.vbW, 448, 'vbW');
+    assertEq(p.vbH, 122, 'vbH');
+    assertEq(p.shapes.length, 1, 'צורה אחת');
+    const sub = p.shapes[0].subpaths[0];
+    assert(sub.length >= 2, 'לפחות M + מקטע');
+    assertEq(sub[0].op, 'M', 'פותח ב-M');
+    assert(p.shapes[0].fill && p.shapes[0].fill.length === 3, 'מילוי שחור (ברירת המחדל של #0)');
+    // ה-transform הופעל: y=1213 × −0.1 + 122 = 0.7 (בטווח ה-viewBox)
+    const m = sub[0].pts;
+    assert(m[1] >= -1 && m[1] <= 1, `translate+scale הופעל על y (קיבל ${m[1].toFixed(2)})`);
+  });
+
+  it('svgToPdfOps — פעולות m/l/c/f בתוך תיבת היעד', () => {
+    const paint = parseSvgPaint(BUILTIN_SVGS.lance);
+    const ops = svgToPdfOps(paint, { x: 100, y: 200, w: 200, h: 22 }, 800, 0.75);
+    assert(ops.some(o => / m$/.test(o)), 'moveto');
+    assert(ops.some(o => / (l|c)$/.test(o)), 'קו/בזייה');
+    assert(ops.some(o => / f$/.test(o)), 'מילוי');
+    assert(ops.some(o => / rg$/.test(o)), 'צבע');
+    // כל הקואורדינטות בתוך התיבה (px→pt): x ∈ [75, 225], y ∈ [577, 593.5]
+    const bad = [];
+    for (const o of ops) {
+      if (/ rg$/.test(o)) continue; // פעולות צבע — לא קואורדינטות
+      const parts = o.split(' ');
+      for (let i = 0; i < parts.length - 1; i++) {
+        const n = parseFloat(parts[i]);
+        if (isNaN(n)) continue;
+        if (n < 74 || n > 226) bad.push(o);
+        break; // רק קואורדינטת x הראשונה של כל פעולה
+      }
+    }
+    assertEq(bad.length, 0, `כל הפעולות בתוך התיבה (חריגות: ${bad.slice(0, 2).join(' | ')})`);
+  });
+
+  it('end-to-end — הפרויקטור מקרין דיו (pdfOps) וה-DOM מקבל רקע לכל עיטור', () => {
+    const S = ornConfig();
+    const r = typeset(CORPUS, S);
+    const pg = r.pages.find(p => (p.decorations || []).some(d => d.kindStyle && d.kindStyle !== 'none' && d.kindStyle !== 'thin'));
+    assert(pg, 'קיים עמוד עם עיטור בעל דיו');
+    const proj = projectPage(pg, S);
+    assert(proj.decorations && proj.decorations.length, 'ההקרנה כוללת עיטורים');
+    const withInk = proj.decorations.filter(d => d.inkType === 'svg');
+    assert(withInk.length > 0, 'לפחות עיטור אחד עם דיו SVG');
+    for (const d of withInk) {
+      assert(Array.isArray(d.pdfOps) && d.pdfOps.length > 0, 'pdfOps הוכנו');
+      assert(d.inkUri && d.inkUri.startsWith('data:image/svg+xml'), 'data-URI ל-DOM');
+      assert(d.paint && d.paint.shapes.length > 0, 'הפענוח הצליח');
+    }
+    // כלל (thin) — פעולת re f
+    const rules = proj.decorations.filter(d => d.inkType === 'rule');
+    for (const d of rules) assert(d.pdfOps.some(o => o.includes(' re f')), 'קו → מלבן');
+    // ה-DOM: הרינדור צובע רקע
+    const doc = makeDoc();
+    const root = renderPage(pg, S, doc);
+    const html = root.outerHTML();
+    assert(html.includes('background-image'), 'ה-DOM מקבל background-image לעיטורים');
+    assert(/orn--/.test(html), 'מחלקות orn--קיימות');
+  });
+});
+
 report('s8-decoration');

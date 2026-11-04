@@ -20,7 +20,7 @@
  */
 
 const crypto = require('crypto');
-const { MeasureAPI, registeredFonts: registeredMeasureFonts, registerFont: registerMeasureFont } = require('../typography/measure-api');
+const { MeasureAPI, registeredFonts: registeredMeasureFonts, registerFont: registerMeasureFont, resolveMeasureImpl } = require('../typography/measure-api');
 const { EventLog } = require('../core/events');
 const { Ledger } = require('../core/ledger');
 
@@ -615,7 +615,8 @@ function wrapText(text, api, widthPx, sizePt) {
  */
 function legacyTypeset(rawText, settings, env) {
   const cfg = readConfig(settings._imudRaw || {});
-  const impl = settings['measure-impl'] === 'font-metrics' ? 'font-metrics' : 'table';
+  // **EXT-13:** גופן רשום ⇒ מדידת אמת גם ברירת מחדל 'table' (live==ייצוא).
+  const impl = resolveMeasureImpl(settings);
   // **S4.13 (רישום גופן הערות-הצד):** הקריאה יכולה לספק את בתי הגופן
   // (env.marginFontBytes) — נרשם כאן פעם אחת; הגלישה מידדת במטריקות שלו.
   if (env && env.marginFontBytes && !registeredMeasureFonts.has('Hadassah Friedlaender')) {

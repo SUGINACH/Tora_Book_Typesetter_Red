@@ -15,13 +15,13 @@
       "config": "ornaments",
       "pages": 36,
       "identity": true,
-      "worstBboxPx": 3.33
+      "worstBboxPx": 3
     },
     {
       "config": "aq-on",
       "pages": 36,
       "identity": true,
-      "worstBboxPx": 3.33
+      "worstBboxPx": 3.43
     },
     {
       "config": "continuous-notes",

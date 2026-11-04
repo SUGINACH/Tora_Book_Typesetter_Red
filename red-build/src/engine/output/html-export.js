@@ -94,6 +94,7 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
    מקור שליטה יחיד לשני הנתיבים (F-09). */
 .spanning-band{position:absolute}
 .orn{position:absolute;background-repeat:no-repeat;background-position:center}
+.deco{position:absolute;background-repeat:no-repeat;background-position:center}/* EXT-4: עיטורי הדף (שערים/רקעים) — ממוקמים מה-rectים (F-09) */
 .shaar-main-box,.shaar-sub-box,.shaar-back-box{position:absolute;display:flex;align-items:center;justify-content:center;font-weight:700;text-align:center;padding:0 8px}
 .custom-box{position:absolute;overflow:hidden}
 .custom-image{position:absolute;background-repeat:no-repeat;background-size:100% 100%}

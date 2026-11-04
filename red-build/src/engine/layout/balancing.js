@@ -8,7 +8,10 @@
 
 const { moveLineForward } = require('./ordering');
 
-function usedHeight(col) { return col.reduce((s, ln) => s + ln.heightPx, 0); }
+function usedHeight(col) {
+  // **EXT-20:** גובה בפועל — כולל מקדם ה-AQ האנכי (לפני ה-AQ כל המקדמים 1).
+  return col.reduce((s, ln) => s + ln.heightPx * (ln.aqStretch || 1), 0);
+}
 
 /** הערכת "איזון" עמוד: הפרש גובה טורים. */
 function pageImbalance(page) {
@@ -63,8 +66,13 @@ function applyChapterEndMode(page, mode, settings, eventLog) {
 }
 
 /**
- * AutoQuality (פורטר מ‑Gold; כל הגבולות מה‑registry):
- * שלבים stretchBy{Word,Letter,Heading}Spacing עם caps מוצהרים + shared-load + clamp overshoot.
+ * AutoQuality (פורטר מ‑Gold; כל הגבולות מה‑registry).
+ * **EXT-20 — מתיחה אנכית אמיתית:** מקדם ה-AQ הוא מקדם **גובה-שורה**
+ * (interline): ‏`aqStretch = cap/used` מעוגן לגבולות השלב, ו-usedHeight כבר
+ * מחשב אותו — המתיחה מגיעה ליעדה (תחתית הטור) גם במודל, גם ב-DOM
+ * וגם בפרויקטור. בעבר המקדם חושב מהגובה החסר אך הוחל כ-wordSpacing
+ * אופקי — usedHeight לא השתנה והיעד מעולם לא הושג; שלושת נתיבי התצוגה
+ * פירשו אותו אחרת. כעת שדה אחד, משמעות אחת, שלושה צרכנים זהים.
  */
 const AQ_STAGES = ['word-spacing', 'letter-spacing', 'heading-spacing'];
 

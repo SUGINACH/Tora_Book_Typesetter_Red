@@ -11,7 +11,7 @@ const { describe, it, assert, assertEq, report } = require('../harness');
 const { typeset } = require('../../src/engine/core/pipeline');
 const { getDefaultSettings } = require('../../src/engine/core/settings-registry');
 const fm = require('../../src/engine/typography/font-metrics');
-const { MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts } = require('../../src/engine/typography/measure-api');
+const { MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts, resolveMeasureImpl } = require('../../src/engine/typography/measure-api');
 const { buildSubset, charInventory } = require('../../src/engine/typography/font-subset');
 const { projectDocument } = require('../../src/engine/output/geometry-projector');
 const { exportHtml, exportPdf, exportProjectZip, importProjectZip } = require('../../src/engine/output/export-api');
@@ -183,6 +183,25 @@ describe('S12.1-5 — שכבת מדידה מתמטית: פרנסר גופנים 
     }
     assert(maxDiff <= 0.01, `parity A↔B ≤0.01px על מילות הקורפוס (מקסימום ${maxDiff.toFixed(4)}px) — נתיב מלא: בינארי→hmtx/cmap→סקאלה→מדידה`);
     unregisterFont('פיקסטשור');
+  });
+
+  it('EXT-13 — איחוד מקור המדידה live↔ייצוא: גופן רשום מעדיף font-metrics גם תחת table', () => {
+    clearRegisteredFonts();
+    const s = getDefaultSettings();
+    // בלי גופן רשום — table נשמר (רציפות הקורפוס הקנוני)
+    assertEq(resolveMeasureImpl(s), 'table', 'בלי גופן — table');
+    assertEq(resolveMeasureImpl({ ...s, 'measure-impl': 'font-metrics' }), 'font-metrics', 'בחירה מפורשת תמיד נשמרת');
+    // גופן רשום (כמו באפליקציה החיה: imud-library registerFont) — העדפת אמת
+    const reg = registerFont('פיקסטשור', buildTtfFixture({ kern: false }).bytes);
+    assert(reg.ok, 'הרשמה תקינה');
+    const sLive = { ...s, 'body-font': 'פיקסטשור' }; // measure-impl נותר 'table' (ברירת המחדל)
+    assertEq(resolveMeasureImpl(sLive), 'font-metrics', 'גופן רשום ⇒ font-metrics (ה-live מציג את מה שהייצוא מיצר)');
+    // וה-MeasureAPI באמת מודד במטריקות האמיתיות (impl לא נופל לטבלה)
+    const api = new MeasureAPI(sLive, resolveMeasureImpl(sLive));
+    assertEq(api.impl, 'font-metrics', 'ה-API קשור לפרופיל האמיתי');
+    assertEq(api.fontProfileName, 'פיקסטשור', 'פרופיל הגופן נקשר');
+    unregisterFont('פיקסטשור');
+    assertEq(resolveMeasureImpl(sLive), 'table', 'אחרי ביטול הרישום — חזרה לטבלה');
   });
 
   it('שקילות שבירות שורות על הקורפוס הקנוני — artifact נשמר (לפני החלפת ברירת מחדל)', () => {

@@ -16,7 +16,8 @@
 const { scrubPUAText } = require('./dom-renderer');
 const { MeasureAPI } = require('../typography/measure-api');
 const { lineFontSizePt } = require('./line-font'); // **03.11(ג):** מקור יחיד — נצרך גם ע"י dom-renderer (תצוגה חיה + ייצוא); מיוצא הלאה לצרכנים קיימים
-const { buildShaarBlocks } = require('./shaar-content'); // **03.11(ד):** תוכן השערים — אותו מודל כמו ה-DOM
+const { buildShaarBlocks } = require('./shaar-content');
+const { ornamentInk, parseSvgPaint, svgToPdfOps, svgInkBBox } = require('../decoration/ornament-ink'); // **EXT-4:** הדיו — מקור יחיד לכל הנתיבים // **03.11(ד):** תוכן השערים — אותו מודל כמו ה-DOM
 
 /**
  * הקרנת עמוד בודד לגיאומטריה מפורשת.
@@ -142,7 +143,9 @@ function projectPage(page, settings, api) {
     let y = tpl.contentBox.top + spanOffset;
     for (const ln of colLines) {
       out.lines.push(projectLine(ln, col.x, y, col.w, settings, measure, lastAlignOf(ln, settings)));
-      y += ln.heightPx || 0;
+      // **EXT-20:** מקדם ה-AQ מיושם על גובה השורה (אנכי) — השורות שאחריה
+      // זזות בהתאם; התיבה והבסיס מחושבים מהגובה הנמתח (מודל תיבת שורה).
+      y += (ln.heightPx || 0) * (ln.aqStretch || 1);
     }
   });
 
@@ -185,6 +188,35 @@ function projectPage(page, settings, api) {
     }
   }
 
+  // **EXT-4 (הדיו):** הקרנת העיטורים — ה-rect מהתוכנית + הדיו הפתוח
+  // (מקור יחיד: ornament-ink). ה-PDF וה-DOM צורכים את אותה רשימה; לאלה
+  // שאין להם דיו (image חיצוני) — ה-rect עובר כרקע בלבד.
+  if (page.decorations && page.decorations.length) {
+    const hPt = out.height * (72 / 96);
+    const PX_TO_PT = 72 / 96;
+    const r2 = (v) => Math.round(v * 100) / 100;
+    out.decorations = page.decorations.map((d) => {
+      const ink = d.image ? { type: 'image', uri: d.image } : ornamentInk(d.kindStyle);
+      let paint = null;
+      let pdfOps = null;
+      if (ink && ink.type === 'svg') {
+        paint = parseSvgPaint(ink.svg);
+        // **EXT-4:** פעולות הציור נחשבות כאן — ה-pdf-writer חף-תלויות
+        // (אוסף אובייקטים טהור) ורק מקבל את הפעולות מוכנות (מקור יחיד).
+        if (paint) pdfOps = svgToPdfOps(paint, d, hPt, PX_TO_PT);
+      } else if (ink && ink.type === 'rule') {
+        const yTop = hPt - (d.y + d.h) * PX_TO_PT;
+        pdfOps = [`0 0 0 rg ${r2(d.x * PX_TO_PT)} ${r2(yTop)} ${r2(d.w * PX_TO_PT)} ${Math.max(0.5, r2(d.h * PX_TO_PT))} re f`];
+      }
+      return {
+        x: d.x, y: d.y, w: d.w, h: d.h,
+        kind: d.kind || null, slot: d.slot || null, kindStyle: d.kindStyle || null,
+        inkType: ink ? ink.type : null, inkUri: ink && ink.uri ? ink.uri : null,
+        paint, pdfOps
+      };
+    });
+  }
+
   // **S12 (parity):** בסיסי שורות/מרזב/גיליון/כותרת — מודל תיבת שורה אחיד
   attachBaselines(out, settings, measure);
 
@@ -218,13 +250,12 @@ function projectLine(ln, colX, y, colW, settings, measure, align) {
   const gaps = Math.max(0, words.length - 1);
 
   // רוחב רווחים: שורת יישור מלאה מפרשת לרוחב הטור (לפחות רווח בסיס);
-  // שורה אחרונה — רווח בסיס. AQ stretch מיושם במרווח (הקירוב של המנוע ב־CSS wordSpacing).
+  // שורה אחרונה — רווח בסיס.
+  // **EXT-20:** ה-AQ כבר אינו מוחל כאן — מקדם המתיחה הוא אנכי (גובה שורה)
+  // ומיושם בלולאת ה-y של הטור; כאן רווחים גיאוגטריים בלבד.
   let gapW = spaceW;
   if (align === 'justify' && gaps > 0 && sumW + gaps * spaceW < colW) {
     gapW = (colW - sumW) / gaps;
-  }
-  if (ln.aqStretch && ln.aqStretch !== 1 && align !== 'justify') {
-    gapW = spaceW * ln.aqStretch;
   }
 
   const lineW = sumW + gaps * gapW;
@@ -242,7 +273,7 @@ function projectLine(ln, colX, y, colW, settings, measure, align) {
   }
 
   return {
-    x: colX, y, w: colW, h: ln.heightPx || 0,
+    x: colX, y, w: colW, h: (ln.heightPx || 0) * (ln.aqStretch || 1),
     words: wordPos, align, kind: ln.kind || 'paragraph',
     level: ln.level, isLast: !!ln.isLast, sizePt,
     tokenId: ln.tokenId != null ? ln.tokenId : (ln.meta && ln.meta.tokenId),
@@ -343,6 +374,15 @@ function projectDocument(result, settings, api) {
         const by = pg.header.baselineY != null ? pg.header.baselineY : pg.header.y + 10;
         acc(x, by - 10, w, 15);
       }
+    }
+    // **EXT-4:** גם דיו העיטורים נצבר — הם מצוירים כעת ב-PDF (pdfOps) וברסטר
+    // מופיעים. תיבת הדיו נלקחת מהצורות עצמן (svgInkBBox — אותה התאמת 'meet'
+    // כמו הציור), לא מה-rect המלא: לצורה צרה בתיבה רחבה יש שוליים שאינם דיו.
+    for (const d of (pg.decorations || [])) {
+      if (d.inkType === 'rule') { acc(d.x, d.y, d.w, Math.max(0.75, d.h)); continue; }
+      if (d.inkType === 'image' || !d.paint) continue;
+      const bb = svgInkBBox(d.paint, d);
+      if (bb) acc(bb.minX, bb.minY, bb.maxX - bb.minX, bb.maxY - bb.minY);
     }
     if (minX === Infinity) return null;
     return { minX, minY, maxX, maxY };

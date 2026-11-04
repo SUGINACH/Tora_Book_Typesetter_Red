@@ -244,6 +244,14 @@ function writePdf(opts) {
         emitWord(s.text, x, y, s.sizePt || 9);
       }
     }
+    // **EXT-4 (ציור עיטורים):** פעולות הציור מגיעות מוכנות מהפרויקטור
+    // (d.pdfOps — פוענחו שם מה-SVG במקור היחיד ornament-ink; הכותב עצמו
+    // חף-תלויות ואוסף אובייקטים בלבד). תמונות רסטר אינן מצוירות כאן (מתועד).
+    if (pg.decorations && pg.decorations.length) {
+      for (const d of pg.decorations) {
+        if (Array.isArray(d.pdfOps)) ops.push(...d.pdfOps);
+      }
+    }
     // סימני חיתוך (חוץ ל־TrimBox; אורך 5מ״מ)
     if (cropMarks) {
       const m = 5 * MM_TO_PT;

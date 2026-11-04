@@ -172,7 +172,20 @@ class MeasureAPI {
   cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
 }
 
+/** **EXT-13 (איחוד מקור המדידה live↔ייצוא):** כשגוף הגוף רשום בפועל
+ * (registerFont) — מדידת האמת (font-metrics) מועדפת גם כשההגדרה היא
+ * 'table' (ברירת המחדל). בלי זה ה-live מדד בטבלאות המקורבות בזמן שהייצוא
+ * מדד במטריקות האמיתיות — סחף עמודים של 2% בספר אמת (1,021 מול 1,000;
+ * real-book-matrix.json) ועד 17% בקורפוס הגדול (794 מול 678). ההעדפה
+ * בטוחה: MeasureAPI נופל בשקיפות לטבלה כשאין גופן (_bindProfile). */
+function resolveMeasureImpl(settings) {
+  if (settings && settings['measure-impl'] === 'font-metrics') return 'font-metrics';
+  const name = settings && settings['body-font'];
+  if (name && registeredFonts.has(name)) return 'font-metrics';
+  return 'table';
+}
+
 module.exports = {
   MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts,
-  charWidthEm, registeredFonts
+  charWidthEm, registeredFonts, resolveMeasureImpl
 };

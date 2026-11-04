@@ -68,7 +68,8 @@ const { markerFor } = require('../notes/markers');
 const { planDecorations } = require('../decoration/page-decorations');
 const { resolveShaarBox } = require('../decoration/shaar-boxes');
 const { columnDividerHeightPx } = require('../decoration/ornament-fit');
-const { resolveAssetRef } = require('../decoration/asset-registry'); // **03.11:** imud: → data-URI
+const { resolveAssetRef } = require('../decoration/asset-registry');
+const { ornamentInk } = require('../decoration/ornament-ink'); // **03.11:** imud: → data-URI
 const { MM_TO_PX } = require('../layout/page-templates');
 const { isCssFrame } = require('../decoration/folio'); // **S9:** מסגרות גיליון CSS (circle/square)
 const { lineFontSizePt, lineFontFamily, ptToPx } = require('./line-font');
@@ -115,8 +116,12 @@ function renderLine(ln, doc, settings = {}) {
   if (Number.isFinite(lnPt) && lnPt > 0) el.style.fontSize = `${ptToPx(lnPt)}px`;
   const lnFont = lineFontFamily(ln, settings);
   if (lnFont) el.style.fontFamily = fontStack(lnFont);
-  if (ln.aqStretch && ln.aqStretch !== 1) {
-    el.style.wordSpacing = `${(ln.aqStretch - 1) * 4}px`;
+  // **EXT-20 (AQ אנכי אמיתי):** מקדם ה-AQ הוא מקדם גובה-שורה — כאן הוא
+  // מיושם כ-line-height מפורש (px) כמו בפרויקטור וב-PDF. בעבר הוחל כאן
+  // wordSpacing אופקי (‏(factor−1)×4px) — שלושה נתיבים, שלוש פרשנויות,
+  // והגובה מעולם לא השתנה. כעת: שדה אחד, משמעות אחת.
+  if (ln.aqStretch && ln.aqStretch !== 1 && Number.isFinite(ln.heightPx)) {
+    el.style.lineHeight = `${Math.round(ln.heightPx * ln.aqStretch * 100) / 100}px`;
   }
   // **S8 (F-08):** הזמנת עיטורי H2 בתוך תיבת השורה — הטקסט יורד/עולה ב־padding;
   // הגובה כבר תוקצב בפריסה, הרנדור רק מצייר בתוך התיבה (מקור יחיד — F-09).
@@ -360,6 +365,8 @@ function renderSpanningBand(page, settings, doc) {
 /**
  * **S8 (REQ-ORN-01..04):** כל העיטורים נציירים מה־rect שחושב בפאס העיטורים
  * (ornament-plan) — הרנדרר לא קובע ממדים משלו (F-09: מקור שליטה יחיד).
+ * **EXT-4 (הדיו):** kindStyle מקבל דיו — SVG מובנה/מספרייה כרקע data-URI,
+ * או קו דק (thin). עד כאן התיבות היו בלתי-נראות (אין כללי .orn ב-CSS).
  */
 function renderDecorations(page, doc) {
   const els = [];
@@ -378,6 +385,25 @@ function renderDecorations(page, doc) {
       if (uri) {
         el.style.backgroundImage = `url("${uri}")`;
         el.style.backgroundSize = '100% 100%';
+        el.style.backgroundRepeat = 'no-repeat';
+      }
+    } else if (d.kindStyle && d.kindStyle !== 'none') {
+      // **EXT-4:** הדיו של kindStyle — מקור יחיד (ornament-ink): SVG מובנה
+      // (pyramid/lance/shoshanta/scroll) או מספריית העיצובים (imud:...) —
+      // רקע data-URI מותאם לתיבה; 'thin' — קו מפריד דק.
+      const ink = ornamentInk(d.kindStyle);
+      if (ink && ink.type === 'svg') {
+        el.style.backgroundImage = `url("${ink.uri}")`;
+        el.style.backgroundSize = 'contain';
+        el.style.backgroundPosition = 'center center';
+        el.style.backgroundRepeat = 'no-repeat';
+      } else if (ink && ink.type === 'rule') {
+        el.style.borderTop = '0.75px solid #000';
+        el.style.height = '0px';
+      } else if (ink && ink.type === 'image') {
+        el.style.backgroundImage = `url("${ink.uri}")`;
+        el.style.backgroundSize = 'contain';
+        el.style.backgroundPosition = 'center center';
         el.style.backgroundRepeat = 'no-repeat';
       }
     }
