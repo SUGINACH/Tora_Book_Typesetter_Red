@@ -1,0 +1,88 @@
+columns with visual-line count differences (ref vs ours):
+  p11 right ref=19 ours=20 Δ=+1
+  p11 left  ref=20 ours=21 Δ=+1
+  p12 right ref=31 ours=32 Δ=+1
+  p14 right ref=40 ours=41 Δ=+1
+  p14 left  ref=43 ours=41 Δ=-2
+  p15 left  ref=44 ours=41 Δ=-3
+  p16 right ref=39 ours=38 Δ=-1
+  p16 left  ref=38 ours=39 Δ=+1
+  p17 right ref=40 ours=41 Δ=+1
+  p17 left  ref=38 ours=41 Δ=+3
+  p18 right ref=44 ours=41 Δ=-3
+  p18 left  ref=41 ours=40 Δ=-1
+  p19 right ref=37 ours=39 Δ=+2
+  p19 left  ref=38 ours=39 Δ=+1
+  p20 right ref=35 ours=41 Δ=+6
+  p20 left  ref=43 ours=41 Δ=-2
+  p21 right ref=41 ours=40 Δ=-1
+  p22 right ref=34 ours=41 Δ=+7
+  p22 left  ref=41 ours=42 Δ=+1
+  p23 left  ref=22 ours=24 Δ=+2
+  p25 left  ref=41 ours=42 Δ=+1
+  p26 right ref=41 ours=42 Δ=+1
+  p27 left  ref=47 ours=41 Δ=-6
+  p28 right ref=41 ours=40 Δ=-1
+  p28 left  ref=40 ours=42 Δ=+2
+  p29 right ref=32 ours=41 Δ=+9
+  p29 left  ref=35 ours=41 Δ=+6
+  p30 right ref=39 ours=36 Δ=-3
+  p31 right ref=39 ours=41 Δ=+2
+  p31 left  ref=48 ours=41 Δ=-7
+  p32 right ref=34 ours=36 Δ=+2
+  p32 left  ref=39 ours=37 Δ=-2
+  p33 left  ref=41 ours=38 Δ=-3
+  p34 right ref=39 ours=41 Δ=+2
+  p34 left  ref=42 ours=40 Δ=-2
+  p35 left  ref=40 ours=38 Δ=-2
+  p36 right ref=37 ours=36 Δ=-1
+  p36 left  ref=29 ours=35 Δ=+6
+  p37 left  ref=26 ours=24 Δ=-2
+  p38 right ref=28 ours=29 Δ=+1
+  p38 left  ref=15 ours=29 Δ=+14
+  p39 right ref=41 ours=39 Δ=-2
+  p39 left  ref=37 ours=39 Δ=+2
+  p40 right ref=44 ours=40 Δ=-4
+  p40 left  ref=34 ours=41 Δ=+7
+  p41 right ref=42 ours=39 Δ=-3
+  p41 left  ref=23 ours=39 Δ=+16
+  p42 left  ref=41 ours=40 Δ=-1
+  p43 right ref=44 ours=41 Δ=-3
+  p44 right ref=38 ours=41 Δ=+3
+  p44 left  ref=42 ours=41 Δ=-1
+  p45 right ref=43 ours=41 Δ=-2
+  p45 left  ref=35 ours=41 Δ=+6
+  p46 right ref=31 ours=34 Δ=+3
+  p46 left  ref=29 ours=34 Δ=+5
+  p47 left  ref=41 ours=36 Δ=-5
+  p48 left  ref=40 ours=37 Δ=-3
+  p49 right ref=30 ours=31 Δ=+1
+  p49 left  ref=31 ours=33 Δ=+2
+  p50 right ref=40 ours=42 Δ=+2
+  p50 left  ref=39 ours=41 Δ=+2
+  p51 right ref=41 ours=42 Δ=+1
+  p51 left  ref=40 ours=38 Δ=-2
+  p52 right ref=30 ours=40 Δ=+10
+  p52 left  ref=38 ours=36 Δ=-2
+  p53 right ref=12 ours=10 Δ=-2
+  p53 left  ref=10 ours= 9 Δ=-1
+
+total: 67 columns differ; net Δ = +61
+direction histogram: Counter({'ours>ref': 37, 'ours<ref': 30})
+
+# מפת הפערים — S4.17 (04.11.2026)
+## מה זה: הפרשי מספר שורות-ויזואליות לכל טור גוף, ייחוס מול שלנו (no_long, 54 עמ')
+## למה זה חשוב: זה בדיוק הפער ש-P6/P7 נותרו לסגור. P7=0.9451 ⇒ ~5.5% מהשורות
+##   באזורי הסט. הטבלה מראה: 67 טורים עם הפרש ±1..16 שורות (לא רעש ±1 בלבד —
+##   סחיפה מבנית שנספגת בגבולות המקטעים).
+## מסקנות ה-S4.17 (הפירוט ב-WORKLOG):
+##   1. המנגנון החסר זוהה והועבר: מתיחת-תחתית + משיכת זנב-יתום + כיווץ
+##      (v21-glm; הוכחה מלאה מעמ' 14 שמאל בייחוס — שחזור אריתמטי מדויק).
+##   2. הפעלתו במצבנו הנוכחי מחריפה (P7 0.9451→0.9279) כי המילוי שלנו שונה
+##      ב±1-2 שורות לעמוד — המשיכות נורות בנקודות שהמקור לא משך בהן.
+##   3. החסם האמיתי ל-P6/P7 = רעש תת-הפיקסל של הדפדפן במילוי המקור
+##      (scrollHeight שלם + עריכת LayoutUnit 21.4375 + גבהים של כותרות/
+##      חלונות). סגירתו דורשת אמולציה מדויקת של מדידות ה-DOM — שלב הבא.
+## כיצד לשחזר: python3 scripts מקומי (הטבלה נוצרה מ-ours-model.json של
+##   run-ours.js + layout-reference.json, ספירת שורות ויזואליות עם מיזוג חלונות
+##   וסינון שורות הערות <11pt).

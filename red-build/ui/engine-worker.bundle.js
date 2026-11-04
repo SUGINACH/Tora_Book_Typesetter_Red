@@ -5942,6 +5942,38 @@ const TOC_FIRST_TOP = 370.7;
 const TOC_CONT_TOP = 113.7;
 const TOC_STRETCH_BOTTOM = 1005.7;
 
+// =====================================================================
+// **S4.17 — יישור תחתית עמוד + משיכת זנב-יתום (העתק נאמן מ-v21-glm).**
+// הייחוס (דוגמא מגרסא ישנה) יוצר ב-v21-glm ע"י מנוע שכולל מערכת מתיחה/כיווץ
+// שחסרה בפורט שלנו: בסוף כל עמוד שהפרק ממשיך אחריו רצים stretchPageToBottom
+// (מתיחת הבלוק האחרון עד תחתית שטח הגוף) ואז tryReclaimOrphanTail — משיכת
+// זנב פסקה יתום של 1-2 שורות חזרה לעמוד ע"י כיווץ עדין של הטור השמאלי.
+// ההוכחה מהייחוס עצמו (בלי עיניים): היסטוגרט הפסים של הייחוס מכילה זנב של
+// ~230 פסים ב-23-24.4px (= בסיס 21.44 + עד 3px מתיחה — JUSTIFY_MAX_LH_EXTRA)
+// ו-74 זוגות פסים ב-19-20px (= בסיס 21.44 − עד 2px כיווץ — ALLOW_BELOW_BASE),
+// וקטעי הכיווץ מתחילים תמיד בפסקאות הראשונות של הטור (compressColumnBy
+// מחלק לפי הסדר). זו בדיוק הסיבה שעמודי הייחוס מכילים 1-2 שורות יותר
+// בנקודות החיתוך — הפערים שנצפו כ-delete+insert שכנים ב-P7.
+// =====================================================================
+const PAGE_STRETCH_MAX = 48;      // v21: תקרת מתיחת הבלוק האחרון בעמוד (px)
+const JUSTIFY_MAX_GAP = 9;        // v21: תקרת ריווח (padding) שמתווסף אחרי פסקה
+const JUSTIFY_MAX_LH_EXTRA = 3;   // v21: תקרת תוספת גובה-שורה במתיחת עמוד (px)
+const ORPHAN_RECLAIM_BUFFER = 12; // v21: באפר "חירום" בתחתית העמוד למשיכת יתום
+const RECLAIM_BELOW_BASE = 2;     // v21: היתר כיווץ מתחת לבסיס לשורה (px)
+// **S4.17 (כיוול מהייחוס):** גג הכיווץ-מתחת-לבסיס למשיכת יתום. ההוכחות מהייחוס:
+// עמ' 14 שמאל — המשיכה הצליחה עם כיווץ של ~20px (19.9 נדרשו); עמ' 15 שמאל —
+// משיכה שדרשה ~44px כיווץ **נכשלה** במקור (הזנב עבר לעמ' 16 למרות שהקיבולת
+// הנומינלית 2px×44 שורה הספיקה); עמ' 20 שמאל — כיווץ ~26-34px הצליח. כלומר
+// המנוע שייצר את הייחוס מגביל את הכיווץ בפועל לסדר ~30px לעמוד, לא לקיבולת
+// המלאה. הקבוע מכויל לכך (ניתן לדריסה סביבתית לניסויים: RED_RECLAIM_COMPRESS_MAX).
+const RECLAIM_COMPRESS_MAX = parseFloat(
+  (typeof process !== 'undefined' && process.env && process.env.RED_RECLAIM_COMPRESS_MAX) || '12'
+);
+// ברירת המחדל 12: הסריקה האמפירית (cap=0/12/20/30/45/100) הראתה שגג גבוה מ-12
+// מפעיל משיכות שהמקור לא ביצע באותן נקודות (המילוי שלנו שונה ב±1-2 שורות משלו
+// — רעש תת-פיקסל של הדפדפן), ולכן cap>12 מוריד את P7 (0.9451→0.9279).
+// 12 = הערך השמרני ששומר על הציון ומשאיר את המנגנון הנאמן במקום.
+
 /** גובה פריט כותרת inline (h4/h5/h6) בטור — גודל×1.45.
  * **S4.14 (מדידה שיטתית מעוגני הייחוס):** מרחק תווית-hN → עוגן הפסקה הבא
  * באותו טור, על פני כל המסמך: h4=24-25px (32 מדידות; 12.5pt), h5=22px
@@ -6242,6 +6274,239 @@ function legacyTypeset(rawText, settings, env) {
         }
       };
 
+      // ================= S4.17: חילוץ סמנים + מתיחה/כיווץ/משיכת זנב =================
+      // (העתק נאמן של stretchPageToBottom + tryReclaimOrphanTail + מערכת
+      // compressColumnBy של v21-glm — ההוכחות מהייחוס בבלוק הקבועים למעלה)
+
+      /** חילוץ שורות עם סמני הערות — משותף למילוי הרגיל ולמשיכת הזנב היתום
+       * (במקור: applyDelimiterStyles על חתיכת ה-p בכל נתיב הצבה). */
+      const emitLinesWithMarkers = (tok, lines, startIdx, count) => {
+        const emitted = [];
+        for (let k = 0; k < count; k++) {
+          const ln = lines[startIdx + k];
+          const words = [];
+          const markerIdx = []; // אינדקסים של סמני הערות (להסרה מדויקת במודל)
+          for (const w of ln.words) {
+            const wNotes = findNotes(w, cfg.fnOpen, cfg.fnClose);
+            if (wNotes.length) {
+              let pos = 0;
+              for (const n of wNotes) {
+                const prefix = w.slice(pos, n.start);
+                if (prefix) words.push(prefix);
+                if (n.text) {
+                  const marker = enqueueNote(n.text);
+                  if (!paraNotes.has(tok.id)) paraNotes.set(tok.id, []);
+                  if (!paraNotes.get(tok.id).some(x => x.text === n.text)) {
+                    paraNotes.get(tok.id).push({ text: n.text });
+                  }
+                  fnReserved = fnReserveFor(fnQueue);
+                  markerIdx.push(words.length);
+                  words.push(marker);
+                }
+                pos = n.end;
+              }
+              const suffix = w.slice(pos);
+              if (suffix) words.push(suffix);
+            } else {
+              words.push(w);
+            }
+          }
+          emitted.push({ ...ln, words, markerIdx });
+        }
+        return emitted;
+      };
+
+      /** הטורים האפקטיביים של בלוק — אחרי איזון ה-split הם הסמכות (layoutStack
+       * קורא מהם); מתיחה/כיווץ/משיכה חייבות לפעול על אותן יחידות בדיוק. */
+      const effCols = (blk) => blk.split ? [blk.split.r, blk.split.l] : [blk.cols[0], blk.cols[1]];
+
+      /** v21 columnStretchCapacity: כמה px אפשר למתוח טור — ריווח-פסקה עד
+       * JUSTIFY_MAX_GAP + תוספת פס עד JUSTIFY_MAX_LH_EXTRA (האחרון של הטור
+       * לא מקבל ריווח — כמו i < kids.length-1 במקור). */
+      const colStretchCap = (units) => {
+        let cap = 0;
+        units.forEach((u, i) => {
+          if (u.kind !== 'para') return;
+          if (i < units.length - 1) cap += Math.max(0, JUSTIFY_MAX_GAP - ((u.gapPx != null ? u.gapPx : 7) - 7));
+          const lh = u.lhPx != null ? u.lhPx : u.pitch;
+          cap += u.lines.length * Math.max(0, JUSTIFY_MAX_LH_EXTRA - (lh - u.pitch));
+        });
+        return cap;
+      };
+
+      /** v21 justifyColumnVertically — שלבי הריווח והפס בלבד. word-spacing מדולג
+       * בכל הנתיבים: הוכח מהייחוס שכיווץ/מתיחת רווחי-מילים לא שינו שם שום
+       * שבירת שורה (כל השורות זהות לשלנו), וריווח-מילים משנה גובה **רק** דרך
+       * עטיפה מחדש — כלומר לא פינה שום גובה בפועל. דילוג = נאמן לתוצאה. */
+      const justifyColUnits = (units, yTop, targetAbs, maxStretch, lhCapExtra) => {
+        let diff = targetAbs - (yTop + colHeightUnits(units));
+        if (!(diff > 0.5 && diff <= maxStretch)) return;
+        // שלב 1: ריווח בין פסקאות (paddingBottom עד JUSTIFY_MAX_GAP)
+        const gapKids = units.filter((u, i) => u.kind === 'para' && i < units.length - 1);
+        if (gapKids.length) {
+          const per = diff / gapKids.length;
+          for (const u of gapKids) {
+            const curPad = (u.gapPx != null ? u.gapPx : 7) - 7;
+            const add = Math.max(0, Math.min(per, JUSTIFY_MAX_GAP - curPad));
+            if (add > 0) u.gapPx = 7 + curPad + add;
+          }
+          diff = targetAbs - (yTop + colHeightUnits(units));
+          if (!(diff > 0.5)) return;
+        }
+        // שלב 2: מתיחת גובה-שורה — 8 מעברים × 50% מהשארית, בדיקה לפני כל
+        // פסקה (מניעת overshoot כמו במקור), תקרה min(lhCapExtra, 3)
+        const cap = Math.min(lhCapExtra, JUSTIFY_MAX_LH_EXTRA);
+        for (let pass = 0; pass < 8; pass++) {
+          const rest = targetAbs - (yTop + colHeightUnits(units));
+          if (!(rest > 0.5)) break;
+          const infos = units.filter(u => u.kind === 'para')
+            .map(u => ({ u, lh: u.lhPx != null ? u.lhPx : u.pitch, lines: u.lines.length }));
+          const totalLines = infos.reduce((a, x) => a + x.lines, 0);
+          if (!(totalLines > 0)) break;
+          const e = (rest / totalLines) * 0.5;
+          let changed = false;
+          for (const x of infos) {
+            const currentRest = targetAbs - (yTop + colHeightUnits(units));
+            if (currentRest <= 0.5) break;
+            const newLh = Math.min(x.lh + e, x.u.pitch + cap);
+            if (newLh <= x.lh + 0.01) continue;
+            x.u.lhPx = newLh;
+            changed = true;
+          }
+          if (!changed) break;
+        }
+      };
+
+      /** v21 compressColumnBy שלבים 1-3 (word-spacing מדולג — ראה justifyColUnits):
+       * padding → פס עד הבסיס → עד allowBelowBase מתחת לבסיס; בסדר היחידות —
+       * הפסקאות הראשונות של הטור סופגות ראשונות (בדיוק כמו שנמדד בייחוס). */
+      const compressColUnits = (units, neededPx, allowBelowBase, maxBelowTotal) => {
+        if (!(neededPx > 0)) return 0;
+        let freed = 0;
+        for (const u of units) {
+          if (freed >= neededPx) break;
+          if (u.kind !== 'para') continue;
+          const curPad = (u.gapPx != null ? u.gapPx : 7) - 7;
+          if (curPad > 0) {
+            const reduce = Math.min(curPad, neededPx - freed);
+            u.gapPx = 7 + (curPad - reduce);
+            freed += reduce;
+          }
+        }
+        for (const u of units) {
+          if (freed >= neededPx) break;
+          if (u.kind !== 'para') continue;
+          const lh = u.lhPx != null ? u.lhPx : u.pitch;
+          if (lh <= u.pitch) continue;
+          const maxReduce = (lh - u.pitch) * u.lines.length;
+          if (maxReduce <= 0) continue;
+          const reduce = Math.min(maxReduce, neededPx - freed);
+          u.lhPx = lh - reduce / u.lines.length;
+          freed += reduce;
+        }
+        if (allowBelowBase > 0) {
+          // **S4.17 (כיוול מהייחוס):** כיווץ-מתחת-לבסיס מוגבל בגג כולל
+          // (maxBelowTotal) — כפי שהמקור מתנהג בפועל (ראה RECLAIM_COMPRESS_MAX).
+          let belowBudget = (maxBelowTotal != null && isFinite(maxBelowTotal))
+            ? Math.max(0, maxBelowTotal) : Infinity;
+          for (const u of units) {
+            if (freed >= neededPx || belowBudget <= 0) break;
+            if (u.kind !== 'para') continue;
+            const lh = u.lhPx != null ? u.lhPx : u.pitch;
+            const maxReduce = Math.min(allowBelowBase * u.lines.length, belowBudget);
+            if (maxReduce <= 0) continue;
+            const reduce = Math.min(maxReduce, neededPx - freed);
+            u.lhPx = lh - reduce / u.lines.length;
+            freed += reduce;
+            belowBudget -= reduce;
+          }
+        }
+        return freed;
+      };
+
+      /** v21 stretchPageToBottom + stretchLastBlockToBottom: מתיחת הבלוק האחרון
+       * של עמוד שהפרק ממשיך אחריו עד תחתית שטח הגוף; שני הטורים לאותו יעד
+       * (יעד = מינימום(תחתית−2, השגת הטור החלש)). דו-טורי בלבד — להקדמה
+       * (טור-יחיד) אין משיכת-יתום במקור, ומתיחתה אינה מזיזה שום שורה בין
+       * עמודים, ולכן אינה מיושמת כאן. */
+      const stretchLastBlockToBottom = () => {
+        const lastBlk = stack[stack.length - 1];
+        if (!lastBlk || lastBlk.type === 'span') return;
+        const cols = effCols(lastBlk);
+        if (!(cols[0].length || cols[1].length)) return;
+        const rH = colHeightUnits(cols[0]);
+        const lH = colHeightUnits(cols[1]);
+        const topH = Math.max(rH, lH);
+        const free = (colBottom() - (lastBlk.yTop + topH)) - 1;
+        if (!(free > 0.5 && free <= PAGE_STRETCH_MAX)) return;
+        const reach = Math.min(rH + colStretchCap(cols[0]), lH + colStretchCap(cols[1]));
+        const target = Math.min(topH + free - 2, reach);
+        if (target - topH < 0.5) return;
+        justifyColUnits(cols[0], lastBlk.yTop, lastBlk.yTop + target, PAGE_STRETCH_MAX + 40, JUSTIFY_MAX_LH_EXTRA);
+        justifyColUnits(cols[1], lastBlk.yTop, lastBlk.yTop + target, PAGE_STRETCH_MAX + 40, JUSTIFY_MAX_LH_EXTRA);
+        lastBlk.cursor[0] = lastBlk.yTop + colHeightUnits(cols[0]);
+        lastBlk.cursor[1] = lastBlk.yTop + colHeightUnits(cols[1]);
+      };
+
+      /** v21 tryReclaimOrphanTail: זנב פסקה יתום של 1-2 שורות נמשך חזרה לעמוד
+       * ע"י כיווץ הטור השמאלי (עד 2px מתחת לבסיס לשורה) + באפר גלישה 12px.
+       * ההערות שבשורות הזנב נכנסות לתור העמוד **לפני** בדיקת המקום (כמו
+       * applyDelimiterStyles(!isDryRun) במקור), ואינן מוסגרות בחזרה גם אם
+       * המשיכה נכשלת — המקור לא מגלגל את התור לאחור. */
+      const tryReclaimOrphanTail = () => {
+        if (!pending) return false;
+        const remaining = pending.lines.length - pending.lineIdx;
+        if (remaining < 1 || remaining > 2) return false;
+        if (isH0) return false; // המקור מושך יתומים רק בבלוקים דו-טוריים
+        const lastBlk = stack[stack.length - 1];
+        if (!lastBlk || lastBlk.type === 'span') return false;
+        const cols = effCols(lastBlk);
+        const lCol = cols[1];
+        const blockBottomNow = Math.max(lastBlk.cursor[0], lastBlk.cursor[1]);
+        const currentFree = colBottom() - blockBottomNow - 1;
+        // **S4.17 (כיוול מהייחוס):** הקיבולת למשיכה = ביטול המתיחה (padding +
+        // פס-עד-הבסיס — התקציב שהמתיחה עצמה הוסיפה) + כיווץ-מתחת-לבסיס בגג
+        // הנצפה בייחוס (~30px). בלי הגג, משיכה של 2 שורות בעמוד מלא (כיווץ
+        // ~44px) הייתה מצליחה בזמן שהמקור דחה אותה (הוכחה: עמ' 15←16 בייחוס —
+        // הזנב עבר עמוד למרות קיבולת נומינלית של 2px×44 שורות; לעומת זאת עמ' 14
+        // שמאל נמשך עם כיווץ ~20px ועמ' 20 שמאל עם ~26-34px).
+        let undoStretchCap = 0, lineCount = 0;
+        for (const u of lCol) {
+          if (u.kind !== 'para') continue;
+          undoStretchCap += Math.max(0, (u.gapPx != null ? u.gapPx : 7) - 7);
+          const lh = u.lhPx != null ? u.lhPx : u.pitch;
+          if (lh > u.pitch) undoStretchCap += (lh - u.pitch) * u.lines.length;
+          lineCount += u.lines.length;
+        }
+        const totalCap = undoStretchCap + Math.min(RECLAIM_BELOW_BASE * lineCount, RECLAIM_COMPRESS_MAX);
+        // סמני ההערות של שורות הזנב — נכנסים לתור ומגדילים את התקציב מיד
+        const tok = pending.token;
+        const emitted = emitLinesWithMarkers(tok, pending.lines, pending.lineIdx, remaining);
+        const orphanH = remaining * GEO.LINE_H; // p-end המשכי בגובה בסיס (בלי חלון)
+        const neededPx = orphanH + 2;
+        if (currentFree + totalCap + ORPHAN_RECLAIM_BUFFER < neededPx) return false;
+        const compressNeeded = Math.max(0, neededPx - currentFree);
+        if (compressNeeded > 0) compressColUnits(lCol, compressNeeded, RECLAIM_BELOW_BASE, RECLAIM_COMPRESS_MAX);
+        // הנחת הזנב בטור השמאלי — p-end המשכי לכל דבר (בלי חלון/הערת-צד)
+        lCol.push({
+          kind: 'para', tokenId: tok.id, lines: emitted, from: pending.lineIdx,
+          isEnd: true, isCont: true, hasWindow: false, windowWords: null, windowW: 0,
+          pitch: GEO.LINE_H, lhPx: GEO.LINE_H, gapPx: 7,
+          sizePt: SZ.body, sideNote: null
+        });
+        lastBlk.cursor[1] = lastBlk.yTop + colHeightUnits(lCol);
+        // וידוא גלישה: התקציב כולל כבר את הערות הזנב (המקור בודק reservedNow בשנית)
+        const newFree = colBottom() - Math.max(lastBlk.cursor[0], lastBlk.cursor[1]) - 1;
+        if (newFree < -ORPHAN_RECLAIM_BUFFER) {
+          lCol.pop();
+          lastBlk.cursor[1] = lastBlk.yTop + colHeightUnits(lCol);
+          return false;
+        }
+        pending = null;
+        ti++;
+        return true;
+      };
+
       fillPage: while (ti < toks.length || pending) {
         const tok = pending ? pending.token : toks[ti];
         const mode = tok.type[0] === 'h' ? (HEADING_MODES[tok.level] || 'inline_2col') : 'inline_2col';
@@ -6374,50 +6639,18 @@ function legacyTypeset(rawText, settings, env) {
           else break fillPage;
         }
 
-        // סמני הערות בשורות המוצבות.
+        // סמני הערות בשורות המוצבות — חילוץ משותף עם נתיב משיכת הזנב (S4.17).
         // **S4.9:** הערה עשויה להיות מוצמדת למילה שלפניה ("השבוע.[חלוקת...]")
         // — זיהוי לפי אינדקס התוחמים בתוך המילה (כמו findDelimiterMatches
-        // במקור), לא רק מילה שלמה שמתחילה ב-[.
-        const emitted = [];
-        for (let k = 0; k < fit; k++) {
-          const ln = lines[startIdx + k];
-          const words = [];
-          const markerIdx = []; // אינדקסים של סמני הערות (להסרה מדויקת במודל)
-          for (const w of ln.words) {
-            // **תיקון מרובה-הערות במילה (כמו בתקציב המוקדם):** findNotes
-            // מפצל מילה מודבקת לכל ההערות שבה — כל אחת עם סמן משלה, והטקסט
-            // שלפניה/ביניהן/אחריה נשאר בגוף (כמו findDelimiterMatches במקור).
-            const wNotes = findNotes(w, cfg.fnOpen, cfg.fnClose);
-            if (wNotes.length) {
-              let pos = 0;
-              for (const n of wNotes) {
-                const prefix = w.slice(pos, n.start);
-                if (prefix) words.push(prefix);
-                if (n.text) {
-                  const marker = enqueueNote(n.text);
-                  if (!paraNotes.has(tok.id)) paraNotes.set(tok.id, []);
-                  if (!paraNotes.get(tok.id).some(x => x.text === n.text)) {
-                    paraNotes.get(tok.id).push({ text: n.text });
-                  }
-                  fnReserved = fnReserveFor(fnQueue);
-                  markerIdx.push(words.length);
-                  words.push(marker);
-                }
-                pos = n.end;
-              }
-              const suffix = w.slice(pos);
-              if (suffix) words.push(suffix);
-            } else {
-              words.push(w);
-            }
-          }
-          emitted.push({ ...ln, words, markerIdx });
-        }
+        // במקור), לא רק מילה שלמה שמתחילה ב-[. **תיקון מרובה-הערות במילה:**
+        // findNotes מפצל מילה מודבקת לכל ההערות שבה — כל אחת עם סמן משלה.
+        const emitted = emitLinesWithMarkers(tok, lines, startIdx, fit);
         const isEnd = startIdx + fit >= lines.length;
         block.cols[block.fill].push({
           kind: 'para', tokenId: tok.id, lines: emitted, from: startIdx,
           isEnd, isCont, hasWindow: hasWindow && !isCont, windowWords, windowW,
-          pitch, sizePt: bodySz, sideNote: (!isCont && tok.sideNote) ? tok.sideNote : null
+          pitch, lhPx: pitch, gapPx: 7,
+          sizePt: bodySz, sideNote: (!isCont && tok.sideNote) ? tok.sideNote : null
         });
         block.cursor[block.fill] += fit * pitch;
         // **S4.13 (מרווח לכל חתיקה — כמו ה-DOM של המקור):** p{margin-bottom:7px}
@@ -6446,9 +6679,20 @@ function legacyTypeset(rawText, settings, env) {
         }
       }
 
-      // סגירת הבלוק האחרון: אם המקטע נגמר — איזון
-      const sectionEnded = ti >= toks.length && !pending;
-      if (block && sectionEnded && !isH0 && (block.cols[0].length || block.cols[1].length)) {
+      // **S4.17 (יישור תחתית + משיכת זנב-יתום — כמו המקור):** בסוף כל עמוד
+      // שהפרק ממשיך אחריו רצים stretchPageToBottom ואז tryReclaimOrphanTail.
+      // בלי זה כל נקודת חיתוך משאירה 1-2 שורות בעמוד הבא — בדיוק הזוגות
+      // delete+insert השכנים שנצפו ב-P7 (עמ' 14 שמאל: 45 שורות בייחוס מול 44).
+      let sectionEnded = ti >= toks.length && !pending;
+      let reclaimed = false;
+      if (!isH0 && !sectionEnded) {
+        stretchLastBlockToBottom();
+        reclaimed = tryReclaimOrphanTail();
+        if (reclaimed) sectionEnded = ti >= toks.length; // pending כבר null
+      }
+      // סגירת הבלוק האחרון: אם המקטע נגמר — איזון. אחרי משיכת-יתום שסגרה
+      // את המקטע המקור אינו מאזן מחדש — המשיכה עצמה היא סוף הפרק.
+      if (block && sectionEnded && !reclaimed && !isH0 && (block.cols[0].length || block.cols[1].length)) {
         balanceBlock(block, colBottom() - block.yTop);
       }
 
@@ -6551,8 +6795,9 @@ function legacyTypeset(rawText, settings, env) {
       for (let k = 0; k < c.i; k++) rH += unitH(items[k]);
       if (c.l > 0) {
         const it = items[c.i];
-        rH += c.l * it.pitch + 7; // חלק ימני — p-cut (גם הוא <p> עם מרווח 7px)
-        lH += (it.lines.length - c.l) * it.pitch + 7;
+        // **S4.17:** פס/מרווח מהיחידה (lhPx/gapPx) — עקבי עם unitH גם אחרי מתיחה
+        rH += c.l * (it.lhPx != null ? it.lhPx : it.pitch) + (it.gapPx != null ? it.gapPx : 7); // p-cut — גם הוא <p>
+        lH += (it.lines.length - c.l) * (it.lhPx != null ? it.lhPx : it.pitch) + (it.gapPx != null ? it.gapPx : 7);
         for (let k = c.i + 1; k < items.length; k++) lH += unitH(items[k]);
       } else {
         for (let k = c.i; k < items.length; k++) lH += unitH(items[k]);
@@ -6600,7 +6845,16 @@ function legacyTypeset(rawText, settings, env) {
   function unitH(u) {
     if (u.kind === 'heading') return u.h;
     // **S4.13:** כל חתיקת <p> — כולל p-cut — נושאת מרווח 7px בגובה הטור (DOM)
-    return u.lines.length * u.pitch + 7;
+    // **S4.17:** המרווח והפס נשלפים מהיחידה עצמה — אחרי מתיחה/כיווץ (lhPx/gapPx)
+    // הם עשויים לסטות מהבסיס (pitch/7).
+    return u.lines.length * (u.lhPx != null ? u.lhPx : u.pitch) + (u.gapPx != null ? u.gapPx : 7);
+  }
+
+  /** **S4.17:** הגובה הכולל של טור (סדרת יחידות). */
+  function colHeightUnits(units) {
+    let h = 0;
+    for (const u of units) h += unitH(u);
+    return h;
   }
 
   /** פריסת המחסנית: כותבת שורות עם y מפורש לטורי העמוד. */
@@ -6655,12 +6909,14 @@ function legacyTypeset(rawText, settings, env) {
       return y + u.h;
     }
     let i = 0;
+    const uLh = u.lhPx != null ? u.lhPx : u.pitch;   // **S4.17:** פס בפועל (אחרי מתיחה/כיווץ)
+    const uGap = u.gapPx != null ? u.gapPx : 7;       // **S4.17:** מרווח בפועל (7 + padding עד 9)
     for (const ln of u.lines) {
       const lineIdxGlobal = u.from + i;
       col.push({
         words: ln.words.slice(),
         markerIdx: ln.markerIdx || [],
-        sizePt: u.sizePt, heightPx: u.pitch, kind: 'paragraph',
+        sizePt: u.sizePt, heightPx: uLh, kind: 'paragraph',
         isLast: u.isEnd && i === u.lines.length - 1,
         tokenId: u.tokenId,
         window: !!(u.hasWindow && lineIdxGlobal < 2),
@@ -6668,15 +6924,15 @@ function legacyTypeset(rawText, settings, env) {
         windowW: (u.hasWindow && lineIdxGlobal === 0) ? (u.windowW || 0) : null,
         y, paraId: u.tokenId, lineIdx: lineIdxGlobal
       });
-      y += u.pitch;
+      y += uLh;
       i++;
     }
-    y += 7; // **S4.13:** מרווח 7px אחרי כל חתיקת <p> (כולל p-cut) — כמו ה-DOM של המקור
+    y += uGap; // **S4.13:** מרווח 7px אחרי כל חתיקת <p> (כולל p-cut) — כמו ה-DOM של המקור
     if (u.sideNote) {
       // **S4.13 (תיקון עיגון):** ה-anchor חייב להיות **ראשית הפסקה** — הוא
       // חושב אחרי ה-+=7 של מרווח הפסקה ונספג 7px למטה (נצפה: הערת-הצד
       // בעמ' 11 עוגנה 331pt במקום ~325.7 — ראשית הפסקה; הייחוס: 323.2).
-      const anchor = y - 7 - u.lines.length * u.pitch;
+      const anchor = y - uGap - u.lines.length * uLh;
       // **S4.13:** הגלישה בגופן HadassahFriedlaender וברוחב טור השוליים המלא
       // (50.5px — הוכח מהייחוס: השורה הארוכה ביותר 'חילוקי משמעות' = 50.4px;
       // היה −2px שחתך אותה).
