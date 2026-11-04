@@ -147,15 +147,29 @@ function projectLegacyPage(pg, settings, api, winApi) {
           }
         }
         const textW = col.w - winW;
+        // **S4.19:** דגלי סוגריים מהמודל — גם בשורות החלון (הסוגריים נפתחים
+        // לא פעם בשורות 0-1 של פסקת-חלון; הזיהוי הפר-שורתי הקודם פספס טווחים
+        // שנפתחו בשורה קודמת).
+        const winParenIdx = new Set();
+        if (ln.parenFlags && ln.parenFlags.length === ln.words.length) {
+          ln.parenFlags.forEach((p, i) => { if (p) winParenIdx.add(i); });
+        }
         const textWords = placeWords(ln.words, api, col.x, textW, ln.sizePt,
-          ln.isLast ? 'center' : 'justify', baseY);
+          ln.isLast ? 'center' : 'justify', baseY, { parenIdx: winParenIdx });
         words = [...winWords, ...textWords];
       } else {
         const align = ln.isLast ? 'center' : 'justify';
         // **S4.9:** מילים בתוך (...) מרונדרות בגודל הסוגריים המוקטן — בדיוק
         // כפי שנמדדו בשבירה (אחרת השורה רחבה מהטור וגולשת מהעמוד).
+        // **S4.19 (סוגריים רב-שורתיים):** הזיהוי הקודם היה פר-שורה (מילה
+        // שנפתחת ב'(' עד מילה שנסגרת ב-')' **באותה שורה**) — טווח שנפתח בשורה
+        // אחת ונסגר באחרת רונדר בגודל הגוף (11.5pt בהקדמה מול 10pt בייחוס —
+        // עמ' 10: 'כהרבה מדיני התורה…'). כעת הדגלים מגיעים מהמודל (חישוב
+        // עומק-תווים על כל הפסקה ב-breakPara) — מקור יחיד למדידה ולרינדור.
         const parenIdx = new Set();
-        {
+        if (ln.parenFlags && ln.parenFlags.length === ln.words.length) {
+          ln.parenFlags.forEach((p, i) => { if (p) parenIdx.add(i); });
+        } else {
           const stack = [];
           ln.words.forEach((w, i) => {
             if (w.startsWith('(')) stack.push(i);

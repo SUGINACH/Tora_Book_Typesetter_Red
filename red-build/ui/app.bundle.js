@@ -9728,6 +9728,7 @@ class LineBreaker {
     // קצוות השכנות בתוך הטווח (הרווח בתוך ה-span).
     const parenSize = SZ.body + SZ.parenDelta; // 12-2 = 10pt (קבוע כמו במקור)
     const wordWs = new Array(out.length);
+    const wordParen = new Array(out.length);
     const endsInParen = new Array(out.length);
     const startsInParen = new Array(out.length);
     {
@@ -9735,10 +9736,12 @@ class LineBreaker {
       for (let i = 0; i < out.length; i++) {
         const wd = disp[i];
         let w = 0, seg = '', segParen = false;
+        let anyParen = false;
         for (let c = 0; c < wd.length; c++) {
           const ch = wd[c];
           if (ch === '(') depth++;                 // '(' עצמו בתוך ה-span
           const inParen = depth > 0;
+          if (inParen) anyParen = true;
           if (c === 0) startsInParen[i] = inParen;
           if (seg === '') { seg = ch; segParen = inParen; }
           else if (inParen === segParen) { seg += ch; }
@@ -9748,6 +9751,7 @@ class LineBreaker {
         }
         if (seg) w += mw(seg, segParen ? parenSize : sizePt);
         wordWs[i] = w;
+        wordParen[i] = anyParen;
       }
     }
     // **S4.15 (רווחים בתוך סוגריים בגודל הסוגריים):** במקור הסוגריים הן span
@@ -9793,7 +9797,7 @@ class LineBreaker {
     const bindPair = false;
 
     const lines = [];
-    let cur = [], curW = 0, lineNo = 0, lastIdx = -1;
+    let cur = [], curPf = [], curW = 0, lineNo = 0, lastIdx = -1;
     const limitOf = () => (useWindow && lineNo < 2) ? colWidthPx - windowW : colWidthPx;
 
     if (useWindow) {
@@ -9806,20 +9810,22 @@ class LineBreaker {
       const w2 = bindHere ? wordWs[i + 1] + spaceBetween(i, i + 1) : 0;
       const addW = spBefore + w1 + (bindHere ? w2 : 0);
       if (cur.length && curW + addW > limitOf() + 0.01) {
-        lines.push({ words: cur, window: useWindow && lineNo < 2 });
-        cur = []; curW = 0; lineNo++;
+        lines.push({ words: cur, parenFlags: curPf, window: useWindow && lineNo < 2 });
+        cur = []; curPf = []; curW = 0; lineNo++;
       }
       cur.push(out[i]);
+      curPf.push(!!wordParen[i]);
       curW += (cur.length > 1 ? spaceBetween(lastIdx, i) : 0) + w1;
       lastIdx = i;
       if (bindHere) {
         cur.push(out[i + 1]);
+        curPf.push(!!wordParen[i + 1]);
         curW += spaceBetween(i, i + 1) + wordWs[i + 1];
         lastIdx = i + 1;
         i++;
       }
     }
-    if (cur.length) lines.push({ words: cur, window: useWindow && lineNo < 2 });
+    if (cur.length) lines.push({ words: cur, parenFlags: curPf, window: useWindow && lineNo < 2 });
     for (const l of lines) l.heightPx = GEO.LINE_H;
     return { lines, hasWindow: useWindow, windowWords, windowW, notes };
   }
@@ -9831,14 +9837,28 @@ class LineBreaker {
 // =====================================================================
 
 const FLOW_BOTTOM = GEO.FLOW_TOP + GEO.FLOW_H; // 1022.2px — תחתית הזרימה האמיתית (עמודים 13-15: block עד 1021)
-// **S4.14:** אזור ה-h2 = מחסנית התוויות של הייחוס: spacer 179 + siman 35 +
-// title 48 = 262; עם FLOW_TOP=107.2 ה-span נוחת ב-368.5 ✓ (הערך הקודם 271.3
-// פיצה על ה-FLOW_TOP השגוי). הפסים עצמם אבסולוטיים (284.9/321.1) ואינם זזים.
-const H2_AREA_H = 261.3;
+// **S4.19 (ה-spacer המלא של המקור):** אזור ה-h2 = מרווח-עליון
+// 22% × גובה הזרימה (0.22×915=201.3) + סימן (20pt×1.1+6=35.3) + כותרת (27.2)
+// + שולי כותרת (20). המדידה מהייחוס (עמ' 24/38 — עמודי h2 ללא הערות): סימן ב-y=307.88px,
+// כותרת ב-344.05, תוכן ב-391.45 — בדיוק הנוסחה. **עמ' 11 (עם הערות) נראה נמוך יותר
+// כי ה-fn-area מוכנס ל-wrapper לפני הפוטר (insertBefore במקור) ומקטין את ה-flow —
+// ה-spacer (flex-basis 22%) מתכווץ ב-0.22×גובה-ההערות וכל אזור ה-h2 זז למעלה**
+// (ההוכחה: עמ' 11 — הפרש 22.98px = 0.22×שמורת-הערות 105.3). ההזזה מיושמת
+// בסוף מילוי העמוד (הערות ידועות רק אז — כמו ה-relayout של ה-flex במקור).
+// הערך הקודם 261.3 כויל מעמ' 11 בלבד — עמודי ה-h2 הרגילים (24/38) שקעו 23px
+// וכל הפרקים שאחריהם הוסטו בשורה שלמה.
+const H2_AREA_H = 284.25;
+// **S4.19:** פטור עמודי h2+span מה-spacer המלא — כיול S4.14 (261.3) נשאר להם.
+const H2_SPAN_EXEMPT = (
+  (typeof process !== 'undefined' && process.env && process.env.RED_H2_SPAN_EXEMPT) !== '0'
+);
 // **S4.14:** span 34px + רווח 4px = 38 — נמדד בכל 13 מופעי block-h3-span
 // של הייחוס (מרחק תווית-span → תווית-block תמיד 38.0). היה 40 (+2px לכל span).
 const H3_SPAN_H = 38;
-const H0_AREA_H = 240.8;   // **מכויל מהייחוס (עמ' 10):** הזרימה מתחילה ב-348px (107.2+240.8); הכותרת ב-309px
+const H0_AREA_H = 249.2;   // **S4.19:** זרימת ההקדמה מתחילה ב-356.4px — המדידה מהייחוס
+// (עמ' 10, שורות ההקדמה 2-3): הייחוס יושב 9.7-10.2px מתחת ל-348 הקודם; גם לדף
+// ה-h0 יש spacer (הכותרת ב-309 = 107.2+201.3+0.5) + כותרת (27.2) + שוליים (20)
+// ⇒ 309+47.4 = 356.4. הערך הקודם 240.8 השאיר את שורות ההקדמה גבוהות בכ-10px.
 const SINGLE_W = 552.3;    // .single-wide-col = 2×269.41+13.48 (grid)
 // **S4.13:** פס שורת ההקדמה — אותו line-height של הגוף (1.34) על 11.5pt
 // ⇒ 15.41pt = 20.55px. מדידת הייחוס בעמוד ההקדמה: פסים 15.0–16.3pt (ממוצע 20.5px
@@ -9895,6 +9915,30 @@ const RECLAIM_COMPRESS_MAX = parseFloat(
 // רק בניסויים מפורשים.
 const STRETCH_RECLAIM_ENABLED = (
   (typeof process !== 'undefined' && process.env && process.env.RED_ENABLE_STRETCH_RECLAIM === '1')
+);
+// **S4.19 (מודל ההתאמה של ה-DOM — השלמת שרשרת הראיות של S4.16/S4.18):**
+// המקור בודק התאמה ב-computeBestFitLine דרך `targetCol.scrollHeight <=
+// remPageHeight - reservedNow(txt)` — scrollHeight/clientHeight הם **שלמים**
+// (קוונטיזציה של הדפדפן), והגובה הנמדד כולל את margin-bottom:7px של
+// הפסקה הנבדקת עצמה (p{margin-bottom:7px} ב-CSS המקור; הטור הוא פריט-גריד
+// = הקשר פורמט עצמאי, השוליים אינם קורסים החוצה). ההוכחה מהייחוס:
+// תחתיות התוכן של 88 הטורים בעמודי הגוף אינן עולות על ~1015.2px
+// (bbox) — כלומר line-box+margin ≤ 1022.2 — בעוד שהמודל האריתמטי המדויק
+// שלנו (בלי המרווח) מגיע עד 1022.2 בפועל (עמ' 11/12/30 אצלנו) — הפרש
+// שיטתי של 7px ≈ שליש שורה לטור, שהוא בדיוק "רעש הגבול" שנמדד ב-S4.18.
+// דריסות לניסויים: RED_FIT_MODEL=dom (ברירת המחדל להלן), RED_FIT_ROUND=
+// round|floor|ceil (כיוון הקוונטיזציה), RED_FIT_MARGIN (ברירת מחדל 7).
+const FIT_MODEL = (
+  (typeof process !== 'undefined' && process.env && process.env.RED_FIT_MODEL) || 'dom'
+);
+const FIT_ROUND = (
+  (typeof process !== 'undefined' && process.env && process.env.RED_FIT_ROUND) || 'round'
+);
+const FIT_MARGIN = parseFloat(
+  (typeof process !== 'undefined' && process.env && process.env.RED_FIT_MARGIN) || '7'
+);
+const snapPx = (x) => (
+  FIT_ROUND === 'floor' ? Math.floor(x) : FIT_ROUND === 'ceil' ? Math.ceil(x) : Math.round(x)
 );
 // ברירת המחדל 0 (רדום): הסריקה האמפירית (cap=0/12/20/30/45/100) הראתה שכל
 // גג > 0 מפעיל משיכות בנקודות שבהן המקור לא ביצע אותן — כי המילוי שלנו שונה
@@ -10100,6 +10144,7 @@ function legacyTypeset(rawText, settings, env) {
     const isH2 = sec.newPage && sec.newPage.level === 2;
 
     while (ti < toks.length || pending) {
+      const pageIsSectionOpen = sectionFirst && !!sec.newPage; // **S4.19:** להזזת אזור-h2/h0 בסוף העמוד
       const pg = newPage(isH0 ? (sectionFirst ? 'preface' : 'regular')
         : (sectionFirst && isH2 ? 'sign-open' : 'regular'));
       let top = GEO.FLOW_TOP;
@@ -10109,17 +10154,27 @@ function legacyTypeset(rawText, settings, env) {
           top = GEO.FLOW_TOP + H0_AREA_H;
           currentH2 = sec.newPage.text;
         } else if (isH2) {
+          // **S4.19 (שני אזורי-h2 — מדידה מהייחוס):** עמוד h2 שהמקטע שלו נפתח
+          // בכותרת-רוחבית (h3-span) ממשיך להשתמש בכיול S4.14 (261.3 — נמדר מעמ' 11
+          // וכולל בתוכו את ה-fn-shift, העיטורים ואזור ה-span יחד); עמוד h2 רגיל
+          // (בלי span — עמ' 24/38) משתמש ב-spacer המלא 284.25. דריסה לניסויים:
+          // RED_H2_SPAN_EXEMPT=0 מבטל את הפטור.
+          const spanExempt = toks.length && toks[0].type[0] === 'h'
+            && (HEADING_MODES[toks[0].level] || 'inline_2col') === 'span_1col'
+            && H2_SPAN_EXEMPT;
+          const areaH = spanExempt ? 261.3 : H2_AREA_H;
           if (cfg.autoSimanH2) {
             simanCounter++;
-            pg.bands.push({ kind: 'h2-siman', text: 'סימן ' + toGematria(simanCounter), sizePt: SZ.siman, y: 284.9, h: 36, tokenId: null });
+            pg.bands.push({ kind: 'h2-siman', text: 'סימן ' + toGematria(simanCounter), sizePt: SZ.siman, y: spanExempt ? 284.9 : 307.88, h: 36, tokenId: null });
           }
           const disp = sec.newPage.text.replace(/^סימן\s+[א-ת]+[:\-–—\s]*/i, '').trim();
-          pg.bands.push({ kind: 'h2-title', text: disp, sizePt: SZ.h2, y: 321.1, h: 30, tokenId: sec.newPage.id });
+          pg.bands.push({ kind: 'h2-title', text: disp, sizePt: SZ.h2, y: spanExempt ? 321.1 : 344.05, h: 30, tokenId: sec.newPage.id });
           currentH2 = disp;
           // **S4.9 (תיקון קריטי):** הזרימה מתחילה מתחת לאזור ה-h2 (סימן+כותרת) —
           // בלי זה הבלוקים מוצבים מראש העמוד, מתנגשים בכותרות וגוררים
           // הסחת עימוד של ~29 שורות בכל עמוד פתיחת סימן.
-          top = GEO.FLOW_TOP + H2_AREA_H;
+          top = GEO.FLOW_TOP + areaH;
+          pg._h2SpanExempt = spanExempt; // **S4.19:** לביטול הזזת ה-fn בסוף העמוד
         }
       }
       setHeader(pg, currentH2);
@@ -10215,14 +10270,19 @@ function legacyTypeset(rawText, settings, env) {
         for (let k = 0; k < count; k++) {
           const ln = lines[startIdx + k];
           const words = [];
+          const flags = [];
           const markerIdx = []; // אינדקסים של סמני הערות (להסרה מדויקת במודל)
-          for (const w of ln.words) {
+          for (let wi = 0; wi < ln.words.length; wi++) {
+            const w = ln.words[wi];
+            // **S4.19:** דגל הסוגריים של המילה המקורית — מועבר לכל חלקיה
+            // (קידומת/סיומת סביב סמן הערה); הסמן עצמו אינו טקסט-סוגריים.
+            const wp = ln.parenFlags && wi < ln.parenFlags.length ? !!ln.parenFlags[wi] : false;
             const wNotes = findNotes(w, cfg.fnOpen, cfg.fnClose);
             if (wNotes.length) {
               let pos = 0;
               for (const n of wNotes) {
                 const prefix = w.slice(pos, n.start);
-                if (prefix) words.push(prefix);
+                if (prefix) { words.push(prefix); flags.push(wp); }
                 if (n.text) {
                   const marker = enqueueNote(n.text);
                   if (!paraNotes.has(tok.id)) paraNotes.set(tok.id, []);
@@ -10232,16 +10292,18 @@ function legacyTypeset(rawText, settings, env) {
                   fnReserved = fnReserveFor(fnQueue);
                   markerIdx.push(words.length);
                   words.push(marker);
+                  flags.push(false);
                 }
                 pos = n.end;
               }
               const suffix = w.slice(pos);
-              if (suffix) words.push(suffix);
+              if (suffix) { words.push(suffix); flags.push(wp); }
             } else {
               words.push(w);
+              flags.push(wp);
             }
           }
-          emitted.push({ ...ln, words, markerIdx });
+          emitted.push({ ...ln, words, markerIdx, parenFlags: flags });
         }
         return emitted;
       };
@@ -10491,7 +10553,12 @@ function legacyTypeset(rawText, settings, env) {
         if (tok.type[0] === 'h') {
           if (!block) openBlock(top);
           const h = headingItemH(tok.level);
-          if (block.cursor[block.fill] + h > colBottom()) {
+          // **S4.19 (מודל ה-DOM):** גם בדיקת הכותרת במקור עוברת scrollHeight
+          // (שלם) מול התקציב — אותה קוונטיזציה כמו בדיקת הפסקה.
+          const hFits = FIT_MODEL === 'dom'
+            ? snapPx(block.cursor[block.fill] - block.yTop + h) <= Math.floor(colBottom() - block.yTop)
+            : block.cursor[block.fill] + h <= colBottom();
+          if (!hFits) {
             if (block.fill === 0 && !isH0 && !(block.cols[0].length === 0)) {
               // **S4.13:** גם כאן המקור מחזיר כותרות זנב לפני מעבר טור —
               // כותרת שנותרה אחרונה בטור הימני תיפלט עם הפסקה הבאה בשמאלי.
@@ -10561,8 +10628,23 @@ function legacyTypeset(rawText, settings, env) {
         }
 
         let fit = 0;
-        for (let k = 1; k <= total; k++) {
-          if (block.cursor[block.fill] + k * pitch <= colBottom() + 0.01) fit = k; else break;
+        // **S4.19 (מודל ה-DOM):** המקור מודד את גובה הטור דרך scrollHeight —
+        // שלם, יחסי לראש הטור, וכולל את margin-bottom של הפסקה הנבדקת.
+        // ההשוואה: scrollHeight_int ≤ remPageHeight_int − reservedNow — כלומר
+        // בפועל snap(colRel + k·pitch + margin) ≤ floor(availRel). במודל
+        // המדויק הקודם (ברירת המחדל עד כאן) חסר המרווח — הטורים שלנו קיבלו
+        // 7px קיבולת עודפת ≈ שליש שורה, וזה מקור הסחף בגבולות העמודים.
+        if (FIT_MODEL === 'dom') {
+          const yTopRef = block.yTop;
+          const availRel = Math.floor(colBottom() - yTopRef);
+          for (let k = 1; k <= total; k++) {
+            const colRel = snapPx(block.cursor[block.fill] - yTopRef + k * pitch + FIT_MARGIN);
+            if (colRel <= availRel) fit = k; else break;
+          }
+        } else {
+          for (let k = 1; k <= total; k++) {
+            if (block.cursor[block.fill] + k * pitch <= colBottom() + 0.01) fit = k; else break;
+          }
         }
         // אלמנה/יתומה (chooseSplitLines של המקור)
         if (fit > 0 && fit < total) {
@@ -10675,6 +10757,23 @@ function legacyTypeset(rawText, settings, env) {
           const it = { marker: n.marker, lines: [] };
           for (const l of n.lines) { it.lines.push({ words: String(l).split(' '), y: yy }); yy += GEO.FN_PITCH; }
           pg.footnotes.push(it);
+        }
+        // **S4.19 (הזזת אזור ה-h2/h0 כשיש הערות — ה-flex של המקור):** ה-fn-area
+        // מוכנס ל-wrapper לפני הפוטר ⇒ ה-flow מתכווץ ⇒ ה-spacer (flex-basis 22%)
+        // מתכווץ ב-0.22×גובה-ההערות וכל אזור הכותרת והתוכן זזים למעלה ביחד.
+        // ההערות עצמן מעוגנות לתחתית ה-flow ואינן זזות. מיושם רק בעמוד הפתיחה
+        // של h2/h0 (שם קיים spacer) ורק כשיש הערות בעמוד (ההוכחה: עמ' 11 —
+        // 0.22×105.3=23.2px ≈ הפרש 22.98px שנמדד בין עמ' 11 לעמ' 24/38).
+        if (pageIsSectionOpen && (isH0 || isH2) && !pg._h2SpanExempt) {
+          const shift = 0.22 * fnReserveFor(fnQueue);
+          if (shift > 0.01) {
+            for (const b of pg.bands) b.y -= shift;
+            for (const col of pg.columns) for (const ln of col) ln.y -= shift;
+            for (const mn of pg.marginNotes) {
+              mn.anchorY -= shift;
+              for (const l of mn.lines) l.y -= shift;
+            }
+          }
         }
       }
     }
@@ -10875,6 +10974,7 @@ function legacyTypeset(rawText, settings, env) {
       col.push({
         words: ln.words.slice(),
         markerIdx: ln.markerIdx || [],
+        parenFlags: ln.parenFlags || null,
         sizePt: u.sizePt, heightPx: uLh, kind: 'paragraph',
         isLast: u.isEnd && i === u.lines.length - 1,
         tokenId: u.tokenId,
@@ -14880,15 +14980,29 @@ function projectLegacyPage(pg, settings, api, winApi) {
           }
         }
         const textW = col.w - winW;
+        // **S4.19:** דגלי סוגריים מהמודל — גם בשורות החלון (הסוגריים נפתחים
+        // לא פעם בשורות 0-1 של פסקת-חלון; הזיהוי הפר-שורתי הקודם פספס טווחים
+        // שנפתחו בשורה קודמת).
+        const winParenIdx = new Set();
+        if (ln.parenFlags && ln.parenFlags.length === ln.words.length) {
+          ln.parenFlags.forEach((p, i) => { if (p) winParenIdx.add(i); });
+        }
         const textWords = placeWords(ln.words, api, col.x, textW, ln.sizePt,
-          ln.isLast ? 'center' : 'justify', baseY);
+          ln.isLast ? 'center' : 'justify', baseY, { parenIdx: winParenIdx });
         words = [...winWords, ...textWords];
       } else {
         const align = ln.isLast ? 'center' : 'justify';
         // **S4.9:** מילים בתוך (...) מרונדרות בגודל הסוגריים המוקטן — בדיוק
         // כפי שנמדדו בשבירה (אחרת השורה רחבה מהטור וגולשת מהעמוד).
+        // **S4.19 (סוגריים רב-שורתיים):** הזיהוי הקודם היה פר-שורה (מילה
+        // שנפתחת ב'(' עד מילה שנסגרת ב-')' **באותה שורה**) — טווח שנפתח בשורה
+        // אחת ונסגר באחרת רונדר בגודל הגוף (11.5pt בהקדמה מול 10pt בייחוס —
+        // עמ' 10: 'כהרבה מדיני התורה…'). כעת הדגלים מגיעים מהמודל (חישוב
+        // עומק-תווים על כל הפסקה ב-breakPara) — מקור יחיד למדידה ולרינדור.
         const parenIdx = new Set();
-        {
+        if (ln.parenFlags && ln.parenFlags.length === ln.words.length) {
+          ln.parenFlags.forEach((p, i) => { if (p) parenIdx.add(i); });
+        } else {
           const stack = [];
           ln.words.forEach((w, i) => {
             if (w.startsWith('(')) stack.push(i);

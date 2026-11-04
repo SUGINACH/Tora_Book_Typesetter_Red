@@ -17,6 +17,16 @@
 const fs = require('fs');
 const path = require('path');
 
+// **S4.19:** צינור ה-parity/הקורפוס מפעיל את מנגנון המתיחה/משיכת-הזנב כברירת
+// מחדל (מדידת גופן-אמת — הנתיב שמיוצג בייחוס). האפליקציה החיה אינה מושפעת:
+// המנגנון נשאר opt-in שם (env לא מוגדר בדפדפן). דריסה: RED_ENABLE_STRETCH_RECLAIM=0.
+if (process.env.RED_ENABLE_STRETCH_RECLAIM === undefined) {
+  process.env.RED_ENABLE_STRETCH_RECLAIM = '1';
+}
+if (process.env.RED_RECLAIM_COMPRESS_MAX === undefined) {
+  process.env.RED_RECLAIM_COMPRESS_MAX = '20';
+}
+
 const ROOT = path.resolve(__dirname, '..', '..');
 const RB = path.join(ROOT, 'red-build');
 const AUD = path.join(ROOT, 'audits');
