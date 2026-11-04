@@ -516,6 +516,16 @@ const RECLAIM_BELOW_BASE = 2;     // v21: היתר כיווץ מתחת לבסי�
 const RECLAIM_COMPRESS_MAX = parseFloat(
   (typeof process !== 'undefined' && process.env && process.env.RED_RECLAIM_COMPRESS_MAX) || '0'
 );
+// **S4.17 (מתג ראשי):** כל מנגנון המתיחה/המשיכה כבוי כברירת מחדל — opt-in
+// מפורש בלבד (RED_ENABLE_STRETCH_RECLAIM=1). סיבה: הנתיב החי של האפליקציה
+// מעמד במדידת טבלאות (794 עמודים ל-very_long מול 678 במדידת גופן-אמת)
+// ולכן מגיע למצבי עמוד שבהם המתיחה/המשיכה כן נורות גם כשגג הכיווץ 0 —
+// והן עלולות להוציא שורות מתיבת הטור ב-DOM (LINE_BELOW_COLUMN באודיט
+// החי, עמ' 192/439). עד שרעש המילוי ייסגר והכיוול ייעשה — המנגנון מופעל
+// רק בניסויים מפורשים.
+const STRETCH_RECLAIM_ENABLED = (
+  (typeof process !== 'undefined' && process.env && process.env.RED_ENABLE_STRETCH_RECLAIM === '1')
+);
 // ברירת המחדל 0 (רדום): הסריקה האמפירית (cap=0/12/20/30/45/100) הראתה שכל
 // גג > 0 מפעיל משיכות בנקודות שבהן המקור לא ביצע אותן — כי המילוי שלנו שונה
 // ב±1-2 שורות לעמוד משל המקור (רעש תת-פיקסל של הדפדפן; ראה טבלת 67 הטורים
@@ -1235,7 +1245,7 @@ function legacyTypeset(rawText, settings, env) {
       // delete+insert השכנים שנצפו ב-P7 (עמ' 14 שמאל: 45 שורות בייחוס מול 44).
       let sectionEnded = ti >= toks.length && !pending;
       let reclaimed = false;
-      if (!isH0 && !sectionEnded) {
+      if (STRETCH_RECLAIM_ENABLED && !isH0 && !sectionEnded) {
         stretchLastBlockToBottom();
         reclaimed = tryReclaimOrphanTail();
         if (reclaimed) sectionEnded = ti >= toks.length; // pending כבר null

@@ -5967,12 +5967,25 @@ const RECLAIM_BELOW_BASE = 2;     // v21: היתר כיווץ מתחת לבסי�
 // המנוע שייצר את הייחוס מגביל את הכיווץ בפועל לסדר ~30px לעמוד, לא לקיבולת
 // המלאה. הקבוע מכויל לכך (ניתן לדריסה סביבתית לניסויים: RED_RECLAIM_COMPRESS_MAX).
 const RECLAIM_COMPRESS_MAX = parseFloat(
-  (typeof process !== 'undefined' && process.env && process.env.RED_RECLAIM_COMPRESS_MAX) || '12'
+  (typeof process !== 'undefined' && process.env && process.env.RED_RECLAIM_COMPRESS_MAX) || '0'
 );
-// ברירת המחדל 12: הסריקה האמפירית (cap=0/12/20/30/45/100) הראתה שגג גבוה מ-12
-// מפעיל משיכות שהמקור לא ביצע באותן נקודות (המילוי שלנו שונה ב±1-2 שורות משלו
-// — רעש תת-פיקסל של הדפדפן), ולכן cap>12 מוריד את P7 (0.9451→0.9279).
-// 12 = הערך השמרני ששומר על הציון ומשאיר את המנגנון הנאמן במקום.
+// **S4.17 (מתג ראשי):** כל מנגנון המתיחה/המשיכה כבוי כברירת מחדל — opt-in
+// מפורש בלבד (RED_ENABLE_STRETCH_RECLAIM=1). סיבה: הנתיב החי של האפליקציה
+// מעמד במדידת טבלאות (794 עמודים ל-very_long מול 678 במדידת גופן-אמת)
+// ולכן מגיע למצבי עמוד שבהם המתיחה/המשיכה כן נורות גם כשגג הכיווץ 0 —
+// והן עלולות להוציא שורות מתיבת הטור ב-DOM (LINE_BELOW_COLUMN באודיט
+// החי, עמ' 192/439). עד שרעש המילוי ייסגר והכיוול ייעשה — המנגנון מופעל
+// רק בניסויים מפורשים.
+const STRETCH_RECLAIM_ENABLED = (
+  (typeof process !== 'undefined' && process.env && process.env.RED_ENABLE_STRETCH_RECLAIM === '1')
+);
+// ברירת המחדל 0 (רדום): הסריקה האמפירית (cap=0/12/20/30/45/100) הראתה שכל
+// גג > 0 מפעיל משיכות בנקודות שבהן המקור לא ביצע אותן — כי המילוי שלנו שונה
+// ב±1-2 שורות לעמוד משל המקור (רעש תת-פיקסל של הדפדפן; ראה טבלת 67 הטורים
+// ב-S4.17), ולכן המשיכות מחריפות את ההסט במקום לצמצמו (P7: ‏0.9451→0.9279).
+// cap=0 הוכח זהה-ביטים לפני הפורט בשני הקורפוסים (legacy-33a08 ל-no_long,
+// legacy-89678 ל-very_long) — המנגנון במקום לצורך כיוול עתידי אחרי סגירת
+// רעש המילוי, ואינו משנה כלום עד אז (דריסה: RED_RECLAIM_COMPRESS_MAX).
 
 /** גובה פריט כותרת inline (h4/h5/h6) בטור — גודל×1.45.
  * **S4.14 (מדידה שיטתית מעוגני הייחוס):** מרחק תווית-hN → עוגן הפסקה הבא
@@ -6685,7 +6698,7 @@ function legacyTypeset(rawText, settings, env) {
       // delete+insert השכנים שנצפו ב-P7 (עמ' 14 שמאל: 45 שורות בייחוס מול 44).
       let sectionEnded = ti >= toks.length && !pending;
       let reclaimed = false;
-      if (!isH0 && !sectionEnded) {
+      if (STRETCH_RECLAIM_ENABLED && !isH0 && !sectionEnded) {
         stretchLastBlockToBottom();
         reclaimed = tryReclaimOrphanTail();
         if (reclaimed) sectionEnded = ti >= toks.length; // pending כבר null
