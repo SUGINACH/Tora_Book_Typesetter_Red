@@ -112,14 +112,19 @@
     const hdr = pg.querySelector('.running-head');
     if (hdr) info.headerText = hdr.textContent.trim().slice(0, 80);
     // **S5.1 (A5):** מיקום בפיקסלים — כמו ב-full-math-audit.
+    // **S5.1-ב (תיקון המטריקה):** יחסית לעמוד (כמו ב-full-math-audit) —
+    // getBoundingClientRect viewport-י אינו מתאים לספים מוחלטים.
+    const pgR = R(pg);
     if (hdr) {
       const hr = R(hdr);
-      if (hr.b > 107.2 + 0.5 || hr.y < -0.5) problems.push({ page: idx, type: 'HEADER_POSITION', severity: 'high', top: Math.round(hr.y * 10) / 10, bottom: Math.round(hr.b * 10) / 10 });
+      const hb = hr.b - pgR.y, ht = hr.y - pgR.y;
+      if (hb > 107.2 + 0.5 || ht < -0.5) problems.push({ page: idx, type: 'HEADER_POSITION', severity: 'high', top: Math.round(ht * 10) / 10, bottom: Math.round(hb * 10) / 10 });
     }
     const fol = pg.querySelector('.folio');
     if (fol && (fol.textContent || '').trim()) {
       const fr2 = R(fol);
-      if (fr2.y < 1022.2 - 0.5 || fr2.b > 1122.5 + 2) problems.push({ page: idx, type: 'FOLIO_POSITION', severity: 'high', top: Math.round(fr2.y * 10) / 10, bottom: Math.round(fr2.b * 10) / 10 });
+      const ft = fr2.y - pgR.y, fb = fr2.b - pgR.y;
+      if (ft < 1022.2 - 0.5 || fb > 1122.5 + 2) problems.push({ page: idx, type: 'FOLIO_POSITION', severity: 'high', top: Math.round(ft * 10) / 10, bottom: Math.round(fb * 10) / 10 });
     }
 
     // תוכן שער (מנוע מורשת): שורות השער הן .band--gate

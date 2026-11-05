@@ -93,13 +93,18 @@
     // הטקסט; כותרת שתשב על שורת הגוף הראשונה (טקסט-על-טקסט) היתה בלתי-נראית.
     // הכותרת מעל ראשית הזרימה (107.2); הגיליון מתחת לתחתית הזרימה (1022.2)
     // ובתוך העמוד (1122.5) — גיאומטריית הייחוס של המנוע.
+    // **S5.1-ב (תיקון המטריקה):** יחסית לעמוד (pr) — getBoundingClientRect הוא
+    // viewport-י; בהשוואה מוחלטת (107.2/1022.2) הבדיקה ירתה על כל עמוד
+    // (1332 אזעקות שווא בריצת ה-Actions הראשונה). עכשיו: יחסית לתיבת העמוד.
     if (hdr) {
       const hr = R(hdr);
-      if (hr.b > 107.2 + 0.5 || hr.y < -0.5) cnt('HEADER_POSITION', { type: 'HEADER_POSITION', severity: 'high', page: idx, top: Math.round(hr.y * 10) / 10, bottom: Math.round(hr.b * 10) / 10 });
+      const hb = hr.b - pr.y, ht = hr.y - pr.y;
+      if (hb > 107.2 + 0.5 || ht < -0.5) cnt('HEADER_POSITION', { type: 'HEADER_POSITION', severity: 'high', page: idx, top: Math.round(ht * 10) / 10, bottom: Math.round(hb * 10) / 10 });
     }
     if (fol && (fol.textContent || '').trim()) {
       const fr2 = R(fol);
-      if (fr2.y < 1022.2 - 0.5 || fr2.b > 1122.5 + 2) cnt('FOLIO_POSITION', { type: 'FOLIO_POSITION', severity: 'high', page: idx, top: Math.round(fr2.y * 10) / 10, bottom: Math.round(fr2.b * 10) / 10 });
+      const ft = fr2.y - pr.y, fb = fr2.b - pr.y;
+      if (ft < 1022.2 - 0.5 || fb > 1122.5 + 2) cnt('FOLIO_POSITION', { type: 'FOLIO_POSITION', severity: 'high', page: idx, top: Math.round(ft * 10) / 10, bottom: Math.round(fb * 10) / 10 });
     }
     info.g = [...pg.querySelectorAll('.band--gate')].filter((b) => (b.textContent || '').trim()).length;
 
