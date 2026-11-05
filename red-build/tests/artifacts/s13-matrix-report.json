@@ -5,10 +5,10 @@
     {
       "config": "default",
       "pages": 36,
-      "ms": 54,
+      "ms": 55,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
+      "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -22,10 +22,10 @@
     {
       "config": "ornaments",
       "pages": 36,
-      "ms": 24,
+      "ms": 25,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
+      "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -39,10 +39,10 @@
     {
       "config": "aq-on",
       "pages": 36,
-      "ms": 45,
+      "ms": 35,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
+      "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -56,7 +56,7 @@
     {
       "config": "continuous-notes",
       "pages": 36,
-      "ms": 21,
+      "ms": 24,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
@@ -73,10 +73,10 @@
     {
       "config": "verso-headers",
       "pages": 36,
-      "ms": 17,
+      "ms": 19,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
+      "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -93,7 +93,7 @@
       "ms": 24,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
+      "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {

@@ -201,7 +201,7 @@ function buildToUnicode(font) {
  * @returns {Buffer}
  */
 function writePdf(opts) {
-  const { pages, pageSizeMm, font, font2, settings, outline, tocLinks } = opts;
+  const { pages, pageSizeMm, font, font2, font3, font4, settings, outline, tocLinks } = opts;
   const pdf = new PdfBuilder();
 
   const wPt = pageSizeMm.w * MM_TO_PT;
@@ -225,6 +225,24 @@ function writePdf(opts) {
     ID.fontDescriptorb = pdf.reserve();
     ID.fontFileb = pdf.reserve();
     ID.toUnicodeb = pdf.reserve();
+  }
+  // **S4.26:** מזהי הגופן השלישי (DavidLibre-Bold — כותרות) — אחרי אלו של
+  // font2, סדר קבוע לפני הדפים (דטרמיניזם).
+  if (font3) {
+    ID.type0c = pdf.reserve();
+    ID.cidFontc = pdf.reserve();
+    ID.fontDescriptorc = pdf.reserve();
+    ID.fontFilec = pdf.reserve();
+    ID.toUnicodec = pdf.reserve();
+  }
+  // **S4.26:** מזהי הגופן הרביעי (Frank Ruhl Libre — fallback לפיסוק שחסר
+  // בגוף הראשי, כמו מחסנית ה-CSS בדפדפן).
+  if (font4) {
+    ID.type0d = pdf.reserve();
+    ID.cidFontd = pdf.reserve();
+    ID.fontDescriptord = pdf.reserve();
+    ID.fontFiled = pdf.reserve();
+    ID.toUnicoded = pdf.reserve();
   }
   const pageIds = pages.map(() => pdf.reserve());
   const contentIds = pages.map(() => pdf.reserve());
@@ -259,15 +277,56 @@ function writePdf(opts) {
     // #0F1749, בלוקי השער האחורי) — ברירת מחדל שחור (0 0 0 rg מרומז ב-PDF).
     const emitWord = (text, xPx, yPx, sizePt, fontKey, color) => {
       // **S4.15:** מילת-חלון בגופן המשני (FrankReal-Bold) — כמו המקור;
-      // בלי font2 (ייצוא כללי) — הכל בגוף הראשי כמו קודם.
+      // **S4.26:** כותרות בגופן השלישי (DavidLibre-Bold — כמו הייחוס);
+      // **S4.26 (פיצול גליפים):** תווים שחסרים בגוף הראשי (פיסוק בסיסי
+      // בגוטמן רש"י: ' . ׳) מצוירים בגופן ה-fallback (/F4) — המשך אותה
+      // פעולת טקסט, העט ממשיך מאליו אחרי כל Tj.
       const useF2 = font2 && fontKey === 'window';
-      const f = useF2 ? font2 : font;
-      const gidHex = cidHex(text, f);
-      if (!gidHex) return;
+      const useF3 = font3 && fontKey === 'heading';
+      const f = useF2 ? font2 : (useF3 ? font3 : font);
+      const chars = [...String(text)].filter(ch => {
+        const cp = ch.codePointAt(0);
+        return cp >= 0x20 && cp !== 0x7F;
+      });
+      const visual = visualOrderRtl(chars);
+      if (!visual.length) return;
+      if (font4 && f !== font2 && f !== font3) {
+        const runs = [];
+        for (const ch of visual) {
+          const useFb = f.cidOf(ch) === 0 && font4.cidOf(ch) !== 0;
+          const key = useFb ? 'fb' : 'main';
+          if (runs.length && runs[runs.length - 1].key === key) runs[runs.length - 1].chars.push(ch);
+          else runs.push({ key, chars: [ch] });
+        }
+        if (runs.length > 1 || (runs[0] && runs[0].key === 'fb')) {
+          if (Array.isArray(color) && color.length === 3) {
+            ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
+          }
+          ops.push(`BT ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td`);
+          for (const run of runs) {
+            const rf = run.key === 'fb' ? font4 : f;
+            let hex = '';
+            for (const ch of run.chars) {
+              const g = rf.cidOf(ch);
+              if (g) hex += g.toString(16).padStart(4, '0');
+            }
+            if (hex) ops.push(`/${run.key === 'fb' ? 'F4' : (useF3 ? 'F3' : 'F1')} ${round2(sizePt)} Tf <${hex}> Tj`);
+          }
+          ops.push('ET');
+          return;
+        }
+      }
+      let out = '';
+      for (const ch of visual) {
+        const g = f.cidOf(ch);
+        if (g === 0) continue;
+        out += g.toString(16).padStart(4, '0');
+      }
+      if (!out) return;
       if (Array.isArray(color) && color.length === 3) {
         ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
       }
-      ops.push(`BT ${useF2 ? '/F2' : '/F1'} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
+      ops.push(`BT ${useF2 ? '/F2' : (useF3 ? '/F3' : '/F1')} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${out}> Tj ET`);
     };
     const emitLines = (lines) => {
       for (const ln of lines) {
@@ -401,13 +460,73 @@ function writePdf(opts) {
     pdf.put(ID.toUnicodeb, `<< /Length ${toUni2.length} >>\nstream\n${toUni2}\nendstream`);
   }
 
+  // **S4.26:** הגופן הרביעי (Frank Ruhl Libre — fallback לפיסוק) — אותם
+  // אובייקטים בשמות שונים (מטריקות: asc 1000/1000, desc −200/1000).
+  if (font4) {
+    const wArray4 = [];
+    let run4 = null;
+    let prevGid4 = -10;
+    for (const g of [...font4.widthsUnits.keys()].sort((a, b) => a - b)) {
+      const wv = Math.round((font4.widthsUnits.get(g) / font4.unitsPerEm) * 1000);
+      if (g === prevGid4 + 1 && run4) run4.push(wv);
+      else { if (run4) wArray4.push(run4); run4 = [g, wv]; }
+      prevGid4 = g;
+    }
+    if (run4) wArray4.push(run4);
+    const wStr4 = wArray4.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+    pdf.put(ID.type0d, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraPunct /Encoding /Identity-H /DescendantFonts [${ID.cidFontd} 0 R] /ToUnicode ${ID.toUnicoded} 0 R >>`);
+    pdf.put(ID.cidFontd, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraPunct /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptord} 0 R /DW 1000 /W [${wStr4}] >>`);
+    pdf.put(ID.fontDescriptord, `<< /Type /FontDescriptor /FontName /ToraPunct /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 1000 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 ${ID.fontFiled} 0 R >>`);
+    const ff4 = Buffer.concat([
+      Buffer.from(`<< /Length ${font4.subsetBytes.length} /Length1 ${font4.subsetBytes.length} >>\nstream\n`, 'latin1'),
+      font4.subsetBytes,
+      Buffer.from('\nendstream', 'latin1')
+    ]);
+    pdf.put(ID.fontFiled, ff4);
+    const toUni4 = buildToUnicode(font4);
+    pdf.put(ID.toUnicoded, `<< /Length ${toUni4.length} >>\nstream\n${toUni4}\nendstream`);
+  }
+
+  // **S4.26:** הגופן השלישי (DavidLibre-Bold — כותרות/TOC) — אותם אובייקטים
+  // בשמות שונים (מטריקות אמת: ascender 1599/2048=781, descender −449/2048=−219).
+  if (font3) {
+    const wArray3 = [];
+    let run3 = null;
+    let prevGid3 = -10;
+    for (const g of [...font3.widthsUnits.keys()].sort((a, b) => a - b)) {
+      const wv = Math.round((font3.widthsUnits.get(g) / font3.unitsPerEm) * 1000);
+      if (g === prevGid3 + 1 && run3) run3.push(wv);
+      else { if (run3) wArray3.push(run3); run3 = [g, wv]; }
+      prevGid3 = g;
+    }
+    if (run3) wArray3.push(run3);
+    const wStr3 = wArray3.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+    pdf.put(ID.type0c, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraHead /Encoding /Identity-H /DescendantFonts [${ID.cidFontc} 0 R] /ToUnicode ${ID.toUnicodec} 0 R >>`);
+    pdf.put(ID.cidFontc, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraHead /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptorc} 0 R /DW 1000 /W [${wStr3}] >>`);
+    pdf.put(ID.fontDescriptorc, `<< /Type /FontDescriptor /FontName /ToraHead /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 781 /Descent -219 /CapHeight 700 /StemV 120 /FontFile2 ${ID.fontFilec} 0 R >>`);
+    const ff3 = Buffer.concat([
+      Buffer.from(`<< /Length ${font3.subsetBytes.length} /Length1 ${font3.subsetBytes.length} >>\nstream\n`, 'latin1'),
+      font3.subsetBytes,
+      Buffer.from('\nendstream', 'latin1')
+    ]);
+    pdf.put(ID.fontFilec, ff3);
+    const toUni3 = buildToUnicode(font3);
+    pdf.put(ID.toUnicodec, `<< /Length ${toUni3.length} >>\nstream\n${toUni3}\nendstream`);
+  }
+
   // ---- עמודים ----
   const mediabox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
   const bleedbox = `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`;
   pages.forEach((pg, i) => {
     const annots = linkIds.get(i) || [];
     const annotsStr = annots.length ? ` /Annots [${annots.map(id => `${id} 0 R`).join(' ')}]` : '';
-    const fontRes = font2 ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R >>` : `/Font << /F1 ${ID.type0} 0 R >>`;
+    const fontRes = font2 && font3 && font4
+      ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R /F3 ${ID.type0c} 0 R /F4 ${ID.type0d} 0 R >>`
+      : (font2 && font3
+        ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R /F3 ${ID.type0c} 0 R >>`
+        : (font2
+          ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R ${font4 ? `/F4 ${ID.type0d} 0 R` : ''} >>`
+          : `/Font << /F1 ${ID.type0} 0 R ${font3 ? `/F3 ${ID.type0c} 0 R` : ''} ${font4 ? `/F4 ${ID.type0d} 0 R` : ''} >>`));
     pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << ${fontRes} >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
     pdf.put(contentIds[i], Buffer.concat([
       Buffer.from(`<< /Length ${contents[i].length} >>\nstream\n`, 'latin1'),

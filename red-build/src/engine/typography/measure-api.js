@@ -24,12 +24,21 @@ function registerFont(profileName, bytes) {
   const res = fm.parseFont(bytes);
   if (!res.ok) return { ok: false, error: res.error };
   registeredFonts.set(String(profileName), res.font);
+  // **S4.26 (גליפים חסרים):** 'Frank Ruhl Libre' הוא fallback הפיסוק
+  // של מחסנית הרינדור (fontStack מוסיף אותו שני) — גם המדידה תשתמש
+  // בו לתווים שחסרים בגופן הראשי (בדיוק כמו הדפדפן).
+  if (String(profileName) === 'Frank Ruhl Libre') {
+    fm.setMissingGlyphFallbackFont(res.font);
+  }
   return { ok: true, profile: res.font, glyphCount: res.font.numGlyphs, mappedChars: res.font.charToGlyph.size };
 }
 
 /** הסרת גופן רשום (בדיקות). */
-function unregisterFont(profileName) { registeredFonts.delete(String(profileName)); }
-function clearRegisteredFonts() { registeredFonts.clear(); }
+function unregisterFont(profileName) {
+  registeredFonts.delete(String(profileName));
+  if (String(profileName) === 'Frank Ruhl Libre') fm.setMissingGlyphFallbackFont(null);
+}
+function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); }
 
 class MeasureAPI {
   constructor(settings, impl = 'table') {
@@ -77,7 +86,13 @@ class MeasureAPI {
         // ממופה בגופן — רוחב hmtx אמיתי (כולל 0 לניקוד)
         return (fm.advanceUnitsOf(this.fontProfile, ch) / this.fontProfile.unitsPerEm) * this.fontFactor;
       }
+      // **S4.26 (גליף חסר — fallback כמו הדפדפן):** פיסוק שחסר בגופנים
+      // תורניים מצויר בדפדפן במשפחת ה-fallback שבמחסנית ('Frank Ruhl
+      // Libre') — המדידה באותם מטריקות בדיוק. בלי גופן כזה רשום — הקירוב
+      // המכויל (התנהגות קודמת).
       this.stats.fontFallbacks++;
+      const fbEm = fm.missingGlyphFallbackEm(ch);
+      if (fbEm > 0) return fbEm;
       return charWidthEm(ch);
     }
     return charWidthEm(ch);

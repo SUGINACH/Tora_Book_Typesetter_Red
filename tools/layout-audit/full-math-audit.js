@@ -121,6 +121,10 @@
       for (const l of lines) {
         const cls = String(l.className);
         const isLast = /line--last/.test(cls), isHead = /line--heading/.test(cls);
+        // **S4.26 (חלון שקוע):** שורה 1 של פסקת-חלון — השפה הימנית תפוסה
+        // ע"י מילת-החלון (בכוונה, כמו float במקור) — פטורה מבדיקות היישור
+        // והמרכוז; גלישה/חפיפה נבדקות כרגיל.
+        const isWinWrap = /line--window-wrap/.test(cls);
         const lr = R(l);
         const cs = getComputedStyle(l);
         const ink = inkOf(l);
@@ -140,7 +144,7 @@
         if (!dirChecked) { if ((l.getAttribute('dir') || '') === 'rtl') S.dirOk++; else S.dirBad++; dirChecked = true; }
         if (prevTop !== null && base === 'b' && prevFlag === 'b') colRec.p.push(Math.round((lr.y - prevTop) * 10) / 10);
 
-        if (!isLast && !isHead && words >= 2 && ink) {
+        if (!isLast && !isHead && !isWinWrap && words >= 2 && ink) {
           const L = ink.x - cr.x, Rg = cr.r - ink.r;
           accAdd(S.bodyL, L); accAdd(S.bodyR, Rg);
           if (L > 3 || Rg > 3) cnt('INK_NOT_JUSTIFIED', { type: 'INK_NOT_JUSTIFIED', severity: 'high', page: idx, col: ci, leftGap: Math.round(L * 10) / 10, rightGap: Math.round(Rg * 10) / 10, text: (l.textContent || '').slice(0, 20) });
@@ -153,7 +157,7 @@
           const fam = String(cs.fontFamily).split(',')[0].trim();
           S.fontsUsed[fam] = (S.fontsUsed[fam] || 0) + 1;
         }
-        if (isLast && ink && words >= 2) {
+        if (isLast && !isWinWrap && ink && words >= 2) {
           const ta = cs.textAlign, tal = cs.textAlignLast;
           const key = ta + '/' + tal;
           S.lastAlign[key] = (S.lastAlign[key] || 0) + 1;

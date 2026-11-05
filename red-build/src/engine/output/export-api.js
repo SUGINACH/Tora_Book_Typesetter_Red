@@ -205,11 +205,86 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
         }
       }
     }
+    // **S4.26 (גופן שלישי — DavidLibre-Bold, כותרות/TOC):** המקרן מסמן מילות
+    // כותרת (fontKey='heading'); כאן נבנה תת-גופן ונעביר לכותב ה-PDF (/F3) —
+    // כמו הייחוס (DavidLibre-Bold בכל הכותרות ושורות ה-TOC).
+    let fontForWriter3 = null;
+    {
+      const headProfile = registeredFontsRef.get('DavidLibre-Bold');
+      if (headProfile) {
+        const headParts = [];
+        for (const pg of projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+            for (const w of ln.words) if (w.fontKey === 'heading') headParts.push(w.text);
+          }
+        }
+        if (headParts.length) {
+          const headSubset = buildSubset(headProfile, charInventory(headParts.join(' ')));
+          if (headSubset.ok) {
+            const headC2g = subsetNewCmap(headSubset);
+            fontForWriter3 = {
+              subsetBytes: headSubset.bytes,
+              widthsUnits: headSubset.widthsUnits,
+              unitsPerEm: headSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = headC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(headSubset), ch);
+              },
+              charToGidEntries: () => [...headC2g.entries()]
+            };
+          }
+        }
+      }
+    }
+    // **S4.26 (גופן רביעי — Frank Ruhl Libre, fallback לפיסוק):** תווים שחסרים
+    // בגוף הראשי (פיסוק בסיסי בגופנים תורניים — למשל ' . בגוטמן רש"י) מצוירים
+    // ב-/F4 — בדיוק כפי שהדפדפן נופל ל-'Frank Ruhl Libre' שבמחסנית, וכפי
+    // שהמדידה מודדת אותם (setMissingGlyphFallbackFont). בלי זה הפיסוק היה
+    // נעלם מהייצוא.
+    let fontForWriter4 = null;
+    {
+      const frlProfile = registeredFontsRef.get('Frank Ruhl Libre');
+      if (frlProfile && fontForWriter) {
+        const missingChars = new Set();
+        for (const pg of projected.pages) {
+          const scan = (lines) => {
+            for (const ln of lines) {
+              for (const w of (ln.words || [])) {
+                for (const ch of String(w.text || '')) {
+                  if (fontForWriter.cidOf(ch) === 0 && glyphIdOf(frlProfile, ch) !== 0) missingChars.add(ch);
+                }
+              }
+            }
+          };
+          scan(pg.spanning ? pg.spanning.lines : []);
+          scan(pg.lines || []);
+          for (const fn of (pg.footnotes || [])) scan([{ words: fn.words || [] }]);
+        }
+        if (missingChars.size) {
+          const punctSubset = buildSubset(frlProfile, charInventory([...missingChars].join('')));
+          if (punctSubset.ok) {
+            const punctC2g = subsetNewCmap(punctSubset);
+            fontForWriter4 = {
+              subsetBytes: punctSubset.bytes,
+              widthsUnits: punctSubset.widthsUnits,
+              unitsPerEm: punctSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = punctC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(punctSubset), ch);
+              },
+              charToGidEntries: () => [...punctC2g.entries()]
+            };
+          }
+        }
+      }
+    }
     const bytes = writePdf({
       pages: projected.pages,
       pageSizeMm,
       font: fontForWriter,
       font2: fontForWriter2,
+      font3: fontForWriter3,
+      font4: fontForWriter4,
       settings,
       outline,
       tocLinks

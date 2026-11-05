@@ -293,7 +293,7 @@ function tokenizeDoc(rawText, cfg) {
  * שתי המילים האחרונות קשורות ברווח בלתי-שביר (מניעת מילה יתומה).
  */
 class LineBreaker {
-  constructor(api, cfg, windowApi = null) {
+  constructor(api, cfg, windowApi = null, headingApi = null) {
     this.api = api;
     this.cfg = cfg;
     // **S4.15 (גופן מילת-החלון):** מילת-החלון נמדדת ב-FrankReal-Bold (כמו
@@ -301,12 +301,24 @@ class LineBreaker {
     // לא בגופן הגוף. אם לא נרשם — נפילה שקופה לגוף (התנהגות קודמת).
     this.win = windowApi;
     this.winCache = new Map();
+    // **S4.26 (גופן כותרות):** כותרות נמדדות ב-DavidLibre-Bold (כמו
+    // הרינדור בפועל) — בלי גופן רשום נופלים לגופן הגוף.
+    this.hApi = headingApi;
+    this.hCache = new Map();
     this.cache = new Map();
   }
   w(text, sizePt) {
     const key = sizePt + '|' + text;
     let v = this.cache.get(key);
     if (v === undefined) { v = this.api.measureTextWidth(text, sizePt, 0); this.cache.set(key, v); }
+    return v;
+  }
+  /** **S4.26:** מדידת כותרת (DavidLibre-Bold) — עם מטמון נפרד. */
+  hw(text, sizePt) {
+    if (!this.hApi) return this.w(text, sizePt);
+    const key = sizePt + '|' + text;
+    let v = this.hCache.get(key);
+    if (v === undefined) { v = this.hApi.measureTextWidth(text, sizePt, 0); this.hCache.set(key, v); }
     return v;
   }
   /** מדידת טקסט חלון (FrankReal-Bold 1.5×) — עם מטמון נפרד. */
@@ -334,7 +346,13 @@ class LineBreaker {
     const inWord = new RegExp(escO + '[\\s\\S]*?' + escC, 'g');
     const disp = words.map(word => {
       if (word.startsWith(fnOpen) && word.endsWith(fnClose)) return 'א';
-      return word.replace(inWord, 'א').replace(/\uE000/g, ' ');
+      // **S4.26 (תיקון שורש — סמן מודבק למילה):** הערה המודבקת למילה
+      // ('וכו'.[...]') נמדדה כאן כמילה אחת בלי רווח — אבל emitLinesWithMarkers
+      // פולט את הסמן כפריט נפרד **עם רווחים** משני צדדיו (כמו בייחוס:
+      // 'מחשבת). א. העבודה.') ⇒ השורה המרונדרת רחבה ברווח מהנמדדת וגולשת
+      // מהטור (נצפה: 272.5px מול 269.4 — INK_OUTSIDE 3.2px בעמ' 114 של
+      // הקובץ הגדול). ההחלפה כוללת את הרווחים — המדידה = הרינדור.
+      return word.replace(inWord, ' א ');
     });
     const out = words.map(word => word.replace(/\uE000/g, ' '));
     return { words, disp, out, notes };
@@ -636,6 +654,18 @@ function wrapText(text, api, widthPx, sizePt) {
   return lines;
 }
 
+/** **S4.26 (דיווח משתמש 05.11 — "טקסט מוסגר ממוקם גבוה")**: הפרש הבסיס שמרכז
+ * אנכית טקסט-סוגריים מוקטן מול טקסט השורה המארח — מרכז גובה האחד מותאם
+ * למרכז גובה השני. מודל תיבת השורה של המנוע (baselineOf): גובה התוכן
+ * = (ascent+0.2)·גודל ⇒ מרכז הגובה יושב (ascent−0.2)/2·גודל מעל הבסיס;
+ * הפרש המרכזים בין גוף לסוגריים = (ascent−0.2)·(S_host−S_paren)/2.
+ * (בעבר הוגבה הסוגריים בעיוורון ב-0.33×גודל-השורה ≈ 5.3px — הרבה מעל
+ * המרכוז; עכשיו ≈ 0.7px בלבד.) */
+function parenCenterRaisePx(ascentEm, hostPt, parenPt) {
+  const a = (Number.isFinite(ascentEm) && ascentEm > 0.1) ? ascentEm : 0.80;
+  return Math.max(0, (a - 0.2) * (hostPt - parenPt) * (96 / 72) / 2);
+}
+
 /**
  * legacyTypeset — הנתיב החי לפרופיל IMUD (התנהגות המקור = המפרט).
  */
@@ -648,15 +678,36 @@ function legacyTypeset(rawText, settings, env) {
   // split ⇒ החלק הראשון במרזב העמוד, השאר לראש תור העמוד הבא עם '(המשך)'.
   const rawSet = settings._imudRaw || {};
   const fnSet = (k, d) => (settings[k] != null ? settings[k] : (rawSet[k] != null ? rawSet[k] : d));
-  const fnLayoutMode = String(fnSet('fn-layout-mode', 'block'));
+  // **S4.26 (דיווח משתמש 05.11 — בעיות 3–5 בהערות השוליים):**
+  // (א) תקרת המרזב: ברירת המחדל עוברת מ-220px הקבוע ל**קיבולת העמוד
+  //     המלאה** ("הערות ארוכות... לא ממלאות את כל גובה העמוד הקיים, ובעקבות
+  //     כך עוברות לעמוד שלישי") — הערה ארוכה ממלאת את העמוד עד תומו לפני
+  //     שהיא נחתכת. התקרה שומרת תמיד שורת-גוף אחת לפחות בעמוד פתיחה רגיל
+  //     (FLOW_H − 38.5 − שורת-גוף) — ערך מפורש בהגדרה נחתם לטווח הבטוח.
+  // (ב) מצב continuous כברירת מחדל ("הערה הבאה מתחילה מיד באותה שורה שהסתיימה
+  //     הערה קודמת") — גם בו יש תקרה (בעבר היה אינסוף ⇒ חריגה מהעמוד).
+  // (ג) מספור פר-פרק ("איפוס מספרי הערות בכל פרק (כותרת 2) ולא בכל עמוד")
+  //     — fn-reset-mode=siman; page שומר על ההתנהגות ההיסטורית.
+  const FN_BODY_LINE_PX = SZ.body * (96 / 72) * 1.34; // 21.44 — שורת גוף אחת
+  const FN_FULL_CAP_PX = Math.max(
+    GEO.FN_PITCH,
+    Math.floor((GEO.FLOW_H - 38.5 - FN_BODY_LINE_PX) / GEO.FN_PITCH) * GEO.FN_PITCH
+  );
+  const fnLayoutMode = String(fnSet('fn-layout-mode', 'continuous'));
   const fnPolicy = String(fnSet('long-footnote-policy', 'split'));
-  const fnBarMaxRaw = Number(fnSet('fn-bar-max-height-px', 220));
-  const fnBarMax = (fnLayoutMode !== 'continuous' && Number.isFinite(fnBarMaxRaw) && fnBarMaxRaw > 0)
-    ? fnBarMaxRaw : Number.POSITIVE_INFINITY;
-  const fnSplitEnabled = fnPolicy === 'split' && Number.isFinite(fnBarMax);
+  const fnResetMode = String(fnSet('fn-reset-mode', 'siman'));
+  const fnBarMaxRaw = Number(fnSet('fn-bar-max-height-px', 0));
+  const fnBarMax = (Number.isFinite(fnBarMaxRaw) && fnBarMaxRaw > 0)
+    ? Math.min(fnBarMaxRaw, FN_FULL_CAP_PX) : FN_FULL_CAP_PX;
+  const fnSplitEnabled = fnPolicy === 'split';
   // **S4.24 (שימור תוכן):** המשכי הערות שנקצצו בתקרת המרזב — ברמת ה-typeset
   // (חוצה עמודים ומקטעים); לעולם לא מאבדים שורת הערה.
   const pendingFootnotes = [];
+  // **S4.26 (מספור פר-פרק):** מונה רץ בתוך הפרק; נשמר במפה כדי שהסמן בגוף
+  // והסמן ברישום יהיו זהים גם כשהפסקה חוצת-עמודים מציגה את ההערה שוב.
+  // איפוס בכל פתיחת מקטע h2/h0 (ראה flowSection).
+  let fnChapterCounter = 0;
+  const fnNoteNumbers = new Map(); // noteText -> מספר בפרק הנוכחי
   // **EXT-13:** גופן רשום ⇒ מדידת אמת גם ברירת מחדל 'table' (live==ייצוא).
   const impl = resolveMeasureImpl(settings);
   // **S4.13 (רישום גופן הערות-הצד):** הקריאה יכולה לספק את בתי הגופן
@@ -670,6 +721,14 @@ function legacyTypeset(rawText, settings, env) {
   // נופלת לגופן הגוף (התנהגות קודמת, בדיקות קיימות לא נשברות).
   if (env && env.windowFontBytes && !registeredMeasureFonts.has('FrankReal-Bold')) {
     registerMeasureFont('FrankReal-Bold', env.windowFontBytes);
+  }
+  // **S4.26 (דיווח משתמש 05.11 — "האתר לא משתמש בגופני ברירת המחדל"):** גופן
+  // הכותרות של המקור בפועל — DavidLibre-Bold (הוכח מהייחוס: כל שורות
+  // הכותרות/ה-TOC ב-DavidLibre-Bold; המחסנית 'AlphaBlack','David Libre'
+  // נפלה אצל המשתמש המקורי ל-David Libre — והכותרות מודגשות). הכותרות
+  // נמדדות במטריקות שלו (שבירת כותרות ארוכות) ומרונדרות בו (bold 700).
+  if (env && env.headingFontBytes && !registeredMeasureFonts.has('DavidLibre-Bold')) {
+    registerMeasureFont('DavidLibre-Bold', env.headingFontBytes);
   }
   // **S4.15 (גופן ההקדמה — Frank Ruhl Libre 11.5pt):** גוף ההקדמה במקור
   // (--fn-h0-body) מרונדר ב-'Frank Ruhl Libre', לא בגופן הגוף — הוכח
@@ -708,6 +767,15 @@ function legacyTypeset(rawText, settings, env) {
       'font-metrics'
     );
   }
+  // **S4.26:** מדידת כותרות ב-DavidLibre-Bold (כמו הרינדור) — בלי גופן
+  // רשום נופלים לגופן הגוף (התנהגות קודמת, מתועדת).
+  let headingApi = null;
+  if (impl === 'font-metrics' && registeredMeasureFonts.has('DavidLibre-Bold')) {
+    headingApi = new MeasureAPI(
+      { 'body-font': 'DavidLibre-Bold', 'body-font-size-pt': SZ.body, 'body-line-height': 1.34 },
+      'font-metrics'
+    );
+  }
   // **S4.13 (גופן הערות-צד — כמו המקור):** הערות הצד מודפסות בגופן
   // HadassahFriedlaender (מוכח מהייחוס: שורות השוליים sz=6 בפונט
   // 'HadassahFriedlaender', לא GuttmanRashi). הגלישה שלהן חייבת למדוד
@@ -721,7 +789,7 @@ function legacyTypeset(rawText, settings, env) {
       'font-metrics'
     );
   }
-  const brk = new LineBreaker(api, cfg, windowApi);
+  const brk = new LineBreaker(api, cfg, windowApi, headingApi);
   const { meta, tokens } = tokenizeDoc(rawText, cfg);
 
   const bookTitle = (meta.bookTitle || 'ספר').trim();
@@ -763,6 +831,9 @@ function legacyTypeset(rawText, settings, env) {
       // קוראים p.sideNotes.length גם על תוצאות מורשת (בלי זה ה-worker קורס
       // והאפליקציה החיה מציגה 0 עמודים — נמצא בביקורת הדפדפן).
       fnSep: false, toc: null, _metadata: meta,
+      // **S4.26:** ascentEm של גופן המדידה — למרכוז האנכי של טקסט-הסוגריים
+      // ברינדור ה-DOM (אותו מודל תיבת-שורה כמו baselineOf של המקרן).
+      ascentEm: api.ascentEm(),
       // **S4.10:** תבנית מלאה — גם צרכני DP (כגון הקרנות/בדיקות) שקוראים
       // template.columns/contentBox.height לא יקרסו על תוצאת מורשת.
       template: {
@@ -853,6 +924,13 @@ function legacyTypeset(rawText, settings, env) {
     let sectionFirst = true;
     const isH0 = sec.newPage && sec.newPage.level === 0;
     const isH2 = sec.newPage && sec.newPage.level === 2;
+    // **S4.26 (איפוס מספור פר-פרק):** כל פתיחת מקטע h2/h0 פותחת ספירה חדשה
+    // (דיווח משתמש: "איפוס מספרי הערות בכל פרק (כותרת 2) ולא בכל עמוד").
+    // מצב page שומר על המספור העמודי ההיסטורי; continuous אינו מאפס לעולם.
+    if ((isH0 || isH2) && fnResetMode === 'siman') {
+      fnChapterCounter = 0;
+      fnNoteNumbers.clear();
+    }
     // **S4.24 (תיקון שורש חפיפות גוף/הערות):** paraNotes ו-tokPages עברו
     // להיקף ה**מקטע** (היו per-page). פסקה שנחתכה בין עמודים חוזרת
     // לעמוד הבא עם pending — אבל requeueParaNotes שלה מצא מפה ריקה
@@ -874,7 +952,7 @@ function legacyTypeset(rawText, settings, env) {
         if (isH0) {
           // **S4.24 (כותרת-h0 ארוכה מהפס — עטיפה):** שורות נוספות בפסים של 30px
           // מתחת למיקום המכויל (309.0) — השורה הראשונה זהה לחלוטין לחד-שורתי.
-          const h0Lines = wrapText(sec.newPage.text, { measureTextWidth: (t, sz) => brk.w(t, sz) }, SINGLE_W, SZ.h0Title);
+          const h0Lines = wrapText(sec.newPage.text, { measureTextWidth: (t, sz) => brk.hw(t, sz) }, SINGLE_W, SZ.h0Title);
           (h0Lines.length ? h0Lines : ['']).forEach((h0seg, li) => pg.bands.push({ kind: 'h0-title', text: h0seg, sizePt: SZ.h0Title, y: 309.0 + li * 30, h: 30, tokenId: li === 0 ? sec.newPage.id : null }));
           top = GEO.FLOW_TOP + H0_AREA_H;
           currentH2 = sec.newPage.text;
@@ -896,7 +974,7 @@ function legacyTypeset(rawText, settings, env) {
           // **S4.24 (כותרת-h2 ארוכה מהפס — עטיפה):** נמדד בחי — "בענין הזכרת
           // שבת ור"ח בברהמ"ז…" 555.4px > 552.3 — גלישה שקטה. שורות נוספות
           // בפסים של 30px מתחת למיקום המכויל; הראשונה זהה לחלוטין.
-          const h2Lines = wrapText(disp, { measureTextWidth: (t, sz) => brk.w(t, sz) }, SINGLE_W, SZ.h2);
+          const h2Lines = wrapText(disp, { measureTextWidth: (t, sz) => brk.hw(t, sz) }, SINGLE_W, SZ.h2);
           (h2Lines.length ? h2Lines : ['']).forEach((h2seg, li) => pg.bands.push({ kind: 'h2-title', text: h2seg, sizePt: SZ.h2, y: (spanExempt ? 321.1 : 344.05) + li * 30, h: 30, tokenId: li === 0 ? sec.newPage.id : null }));
           currentH2 = disp;
           // **S4.9 (תיקון קריטי):** הזרימה מתחילה מתחת לאזור ה-h2 (סימן+כותרת) —
@@ -928,10 +1006,29 @@ function legacyTypeset(rawText, settings, env) {
       // (הוכח מהייחוס: כל אזורי ההערות של המקור פותחים ב־א', והערה של
       // פסקה חוצת-עמודים חוזרת בעמוד ההמשך עם סמן א' מחדש).
       const enqueueNote = (text, dup) => {
-        let idx = fnQueue.findIndex(q => q.text === text);
-        if (idx < 0) { fnQueue.push({ text, dup }); idx = fnQueue.length - 1; }
+        // **S4.26 (תיקון שכפול — המשך מזוהה גם לפי srcText):** פסקה שנשברה
+        // לפני ההנחה פולטת את שורת הסמן שוב בעמוד הבא; בלי התאמת srcText
+        // ההערה נוספה לתור במלואה לצד ההמשך שכבר זורם — והטקסט הוכפל
+        // (נצפה: הערה של 4,500 מילים = 9,000 בפלט). המשך שנמצא ⇒ הסמן
+        // ממספרה הפרקי היציב של ההערה (זהה לסמן שהוצג בעמוד הפתיחה).
+        let idx = fnQueue.findIndex(q => q.text === text || q.srcText === text);
+        if (idx < 0) {
+          // **S4.26 (מספור פר-פרק):** מספר יציב להערה בתוך הפרק — סמן הגוף
+          // וסמן הרישום זהים גם בהצגה חוזרת (פסקה חוצת-עמודים). מצב page
+          // ממשיך לגזור מקום בתור (התנהגות היסטורית).
+          let num = null;
+          if (fnResetMode === 'siman') {
+            num = fnNoteNumbers.get(text);
+            if (num == null) { fnChapterCounter++; num = fnChapterCounter; fnNoteNumbers.set(text, num); }
+          }
+          fnQueue.push({ text, dup, num, cont: false });
+          idx = fnQueue.length - 1;
+        }
+        const q = fnQueue[idx];
+        const mkNum = (q && q.num != null) ? q.num
+          : (fnResetMode === 'siman' && fnNoteNumbers.has(text) ? fnNoteNumbers.get(text) : idx + 1);
         // **EXT-17:** המפריד אחרי המספר — הגדרת המקור (note-num-separator).
-        return LineBreaker.markerWord(idx + 1, cfg.fnNumSeparator);
+        return LineBreaker.markerWord(mkNum, cfg.fnNumSeparator);
       };
       // **S4.9 (התנהגות המקור הנצפית):** הערות של פסקה מופיעות ומוזרמות לתקציב
       // בכל עמוד שבו לפסקה שורות — גם בהמשכים (הייחוס מציג את הערה-א בעמודים
@@ -943,7 +1040,12 @@ function legacyTypeset(rawText, settings, env) {
           // **S4.24:** הערה שקוצצה בתקרת המרזב ועודנה ממתינה בהמשכים — לא
           // חוזרת שנית במלואה (ההמשך הקצוץ ממשיך אותה); המקוריות נשמרת
           // ב-srcText לזיהוי.
+          // **S4.26 (תיקון שכפול):** גם המשך שכבר נכנס לתור העמוד (אחרי
+          // ה-splice בפתיחת העמוד) חוסם את ההוספה החוזרת — בעבר ההערה
+          // זרמה פעמיים במקביל (ההמשך + ההערה המלאה מחדש): הערה של 4,500
+          // מילים תפסה 13 עמודי הערות במקום 7, עם חזרה שלמה של הטקסט.
           if (pendingFootnotes.some(c => (c.srcText || c.text) === n.text)) continue;
+          if (fnQueue.some(q => (q.srcText || q.text) === n.text)) continue;
           enqueueNote(n.text, true);
         }
         fnReserved = fnReserveFor(fnQueue);
@@ -1307,7 +1409,7 @@ function legacyTypeset(rawText, settings, env) {
           // ממנו (נמדד בחי: "ו. אחידות מעשה השחיטה וספיקות הגמרא" גלשה
           // 96px, עמ' 571). המקור עוטף ברוחב הפס; כל שורה עטופה = פס נפרד
           // בגיאומטריה המכוילת (H3_SPAN_H) — שורה ראשונה זהה לחלוטין.
-          const spanLines = wrapText(tok.text, { measureTextWidth: (t, sz) => brk.w(t, sz) }, SINGLE_W, SZ.h3);
+          const spanLines = wrapText(tok.text, { measureTextWidth: (t, sz) => brk.hw(t, sz) }, SINGLE_W, SZ.h3);
           // **S4.13:** סף 60px — כמו המקור (if (currentAvailH < 60) break
           // לפני הצבת כותרת רוחבית); היה H3_SPAN_H+6≈46. **S4.24:** כותרת
           // מרובת-שורות דורשת מקום לכל שורותיה.
@@ -1331,7 +1433,7 @@ function legacyTypeset(rawText, settings, env) {
           // כולה (scrollHeight של האלמנט במקור — לא שורה-שורה).
           const headSz = ({ 4: SZ.h4, 5: SZ.h5, 6: SZ.h6 })[tok.level] || SZ.body;
           const headColW = isH0 ? SINGLE_W : GEO.COL_W;
-          const headLines = wrapText(tok.text, { measureTextWidth: (t, sz) => brk.w(t, sz) }, headColW, headSz);
+          const headLines = wrapText(tok.text, { measureTextWidth: (t, sz) => brk.hw(t, sz) }, headColW, headSz);
           const headSegs = headLines.length ? headLines : [''];
           const h = headingItemH(tok.level);
           const hTotal = headSegs.length * h;
@@ -1414,7 +1516,9 @@ function legacyTypeset(rawText, settings, env) {
             // עוברת לעמוד הבא והתור של העמוד הנוכחי נשאר נקי מהן.
             const prospective = [...fnQueue];
             for (const n of paraNotes.get(tok.id)) {
-              if (!prospective.some(q => q.text === n.text)) prospective.push({ text: n.text });
+              // **S4.26:** דה-דופ גם מול המשכים שבתור (srcText) — אחרת התקציב
+              // מכפיל את ההערה ודוחס את הגוף ללא צורך.
+              if (!prospective.some(q => (q.srcText || q.text) === n.text)) prospective.push({ text: n.text });
             }
             const prospectiveBottom = FLOW_BOTTOM - fnReserveFor(prospective);
             let placedB = top;
@@ -1424,6 +1528,11 @@ function legacyTypeset(rawText, settings, env) {
             }
             if (placedB > prospectiveBottom + 1.5) break fillPage;
             for (const n of paraNotes.get(tok.id)) {
+              // **S4.26 (תיקון שכפול — המשך):** הערה שהמשכה כבר בתור/בהמתנה
+              // לא נוספת שוב במלואה (אחרת היא זורמת פעמיים: ההמשך + עותק
+              // מלא — נצפה 9,000 מילים במקום 4,500 בהערת-בדיקה).
+              if (pendingFootnotes.some(c => (c.srcText || c.text) === n.text)) continue;
+              if (fnQueue.some(q => (q.srcText || q.text) === n.text)) continue;
               enqueueNote(n.text, true);
             }
             fnReserved = fnReserveFor(fnQueue);
@@ -1587,8 +1696,52 @@ function legacyTypeset(rawText, settings, env) {
   function placeFootnoteArea(pg, queue) {
     if (!queue.length) return;
     pg.fnSep = true;
-    const items = fnItemsFor(queue);
     const maxLines = fnSplitEnabled ? Math.max(1, Math.floor(fnBarMax / GEO.FN_PITCH)) : Infinity;
+    // **S4.26 (זרימה רציפה — ברירת המחדל):** כל הערות העמוד זורמות כרצף אחד;
+    // הערה הבאה מתחילה באותה שורה שבה הסתיימה קודמתה. המשך מוצג בלי אות
+    // סימון. חיתוך בגבול שורה בתקרת הקיבולת; השארית מקובצת לפי הערה —
+    // הערה שכבר החלה כאן → המשך (cont), הערה שלא החלה → פריט טרי (עם
+    // מספרה הפרקי) בראש תור העמוד הבא.
+    if (fnLayoutMode === 'continuous') {
+      const built = fnFlowFor(queue);
+      const placed = built.flowLines.slice(0, maxLines);
+      const rest = built.flowLines.slice(maxLines);
+      if (placed.length) {
+        const lines = [];
+        let yy = FLOW_BOTTOM - placed.length * GEO.FN_PITCH;
+        for (const tl of placed) { lines.push({ words: tl, y: yy }); yy += GEO.FN_PITCH; }
+        pg.footnotes.push({ continuous: true, lines });
+      }
+      if (rest.length) {
+        const started = new Set();
+        for (const tl of placed) for (const t of tl) started.add(t.noteIdx);
+        let curIdx = null, curTxt = [];
+        const flushRest = () => {
+          if (curIdx == null || !curTxt.length) return;
+          const src = built.items[curIdx].note || {};
+          const began = started.has(curIdx);
+          pendingFootnotes.push({
+            text: curTxt.join(' '),
+            cont: began || !!src.cont,
+            num: (!began && src.num != null) ? src.num : undefined,
+            srcText: src.srcText || src.text || curTxt.join(' ')
+          });
+        };
+        for (const tl of rest) {
+          for (const t of tl) {
+            // **S4.26:** סמנים ו-(המשך) אינם טקסט — המספר נשמר ב-num (והסמן
+            // נוסף מחדש בעמוד הבא רק להערה שלא החלה); ההמשך מקבל '(המשך)'
+            // מ-fnFlowFor בעמוד הבא לפי cont=true.
+            if (t.gap || t.mk || t.t === '(המשך)') continue;
+            if (t.noteIdx !== curIdx) { flushRest(); curIdx = t.noteIdx; curTxt = []; }
+            curTxt.push(t.t);
+          }
+        }
+        flushRest();
+      }
+      return;
+    }
+    const items = fnItemsFor(queue);
     const placed = []; // {note, marker, lines(strings), cont}
     let usedLines = 0;
     for (const it of items) {
@@ -1613,8 +1766,9 @@ function legacyTypeset(rawText, settings, env) {
         pendingFootnotes.push({ text: restText, cont: true, srcText: it.note.srcText || it.note.text });
         usedLines = maxLines;
       } else {
-        // אין עוד תקציב במרזב — ההערה כולה עוברת לעמוד הבא
-        pendingFootnotes.push({ text: it.note.text, cont: it.note.cont, srcText: it.note.srcText || it.note.text });
+        // אין עוד תקציב במרזב — ההערה כולה עוברת לעמוד הבא (מספרה הפרקי
+        // נשמר — S4.26 — כדי שהסמן בגוף וברישום יישארו זהים)
+        pendingFootnotes.push({ text: it.note.text, cont: it.note.cont, num: it.note.num, srcText: it.note.srcText || it.note.text });
       }
     }
     const totalH = placed.reduce((a, p) => a + p.lines.length * GEO.FN_PITCH, 0);
@@ -1632,14 +1786,59 @@ function legacyTypeset(rawText, settings, env) {
    * השתיים חישבו בנפרד (התקציב מדד את כולם ברוחב הסמן של ההערה הראשונה
    * בלבד) וסטו זו מזו בסמנים ארוכים; כעת הצדדים אינם יכולים להתפצל. */
   function fnItemsFor(queue) {
-    return queue.map((n, i) => {
-      const marker = LineBreaker.markerWord(i + 1, cfg.fnNumSeparator);
-      // **EXT-17:** רוחב הסמן בגודל הרישום (note-listing-num-size) — כמו שמוצג.
-      const mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0)
-        + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+    // **S4.26:** סמן לפי המספר הפרקי של ההערה (או מקום בתור במצב page);
+    // **המשך (cont) — בלי סמן כלל** (דיווח משתמש: "להסיר את אות הסימון מהערה
+    // שהיא המשך של הערה מעמוד קודם"). רוחב הסמן בגודל הרישום — כמו שמוצג.
+    let pagePos = 0;
+    return queue.map((n) => {
+      let marker = '', mkW = 0;
+      if (!n.cont) {
+        const num = (n.num != null) ? n.num : ++pagePos;
+        marker = LineBreaker.markerWord(num, cfg.fnNumSeparator);
+        mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0)
+          + fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+      }
       const lines = wrapText(n.text, fnApi, SINGLE_W - mkW, SZ.fnBody);
       return { note: n, marker, lines, mkW };
     });
+  }
+
+  /** **S4.26 (זרימה רציפה):** כל הערות העמוד זורמות כרצף אחד — הערה הבאה
+   * מתחילה באותה שורה שבה הסתיימה קודמתה (כמו continuous-mode של המקור:
+   * ‏.note-line{display:inline} + רווח-כפול בין הערות). סמני הערות הטריות
+   * מוצגים בגודל הרישום בתוך הזרם; המשך נפתח ב-'(המשך)' בלבד. מחזיר
+   * שורות זרימה — כל שורה רשימת טוקנים {t, mk?, gap?, noteIdx} — מקור
+   * יחיד לתקציב (fnReserveFor) ולפריסה (placeFootnoteArea). */
+  function fnFlowFor(queue) {
+    const items = fnItemsFor(queue);
+    const spaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+    // רווח-כפול בין הערות (כמו margin-right:1em במקור): טוקן רווח ברוחב 0 —
+    // הזוגות סביבו מוסיפים שני רווחי-מילה רגילים (מילה·רווח·[רווח]·רווח·מילה
+    // = פעמיים רווח) — אותו דבר ב-DOM (nbsp) וב-PDF (שני גאפים).
+    const tokens = [];
+    items.forEach((it, i) => {
+      if (i > 0) tokens.push({ t: '', gap: true, noteIdx: i, w: 0 });
+      if (it.note.cont) {
+        const p = '(המשך)';
+        tokens.push({ t: p, w: fnApi.measureTextWidth(p, SZ.fnBody, 0), noteIdx: i });
+      }
+      if (it.marker) {
+        tokens.push({ t: it.marker, mk: true, sizePt: cfg.fnListingNumSize, w: fnApi.measureTextWidth(it.marker, cfg.fnListingNumSize, 0), noteIdx: i });
+      }
+      for (const wd of String(it.note.text).split(/\s+/).filter(Boolean)) {
+        tokens.push({ t: wd, w: fnApi.measureTextWidth(wd, SZ.fnBody, 0), noteIdx: i });
+      }
+    });
+    const flowLines = [];
+    let cur = [], curW = 0;
+    for (const tk of tokens) {
+      const tw = tk.w != null ? tk.w : 0;
+      const add = tw + (cur.length ? spaceW : 0);
+      if (cur.length && curW + add > SINGLE_W) { flowLines.push(cur); cur = [tk]; curW = tw; }
+      else { cur.push(tk); curW += add; }
+    }
+    if (cur.length) flowLines.push(cur);
+    return { items, flowLines };
   }
 
   function fnReserveFor(queue) {
@@ -1647,6 +1846,10 @@ function legacyTypeset(rawText, settings, env) {
     // **S4.13 (כיול מהייחוס):** אותה נוסחת גלישה כמו הרינדור בפועל (השורה
     // הראשונה קצרה ברוחב הסמן) — הצדדים חייבים להסכים על מספר השורות.
     let total = fnItemsFor(queue).reduce((a, it) => a + it.lines.length * GEO.FN_PITCH, 0);
+    // **S4.26 (זרימה רציפה):** שורות הזרימה המשותפת — מקור יחיד (fnFlowFor).
+    if (fnLayoutMode === 'continuous') {
+      total = fnFlowFor(queue).flowLines.length * GEO.FN_PITCH;
+    }
     // **S4.24 (תקרת המרזב):** במצב block עם מדיניות split המרזב מוגבל
     // ב-fn-bar-max-height-px — התקציב מכסה רק את מה שיוצג בעמוד; השאר
     // נפצל לעמוד הבא (pendingFootnotes) ואינו מכפיל את השמורה.
@@ -1844,7 +2047,10 @@ function legacyTypeset(rawText, settings, env) {
         tokenId: u.tokenId,
         window: !!(u.hasWindow && lineIdxGlobal < 2),
         windowWords: (u.hasWindow && lineIdxGlobal === 0) ? u.windowWords : null,
-        windowW: (u.hasWindow && lineIdxGlobal === 0) ? (u.windowW || 0) : null,
+        // **S4.26 (חלון קלאסי שקוע):** רוחב החלון נישא גם על שורה 1 — הטקסט
+        // עוטף את מילת-החלון בשתי השורות הראשונות (כמו float:right עם
+        // height:1.25em במקור), לא רק בשורה הראשונה.
+        windowW: (u.hasWindow && lineIdxGlobal < 2) ? (u.windowW || 0) : null,
         y, paraId: u.tokenId, lineIdx: lineIdxGlobal
       });
       y += uLh;
@@ -2144,5 +2350,6 @@ function legacyLayoutHashDigest(pages) {
 module.exports = {
   GEO, SZ, HEADING_MODES, toGematria, stripEditorialNotes, parseMetadata,
   tokenizeDoc, LineBreaker, findNotes, readConfig, legacyTypeset,
-  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH, legacyLayoutHashDigest
+  FLOW_BOTTOM, SINGLE_W, wrapText, headingItemH, legacyLayoutHashDigest,
+  parenCenterRaisePx
 };

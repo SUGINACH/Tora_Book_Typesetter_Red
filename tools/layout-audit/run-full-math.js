@@ -128,8 +128,23 @@ async function runScriptVar(varSrc, varOut, errVar, timeoutMs) {
 async function fetchBigVar(name) {
   const len = await ev(`(window.${name} ? window.${name}.length : -1)`);
   if (typeof len !== 'number' || len < 0) throw new Error(`משתנה ${name} לא זמין (אורך ${len})`);
-  let s = '';
-  for (let i = 0; i < len; i += 150_000) s += await ev(`window.${name}.slice(${i}, ${i + 150_000})`);
+  // **S4.26 (תעבורה עמידה):** שליפת מחרוזות גדולות דרך פלט ה-CLI של
+  // agent-browser עלולה לשנות תווי יוניקוד נדירים (נצפה: אורך 777660
+  // מול 777659 — פער של תו אחד בתעבורה, לא בתוכן). שליפה ב-base64 לכל
+  // חתיכה — חסינה לחלוטין לרגעים כאלה (utf-8 ⇄ base64 בלי עריכת התווים).
+  const CHUNK = 120_000;
+  const parts = [];
+  for (let i = 0; i < len; i += CHUNK) {
+    const b64 = await ev(
+      `(function(){ const s = window.${name}.slice(${i}, ${i + CHUNK});`
+      + ` const u8 = new TextEncoder().encode(s);`
+      + ` let bin = ''; for (let k = 0; k < u8.length; k += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(k, k + 0x8000));`
+      + ` return btoa(bin); })()`
+    );
+    if (typeof b64 !== 'string' || !b64.length) throw new Error(`שליפת ${name}: חתיכה ${i} ריקה`);
+    parts.push(Buffer.from(b64, 'base64').toString('utf8'));
+  }
+  const s = parts.join('');
   if (s.length !== len) throw new Error(`שליפת ${name}: אורך ${s.length} ≠ ${len}`);
   return s;
 }

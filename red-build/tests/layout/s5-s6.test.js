@@ -123,7 +123,11 @@ describe('S6.1.2 long-footnote policy (REQ-FN-02) — real path via dp-planner',
   const longNote = 'תוכן הערה ארוך מאוד '.repeat(60).trim();
   const doc = 'כותרת 1 - חלק\nפסקת הגוף עם הערה [' + longNote + '] ועוד קצת טקסט למילוי.\n' + 'פסקה נוספת למילוי עמודים '.repeat(40);
   function run(policy) {
-    const s = { ...getDefaultSettings(), 'long-footnote-policy': policy, 'fn-bar-max-height-px': 120, 'footnote-reset-policy': 'continuous' };
+    // **S4.26:** ברירת המחדל של fn-layout-mode היא עתה continuous (דיווח
+    // משתמש 05.11 — בנתיב ה-legacy זרימה רציפה עם תקרת קיבולת). בדיקת
+    // מדיניות המרזב של ה-DP נועדה למצב block (D-34) — מצמידים אותו כאן
+    // מפורש כדי להמשיך לבדוק את אותה חוזה.
+    const s = { ...getDefaultSettings(), 'long-footnote-policy': policy, 'fn-layout-mode': 'block', 'fn-bar-max-height-px': 120, 'footnote-reset-policy': 'continuous' };
     return typeset(doc, s);
   }
   it('split: first segment on this page, continuation marked on the next', () => {

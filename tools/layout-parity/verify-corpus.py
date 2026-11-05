@@ -27,7 +27,8 @@ verify-corpus.py — אימות אינווריאנטים מוחלטים של ה�
   C8  כותרות עליונות — ימין/שמאל = חצאי שם הספר מהמסמך; מרכז = כותרת
       h0/h2 אמיתית מהמקור (הסעיף הזורם).
   C9  שימור כותרות — כל כותרת h0..h6 מהמקור מופיעה בפלט.
-  C10 הערות שוליים — אפס כפילויות בתוך עמוד; סמנים עוקבים מ-א' בכל עמוד
+  C10 הערות שוליים — אפס כפילויות בתוך עמוד; מספור פר-פרק (S4.26: איפוס
+      בכל כותרת 2, לא בכל עמוד); המשך-הערה מוצג בלי אות סימון
       (כמקור); כל הערה בפלט היא הערת [..] אמיתית מהמקור; כל הערת מקור
       מופיעה בפלט לפחות פעם אחת.
   C11 תקינות PDF — נפתח, מספר עמודים תואם למודל, כל הגופנים מוטמעים.
@@ -449,6 +450,11 @@ def main():
     # ============ C10: הערות שוליים ============
     fn_bad = []
     pages_with_notes = 0
+    # **S4.26 (מספור פר-פרק — הוראת משתמש 05.11):** הסמנים עוקבים בתוך הפרק
+    # (איפוס בכל פתיחת פרק/הקדמה — כותרת 2), לא בכל עמוד; המשך (marker ריק)
+    # אינו מקבל מספר; הצגה חוזרת של הערה שומרת על מספרה המקורי. פתיחת פרק
+    # מזוהה מהסמנים עצמם (א' פותח ספירה חדשה) — בלי תלות בסיווג העמוד.
+    chap_seen = {}
     for p in pages:
         fns = p.get("footnotes") or []
         if not fns:
@@ -459,12 +465,19 @@ def main():
         dup = [t[:30] for t, c in Counter(texts).items() if c > 1]
         if dup:
             fn_bad.append({"page": p["index"], "why": "הערה כפולה באותו עמוד", "sample": dup[:3]})
-        # סמנים עוקבים מ-א' (מספור עמודי — הוכח מהייחוס)
-        for i, f in enumerate(fns):
-            if gematria((f.get("marker") or "").rstrip(".")) != i + 1:
-                fn_bad.append({"page": p["index"], "why": "סמנים אינם עוקבים מ-א'",
-                               "got": [x.get("marker") for x in fns[:6]]})
-                break
+        for f in fns:
+            mk = (f.get("marker") or "").strip().rstrip(".")
+            if not mk:
+                continue  # המשך — בלי סמן (S4.26)
+            if gematria(mk) == 1 and mk not in chap_seen and chap_seen:
+                chap_seen = {mk: 1}  # פרק חדש נפתח ב-א'
+            elif mk in chap_seen:
+                continue  # הצגה חוזרת — מספר יציב
+            else:
+                chap_seen[mk] = len(chap_seen) + 1
+                if gematria(mk) != chap_seen[mk]:
+                    fn_bad.append({"page": p["index"], "why": "מספור פר-פרק אינו עוקב",
+                                   "got": mk, "expected": chap_seen[mk]})
     src_note_set = set()
     for m in re.finditer(r"\[([^\]]*)\]", src_text):
         t = norm(m.group(1))
@@ -490,16 +503,34 @@ def main():
         fns = p.get("footnotes") or []
         for fi, f in enumerate(fns):
             t = norm(f.get("text") or "")
-            if carry is not None:
-                t = norm(carry + " " + t)
-                carry = None
+            mk = (f.get("marker") or "").strip()
             if not t:
                 fn_bad.append({"page": p["index"], "why": "הערה ריקה בפלט",
                                "marker": f.get("marker")})
                 continue
+            if mk == "":
+                # **S4.26: המשך — בלי אות סימון.** חייב להתחבר לנושא פתוח.
+                if carry is None:
+                    fn_bad.append({"page": p["index"], "why": "המשך בלי נושא קודם",
+                                   "sample": t[:40]})
+                    reconstructed.append(t)
+                    carry = t
+                else:
+                    carry = norm(carry + " " + t)
+                continue
+            # פריט עם סמן: סוגר נושא פתוח אם קיים
+            if carry is not None:
+                if carry in src_note_set:
+                    reconstructed.append(carry)
+                else:
+                    fn_bad.append({"page": p["index"], "why": "נושא שלא הושלם להערת מקור",
+                                   "sample": carry[:40]})
+                    reconstructed.append(carry)
+                carry = None
             if t in src_note_set:
                 reconstructed.append(t)
             elif fi == len(fns) - 1:
+                # פריט טרי שנחתך בגבול העמוד — המשכו יופיע חסר-סמן בעמוד הבא
                 carry = t
                 split_cuts += 1
             else:
@@ -508,8 +539,9 @@ def main():
                                "sample": t[:40]})
                 reconstructed.append(t)
     if carry is not None:
-        fn_bad.append({"why": "המשך הערה אבוד — קטע חיתוך בסוף הספר שלא הושלם",
-                       "sample": carry[:40]})
+        if carry not in src_note_set:
+            fn_bad.append({"why": "המשך הערה אבוד — קטע חיתוך בסוף הספר שלא הושלם",
+                           "sample": carry[:40]})
         reconstructed.append(carry)
     seen_out_notes = set(reconstructed)
     invented = [t[:30] for t in sorted(seen_out_notes) if t not in src_note_set]
@@ -518,7 +550,7 @@ def main():
     missing_notes = [t[:30] for t in src_note_set if t not in seen_out_notes]
     if missing_notes:
         fn_bad.append({"why": "הערות מקור שאינן מופיעות בפלט", "sample": missing_notes[:4]})
-    C.add("C10", "הערות שוליים — בלי כפילויות בעמוד, סמנים עוקבים, מקוריות ושלמות",
+    C.add("C10", "הערות שוליים — בלי כפילויות, מספור פר-פרק (S4.26), המשך בלי סמן, מקוריות ושלמות",
           not fn_bad, pagesWithNotes=pages_with_notes, srcNotes=len(src_note_set),
           splitCuts=split_cuts, count=len(fn_bad), sample=fn_bad[:5])
 

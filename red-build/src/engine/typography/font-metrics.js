@@ -303,6 +303,16 @@ function coverageGlyphs(b, off) {
 
 // ============ שכבת שאילתות (המידע שמעניין את המדידה) ============
 
+/** **S4.26:** גופן ה-fallback לגליפים חסרים — כמו מחסנית ה-CSS בדפדפן. */
+let missingGlyphFallbackFont = null;
+function setMissingGlyphFallbackFont(font) { missingGlyphFallbackFont = font || null; }
+
+/** **S4.26:** רוחב-גליף-חסר בגופן ה-fallback (em) — 0 אם אין fallback/גם בו חסר. */
+function missingGlyphFallbackEm(ch) {
+  if (!missingGlyphFallbackFont) return 0;
+  return advanceEmOf(missingGlyphFallbackFont, ch);
+}
+
 /** מזהה גליף של תו (או 0 = .notdef). */
 function glyphIdOf(font, ch) {
   const cp = typeof ch === 'number' ? ch : ch.codePointAt(0);
@@ -313,7 +323,19 @@ function glyphIdOf(font, ch) {
 /** רוחב advance ביחידות גופן (0 ללא מיפוי). */
 function advanceUnitsOf(font, ch) {
   const g = glyphIdOf(font, ch);
-  if (g === 0 || g >= font.numGlyphs) return 0;
+  if (g === 0 || g >= font.numGlyphs) {
+    // **S4.26 (גליפים חסרים — fallback כמו הדפדפן):** לגופנים תורניים
+    // (למשל גוטמן רש"י) אין גליפים לפיסוק בסיסי (' . ׳) — הדפדפן מצייר
+    // אותם במשפחת ה-fallback שבמחסנית ('Frank Ruhl Libre'); המדידה
+    // בלי זה החזירה 0 ושורות ממורכזות נבדקו צרות מהרינדור (נצפה:
+    // INK_OUTSIDE 3px בשורת "הרי בהכרח שהם גדרים... וכו'."). המרה
+    // ליחידות הגופן הראשי משמרת את היחס הנכון בשרשרת.
+    if (missingGlyphFallbackFont && missingGlyphFallbackFont !== font) {
+      const em = advanceEmOf(missingGlyphFallbackFont, ch);
+      if (em > 0) return em * font.unitsPerEm;
+    }
+    return 0;
+  }
   return font.advanceUnits[g];
 }
 
@@ -344,5 +366,5 @@ function isZeroAdvanceMark(font, ch) {
 
 module.exports = {
   parseFont, glyphIdOf, advanceUnitsOf, advanceEmOf, kernUnitsOf,
-  capHeightEmOf, isZeroAdvanceMark
+  capHeightEmOf, isZeroAdvanceMark, setMissingGlyphFallbackFont, missingGlyphFallbackEm
 };

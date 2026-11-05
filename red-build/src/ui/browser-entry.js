@@ -79,7 +79,7 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-05-s4.24'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-05-s4.26'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   const worker = new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`);
   // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
   // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.

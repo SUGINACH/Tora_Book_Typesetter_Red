@@ -207,32 +207,60 @@ describe('s24-fullmath-fixes', () => {
     assert(sawRlmLine, 'the RLM must still be present (bidi preserved)');
   });
 
-  // ---------- 5. הערות שוליים: תקרה, פיצול, המשכים, אי-חפיפה, שימור ----------
-
-  const NOTE_WORDS = Array.from({ length: 260 }, (_, i) => `מילת${i} הערה`).join(' ');
+  // ---------- 5. הערות שוליים: קיבולת מלאה, פיצול, המשכים בלי סמן, אי-חפיפה, שימור ----------
+  // **S4.26 (דיווח משתמש 05.11 — בעיות 3–5):** תקרת המרזב עוברת מ-220px קבוע
+  // לקיבולת העמוד המלאה (הערה ארוכה ממלאת את העמוד לפני חיתוך), הזרימה
+  // רציפה כברירת מחדל, והמשך-הערה מוצג בלי אות סימון.
+  const NOTE_WORDS = Array.from({ length: 900 }, (_, i) => `מילת${i} הערה ארוכה מאוד לבדיקה`).join(' ');
   const FN_DOC = `כותרת 1 - חלק ההערות\nפסקה פותחת עם הערה אחת ארוכה מאוד [${NOTE_WORDS}] והמשך הפסקה בטקסט רגיל למילוי הטורים.\nפסקה שנייה עם עוד קצת תוכן שוטף למילוי העמודים הבאים בשורות תקינות ובסדר מלא לגמרי כאן. עוד משפט ארוך למילוי השורות בטור הימני ואז בשמאלי.\n`;
+  // קיבולת העמוד: (915 − 38.5 תקורת שמורה − 21.44 שורת-גוף) בכפולות FN_PITCH
+  const FN_CAP_PX = Math.floor((GEO.FLOW_H - 38.5 - 12 * (96 / 72) * 1.34) / GEO.FN_PITCH) * GEO.FN_PITCH;
 
-  it('תקרת מרזב 220px: אף עמוד לא מציג יותר מ-13 שורות הערה', () => {
+  it('תקרת קיבולת העמוד: הערה ארוכה ממלאת את העמוד עד תומו (לא 220px)', () => {
     const r = typeset(FN_DOC, legacySettings(), { noRecommendations: true });
     assert(r.pages.some(p => (p.footnotes || []).length), 'footnotes exist');
+    let maxH = 0;
     for (const pg of r.pages) {
       const placedH = (pg.footnotes || []).reduce((a, f) => a + f.lines.length * GEO.FN_PITCH, 0);
-      assert(placedH <= 220 + 0.01, `page ${pg.index}: fn bar ≤ 220px (got ${placedH.toFixed(1)})`);
+      maxH = Math.max(maxH, placedH);
+      assert(placedH <= FN_CAP_PX + 0.01, `page ${pg.index}: fn bar ≤ קיבולת ${FN_CAP_PX.toFixed(1)}px (got ${placedH.toFixed(1)})`);
     }
+    // התיקון עצמו: המרזב ממלא מעבר לתקרת 220 ההיסטורית — הערה ארוכה לא
+    // "מדלגת" לעמוד שלישי מוקדם (דיווח משתמש: "לא ממלאות את כל גובה העמוד").
+    assert(maxH > 220, `המרזב ממלא את העמוד (max ${maxH.toFixed(1)}px > 220)`);
   });
 
-  it('פיצול: ההערה הארוכה נחתכת בגבול שורה וממשיכה בעמוד הבא עם cont', () => {
+  it('פיצול: ההמשך בעמוד הבא פותח ב-(המשך) בלי אות סימון', () => {
     const r = typeset(FN_DOC, legacySettings(), { noRecommendations: true });
-    const conts = [];
-    for (const pg of r.pages) for (const f of (pg.footnotes || [])) if (f.cont) conts.push({ page: pg.index, f });
-    assert(conts.length >= 1, 'long note must split with a continuation');
+    // זרימה רציפה: מזהים המשך לפי טוקן '(המשך)' — ומוודאים שאין לפניו סמן
+    // (דיווח משתמש: "להסיר את אות הסימון מהערה שהיא המשך").
+    let contPages = 0;
+    for (const pg of r.pages) {
+      for (const f of (pg.footnotes || [])) {
+        for (const l of f.lines) {
+          const toks = (l.words || []).filter(t => !t.gap);
+          for (let i = 0; i < toks.length; i++) {
+            if (toks[i].t === '(המשך)') {
+              contPages++;
+              assert(i === 0 || !toks[i - 1].mk, 'לפני (המשך) אין אות סימון');
+              assert(!toks[i].mk, '(המשך) אינו מסומן כסמן');
+            }
+          }
+        }
+      }
+    }
+    assert(contPages >= 1, 'long note must continue with (המשך)');
     const settings = legacySettings();
-    const pgc = r.pages.find(p => (p.footnotes || []).some(f => f.cont));
+    const pgc = r.pages.find(p => {
+      const f = (p.footnotes || [])[0];
+      return f && f.continuous && (f.lines[0].words || []).some(t => t.t === '(המשך)');
+    });
+    assert(pgc, 'page with a continuation flow exists');
     const doc = makeDoc();
     const el = renderPage(pgc, settings, doc, pgc.header || null);
     let sawHamsht = false;
     walk(el, (n) => { if (hasClass(n, 'fn--continuation')) sawHamsht = n.textContent.startsWith('(המשך)'); });
-    assert(sawHamsht, 'continuation footnote renders with (המשך) prefix');
+    assert(sawHamsht, 'continuation flow renders with (המשך) prefix');
   });
 
   it('אין חפיפת גוף/הערות: תחתית הגוף מעל ראש מרזב ההערות בכל עמוד', () => {
@@ -249,15 +277,34 @@ describe('s24-fullmath-fixes', () => {
 
   it('שימור תוכן: שרשור כל חלקי ההערה (עם ההמשכים) = הטקסט המקורי', () => {
     const r = typeset(FN_DOC, legacySettings(), { noRecommendations: true });
+    // **S4.26 (זרימה רציפה):** משחזרים פריטי הערה מהטוקנים — מקטע שפותח
+    // ב-'(המשך)' משורשר לקודמו; מקטע עם סמן פותח הערה חדשה.
     const parts = [];
-    for (const pg of r.pages) for (const f of (pg.footnotes || [])) {
-      parts.push({ cont: !!f.cont, text: f.lines.map(l => (Array.isArray(l.words) ? l.words.join(' ') : String(l.words))).join(' ') });
+    for (const pg of r.pages) {
+      for (const f of (pg.footnotes || [])) {
+        if (!f.continuous) {
+          parts.push({ cont: !!f.cont, text: f.lines.map(l => (Array.isArray(l.words) ? l.words.join(' ') : String(l.words))).join(' ') });
+          continue;
+        }
+        let cur = null, curIsCont = false;
+        for (const l of f.lines) {
+          for (const t of (l.words || [])) {
+            if (t.gap) continue;
+            if (t.t === '(המשך)') { if (cur) { parts.push({ cont: curIsCont, text: cur }); } cur = []; curIsCont = true; continue; }
+            if (t.mk) { if (cur) { parts.push({ cont: curIsCont, text: cur }); } cur = []; curIsCont = false; continue; }
+            if (!cur) cur = [];
+            cur.push(t.t);
+          }
+        }
+        if (cur) parts.push({ cont: curIsCont, text: cur });
+      }
     }
     assert(parts.length >= 2, 'note split across pages');
     const rebuilt = [];
     for (const p of parts) {
-      if (p.cont && rebuilt.length) rebuilt[rebuilt.length - 1] += ' ' + p.text;
-      else rebuilt.push(p.text);
+      const txt = p.text.join ? p.text.join(' ') : p.text;
+      if (p.cont && rebuilt.length) rebuilt[rebuilt.length - 1] += ' ' + txt;
+      else rebuilt.push(txt);
     }
     // ההערה הארוכה היא הראשונה; המשכיה משורשרים אליה
     const target = rebuilt.find(t => norm(t).length > 100);

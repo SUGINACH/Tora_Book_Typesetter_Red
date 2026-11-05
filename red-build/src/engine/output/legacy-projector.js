@@ -9,7 +9,7 @@
  * הגיאומטריה מקורה אחד: legacy-imud-flow (GEO/SZ) — מכויל מהייחוס.
  */
 
-const { GEO, SZ } = require('../layout/legacy-imud-flow');
+const { GEO, SZ, parenCenterRaisePx } = require('../layout/legacy-imud-flow');
 const { MeasureAPI, registeredFonts, resolveMeasureImpl } = require('../typography/measure-api');
 const { ornamentInk, parseSvgPaint, svgToPdfOps } = require('../decoration/ornament-ink'); // **EXT-4:** הדיו — מקור יחיד
 
@@ -78,7 +78,7 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
     // מחדל 8) ולא נגזרת מגודל הגוף.
     const markerSz = opts.markerSize != null ? opts.markerSize : SZ.fnMarker;
     const sz = isMarker ? markerSz : (isParen ? SZ.body + SZ.parenDelta : sizePt);
-    return { text: w, w: api.measureTextWidth(w, sz, 0), sizePt: sz };
+    return { text: w, w: api.measureTextWidth(w, sz, 0), sizePt: sz, smallKind: isMarker ? 'marker' : (isParen ? 'paren' : null) };
   });
   const sumW = placed.reduce((a, w) => a + w.w, 0);
   const gaps = Math.max(0, placed.length - 1);
@@ -100,6 +100,11 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
   let xRight;
   if (align === 'center') xRight = xLeft + (width + lineW) / 2;
   else xRight = xLeft + width;
+  // **S4.26 (דיווח משתמש: "טקסט מוסגר ממוקם גבוה"):** סוגריים — מרכוז אנכי
+  // מול הטקסט הרגיל (parenCenterRaisePx, אותו מודל תיבת-שורה כמו ה-DOM);
+  // סמן-הערה נשאר מוגבה כמו super של המקור (0.33×גודל-השורה). בעבר שניהם
+  // קיבלו את הגבהת הסמן — הסוגריים ישבו ~5.3px גבוה מדי.
+  const parenRaise = parenCenterRaisePx(api.ascentEm(), sizePt, SZ.body + SZ.parenDelta);
   const out = [];
   let cursor = xRight;
   for (let k = 0; k < placed.length; k++) {
@@ -107,7 +112,9 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
     cursor -= w.w;
     out.push({
       text: w.text, x: cursor, w: w.w,
-      sizePt: w.sizePt, baselineY: w.sizePt < sizePt ? baseY - sizePt * (96 / 72) * 0.33 : baseY
+      sizePt: w.sizePt,
+      baselineY: w.smallKind === 'paren' ? baseY - parenRaise
+        : (w.smallKind === 'marker' ? baseY - sizePt * (96 / 72) * 0.33 : baseY)
     });
     if (k < gaps) cursor -= gapWs[k];
   }
@@ -115,7 +122,10 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
 }
 
 /** הקרנת עמוד legacy בודד. */
-function projectLegacyPage(pg, settings, api, winApi) {
+function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
+  // **S4.26:** headingApi — מדידת/ציור כותרות ב-DavidLibre-Bold (כמו הייחוס
+  // וכמו ה-DOM); בלי גופן רשום — גופן הגוף (התנהגות קודמת).
+  const hApi = headingApi || api;
   // **EXT-17:** גדלי סמני ההערות מהגדרות המקור (ברירות המחדל: 8/8). ההגדרות
   // של פרופיל IMUD מגיעות ב-_imudRaw (כמו readConfig של העימוד עצמו).
   const imudSet = (settings && settings._imudRaw) || settings || {};
@@ -142,7 +152,9 @@ function projectLegacyPage(pg, settings, api, winApi) {
   const bandW = 2 * GEO.COL_W + 13.48;
   for (const b of (pg.bands || [])) {
     const baseY = baselineOf(b.y, b.h, b.sizePt, ascent);
-    const words = placeWords(b.text.split(' '), api, bandLeft, bandW, b.sizePt, 'center', baseY);
+    // **S4.26:** כותרות בגופן הכותרות (DavidLibre-Bold) — מדידה וציור (/F3)
+    const words = placeWords(b.text.split(' '), hApi, bandLeft, bandW, b.sizePt, 'center', baseY);
+    if (headingApi) for (const w of words) w.fontKey = 'heading';
     out.lines.push({
       x: bandLeft, y: b.y, w: bandW, h: b.h, words, align: 'center',
       kind: b.kind, level: null, isLast: false, sizePt: b.sizePt,
@@ -194,9 +206,10 @@ function projectLegacyPage(pg, settings, api, winApi) {
         : baselineOf(ln.y, ln.heightPx, ln.sizePt, ascent);
       let words;
       if (ln.kind === 'heading') {
-        // כותרת inline — מילים נפרדות (חילוץ לוגי, כמו בייחוס)
+        // כותרת inline — מילים נפרדות (חילוץ לוגי, כמו בייחוס); גופן הכותרות
         const joined = ln.words.join(' ');
-        words = placeWords(joined.split(' '), api, col.x, col.w, ln.sizePt, 'center', baseY);
+        words = placeWords(joined.split(' '), hApi, col.x, col.w, ln.sizePt, 'center', baseY);
+        if (headingApi) for (const w of words) w.fontKey = 'heading';
       } else if (ln.window && ln.windowWords) {
         // שורת חלון: מילת החלון (1.5×) בשפה הימנית; הטקסט ברוחב מוקטן
         const winSz = ln.sizePt * 1.5;
@@ -243,6 +256,12 @@ function projectLegacyPage(pg, settings, api, winApi) {
         words = [...winWords, ...textWords];
       } else {
         const align = ln.isLast ? 'center' : 'justify';
+        // **S4.26 (חלון שקוע — שורה 1):** שורה 1 של פסקת-חלון (window בלי
+        // windowWords) נמדדה במודל ברוחב מוקטן (limitOf של breakPara) —
+        // וגם כאן הטקסט מקבל את הרוחב המוקטן ועוטף את מילת-החלון (כמו
+        // float:right במקור); עד כאן נמתחה לרוחב מלא.
+        const lineW = (ln.window && !ln.windowWords && ln.windowW)
+          ? Math.max(40, col.w - ln.windowW) : col.w;
         // **S4.9:** מילים בתוך (...) מרונדרות בגודל הסוגריים המוקטן — בדיוק
         // כפי שנמדדו בשבירה (אחרת השורה רחבה מהטור וגולשת מהעמוד).
         // **S4.19 (סוגריים רב-שורתיים):** הזיהוי הקודם היה פר-שורה (מילה
@@ -275,7 +294,7 @@ function projectLegacyPage(pg, settings, api, winApi) {
         const markerIdxSet = Array.isArray(ln.markerIdx) ? new Set(ln.markerIdx) : null;
         const MARKER_WORD_RE = /^[א-ת]{1,3}[.:]?$/; // א. / בק. — גימטריה קצרה (±מפריד)
         const isMarkerWord = (w, i) => !!(markerIdxSet && markerIdxSet.has(i) && MARKER_WORD_RE.test(w));
-        words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
+        words = placeWords(ln.words, api, col.x, lineW, ln.sizePt, align, baseY,
           { markers: ln.words.map((w, i) => isMarkerWord(w, i)), parenIdx,
             parenStarts: Array.isArray(ln.parenStarts) && ln.parenStarts.length === ln.words.length ? ln.parenStarts : null,
             parenEnds: Array.isArray(ln.parenEnds) && ln.parenEnds.length === ln.words.length ? ln.parenEnds : null,
@@ -321,6 +340,45 @@ function projectLegacyPage(pg, settings, api, winApi) {
   // האחרונה מיושרת לשפה הימנית — כפי שנמדד בייחוס (עמ' 31: שורה-1
   // x:91–494 מיושרת; שורה-2 x:383–505 מיושרת-ימין; סמן '.א' ב-x:496–505).
   for (const fn of (pg.footnotes || [])) {
+    // **S4.26 (זרימה רציפה):** כל ההערות בזרם אחד — סמנים בגודל הרישום,
+    // יישוב לשני הצדדים בכל שורה חוץ מהאחרונה (לימין), המשך ב-'(המשך)'
+    // בלי אות סימון. שורות הזרימה מהמודל (fnFlowFor) — מקור יחיד.
+    if (fn.continuous) {
+      const rightEdge = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
+      const spaceW = api.measureTextWidth(' ', SZ.fnBody, 0);
+      const usableW = rightEdge - GEO.COL_L_X;
+      const words = [];
+      fn.lines.forEach((l, li) => {
+        const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
+        const isLast = li === fn.lines.length - 1;
+        const toks = (l.words || []).filter(t => !t.gap);
+        const ws = toks.map(t => ({
+          text: t.t,
+          sizePt: t.mk ? projCfg.listingSize : SZ.fnBody,
+          w: api.measureTextWidth(t.t, t.mk ? projCfg.listingSize : SZ.fnBody, 0)
+        }));
+        const sumW = ws.reduce((a, w) => a + w.w, 0);
+        const gaps = Math.max(0, ws.length - 1);
+        let gapW = spaceW;
+        if (!isLast && gaps > 0 && sumW + gaps * spaceW < usableW) {
+          gapW = (usableW - sumW) / gaps; // יישוב לשני הצדדים — כמו הגוף
+        }
+        let cursor = rightEdge;
+        for (let i = ws.length - 1; i >= 0; i--) {
+          cursor -= ws[i].w;
+          words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: ws[i].sizePt, baselineY: baseY });
+          cursor -= gapW;
+        }
+      });
+      if (words.length) {
+        out.footnotes.push({
+          y: fn.lines[0].y, x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48, marker: '',
+          text: fn.lines.flatMap(l => (l.words || []).filter(t => !t.gap).map(t => t.t)).join(' '),
+          words, baselineY: null, h: fn.lines.length * GEO.FN_PITCH
+        });
+      }
+      continue;
+    }
     const rightEdge = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
     const spaceW = api.measureTextWidth(' ', SZ.fnBody, 0);
     const words = [];
@@ -383,9 +441,11 @@ function projectLegacyPage(pg, settings, api, winApi) {
     }
     for (const r of (pg.toc.rows || [])) {
       const baseY = baselineOf(r.y, 26, r.sizePt, ascent);
-      // כותרת מימין (במדרגות לפי רמה), מספר משמאל
-      const tW = api.measureTextWidth(r.text, r.sizePt, 0);
-      const textWords = placeWords([r.text], api, r.x1 - tW, tW, r.sizePt, 'right', baseY);
+      // כותרת מימין (במדרגות לפי רמה), מספר משמאל; **S4.26:** בגופן הכותרות
+      // (DavidLibre-Bold — כמו הייחוס: כל שורות ה-TOC ב-DavidLibre-Bold)
+      const tW = hApi.measureTextWidth(r.text, r.sizePt, 0);
+      const textWords = placeWords([r.text], hApi, r.x1 - tW, tW, r.sizePt, 'right', baseY);
+      if (headingApi) for (const w of textWords) w.fontKey = 'heading';
       const numW = api.measureTextWidth(r.folio, SZ.tocNum, 0);
       const numWords = r.folio ? placeWords([r.folio], api, GEO.TOC_NUM_X, numW, SZ.tocNum, 'left', baseY) : [];
       out.lines.push({
@@ -492,7 +552,13 @@ function projectLegacyDocument(result, settings) {
   if (impl === 'font-metrics' && winName) {
     winApi = new MeasureAPI({ 'body-font': winName, 'body-font-size-pt': SZ.body }, 'font-metrics');
   }
-  const pages = result.pages.map(p => projectLegacyPage(p, settings, api, winApi));
+  // **S4.26 (גופן כותרות בהקרנה):** DavidLibre-Bold — אותו גופן כמו המדידה
+  // ב-legacyTypeset (env.headingFontBytes) וכמו ה-DOM; הציור ב-/F3.
+  let headingApi = null;
+  if (impl === 'font-metrics' && registeredFonts.has('DavidLibre-Bold')) {
+    headingApi = new MeasureAPI({ 'body-font': 'DavidLibre-Bold', 'body-font-size-pt': SZ.body }, 'font-metrics');
+  }
+  const pages = result.pages.map(p => projectLegacyPage(p, settings, api, winApi, headingApi));
   return { pages, inkBounds: pages.map(() => null), layoutHash: result.layoutHash };
 }
 

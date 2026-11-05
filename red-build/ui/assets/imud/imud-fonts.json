@@ -1,2221 +1,2236 @@
 [
-{
-"family": "אהבה מודגש",
-"file": "Ahava-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אהבה רגיל",
-"file": "Ahava-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אהבה שמן",
-"file": "AhavaBold.ttf",
-"format": "truetype"
-},
-{
-"family": "אהרוני חדש קל",
-"file": "Aharoninew-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אהרוני מודגש",
-"file": "Aharoni-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון בינוני",
-"file": "Oron-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון צר חצי מודגש",
-"file": "Oron-Tzar-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון צר מודגש",
-"file": "Oron-Tzar-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון צר קל",
-"file": "Oron-Tzar-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון צר רגיל",
-"file": "Oron-Tzar-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קלאסי חצי מודגש",
-"file": "Oron-Classic-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קלאסי מודגש",
-"file": "Oron-Classic-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קלאסי קל",
-"file": "Oron-Classic-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קלאסי רגיל",
-"file": "Oron-Classic-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קשת בינוני",
-"file": "Oron-Keshet-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קשת מודגש מאוד",
-"file": "Oron-Keshet-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קשת מודגש",
-"file": "Oron-Keshet-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון קשת רגיל",
-"file": "Oron-Keshet-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון רחב חצי מודגש",
-"file": "Oron-Wide-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון רחב מודגש",
-"file": "Oron-Wide-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון רחב קל",
-"file": "Oron-Wide-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון רחב רגיל",
-"file": "Oron-Wide-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון תבנית חצי מודגש",
-"file": "Oron-Tavnit-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון תבנית מודגש",
-"file": "Oron-Tavnit-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון תבנית קל",
-"file": "Oron-Tavnit-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אורון תבנית רגיל",
-"file": "Oron-Tavnit-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אות מורשת מודגש",
-"file": "OtMoresht-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אות מורשת קל מאוד",
-"file": "OtMoresht-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אות מורשת קל",
-"file": "OtMoresht-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אות מורשת רגיל",
-"file": "OtMoresht-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אות מורשת שחור",
-"file": "OtMoresht-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "אטלס בינוני",
-"file": "Atlas-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "אטלס דק",
-"file": "Atlas-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "אטלס מודגש",
-"file": "Atlas-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אטלס קל",
-"file": "Atlas-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אטלס רגיל",
-"file": "Atlas-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אטלס שחור",
-"file": "Atlas-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני בינוני",
-"file": "Almoni-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני דק",
-"file": "Almoni-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני חצי מודגש",
-"file": "Almoni-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני מודגש מאוד",
-"file": "Almoni-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני מודגש",
-"file": "Almoni-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר בינוני",
-"file": "Almoni-Tzar-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר חצי מודגש",
-"file": "Almoni-Tzar-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר מודגש מאוד",
-"file": "Almoni-Tzar-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר מודגש",
-"file": "Almoni-Tzar-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר קל מאוד",
-"file": "Almoni-Tzar-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר קל",
-"file": "Almoni-Tzar-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני צר רגיל",
-"file": "Almoni-Tzar-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני קל מאוד",
-"file": "Almoni-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני קל",
-"file": "Almoni-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני רגיל",
-"file": "Almoni-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני שחור כבד",
-"file": "Almoni-Ultra-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "אלמוני שחור",
-"file": "Almoni-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "אלף מודגש",
-"file": "Alef-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלף קומיק רגיל",
-"file": "Alef-Comic-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אלף רגיל",
-"file": "Alef-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אלפא מודגש",
-"file": "Alpha-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אלפא קל",
-"file": "Alpha-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אלפא רגיל",
-"file": "Alpha-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אלפא שחור",
-"file": "Alpha-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "אסיסטנט חצי מודגש",
-"file": "Assistant-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אסיסטנט מודגש מאוד",
-"file": "Assistant-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אסיסטנט מודגש",
-"file": "Assistant-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אסיסטנט קל מאוד",
-"file": "Assistant-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אסיסטנט קל",
-"file": "Assistant-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "אסיסטנט רגיל",
-"file": "Assistant-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל מודגש נטוי",
-"file": "Arial-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל מודגש",
-"file": "Arial-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל נטוי",
-"file": "Arial Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל נטוי",
-"file": "Arial-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל צר מודגש נטוי",
-"file": "Arial-Narrow-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל צר מודגש",
-"file": "Arial-Narrow-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל צר נטוי",
-"file": "Arial Narrow Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל צר נטוי",
-"file": "Arial-Narrow-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל צר רגיל",
-"file": "Arial-Narrow-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל רגיל",
-"file": "Arial-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אריאל שחור",
-"file": "Arial-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "ארצי מודגש",
-"file": "Artzi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "ארצי רגיל",
-"file": "Artzi-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "אשכנזי רגיל",
-"file": "Ashkenazy-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר 1 בינוני",
-"file": "Booster-1-medium.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר 1 מודגש מאוד",
-"file": "Booster-1-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר 1 מודגש",
-"file": "Booster-1-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר 1 קל",
-"file": "Booster-1-light.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר 1 רגיל",
-"file": "Booster-1-regular.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר 1 שחור",
-"file": "Booster-1-black.ttf",
-"format": "truetype"
-},
-{
-"family": "בוסטר קל 2",
-"file": "Booster-Light-2.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן אהרוני מודגש",
-"file": "Guttman-Aharoni-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן אהרוני רגיל",
-"file": "Guttman-Aharoni-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן ארם רגיל",
-"file": "Guttman-Aram-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן דוד מודגש",
-"file": "Guttman-David-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן דוד קל",
-"file": "Guttman-David-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן דוד רגיל",
-"file": "Guttman-David-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן דרוגולין מודגש",
-"file": "Guttman-Drogolin-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן דרוגולין רגיל",
-"file": "Guttman-Drogolin-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן הצבי מודגש",
-"file": "Guttman-Hatzvi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן הצבי רגיל",
-"file": "Guttman-Hatzvi-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן וילנא מודגש",
-"file": "Guttman-Vilna-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן וילנא רגיל",
-"file": "Guttman-Vilna-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן חיים צר רגיל",
-"file": "Guttman-Haim-Condensed-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן חיים רגיל",
-"file": "Guttman-Haim-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן יד מברשת רגיל",
-"file": "Guttman-Yad-Brush-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן יד קל",
-"file": "Guttman-Yad-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן יד רגיל",
-"file": "Guttman-Yad-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן לוגו 1 רגיל",
-"file": "Guttman-Logo1-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן מנטובה מודגש",
-"file": "Guttman-Mantova-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן מנטובה מעוטר רגיל",
-"file": "Guttman-Mantova-Decor-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן מנטובה רגיל",
-"file": "Guttman-Mantova-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן מרים מודגש",
-"file": "Guttman-Miryam-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן מרים פיקס רגיל",
-"file": "Guttman-Myamfix-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן מרים קל",
-"file": "Guttman-Miryam-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן סת\"ם רגיל",
-"file": "Guttman-Stam-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן פרנק חדש רגיל",
-"file": "Guttman-Frnew-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן פרנק רגיל",
-"file": "Guttman-Frank-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן קו מודגש",
-"file": "Guttman-Kav-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן קו קל",
-"file": "Guttman-Kav-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן קו רגיל",
-"file": "Guttman-Kav-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן קורמיר רגיל",
-"file": "Guttman-CourMir-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן רש\"י מודגש",
-"file": "Guttman-Rashi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "גוטמן רש\"י רגיל",
-"file": "Guttman-Rashi-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "דוד ליברה בינוני",
-"file": "DavidLibre-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "דוד ליברה מודגש",
-"file": "David-Libre-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "דוד ליברה רגיל",
-"file": "DavidLibre-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "דוד מודגש",
-"file": "David-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "דוד ספר חדש רגיל",
-"file": "Davidnewbook-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "דוד רגיל",
-"file": "David-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "דניאל רגיל",
-"file": "Daniel-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה 0 רגיל",
-"file": "Hadasa_0-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה חדש מודגש",
-"file": "HadasaNew-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה חדש קל",
-"file": "HadasaNew-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה חדש רגיל",
-"file": "HadasaNew-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה חדש שחור",
-"file": "HadasaNew-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה מודגש 0 מודגש",
-"file": "Hadasab_0-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה פרידלנדר מודגש",
-"file": "Hadassah-Friedlaender-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "הדסה פרידלנדר רגיל",
-"file": "Hadassah-Friedlaender-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו בינוני",
-"file": "Heebo-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו דק",
-"file": "Heebo-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו מודגש מאוד",
-"file": "Heebo-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו מודגש",
-"file": "Heebo-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו קל",
-"file": "Heebo-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו רגיל",
-"file": "Heebo-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "היבו שחור",
-"file": "Heebo-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "הר סיני רגיל",
-"file": "HarSinai-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים ארוכים בינוני",
-"file": "HaimArukeem-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים גראנג' שחור",
-"file": "Haim-Grunge-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים צר",
-"file": "Haimzar.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים קלאסי מודגש",
-"file": "Haim-Classic-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים קלאסי קל",
-"file": "Haim-Classic-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים קלאסי רגיל",
-"file": "Haim-Classic-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "חיים קלאסי שחור",
-"file": "Haim-Classic-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב בינוני",
-"file": "Tubic-Slab-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב מודגש",
-"file": "Tubic-Slab-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב עב-אנ קל מאוד",
-"file": "Tubic-Slabhebeng-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב קל מאוד",
-"file": "Tubic-Slab-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב קל",
-"file": "Tubic-Slab-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב רגיל",
-"file": "Tubic-Slab-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סלאב שחור",
-"file": "Tubic-Slab-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס בינוני",
-"file": "Tubic-Sans-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס מודגש",
-"file": "Tubic-Sans-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס צר עב-אנ שחור",
-"file": "Tubic-Sansconhebeng-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס קל מאוד",
-"file": "Tubic-Sans-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס קל",
-"file": "Tubic-Sans-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס רגיל",
-"file": "Tubic-Sans-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "טוביק סנס שחור",
-"file": "Tubic-Sans-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "טיימס ניו רומן מודגש נטוי",
-"file": "Times-New-Roman-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "טיימס ניו רומן מודגש",
-"file": "Times-New-Roman-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "טיימס ניו רומן נטוי",
-"file": "Times New Roman Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "טיימס ניו רומן נטוי",
-"file": "Times-New-Roman-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "טיימס ניו רומן רגיל",
-"file": "Times-New-Roman-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "יוסף באוהאוס מודגש",
-"file": "Yosefbau-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "יוסף רגיל",
-"file": "Josef-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "יוסף רגיל",
-"file": "Yosef-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "יעקב רגיל",
-"file": "Yaakov-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "יצחק נבון אותיות פתיח רגיל",
-"file": "YitzhakNavon-DropCaps-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "יצחק נבון רגיל",
-"file": "YitzhakNavon-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "יצחק רגיל",
-"file": "Izhak-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "ליבורנה מודגש",
-"file": "Livorna-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "ליבורנה ספר רגיל",
-"file": "Livornabook-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "ליבורנה רגיל",
-"file": "Livorna-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי טקסט בינוני",
-"file": "Mugrabi-Text-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי טקסט חצי מודגש",
-"file": "Mugrabi-Text-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי טקסט מודגש",
-"file": "Mugrabi-Text-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי טקסט רגיל",
-"file": "Mugrabi-Text-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי תצוגה בינוני",
-"file": "Mugrabi-Display-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי תצוגה חצי מודגש",
-"file": "Mugrabi-Display-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי תצוגה מודגש",
-"file": "Mugrabi-Display-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי תצוגה קל",
-"file": "Mugrabi-Display-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "מוגרבי תצוגה רגיל",
-"file": "Mugrabi-Display-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מורשת רגיל",
-"file": "Moreshet-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מקומי בינוני",
-"file": "Mekomi-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "מקומי מודגש מאוד",
-"file": "Mekomi-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מקומי מודגש",
-"file": "Mekomi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מקומי קל",
-"file": "Mekomi-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "מקומי רגיל",
-"file": "Mekomi-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מרים אלג'יאן רגיל",
-"file": "Miriam-Elagean-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מרים חדש מודגש",
-"file": "Miryamnew-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מרים ליברה מודגש",
-"file": "Miriam-Libre-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מרים ליברה רגיל",
-"file": "MiriamLibre-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מרים רגיל",
-"file": "Miriam-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מרים רווח קבוע רגיל",
-"file": "Miriam-Fixed-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "מרקו מודגש",
-"file": "Marco-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "מרקו קל",
-"file": "Marco-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "מרקו רגיל",
-"file": "Marco-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "משכנות רגיל",
-"file": "Mishkenot-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית בינוני",
-"file": "Noto-Sans-Hebrew-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית דק",
-"file": "Noto-Sans-Hebrew-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי מודגש",
-"file": "Noto-Sans-Hebrew-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר בינוני",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר דק",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר חצי מודגש",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר מודגש מאוד",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר מודגש",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר קל מאוד",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר קל",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר רגיל",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית חצי צר שחור",
-"file": "Noto-Sans-Hebrew-SemiCondensed-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית מודגש מאוד",
-"file": "Noto-Sans-Hebrew-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית מודגש",
-"file": "Noto-Sans-Hebrew-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר בינוני",
-"file": "Noto-Sans-Hebrew-Condensed-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר דק",
-"file": "Noto-Sans-Hebrew-Condensed-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר חצי מודגש",
-"file": "Noto-Sans-Hebrew-Condensed-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד בינוני",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד דק",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד חצי מודגש",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד מודגש מאוד",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד מודגש",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד קל מאוד",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד קל",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד רגיל",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מאוד שחור",
-"file": "Noto-Sans-Hebrew-ExtraCondensed-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מודגש מאוד",
-"file": "Noto-Sans-Hebrew-Condensed-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר מודגש",
-"file": "Noto-Sans-Hebrew-Condensed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר קל מאוד",
-"file": "Noto-Sans-Hebrew-Condensed-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר קל",
-"file": "Noto-Sans-Hebrew-Condensed-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר רגיל",
-"file": "Noto-Sans-Hebrew-Condensed-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית צר שחור",
-"file": "Noto-Sans-Hebrew-Condensed-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית קל מאוד",
-"file": "Noto-Sans-Hebrew-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית קל",
-"file": "Noto-Sans-Hebrew-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית רגיל",
-"file": "Noto-Sans-Hebrew-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סנס עברית שחור",
-"file": "Noto-Sans-Hebrew-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית בינוני",
-"file": "Noto-Serif-Hebrew-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית דק",
-"file": "Noto-Serif-Hebrew-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי מודגש",
-"file": "Noto-Serif-Hebrew-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר בינוני",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר דק",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר חצי מודגש",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר מודגש מאוד",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר מודגש",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר קל מאוד",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר קל",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר שחור",
-"file": "Noto-Serif-Hebrew-SemiCondensed-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית חצי צר",
-"file": "Noto-Serif-Hebrew-SemiCondensed.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית מודגש מאוד",
-"file": "Noto-Serif-Hebrew-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית מודגש",
-"file": "Noto-Serif-Hebrew-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר בינוני",
-"file": "Noto-Serif-Hebrew-Condensed-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר דק",
-"file": "Noto-Serif-Hebrew-Condensed-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר חצי מודגש",
-"file": "Noto-Serif-Hebrew-Condensed-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד בינוני",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד דק",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד חצי מודגש",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד מודגש מאוד",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד מודגש",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד קל מאוד",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד קל",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד שחור",
-"file": "Noto-Serif-Hebrew-ExtraCondensed-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מאוד",
-"file": "Noto-Serif-Hebrew-ExtraCondensed.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מודגש מאוד",
-"file": "Noto-Serif-Hebrew-Condensed-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר מודגש",
-"file": "Noto-Serif-Hebrew-Condensed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר קל מאוד",
-"file": "Noto-Serif-Hebrew-Condensed-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר קל",
-"file": "Noto-Serif-Hebrew-Condensed-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר שחור",
-"file": "Noto-Serif-Hebrew-Condensed-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית צר",
-"file": "Noto-Serif-Hebrew-Condensed.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית קל מאוד",
-"file": "Noto-Serif-Hebrew-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית קל",
-"file": "Noto-Serif-Hebrew-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית רגיל",
-"file": "Noto-Serif-Hebrew-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו סריף עברית שחור",
-"file": "Noto-Serif-Hebrew-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית בינוני",
-"file": "Noto-Rashi-Hebrew-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית דק",
-"file": "Noto-Rashi-Hebrew-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית חצי מודגש",
-"file": "Noto-Rashi-Hebrew-Semi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית מודגש מאוד",
-"file": "Noto-Rashi-Hebrew-Extra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית מודגש",
-"file": "Noto-Rashi-Hebrew-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית קל מאוד",
-"file": "Noto-Rashi-Hebrew-Extra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית קל",
-"file": "Noto-Rashi-Hebrew-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית רגיל",
-"file": "Noto-Rashi-Hebrew-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "נוטו רש\"י עברית שחור",
-"file": "Noto-Rashi-Hebrew-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "נרקיסים רגיל",
-"file": "Narkisim-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "סואץ 1 רגיל",
-"file": "SuezOne-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני בינוני",
-"file": "Ploni-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני חצי מודגש",
-"file": "Ploni-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד בינוני",
-"file": "Ploni-Yad-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד חצי מודגש",
-"file": "Ploni-Yad-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד מודגש מאוד",
-"file": "Ploni-Yad-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד מודגש",
-"file": "Ploni-Yad-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד קל מאוד",
-"file": "Ploni-Yad-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד קל",
-"file": "Ploni-Yad-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד רגיל",
-"file": "Ploni-Yad-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני יד שחור",
-"file": "Ploni-Yad-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מודגש מאוד",
-"file": "Ploni-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מודגש",
-"file": "Ploni-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מעוגל בינוני",
-"file": "Ploni-Round-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מעוגל חצי מודגש",
-"file": "Ploni-Round-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מעוגל מודגש מאוד",
-"file": "Ploni-Round-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מעוגל מודגש",
-"file": "Ploni-Round-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מעוגל קל",
-"file": "Ploni-Round-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני מעוגל רגיל",
-"file": "Ploni-Round-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר בינוני",
-"file": "Ploni-Tzar-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר דק",
-"file": "Ploni-Tzar-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר חצי מודגש",
-"file": "Ploni-Tzar-Demi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר מודגש מאוד",
-"file": "Ploni-Tzar-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר מודגש",
-"file": "Ploni-Tzar-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר קל מאוד",
-"file": "Ploni-Tzar-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר קל",
-"file": "Ploni-Tzar-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני צר רגיל",
-"file": "Ploni-Tzar-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני קל מאוד",
-"file": "Ploni-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני קל",
-"file": "Ploni-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני רגיל",
-"file": "Ploni-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פלוני שחור",
-"file": "Ploni-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רה בינוני נטוי",
-"file": "Frank-Re-Medium-Natui-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רה בינוני",
-"file": "Frank-Re-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רה מודגש נטוי",
-"file": "Frank-Re-Bold-Natui-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רה מודגש",
-"file": "Frank-Re-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רה רגיל נטוי",
-"file": "Frank-Re-Regular-Natui-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רה רגיל",
-"file": "Frank-Re-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל דפ מודגש",
-"file": "FrankRuehl-Dp-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל דפ רגיל",
-"file": "FrankRuehl-Dp-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל ליברה בינוני",
-"file": "FrankRuhlLibre-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל ליברה מודגש",
-"file": "Frank-Ruhl-Libre-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל ליברה קל",
-"file": "FrankRuhlLibre-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל ליברה רגיל",
-"file": "FrankRuhlLibre-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל ליברה שחור",
-"file": "FrankRuhlLibre-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל מ\"פ מודגש א",
-"file": "FrankRuhlMF-BoldA.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל מ\"פ מודגש א",
-"file": "FrankRuhlMF-Bold-A.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק רוהל רגיל",
-"file": "FrankRuehl-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק ריל בינוני",
-"file": "FrankReal-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק ריל מודגש",
-"file": "FrankReal-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק ריל קל",
-"file": "FrankReal-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "פרנק ריל רגיל",
-"file": "FrankReal-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סנס מודגש",
-"file": "Kedem-Sans-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סנס קל מאוד",
-"file": "Kedem-Sans-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סנס קל",
-"file": "Kedem-Sans-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סנס רגיל",
-"file": "Kedem-Sans-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סנס שחור מודגש",
-"file": "Kedem-Sans-Black-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף דקיק נטוי",
-"file": "Kedem-Serif-Ultralight-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף חלול מודגש נטוי",
-"file": "Kedem-Serif-Hollow-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף מודגש נטוי",
-"file": "Kedem-Serif-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף קל מאוד נטוי",
-"file": "Kedem-Serif-Ultra-Light-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף קל נטוי",
-"file": "Kedem-Serif-Light-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף רגיל נטוי",
-"file": "Kedem-Serif-Regular-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קדם סריף שחור מודגש נטוי",
-"file": "Kedem-Serif-Black-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך עב-אנ בינוני",
-"file": "KarlibachHebEng-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך עב-אנ דק",
-"file": "KarlibachHebEng-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך עב-אנ מודגש",
-"file": "KarlibachHebEng-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך עב-אנ קל",
-"file": "KarlibachHebEng-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך עב-אנ רגיל",
-"file": "KarlibachHebEng-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך צר בינוני",
-"file": "KarlibachCon-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך צר דק",
-"file": "KarlibachCon-Thin.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך צר מודגש",
-"file": "KarlibachCon-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך צר קל",
-"file": "KarlibachCon-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "קרליבך צר רגיל",
-"file": "KarlibachCon-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רביצקי מודגש",
-"file": "Ravitzky-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק 1 רגיל",
-"file": "Rubik-One-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק אבני חן רגיל",
-"file": "Rubik-Gemstones-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק איזומטרי רגיל",
-"file": "Rubik-Iso-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק בועות רגיל",
-"file": "Rubik-Bubbles-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק בינוני",
-"file": "Rubik-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק ביסטלי רגיל",
-"file": "Rubik-Beastly-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק גליץ' פופ רגיל",
-"file": "Rubik-GlitchPop-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק גליץ' רגיל",
-"file": "Rubik-Glitch-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק גרפיטי רגיל",
-"file": "Rubik-SprayPaint-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק הסוואה ימית רגיל",
-"file": "Rubik-SeaCamouflage-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק ויניל רגיל",
-"file": "Rubik-Vinyl-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק חיידק רגיל",
-"file": "Rubik-Microbe-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק לכלוך רגיל",
-"file": "Rubik-Dirt-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק מבוך רגיל",
-"file": "Rubik-Maze-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק מודגש נטוי",
-"file": "Rubik-Bold-Italic.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק מודגש",
-"file": "Rubik-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק מפות רגיל",
-"file": "Rubik-Maps-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק מרקר רגיל",
-"file": "Rubik-MarkerHatch-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק נטוי שחור",
-"file": "Rubik-Italic-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק סלעי ירח רגיל",
-"file": "Rubik-MoonRocks-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק סערה רגיל",
-"file": "Rubik-Storm-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק פייד אייטיז רגיל",
-"file": "Rubik-80sFade-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק פיקסלים רגיל",
-"file": "Rubik-Pixels-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק פקס שבור רגיל",
-"file": "Rubik-BrokenFax-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק צבע רטוב רגיל",
-"file": "Rubik-WetPaint-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק קווים רגיל",
-"file": "Rubik-Lines-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק קל",
-"file": "Rubik-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק רגיל",
-"file": "Rubik-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק ריר רגיל",
-"file": "Rubik-Goo-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שחוק רגיל",
-"file": "Rubik-Distressed-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שחור",
-"file": "Rubik-Black.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שלוליות רגיל",
-"file": "Rubik-Puddles-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שרבוט משולשים רגיל",
-"file": "Rubik-DoodleTriangles-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שרבוט צללית רגיל",
-"file": "Rubik-DoodleShadow-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שרבוט רגיל",
-"file": "Rubik-Scribble-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רוביק שרוף רגיל",
-"file": "Rubik-Burned-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז גלעד מודגש",
-"file": "RmzGaled-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז גלעד מודגש",
-"file": "Rmz-Galed-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז גלעד רגיל",
-"file": "RmzGaled-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז גלעד רגיל",
-"file": "Rmz-Galed-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז דוד מודגש",
-"file": "RmzDavid-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז דוד מודגש",
-"file": "Rmz-David-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז דוד רגיל",
-"file": "RmzDavid-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז דוד רגיל",
-"file": "Rmz-David-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז הדס מודגש",
-"file": "RmzHadas-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז הדס מודגש",
-"file": "Rmz-Hadas-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז הדס רגיל",
-"file": "RmzHadas-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז הדס רגיל",
-"file": "Rmz-Hadas-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז מאירי מודגש",
-"file": "RmzMeiri-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז מאירי מודגש",
-"file": "Rmz-Meiri-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז מאירי רגיל",
-"file": "RmzMeiri-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז מאירי רגיל",
-"file": "Rmz-Meiri-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז סופר רגיל",
-"file": "RmzSofer-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז סופר רגיל",
-"file": "Rmz-Sofer-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז פרנק מודגש",
-"file": "RmzFrank-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז פרנק מודגש",
-"file": "Rmz-Frank-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז פרנק רגיל",
-"file": "RmzFrank-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז פרנק רגיל",
-"file": "Rmz-Frank-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז רש\"י מודגש",
-"file": "RmzRashi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז רש\"י מודגש",
-"file": "Rmz-Rashi-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז רש\"י רגיל",
-"file": "RmzRashi-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רמז רש\"י רגיל",
-"file": "Rmz-Rashi-Normal.ttf",
-"format": "truetype"
-},
-{
-"family": "רש\"י אות רגיל",
-"file": "Rashi-Ot-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רש\"י ארט 1 רגיל",
-"file": "Rashi-Art1-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רש\"י דפ רגיל",
-"file": "Rashi-Dp-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "רש\"י רגיל",
-"file": "Rashy-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "שלום רגיל",
-"file": "Shalom-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "שמעון קל",
-"file": "Shimon-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "תהילה בינוני",
-"file": "TehilaMedium.ttf",
-"format": "truetype"
-},
-{
-"family": "תהילה בינוני",
-"file": "Tehila-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "תהילה רגיל 2",
-"file": "Tehila-Regular_2.ttf",
-"format": "truetype"
-},
-{
-"family": "תהילה רגיל",
-"file": "Tehila-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "תעמולה בינוני",
-"file": "Taamula-Medium.ttf",
-"format": "truetype"
-},
-{
-"family": "תעמולה מודגש מאוד",
-"file": "Taamula-Ultra-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "תעמולה מודגש",
-"file": "Taamula-Bold.ttf",
-"format": "truetype"
-},
-{
-"family": "תעמולה קל מאוד",
-"file": "Taamula-Ultra-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "תעמולה קל",
-"file": "Taamula-Light.ttf",
-"format": "truetype"
-},
-{
-"family": "תעמולה רגיל",
-"file": "Taamula-Regular.ttf",
-"format": "truetype"
-},
-{
-"family": "David Libre",
-"file": "DavidLibre-Regular.ttf",
-"format": "truetype",
-"source": "google-fonts/ofl/davidlibre (SIL OFL 1.1)"
-},
-{
-"family": "Frank Ruhl Libre",
-"file": "FrankRuhlLibre-VF.ttf",
-"format": "truetype",
-"source": "google-fonts/ofl/frankruhllibre (SIL OFL 1.1) — variable, default 400"
-},
-{
-"family": "Bellefair",
-"file": "Bellefair-Regular.ttf",
-"format": "truetype",
-"source": "google-fonts/ofl/bellefair (SIL OFL 1.1)"
-},
-{
-"family": "Noto Serif Hebrew",
-"file": "NotoSerifHebrew-VF.ttf",
-"format": "truetype",
-"source": "google-fonts/ofl/notoserifhebrew (SIL OFL 1.1) — variable, default 400"
-}
+  {
+    "family": "אהבה מודגש",
+    "file": "Ahava-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אהבה רגיל",
+    "file": "Ahava-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אהבה שמן",
+    "file": "AhavaBold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אהרוני חדש קל",
+    "file": "Aharoninew-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אהרוני מודגש",
+    "file": "Aharoni-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון בינוני",
+    "file": "Oron-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון צר חצי מודגש",
+    "file": "Oron-Tzar-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון צר מודגש",
+    "file": "Oron-Tzar-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון צר קל",
+    "file": "Oron-Tzar-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון צר רגיל",
+    "file": "Oron-Tzar-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קלאסי חצי מודגש",
+    "file": "Oron-Classic-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קלאסי מודגש",
+    "file": "Oron-Classic-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קלאסי קל",
+    "file": "Oron-Classic-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קלאסי רגיל",
+    "file": "Oron-Classic-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קשת בינוני",
+    "file": "Oron-Keshet-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קשת מודגש מאוד",
+    "file": "Oron-Keshet-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קשת מודגש",
+    "file": "Oron-Keshet-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון קשת רגיל",
+    "file": "Oron-Keshet-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון רחב חצי מודגש",
+    "file": "Oron-Wide-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון רחב מודגש",
+    "file": "Oron-Wide-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון רחב קל",
+    "file": "Oron-Wide-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון רחב רגיל",
+    "file": "Oron-Wide-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון תבנית חצי מודגש",
+    "file": "Oron-Tavnit-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון תבנית מודגש",
+    "file": "Oron-Tavnit-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון תבנית קל",
+    "file": "Oron-Tavnit-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אורון תבנית רגיל",
+    "file": "Oron-Tavnit-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אות מורשת מודגש",
+    "file": "OtMoresht-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אות מורשת קל מאוד",
+    "file": "OtMoresht-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אות מורשת קל",
+    "file": "OtMoresht-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אות מורשת רגיל",
+    "file": "OtMoresht-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אות מורשת שחור",
+    "file": "OtMoresht-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אטלס בינוני",
+    "file": "Atlas-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אטלס דק",
+    "file": "Atlas-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אטלס מודגש",
+    "file": "Atlas-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אטלס קל",
+    "file": "Atlas-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אטלס רגיל",
+    "file": "Atlas-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אטלס שחור",
+    "file": "Atlas-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני בינוני",
+    "file": "Almoni-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני דק",
+    "file": "Almoni-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני חצי מודגש",
+    "file": "Almoni-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני מודגש מאוד",
+    "file": "Almoni-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני מודגש",
+    "file": "Almoni-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר בינוני",
+    "file": "Almoni-Tzar-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר חצי מודגש",
+    "file": "Almoni-Tzar-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר מודגש מאוד",
+    "file": "Almoni-Tzar-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר מודגש",
+    "file": "Almoni-Tzar-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר קל מאוד",
+    "file": "Almoni-Tzar-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר קל",
+    "file": "Almoni-Tzar-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני צר רגיל",
+    "file": "Almoni-Tzar-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני קל מאוד",
+    "file": "Almoni-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני קל",
+    "file": "Almoni-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני רגיל",
+    "file": "Almoni-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני שחור כבד",
+    "file": "Almoni-Ultra-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלמוני שחור",
+    "file": "Almoni-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלף מודגש",
+    "file": "Alef-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלף קומיק רגיל",
+    "file": "Alef-Comic-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלף רגיל",
+    "file": "Alef-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלפא מודגש",
+    "file": "Alpha-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלפא קל",
+    "file": "Alpha-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלפא רגיל",
+    "file": "Alpha-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אלפא שחור",
+    "file": "Alpha-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אסיסטנט חצי מודגש",
+    "file": "Assistant-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אסיסטנט מודגש מאוד",
+    "file": "Assistant-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אסיסטנט מודגש",
+    "file": "Assistant-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אסיסטנט קל מאוד",
+    "file": "Assistant-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אסיסטנט קל",
+    "file": "Assistant-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אסיסטנט רגיל",
+    "file": "Assistant-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל מודגש נטוי",
+    "file": "Arial-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל מודגש",
+    "file": "Arial-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל נטוי",
+    "file": "Arial Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל נטוי",
+    "file": "Arial-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל צר מודגש נטוי",
+    "file": "Arial-Narrow-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל צר מודגש",
+    "file": "Arial-Narrow-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל צר נטוי",
+    "file": "Arial Narrow Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל צר נטוי",
+    "file": "Arial-Narrow-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל צר רגיל",
+    "file": "Arial-Narrow-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל רגיל",
+    "file": "Arial-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אריאל שחור",
+    "file": "Arial-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "ארצי מודגש",
+    "file": "Artzi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "ארצי רגיל",
+    "file": "Artzi-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "אשכנזי רגיל",
+    "file": "Ashkenazy-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר 1 בינוני",
+    "file": "Booster-1-medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר 1 מודגש מאוד",
+    "file": "Booster-1-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר 1 מודגש",
+    "file": "Booster-1-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר 1 קל",
+    "file": "Booster-1-light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר 1 רגיל",
+    "file": "Booster-1-regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר 1 שחור",
+    "file": "Booster-1-black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "בוסטר קל 2",
+    "file": "Booster-Light-2.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן אהרוני מודגש",
+    "file": "Guttman-Aharoni-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן אהרוני רגיל",
+    "file": "Guttman-Aharoni-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן ארם רגיל",
+    "file": "Guttman-Aram-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן דוד מודגש",
+    "file": "Guttman-David-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן דוד קל",
+    "file": "Guttman-David-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן דוד רגיל",
+    "file": "Guttman-David-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן דרוגולין מודגש",
+    "file": "Guttman-Drogolin-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן דרוגולין רגיל",
+    "file": "Guttman-Drogolin-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן הצבי מודגש",
+    "file": "Guttman-Hatzvi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן הצבי רגיל",
+    "file": "Guttman-Hatzvi-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן וילנא מודגש",
+    "file": "Guttman-Vilna-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן וילנא רגיל",
+    "file": "Guttman-Vilna-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן חיים צר רגיל",
+    "file": "Guttman-Haim-Condensed-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן חיים רגיל",
+    "file": "Guttman-Haim-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן יד מברשת רגיל",
+    "file": "Guttman-Yad-Brush-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן יד קל",
+    "file": "Guttman-Yad-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן יד רגיל",
+    "file": "Guttman-Yad-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן לוגו 1 רגיל",
+    "file": "Guttman-Logo1-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן מנטובה מודגש",
+    "file": "Guttman-Mantova-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן מנטובה מעוטר רגיל",
+    "file": "Guttman-Mantova-Decor-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן מנטובה רגיל",
+    "file": "Guttman-Mantova-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן מרים מודגש",
+    "file": "Guttman-Miryam-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן מרים פיקס רגיל",
+    "file": "Guttman-Myamfix-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן מרים קל",
+    "file": "Guttman-Miryam-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן סת\"ם רגיל",
+    "file": "Guttman-Stam-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן פרנק חדש רגיל",
+    "file": "Guttman-Frnew-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן פרנק רגיל",
+    "file": "Guttman-Frank-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן קו מודגש",
+    "file": "Guttman-Kav-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן קו קל",
+    "file": "Guttman-Kav-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן קו רגיל",
+    "file": "Guttman-Kav-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן קורמיר רגיל",
+    "file": "Guttman-CourMir-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן רש\"י מודגש",
+    "file": "Guttman-Rashi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "גוטמן רש\"י רגיל",
+    "file": "Guttman-Rashi-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דוד ליברה בינוני",
+    "file": "DavidLibre-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דוד ליברה מודגש",
+    "file": "David-Libre-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דוד ליברה רגיל",
+    "file": "DavidLibre-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דוד מודגש",
+    "file": "David-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דוד ספר חדש רגיל",
+    "file": "Davidnewbook-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דוד רגיל",
+    "file": "David-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "דניאל רגיל",
+    "file": "Daniel-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה 0 רגיל",
+    "file": "Hadasa_0-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה חדש מודגש",
+    "file": "HadasaNew-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה חדש קל",
+    "file": "HadasaNew-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה חדש רגיל",
+    "file": "HadasaNew-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה חדש שחור",
+    "file": "HadasaNew-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה מודגש 0 מודגש",
+    "file": "Hadasab_0-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה פרידלנדר מודגש",
+    "file": "Hadassah-Friedlaender-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הדסה פרידלנדר רגיל",
+    "file": "Hadassah-Friedlaender-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו בינוני",
+    "file": "Heebo-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו דק",
+    "file": "Heebo-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו מודגש מאוד",
+    "file": "Heebo-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו מודגש",
+    "file": "Heebo-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו קל",
+    "file": "Heebo-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו רגיל",
+    "file": "Heebo-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "היבו שחור",
+    "file": "Heebo-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "הר סיני רגיל",
+    "file": "HarSinai-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים ארוכים בינוני",
+    "file": "HaimArukeem-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים גראנג' שחור",
+    "file": "Haim-Grunge-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים צר",
+    "file": "Haimzar.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים קלאסי מודגש",
+    "file": "Haim-Classic-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים קלאסי קל",
+    "file": "Haim-Classic-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים קלאסי רגיל",
+    "file": "Haim-Classic-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "חיים קלאסי שחור",
+    "file": "Haim-Classic-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב בינוני",
+    "file": "Tubic-Slab-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב מודגש",
+    "file": "Tubic-Slab-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב עב-אנ קל מאוד",
+    "file": "Tubic-Slabhebeng-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב קל מאוד",
+    "file": "Tubic-Slab-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב קל",
+    "file": "Tubic-Slab-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב רגיל",
+    "file": "Tubic-Slab-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סלאב שחור",
+    "file": "Tubic-Slab-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס בינוני",
+    "file": "Tubic-Sans-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס מודגש",
+    "file": "Tubic-Sans-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס צר עב-אנ שחור",
+    "file": "Tubic-Sansconhebeng-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס קל מאוד",
+    "file": "Tubic-Sans-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס קל",
+    "file": "Tubic-Sans-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס רגיל",
+    "file": "Tubic-Sans-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טוביק סנס שחור",
+    "file": "Tubic-Sans-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טיימס ניו רומן מודגש נטוי",
+    "file": "Times-New-Roman-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טיימס ניו רומן מודגש",
+    "file": "Times-New-Roman-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טיימס ניו רומן נטוי",
+    "file": "Times New Roman Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טיימס ניו רומן נטוי",
+    "file": "Times-New-Roman-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "טיימס ניו רומן רגיל",
+    "file": "Times-New-Roman-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יוסף באוהאוס מודגש",
+    "file": "Yosefbau-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יוסף רגיל",
+    "file": "Josef-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יוסף רגיל",
+    "file": "Yosef-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יעקב רגיל",
+    "file": "Yaakov-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יצחק נבון אותיות פתיח רגיל",
+    "file": "YitzhakNavon-DropCaps-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יצחק נבון רגיל",
+    "file": "YitzhakNavon-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "יצחק רגיל",
+    "file": "Izhak-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "ליבורנה מודגש",
+    "file": "Livorna-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "ליבורנה ספר רגיל",
+    "file": "Livornabook-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "ליבורנה רגיל",
+    "file": "Livorna-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי טקסט בינוני",
+    "file": "Mugrabi-Text-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי טקסט חצי מודגש",
+    "file": "Mugrabi-Text-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי טקסט מודגש",
+    "file": "Mugrabi-Text-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי טקסט רגיל",
+    "file": "Mugrabi-Text-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי תצוגה בינוני",
+    "file": "Mugrabi-Display-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי תצוגה חצי מודגש",
+    "file": "Mugrabi-Display-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי תצוגה מודגש",
+    "file": "Mugrabi-Display-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי תצוגה קל",
+    "file": "Mugrabi-Display-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מוגרבי תצוגה רגיל",
+    "file": "Mugrabi-Display-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מורשת רגיל",
+    "file": "Moreshet-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מקומי בינוני",
+    "file": "Mekomi-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מקומי מודגש מאוד",
+    "file": "Mekomi-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מקומי מודגש",
+    "file": "Mekomi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מקומי קל",
+    "file": "Mekomi-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מקומי רגיל",
+    "file": "Mekomi-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרים אלג'יאן רגיל",
+    "file": "Miriam-Elagean-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרים חדש מודגש",
+    "file": "Miryamnew-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרים ליברה מודגש",
+    "file": "Miriam-Libre-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרים ליברה רגיל",
+    "file": "MiriamLibre-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרים רגיל",
+    "file": "Miriam-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרים רווח קבוע רגיל",
+    "file": "Miriam-Fixed-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרקו מודגש",
+    "file": "Marco-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרקו קל",
+    "file": "Marco-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "מרקו רגיל",
+    "file": "Marco-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "משכנות רגיל",
+    "file": "Mishkenot-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית בינוני",
+    "file": "Noto-Sans-Hebrew-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית דק",
+    "file": "Noto-Sans-Hebrew-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי מודגש",
+    "file": "Noto-Sans-Hebrew-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר בינוני",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר דק",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר חצי מודגש",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר מודגש",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר קל מאוד",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר קל",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר רגיל",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר שחור",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית מודגש",
+    "file": "Noto-Sans-Hebrew-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר בינוני",
+    "file": "Noto-Sans-Hebrew-Condensed-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר דק",
+    "file": "Noto-Sans-Hebrew-Condensed-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר חצי מודגש",
+    "file": "Noto-Sans-Hebrew-Condensed-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד בינוני",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד דק",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד חצי מודגש",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד מודגש",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד קל מאוד",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד קל",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד רגיל",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד שחור",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-Condensed-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מודגש",
+    "file": "Noto-Sans-Hebrew-Condensed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר קל מאוד",
+    "file": "Noto-Sans-Hebrew-Condensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר קל",
+    "file": "Noto-Sans-Hebrew-Condensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר רגיל",
+    "file": "Noto-Sans-Hebrew-Condensed-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר שחור",
+    "file": "Noto-Sans-Hebrew-Condensed-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית קל מאוד",
+    "file": "Noto-Sans-Hebrew-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית קל",
+    "file": "Noto-Sans-Hebrew-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית רגיל",
+    "file": "Noto-Sans-Hebrew-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית שחור",
+    "file": "Noto-Sans-Hebrew-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית בינוני",
+    "file": "Noto-Serif-Hebrew-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית דק",
+    "file": "Noto-Serif-Hebrew-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי מודגש",
+    "file": "Noto-Serif-Hebrew-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר בינוני",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר דק",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר חצי מודגש",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר מודגש",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר קל מאוד",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר קל",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר שחור",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית חצי צר",
+    "file": "Noto-Serif-Hebrew-SemiCondensed.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית מודגש",
+    "file": "Noto-Serif-Hebrew-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר בינוני",
+    "file": "Noto-Serif-Hebrew-Condensed-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר דק",
+    "file": "Noto-Serif-Hebrew-Condensed-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר חצי מודגש",
+    "file": "Noto-Serif-Hebrew-Condensed-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד בינוני",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד דק",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד חצי מודגש",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד מודגש",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד קל מאוד",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד קל",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד שחור",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מאוד",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-Condensed-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר מודגש",
+    "file": "Noto-Serif-Hebrew-Condensed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר קל מאוד",
+    "file": "Noto-Serif-Hebrew-Condensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר קל",
+    "file": "Noto-Serif-Hebrew-Condensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר שחור",
+    "file": "Noto-Serif-Hebrew-Condensed-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית צר",
+    "file": "Noto-Serif-Hebrew-Condensed.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית קל מאוד",
+    "file": "Noto-Serif-Hebrew-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית קל",
+    "file": "Noto-Serif-Hebrew-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית רגיל",
+    "file": "Noto-Serif-Hebrew-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סריף עברית שחור",
+    "file": "Noto-Serif-Hebrew-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית בינוני",
+    "file": "Noto-Rashi-Hebrew-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית דק",
+    "file": "Noto-Rashi-Hebrew-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית חצי מודגש",
+    "file": "Noto-Rashi-Hebrew-Semi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית מודגש מאוד",
+    "file": "Noto-Rashi-Hebrew-Extra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית מודגש",
+    "file": "Noto-Rashi-Hebrew-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית קל מאוד",
+    "file": "Noto-Rashi-Hebrew-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית קל",
+    "file": "Noto-Rashi-Hebrew-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית רגיל",
+    "file": "Noto-Rashi-Hebrew-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית שחור",
+    "file": "Noto-Rashi-Hebrew-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נרקיסים רגיל",
+    "file": "Narkisim-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "סואץ 1 רגיל",
+    "file": "SuezOne-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני בינוני",
+    "file": "Ploni-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני חצי מודגש",
+    "file": "Ploni-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד בינוני",
+    "file": "Ploni-Yad-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד חצי מודגש",
+    "file": "Ploni-Yad-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד מודגש מאוד",
+    "file": "Ploni-Yad-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד מודגש",
+    "file": "Ploni-Yad-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד קל מאוד",
+    "file": "Ploni-Yad-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד קל",
+    "file": "Ploni-Yad-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד רגיל",
+    "file": "Ploni-Yad-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד שחור",
+    "file": "Ploni-Yad-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מודגש מאוד",
+    "file": "Ploni-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מודגש",
+    "file": "Ploni-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מעוגל בינוני",
+    "file": "Ploni-Round-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מעוגל חצי מודגש",
+    "file": "Ploni-Round-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מעוגל מודגש מאוד",
+    "file": "Ploni-Round-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מעוגל מודגש",
+    "file": "Ploni-Round-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מעוגל קל",
+    "file": "Ploni-Round-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני מעוגל רגיל",
+    "file": "Ploni-Round-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר בינוני",
+    "file": "Ploni-Tzar-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר דק",
+    "file": "Ploni-Tzar-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר חצי מודגש",
+    "file": "Ploni-Tzar-Demi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר מודגש מאוד",
+    "file": "Ploni-Tzar-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר מודגש",
+    "file": "Ploni-Tzar-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר קל מאוד",
+    "file": "Ploni-Tzar-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר קל",
+    "file": "Ploni-Tzar-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני צר רגיל",
+    "file": "Ploni-Tzar-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני קל מאוד",
+    "file": "Ploni-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני קל",
+    "file": "Ploni-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני רגיל",
+    "file": "Ploni-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני שחור",
+    "file": "Ploni-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה בינוני נטוי",
+    "file": "Frank-Re-Medium-Natui-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה בינוני",
+    "file": "Frank-Re-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה מודגש נטוי",
+    "file": "Frank-Re-Bold-Natui-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה מודגש",
+    "file": "Frank-Re-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה רגיל נטוי",
+    "file": "Frank-Re-Regular-Natui-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה רגיל",
+    "file": "Frank-Re-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל דפ מודגש",
+    "file": "FrankRuehl-Dp-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל דפ רגיל",
+    "file": "FrankRuehl-Dp-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל ליברה בינוני",
+    "file": "FrankRuhlLibre-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל ליברה מודגש",
+    "file": "Frank-Ruhl-Libre-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל ליברה קל",
+    "file": "FrankRuhlLibre-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל ליברה רגיל",
+    "file": "FrankRuhlLibre-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל ליברה שחור",
+    "file": "FrankRuhlLibre-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל מ\"פ מודגש א",
+    "file": "FrankRuhlMF-BoldA.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל מ\"פ מודגש א",
+    "file": "FrankRuhlMF-Bold-A.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רוהל רגיל",
+    "file": "FrankRuehl-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק ריל בינוני",
+    "file": "FrankReal-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק ריל מודגש",
+    "file": "FrankReal-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק ריל קל",
+    "file": "FrankReal-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק ריל רגיל",
+    "file": "FrankReal-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סנס מודגש",
+    "file": "Kedem-Sans-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סנס קל מאוד",
+    "file": "Kedem-Sans-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סנס קל",
+    "file": "Kedem-Sans-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סנס רגיל",
+    "file": "Kedem-Sans-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סנס שחור מודגש",
+    "file": "Kedem-Sans-Black-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף דקיק נטוי",
+    "file": "Kedem-Serif-Ultralight-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף חלול מודגש נטוי",
+    "file": "Kedem-Serif-Hollow-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף מודגש נטוי",
+    "file": "Kedem-Serif-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף קל מאוד נטוי",
+    "file": "Kedem-Serif-Ultra-Light-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף קל נטוי",
+    "file": "Kedem-Serif-Light-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף רגיל נטוי",
+    "file": "Kedem-Serif-Regular-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קדם סריף שחור מודגש נטוי",
+    "file": "Kedem-Serif-Black-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך עב-אנ בינוני",
+    "file": "KarlibachHebEng-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך עב-אנ דק",
+    "file": "KarlibachHebEng-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך עב-אנ מודגש",
+    "file": "KarlibachHebEng-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך עב-אנ קל",
+    "file": "KarlibachHebEng-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך עב-אנ רגיל",
+    "file": "KarlibachHebEng-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך צר בינוני",
+    "file": "KarlibachCon-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך צר דק",
+    "file": "KarlibachCon-Thin.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך צר מודגש",
+    "file": "KarlibachCon-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך צר קל",
+    "file": "KarlibachCon-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "קרליבך צר רגיל",
+    "file": "KarlibachCon-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רביצקי מודגש",
+    "file": "Ravitzky-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק 1 רגיל",
+    "file": "Rubik-One-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק אבני חן רגיל",
+    "file": "Rubik-Gemstones-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק איזומטרי רגיל",
+    "file": "Rubik-Iso-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק בועות רגיל",
+    "file": "Rubik-Bubbles-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק בינוני",
+    "file": "Rubik-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק ביסטלי רגיל",
+    "file": "Rubik-Beastly-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק גליץ' פופ רגיל",
+    "file": "Rubik-GlitchPop-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק גליץ' רגיל",
+    "file": "Rubik-Glitch-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק גרפיטי רגיל",
+    "file": "Rubik-SprayPaint-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק הסוואה ימית רגיל",
+    "file": "Rubik-SeaCamouflage-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק ויניל רגיל",
+    "file": "Rubik-Vinyl-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק חיידק רגיל",
+    "file": "Rubik-Microbe-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק לכלוך רגיל",
+    "file": "Rubik-Dirt-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק מבוך רגיל",
+    "file": "Rubik-Maze-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק מודגש נטוי",
+    "file": "Rubik-Bold-Italic.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק מודגש",
+    "file": "Rubik-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק מפות רגיל",
+    "file": "Rubik-Maps-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק מרקר רגיל",
+    "file": "Rubik-MarkerHatch-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק נטוי שחור",
+    "file": "Rubik-Italic-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק סלעי ירח רגיל",
+    "file": "Rubik-MoonRocks-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק סערה רגיל",
+    "file": "Rubik-Storm-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק פייד אייטיז רגיל",
+    "file": "Rubik-80sFade-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק פיקסלים רגיל",
+    "file": "Rubik-Pixels-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק פקס שבור רגיל",
+    "file": "Rubik-BrokenFax-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק צבע רטוב רגיל",
+    "file": "Rubik-WetPaint-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק קווים רגיל",
+    "file": "Rubik-Lines-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק קל",
+    "file": "Rubik-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק רגיל",
+    "file": "Rubik-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק ריר רגיל",
+    "file": "Rubik-Goo-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שחוק רגיל",
+    "file": "Rubik-Distressed-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שחור",
+    "file": "Rubik-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שלוליות רגיל",
+    "file": "Rubik-Puddles-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שרבוט משולשים רגיל",
+    "file": "Rubik-DoodleTriangles-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שרבוט צללית רגיל",
+    "file": "Rubik-DoodleShadow-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שרבוט רגיל",
+    "file": "Rubik-Scribble-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רוביק שרוף רגיל",
+    "file": "Rubik-Burned-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז גלעד מודגש",
+    "file": "RmzGaled-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז גלעד מודגש",
+    "file": "Rmz-Galed-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז גלעד רגיל",
+    "file": "RmzGaled-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז גלעד רגיל",
+    "file": "Rmz-Galed-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז דוד מודגש",
+    "file": "RmzDavid-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז דוד מודגש",
+    "file": "Rmz-David-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז דוד רגיל",
+    "file": "RmzDavid-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז דוד רגיל",
+    "file": "Rmz-David-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז הדס מודגש",
+    "file": "RmzHadas-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז הדס מודגש",
+    "file": "Rmz-Hadas-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז הדס רגיל",
+    "file": "RmzHadas-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז הדס רגיל",
+    "file": "Rmz-Hadas-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז מאירי מודגש",
+    "file": "RmzMeiri-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז מאירי מודגש",
+    "file": "Rmz-Meiri-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז מאירי רגיל",
+    "file": "RmzMeiri-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז מאירי רגיל",
+    "file": "Rmz-Meiri-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז סופר רגיל",
+    "file": "RmzSofer-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז סופר רגיל",
+    "file": "Rmz-Sofer-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז פרנק מודגש",
+    "file": "RmzFrank-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז פרנק מודגש",
+    "file": "Rmz-Frank-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז פרנק רגיל",
+    "file": "RmzFrank-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז פרנק רגיל",
+    "file": "Rmz-Frank-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז רש\"י מודגש",
+    "file": "RmzRashi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז רש\"י מודגש",
+    "file": "Rmz-Rashi-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז רש\"י רגיל",
+    "file": "RmzRashi-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רמז רש\"י רגיל",
+    "file": "Rmz-Rashi-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רש\"י אות רגיל",
+    "file": "Rashi-Ot-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רש\"י ארט 1 רגיל",
+    "file": "Rashi-Art1-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רש\"י דפ רגיל",
+    "file": "Rashi-Dp-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "רש\"י רגיל",
+    "file": "Rashy-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "שלום רגיל",
+    "file": "Shalom-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "שמעון קל",
+    "file": "Shimon-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תהילה בינוני",
+    "file": "TehilaMedium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תהילה בינוני",
+    "file": "Tehila-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תהילה רגיל 2",
+    "file": "Tehila-Regular_2.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תהילה רגיל",
+    "file": "Tehila-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תעמולה בינוני",
+    "file": "Taamula-Medium.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תעמולה מודגש מאוד",
+    "file": "Taamula-Ultra-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תעמולה מודגש",
+    "file": "Taamula-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תעמולה קל מאוד",
+    "file": "Taamula-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תעמולה קל",
+    "file": "Taamula-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "תעמולה רגיל",
+    "file": "Taamula-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "David Libre",
+    "file": "DavidLibre-Regular.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/davidlibre (SIL OFL 1.1)"
+  },
+  {
+    "family": "Frank Ruhl Libre",
+    "file": "FrankRuhlLibre-VF.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/frankruhllibre (SIL OFL 1.1) — variable, default 400"
+  },
+  {
+    "family": "Bellefair",
+    "file": "Bellefair-Regular.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/bellefair (SIL OFL 1.1)"
+  },
+  {
+    "family": "Noto Serif Hebrew",
+    "file": "NotoSerifHebrew-VF.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/notoserifhebrew (SIL OFL 1.1) — variable, default 400"
+  },
+  {
+    "family": "Guttman Rashi",
+    "file": "Guttman-Rashi-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Hadassah Friedlaender",
+    "file": "Hadassah-Friedlaender-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "FrankReal",
+    "file": "FrankReal-Bold.ttf",
+    "format": "truetype"
+  }
 ]

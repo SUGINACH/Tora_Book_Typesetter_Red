@@ -237,6 +237,8 @@ function createImudLibrary(engine) {
     // **S4.15:** רישום גופן החלון (מדידה ב-Worker + FontFace לתצוגה + base64
     // לייצוא HTML) — בלי להיכשל אם הקובץ חסר (fallback מתועד).
     try { await loadWindowFont(); } catch (e) { /* אין FrankReal-Bold — fallback */ }
+    // **S4.26:** רישום גופן הכותרות (DavidLibre-Bold) — מדידה+תצוגה מודגשת.
+    try { await loadHeadingFont(); } catch (e) { /* אין DavidLibre-Bold — fallback */ }
     return { settings, unmapped, report };
   }
 
@@ -272,6 +274,34 @@ function createImudLibrary(engine) {
     return p;
   }
 
+  /** **S4.26 (דיווח משתמש: "האתר לא משתמש בגופני ברירת המחדל"):** גופן
+   * הכותרות של המקור בפועל — DavidLibre-Bold. נרשם ב-Worker תחת
+   * 'DavidLibre-Bold' (מדידת כותרות — headingApi) וכ-FontFace של המשפחה
+   * 'David Libre' במשקל 700 (תצוגת כותרות מודגשות — כמו הייחוס, שבו כל
+   * הכותרות ושורות ה-TOC ב-DavidLibre-Bold). */
+  async function loadHeadingFont() {
+    if (appliedFontsReady.has('DavidLibre-Bold')) return appliedFontsReady.get('DavidLibre-Bold');
+    const p = (async () => {
+      const r = await fetch(`${BASE}/fonts/DavidLibre-Bold.ttf`);
+      if (!r.ok) return null;
+      const buf = await r.arrayBuffer();
+      try {
+        await engine.registerFont({ name: 'DavidLibre-Bold', bytes: buf.slice(0) });
+      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      if (typeof FontFace !== 'undefined') {
+        try {
+          const face = new FontFace('David Libre', buf, { weight: '700' });
+          await face.load();
+          document.fonts.add(face);
+          if (!fontCatalog.faces.has('David Libre')) fontCatalog.faces.add('David Libre');
+        } catch (e) { /* פונט תצוגה נכשל */ }
+      }
+      return buf;
+    })();
+    appliedFontsReady.set('DavidLibre-Bold', p);
+    return p;
+  }
+
   /** CSS של הפונטים שנטענו — להטמעה בייצוא HTML העצמאי (@font-face data-URI). */
   function exportFontCss() {
     let css = '';
@@ -288,7 +318,7 @@ function createImudLibrary(engine) {
     return fontCatalog.loaded ? new Set(fontCatalog.byFamily.keys()) : null;
   }
 
-  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, loadHeadingFont, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };

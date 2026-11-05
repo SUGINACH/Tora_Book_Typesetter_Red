@@ -127,6 +127,10 @@ function main() {
   // (הוכח מסימון הייחוס: אילוצי שבירת השורות מתקיימים ברוחבי FRL).
   const prefaceFontPath = path.join(RB, 'ui/assets/imud/fonts/FrankRuhlLibre-VF.ttf');
   const prefaceFontBytes = fs.existsSync(prefaceFontPath) ? fs.readFileSync(prefaceFontPath) : null;
+  // **S4.26 (גופן כותרות):** DavidLibre-Bold — מדידת/ציור הכותרות ושורות ה-TOC
+  // (כמו הייחוס: כל הכותרות ב-DavidLibre-Bold) וכמו ה-DOM באתר החי.
+  const headingFontPath = path.join(RB, 'ui/assets/imud/fonts/DavidLibre-Bold.ttf');
+  const headingFontBytes = fs.existsSync(headingFontPath) ? fs.readFileSync(headingFontPath) : null;
 
   const settings = {
     ...getDefaultSettings(),
@@ -140,13 +144,13 @@ function main() {
   // המנוע נרשם אותם וגולש את הערות במטריקות הנכונות.
   const marginFontPath = path.join(RB, 'ui/assets/imud/fonts/Hadassah-Friedlaender-Regular.ttf');
   const marginFontBytes = fs.existsSync(marginFontPath) ? fs.readFileSync(marginFontPath) : null;
-  const result = typeset(text, settings, { noRecommendations: true, marginFontBytes, windowFontBytes, prefaceFontBytes });
+  const result = typeset(text, settings, { noRecommendations: true, marginFontBytes, windowFontBytes, prefaceFontBytes, headingFontBytes });
   console.error(`typeset: ${result.pages.length} pages in ${Date.now() - t0}ms (hash ${String(result.layoutHash).slice(0, 12)}) [profile: ${result.legacyProfile ? 'imud-legacy' : 'dp'}]`);
 
   // ---------- דטרמיניזם: הרצה שנייה חייבת לתת hash ועמודים זהים ----------
   if (wantDeterminism) {
     const t1 = Date.now();
-    const again = typeset(text, settings, { noRecommendations: true, marginFontBytes, windowFontBytes, prefaceFontBytes });
+    const again = typeset(text, settings, { noRecommendations: true, marginFontBytes, windowFontBytes, prefaceFontBytes, headingFontBytes });
     const ok = again.layoutHash === result.layoutHash && again.pages.length === result.pages.length;
     console.error(`determinism: run2 ${again.pages.length} pages in ${Date.now() - t1}ms (hash ${String(again.layoutHash).slice(0, 12)}) — ${ok ? 'OK (identical)' : 'MISMATCH'}`);
     if (!ok) { console.error('determinism FAILED — hash or page count differs between runs'); process.exit(3); }
@@ -268,6 +272,43 @@ function main() {
     // בזרם none_rows במקום בסוף הטור הימני — הפרש סדר קריאה ב-P7.
     const fnStruct = [];
     for (const fn of (pg.footnotes || [])) {
+      // **S4.26 (זרימה רציפה):** פריט זרימה אחד לכל הערות העמוד — משוחזר
+      // לפריטי הערה (מקובץ לפי noteIdx) לצרכי verify-corpus/C10; שורות
+      // הזרימה נשפכות כשורות קריאה רגילות (סמנים בגודל רישום בפנים).
+      if (fn.continuous) {
+        const byNote = new Map();
+        for (const l of fn.lines) {
+          for (const t of (l.words || [])) {
+            if (t.gap) continue;
+            if (!byNote.has(t.noteIdx)) byNote.set(t.noteIdx, { marker: '', words: [] });
+            const rec = byNote.get(t.noteIdx);
+            if (t.mk) rec.marker = rec.marker ? rec.marker + ' ' + t.t : t.t;
+            else rec.words.push(t.t);
+          }
+        }
+        let lastLineY = null;
+        fn.lines.forEach((l, li) => {
+          const toks = (l.words || []).filter(t => !t.gap);
+          const fullText = toks.map(t => t.t).join(' ');
+          const noMk = toks.filter(t => !t.mk).map(t => t.t).join(' ');
+          const isLastLine = li === fn.lines.length - 1;
+          const isLastRagged = isLastLine && noMk.length < 60;
+          const firstMk = toks.find(t => t.mk);
+          lines.push({
+            col: isLastRagged ? 'right' : null, text: fullText, font: 'GuttmanRashiNormal', size: 8.5,
+            x0: isLastRagged ? 380 : GEO.COL_L_X * PX,
+            x1: isLastRagged ? 504.8 : (GEO.COL_L_X + 2 * GEO.COL_W + 13.48) * PX,
+            y0: l.y * PX, y1: (l.y + GEO.FN_PITCH) * PX, kind: 'footnote',
+            textNoMarkers: noMk, justified: false, fnMarker: firstMk ? firstMk.t : null
+          });
+          lastLineY = l.y;
+        });
+        void lastLineY;
+        for (const [idx, rec] of [...byNote.entries()].sort((a, b) => a[0] - b[0])) {
+          fnStruct.push({ marker: rec.marker, text: rec.words.join(' '), noteIdx: idx });
+        }
+        continue;
+      }
       let first = true;
       const joined = [];
       const nLines = fn.lines.length;
@@ -442,7 +483,7 @@ function main() {
 
   // ---------- PDF באותן הגדרות בדיוק ----------
   // **S4.15:** env החלון גם לייצוא — שבירת השורות ב-PDF חייבת להיות זהה למודל
-  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes });
+  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes, headingFontBytes });
   if (!pdf.ok) { console.error('exportPdf failed:', pdf.error); process.exit(2); }
   const pdfPath = path.join(outDir, 'ours.pdf');
   fs.writeFileSync(pdfPath, Buffer.from(pdf.bytes));

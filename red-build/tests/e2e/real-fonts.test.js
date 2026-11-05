@@ -73,7 +73,16 @@ describe('EXT-9 א — שלמות ספריית הגופנים התורניים �
     // כפל-שמות מתוכנן ויחיד: DavidLibre-Regular.ttf רשום גם כ-'דוד ליברה רגיל'
     // (השם בבורר המקורי) וגם כ-'David Libre' (השם שמחסניות ה-CSS של המקור משתמשות
     // בו: "'AlphaBlack', 'David Libre', serif"). שני השמות ⇒ אותו גופן.
-    const DUAL_NAMED = new Map([['DavidLibre-Regular.ttf', new Set(['דוד ליברה רגיל', 'David Libre'])]]);
+    // **S4.26 (דיווח משתמש 05.11 — "האתר לא משתמש בגופני ברירת המחדל"):** שלושה
+    // כינויים אנגליים נוספו — הגופנים שהותקנו אצל המשתמש המקורי (מוכח מהייחוס:
+    // ‏GuttmanRashiNormal ×3,182 שורות גוף, HadassahFriedlaender ×677 הערות-צד,
+    // ‏FrankReal למילות-החלון). בלעדיהם המחסניות נפלו ל-Frank Ruhl Libre.
+    const DUAL_NAMED = new Map([
+      ['DavidLibre-Regular.ttf', new Set(['דוד ליברה רגיל', 'David Libre'])],
+      ['Guttman-Rashi-Normal.ttf', new Set(['גוטמן רש"י רגיל', 'Guttman Rashi'])],
+      ['Hadassah-Friedlaender-Regular.ttf', new Set(['הדסה פרידלנדר רגיל', 'Hadassah Friedlaender'])],
+      ['FrankReal-Bold.ttf', new Set(['פרנק ריל מודגש', 'FrankReal'])]
+    ]);
     const byFile = new Map();
     for (const e of CATALOG) {
       assert(fs.existsSync(path.join(FONT_DIR, e.file)), `הקובץ מוטמע: ${e.file}`);
@@ -155,11 +164,13 @@ describe('EXT-9 ב — פתרון מחסניות המקור מול הקטלוג 
   it('ברירות המקור נפתרות למשפחות מוטמעות בפועל', () => {
     const available = new Set(CATALOG.map(e => e.family));
     const { settings } = importImudSettings(LEGACY_DEFAULTS, new Set(getSettingDefs().map(r => r.id)), { availableFonts: available });
-    // גוף המקור: "'Guttman Rashi', 'Frank Ruhl Libre', serif" — הראשונה אינה
-    // בקטלוג (גופן מערכת היסטורי) ⇒ המחסנית נופלת ל-Frank Ruhl Libre המוטמע
-    // — בדיוק כפי שה-CSS של המקור התנהג במכונה בלי גופן מערכת.
-    assertEq(settings['body-font'], 'Frank Ruhl Libre', 'מחסנית גוף ⇒ משפחה מוטמעת');
-    for (const fam of ['Frank Ruhl Libre', 'David Libre', 'Bellefair']) {
+    // **S4.26:** גוף המקור "'Guttman Rashi', 'Frank Ruhl Libre', serif" — הכינוי
+    // האנגלי 'Guttman Rashi' נוסף לקטלוג (מצביע על Guttman-Rashi-Normal.ttf
+    // המוטמע — הגופן שמחסנית המקור נפלה אליו במכונת המשתמש, מוכח מהייחוס:
+    // כל 3,182 שורות הגוף ב-GuttmanRashiNormal) ⇒ הגוף נפתר לגוטמן רש"י —
+    // לא עוד ל-Frank Ruhl Libre (דיווח משתמש: "האתר לא משתמש בגופני ברירת המחדל").
+    assertEq(settings['body-font'], 'Guttman Rashi', 'מחסנית גוף ⇒ גוטמן רש"י המוטמע (S4.26)');
+    for (const fam of ['Guttman Rashi', 'Hadassah Friedlaender', 'FrankReal', 'Frank Ruhl Libre', 'David Libre', 'Bellefair']) {
       assert(available.has(fam), `${fam} בקטלוג`);
     }
     // כותרת H0: "'AlphaBlack', 'David Libre', serif" ⇒ David Libre
