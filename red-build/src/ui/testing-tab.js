@@ -81,7 +81,8 @@ function buildTestingTab(doc, opts) {
     tbody.textContent = '';
     let shown = 0;
     for (const f of sorted) {
-      const hay = `${f.kindHe || ''} ${f.kind} ${f.page != null ? f.page : ''} ${f.id}`.toLowerCase();
+      // **S5.2 (8):** החיפוש לפי מספר עמוד תואם לתצוגה (1-based) — כמו שאר הממשק
+      const hay = `${f.kindHe || ''} ${f.kind} ${f.page != null ? f.page + 1 : ''} ${f.id}`.toLowerCase();
       if (q && !hay.includes(q)) continue;
       shown++;
       const tr = doc.createElement('tr');
@@ -90,7 +91,7 @@ function buildTestingTab(doc, opts) {
       tr.setAttribute('tabindex', '0');
       const cells = [
         f.kindHe || GEOM_KIND_NAMES[f.kind] || f.kind,
-        f.page != null ? String(f.page) : '—',
+        f.page != null ? String(f.page + 1) : '—', // **S5.2 (8):** תצוגה 1-based — כמו ההמלצות/הפטורים/הגיליונות
         STATUS_HE[f.status] || f.status,
         f.id
       ];

@@ -163,7 +163,11 @@ function describe_s14() {
       // חפיפות אנכיות בין שורות של אותו טור: מקרינים לפי x — שורות מאותו טור חולקות טווח x
       const cols = new Map();
       for (const ln of pg.lines) {
-        const key = Math.round(ln.x / 10);
+        // **S5.2 (P-11d):** מפתח לפי x מדויק של הטור (עיגול ל-0.1px) — שורות
+        // של אותו טור מקבלות מהפרויקטור את אותו col.x מהתבנית, ולכן x מדויק
+        // = זהות הטור. המפתח הקודם Math.round(ln.x/10) איחד לסלים שונים שורות
+        // של אותו טור שהפער בין העמודונים גדול מ-5px — והבדיקה דילגה עליהן.
+        const key = Math.round(ln.x * 10) / 10;
         if (!cols.has(key)) cols.set(key, []);
         cols.get(key).push(ln);
       }

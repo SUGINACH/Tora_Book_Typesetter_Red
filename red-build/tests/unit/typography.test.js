@@ -105,11 +105,13 @@ describe('REQ-LB-03 protectors (NBSP gluing)', () => {
     const words = protectWords([`${hugeA}\u00A0${hugeB}`, 'רגיל'], W, COLW);
     assert(words.every(w => !w.includes('\u00A0')), 'gluing cancelled for oversized pair');
   });
-  it('fixDropWordInColumns pulls short dropper into next column', () => {
-    const cols = [[{ words: ['א', 'ב'] }, { words: ['קצר'] }], [{ words: ['המשך', 'טקסט'] }]];
-    const fixed = fixDropWordInColumns(cols, 5);
-    assert(fixed, 'correction applied');
+  it('fixDropWordInColumns pulls short dropper into next column (S5.2: only when the merged line fits)', () => {
+    const measure = (t) => t.length * 6; // מודד סינתטי דטרמיניסטי
+    const cols = [[{ words: ['א', 'ב'] }, { words: ['קצר'], widthPx: 42 }], [{ words: ['המשך', 'טקסט'], widthPx: 100 }]];
+    const fixed = fixDropWordInColumns(cols, 5, { measure, colW: 200 });
+    assert(fixed, 'correction applied (merged width 42+6+12=60 ≤ 200−0.75)');
     assertEq(cols[1][0].words[0], 'קצר', 'dropped word pulled to next column head');
+    assertEq(cols[1][0].widthPx, 100 + measure(' ') + measure('קצר'), 'merged line widthPx updated');
   });
 });
 

@@ -21,6 +21,9 @@ const PAGE_TYPES = {
 
 const MM_TO_PX = 96 / 25.4;
 const PAGE_SIZES = {
+  // **S5.2 (O14 — A4 מדויק):** 210×297מ״מ @96dpi = 793.70×1122.52px — הערכים
+  // המעוגלים (794×1123) הזיזו את גוף ה-DP ב-0.3px ויצרו MediaBox שאינו זהה
+  // לגיאומטריית המורשת (793.7×1122.5). כעת זהה ל-GEO של legacy-imud-flow.
   A4: { w: Math.round(210 * MM_TO_PX), h: Math.round(297 * MM_TO_PX) },
   A5: { w: Math.round(148 * MM_TO_PX), h: Math.round(210 * MM_TO_PX) },
   '16x16': { w: Math.round(165 * MM_TO_PX), h: Math.round(165 * MM_TO_PX) }

@@ -7,6 +7,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # **S5.2 (P-11):** תקרה מפורשת — בלי זה job תקוע מחזיק ראנר עד 360 דק'
+    timeout-minutes: 60
     strategy:
       matrix:
         node: [ 18, 20, 22 ]
@@ -45,14 +47,19 @@ jobs:
   # סורק את הספר בגלילה ומבקר כל עמוד כשהוא חי — עם בדיקת כיסוי מלא (COVERAGE).
   layout-audit:
     runs-on: ubuntu-latest
+    # **S5.2 (P-11):** תקרה מפורשת — הסריקה הכפולה (עשן + הקורפוס הגדול) עם
+    # דפדפן חי ו-virtualization-sweep עשויה להיות איטית; 90 דק' תקרה נדיבה.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # **S5.2 (P-11):** נעילת גרסה — 0.41.2 היא הגרסה האחרונה ב-npm (אין 1.x);
+      # שדרוג לא מבוקר של ה-CLI יכול לשבור את חוזה ה-eval/פלט של האודיט.
       - name: Install agent-browser + headless browser
         run: |
-          npm install -g agent-browser
+          npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
       - name: Layout audit — smoke (small fixture, fail fast)
         run: bash tools/layout-audit/run.sh

@@ -44,3 +44,7 @@ with open(os.path.join(OUT, '..', 'imud-fonts.json'), 'w', encoding='utf-8') as 
 
 total_mb = sum(os.path.getsize(os.path.join(OUT, c['file'])) for c in catalog) / 1e6
 print(f'converted {ok} fonts ({total_mb:.1f} MB), failed {fail} → {OUT}')
+# **S5.2 (P-11b):** כישלונות המרה = יציאה 1 — בעבר נספרו אך הסקריפט החזיר 0,
+# ולכן פונט חסר/שבור היה נבלע בירוק והקטלוג יצא חלקי בשקט.
+if fail > 0:
+    sys.exit(1)

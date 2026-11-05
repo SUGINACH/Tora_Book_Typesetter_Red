@@ -4,8 +4,8 @@
   "note": "bbox: סביבות גליף (bearings) + הערכת ascent; שורות: מיקום בסיס מדויק",
   "lineBands": {
     "page": 3,
-    "rasterBands": 5,
-    "modelLines": 5,
+    "rasterBands": 4,
+    "modelLines": 4,
     "maxOffsetPx": 4
   },
   "worstBboxPx": 0

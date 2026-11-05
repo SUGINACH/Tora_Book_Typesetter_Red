@@ -7,7 +7,7 @@ const { Ledger } = require('../core/ledger');
 const { runProtections } = require('./protections-matrix');
 const { runRetreatLoop } = require('./retreat-loop');
 const { generateCandidates } = require('./candidate-generator');
-const { blockGapPx } = require('./column-flow');
+const { blockGapPx, colCapacityOf } = require('./column-flow');
 const { fixDropWordInColumns } = require('../typography/protectors');
 const { MARK_TAG } = require('../notes/markers');
 const { moveLineForward } = require('./ordering');
@@ -119,7 +119,11 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   // מלא מוצבת בפס עליון חוצה־טורים במקום בטור חצי־רוחב (בעבר: נמדדה ברוחב מלא
   // והוצבה בטור רגיל ⇒ גלישה אופקית שקטה). הטורים מתחילים מתחת לפס.
   const spanH = (page) => (page && page.spanning ? page.spanning.heightPx : 0);
-  const colCapacity = (tpl, page) => tpl.contentBox.height - spanH(page);
+  // **S5.2 (P-2 — קיבולת מאוחדת):** כל חישובי הקיבולת עוברים דרך colCapacityOf
+  // (column-flow — מקור יחיד). כאן usedHeight כבר כולל את תקציב ההערות על
+  // הטור האחרון (F-17) — ולכן הקיבולת נלקחת בלי התקציב (fnBudget:false;
+  // שקול מתמטית: used+fn ≤ cap ⟺ used ≤ cap−fn). הפס החוצה־טורים נכלל תמיד.
+  const colCapacity = (tpl, page) => colCapacityOf(page, { fnBudget: false }) || (tpl && tpl.contentBox ? tpl.contentBox.height - spanH(page) : 0);
 
   /**
    * גובה תפוס = שורות + **יתרת תקציב ההערות של העמוד** — כך ה‑probe וה‑reservation
@@ -171,7 +175,10 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
         }
       }
       // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
-      if (fixDropWordInColumns(cur.columns) ) {
+      // **S5.2 (תיקון 2):** המיזוג מותר רק אם השורה המקבלת נכנסת ברוחב הטור
+      // (מדידה מחדש + FIT_EPS שמרני) — אותה מדידה של המתכנן; מילה שאינה
+      // נכנסת נשארת בטור המקורי (בלי גלישה אופקית שקטה — מחלקת D-92).
+      if (fixDropWordInColumns(cur.columns, 3, { measure: (t) => measureFn(t), colW: cur.template.columns[0].w })) {
         eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
       }
       const a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
@@ -463,7 +470,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
           if (room !== -1) {
             eventLog.emit('page-plan', 'heading-escort-push', { token: blk.tokenId, page: cur.index }, cur.index);
           } else {
-            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template), lineHPx: lineH }, 'protections');
+            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template, cur), lineHPx: lineH }, 'protections');
             ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no column fits heading+escort even on fresh page (oversized block)');
           }
         }
@@ -506,7 +513,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   // terminal residual fallback (REQ-BAL-04): אם העמוד האחרון ריק למחצה ויש מצב natural — סמן
   if (settings['allow-terminal-residual-fallback']) {
     const last = pages[pages.length - 1];
-    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template) * 0.5)) {
+    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template, last) * 0.5)) {
       last.terminalResidual = true; // לא מדווח כ‑underfill (B4)
     }
   }
@@ -561,7 +568,10 @@ function balancePageSafe(page, settings, ledger) {
   const maxDelta = settings['imbalance-max-delta-px'];
   if (deltaOf() <= maxDelta) return true; // כבר מאוזן — אין התערבות (יציבות פריסה)
   if (!page.columns || page.columns.length < 2) return false;
-  const cap = page.template.contentBox.height;
+  // **S5.2 (P-2 — קיבולת מאוחדת):** colCapacityOf — כולל הפס החוצה־טורים
+  // (בעבר חושב מ-contentBox.height גולמי ⇒ איזון שגלש מתחת לפס בעמודי H2);
+  // תקציב ההערות עובר כ-extraLast (P1-8) — בלי כפילה.
+  const cap = colCapacityOf(page, { fnBudget: false });
   const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
   if (!best || best.k === page.columns[0].length) {
     // **EXT-8:** אין פיצול חוקי, או שהנוכחי כבר האופטימלי הגלובלי — הפרש שנותר
@@ -580,10 +590,10 @@ function balancePageSafe(page, settings, ledger) {
   page.columns[0] = seq.slice(0, best.k);
   page.columns[1] = seq.slice(best.k);
   // hard reject: חריגת קיבולת אחרי ההחלפה (הגנה כפולה — optimalSplit כבר מסנן) → rollback מלא
-  const overflows = (c) => {
-    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0)
-      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
-    return hh > cap + 0.5;
+  // **S5.2 (P-2):** קיבולת אפקטיבית פר-טור (פס + תקציב על הטור האחרון) — מקור יחיד.
+  const overflows = (c, ci) => {
+    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0);
+    return hh > colCapacityOf(page, { colIndex: ci }) + 0.5;
   };
   if (page.columns.some(overflows)) {
     page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;

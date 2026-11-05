@@ -30,6 +30,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const UI = path.join(ROOT, 'red-build', 'ui');
@@ -50,6 +51,12 @@ const SKIP_DET = args.includes('--skip-determinism');
 const PORT = 8932;
 const B64_CHUNK = 100_000;
 const READY_TIMEOUT_MS = 900_000;
+// **S5.2 (רצפת נפח):** ספר שהתקצר בשקט (מנוע שבורע/מדלג תוכן) עבר ירוק כל
+// עוד 0 בעיות במה שכן רונדר. הקורפוס הקנוני: 704 עמודים / 363,232 מילים —
+// הרצפה מכוונת בכוונה נדיבה (690) כי שינויי TOC/הערות-סיום של המנוע עשויים
+// להזיז את מספר העמודים במעט; יחס המילים (0.98) תופס איבוד תוכן אמיתי.
+const EXPECTED_PAGES_MIN = 690;
+const EXPECTED_WORDS_MIN_RATIO = 0.98;
 
 const log = (m) => console.log(m);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -150,15 +157,32 @@ async function fetchBigVar(name) {
 }
 
 async function retypesetAndWait(label) {
+  // **S5.2 (מרוץ הרצה-2):** לפני ההדלקה נלקח מונה הדור של האפליקציה —
+  // app.getState().gen: 0 בעלייה, +1 על **כל** עימוד שהושלם. בלי זה, הרצה-2
+  // המתינה על `hasResult && pages>0` — תנאי שכבר התקיים מהרצה-1 (עימוד מחדש
+  // אינו מאפס את התוצאה הישנה) — ויכלה לבדוק את ה-DOM הישן/מעורבב של הרצה-1
+  // ("IDENTICAL" ריק, או דגימת ביניים באמצע מחיקה). חוזה: gen מספר; אם השדה
+  // חסר (אפליקציה ישנה) — נפילה חזרה להתנהגות הקודמת.
+  const gen0 = await ev(`(function(){ const st = window.__toraApp && window.__toraApp.getState(); return st && typeof st.gen === 'number' ? st.gen : null; })()`);
+  const hasGen = typeof gen0 === 'number';
+  log(`${label}: מונה דור (gen) ${hasGen ? '=' + gen0 : 'לא נתמך — נפילה ל-polling ישן'}`);
   const inject = URL
     ? `(async () => { const app = window.__toraApp; if (!app) return 'NO_APP'; const ta = document.querySelector('textarea'); if (!ta) return 'NO_TEXTAREA'; ta.value = window.__fx; ta.dispatchEvent(new Event('input', {bubbles:true})); await new Promise(r => setTimeout(r, 400)); app.onExplicitRetypeset(); return 'STARTED'; })()`
     : `(async () => { const app = window.__toraApp; if (!app) return 'NO_APP'; const ta = document.querySelector('textarea'); if (!ta) return 'NO_TEXTAREA'; const text = await (await fetch('/_audit-fixture.txt')).text(); ta.value = text; ta.dispatchEvent(new Event('input', {bubbles:true})); await new Promise(r => setTimeout(r, 400)); app.onExplicitRetypeset(); return 'STARTED'; })()`;
   const r = await ev(inject);
   if (r !== 'STARTED') throw new Error(`${label}: הזרקה נכשלה: ${r}`);
   const t0 = Date.now();
+  const pollJs = hasGen
+    ? `(function(){ const st = window.__toraApp && window.__toraApp.getState(); return st && typeof st.gen === 'number' && st.gen > ${gen0} && st.hasResult && st.pages > 0 ? 'READY_' + st.pages : 'WAIT'; })()`
+    : `(function(){ const st = window.__toraApp && window.__toraApp.getState(); return st && st.hasResult && st.pages > 0 ? 'READY_' + st.pages : 'WAIT'; })()`;
   for (;;) {
-    const st = await ev(`(function(){ const st = window.__toraApp && window.__toraApp.getState(); return st && st.hasResult && st.pages > 0 ? 'READY_' + st.pages : 'WAIT'; })()`);
-    if (String(st).startsWith('READY_')) return parseInt(String(st).slice(6), 10);
+    const st = await ev(pollJs);
+    if (String(st).startsWith('READY_')) {
+      // **S5.2:** המתנה קצרה אחרי READY — הווירטואליזציה של התצוגה מרנדרת את
+      // החלון החי בגלילה; בלי המתנה הבדיקה עלולה לראות placeholders טריים.
+      await sleep(1200);
+      return parseInt(String(st).slice(6), 10);
+    }
     if (Date.now() - t0 > READY_TIMEOUT_MS) throw new Error(`${label}: פסק זמן לעימוד`);
     await sleep(3000);
   }
@@ -171,7 +195,14 @@ const gotoView = async () => {
 (async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   if (!fs.existsSync(FIXTURE)) throw new Error(`חסר fixture: ${FIXTURE}`);
-  const targetUrl = URL || `http://127.0.0.1:${PORT}/index.html`;
+  // **S5.2 (רצפת נפח):** ספירת מילות ה-fixture — בסיס ליחס המילים המרונדרות
+  const fixtureWords = fs.readFileSync(FIXTURE, 'utf8').split(/\s+/).filter(Boolean).length;
+  // **S5.2 (פריסה מיושנת — cache-bust):** פתיחת ה-HTML עם query ייחודי — אחרת
+  // ה-CDN של Pages עשוי להגיש HTML מיושן מהמטמון והבדיקה תרוץ נגד עבר.
+  const runId = Date.now();
+  const targetUrl = URL
+    ? URL + (URL.includes('?') ? '&' : '?') + 't=' + runId
+    : `http://127.0.0.1:${PORT}/index.html`;
   if (!URL) await startServer();
 
   try { await ab(['close']); } catch (e) {}
@@ -193,6 +224,59 @@ const gotoView = async () => {
     await sleep(2000);
   }
   log(`אתר: ${targetUrl} | app: ${await ev(`(document.querySelector('script[src*="app.bundle.js"]') || {}).src || '—'`)}`);
+
+  // **S5.2 (פריסה מיושנת — אמת חמורה, מצב חי בלבד):** sha256 של הבאנדלים הפרוסים
+  // (נמשכים בעמוד עצמו עם cache:'reload') מול הבאנדלים בענף — אי-התאמה אחת
+  // משמעותה שהאודיט רץ נגד פריסה שאינה main. בנוסף ASSET_VERSION שבפועל
+  // במסמך (?v= ב-script src) מול הקבוע ב-red-build/src/ui/browser-entry.js.
+  if (URL) {
+    const deployed = await ev(`(async function () {
+      const appSrc = (document.querySelector('script[src*="app.bundle.js"]') || {}).src || null;
+      const verOf = (u) => { const m = String(u || '').match(/[?&]v=([^&]+)/); return m ? m[1] : null; };
+      // **S5.2:** גם השליפה עצמה עם ?t= (cache-bust) + cache:'reload' — לא לקבל
+      // עותק מיושן מה-CDN/מטמון הדפדפן בדיוק ברגע שבודקים טריות.
+      const bust = (u) => String(u) + (String(u).includes('?') ? '&' : '?') + 't=' + '${runId}';
+      const sha = async (u) => {
+        try {
+          const buf = await (await fetch(bust(u), { cache: 'reload' })).arrayBuffer();
+          const h = await crypto.subtle.digest('SHA-256', buf);
+          let hex = '';
+          for (const b of new Uint8Array(h)) hex += b.toString(16).padStart(2, '0');
+          return hex;
+        } catch (e) { return 'FETCH_FAIL:' + ((e && e.message) || e); }
+      };
+      const v = verOf(appSrc);
+      const appSha = await sha(appSrc || (location.href.replace(/[?#].*$/, '') + 'app.bundle.js'));
+      const workerUrl = new URL('engine-worker.bundle.js' + (v ? '?v=' + v : ''), location.href).href;
+      const workerSha = await sha(workerUrl);
+      return { appSrc, assetVersion: v, appSha, workerSha };
+    })()`);
+    const shaFile = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+    const localAppSha = shaFile(path.join(UI, 'app.bundle.js'));
+    const localWorkerSha = shaFile(path.join(UI, 'engine-worker.bundle.js'));
+    const entrySrc = fs.readFileSync(path.join(ROOT, 'red-build', 'src', 'ui', 'browser-entry.js'), 'utf8');
+    const mV = entrySrc.match(/ASSET_VERSION\s*=\s*'([^']+)'/);
+    const localVersion = mV ? mV[1] : null;
+    log(`באנדלים (חי):  app ${String(deployed.appSha).slice(0, 16)}… | worker ${String(deployed.workerSha).slice(0, 16)}… | ASSET_VERSION ${deployed.assetVersion || '—'}`);
+    log(`באנדלים (main): app ${localAppSha.slice(0, 16)}… | worker ${localWorkerSha.slice(0, 16)}… | ASSET_VERSION ${localVersion || '—'}`);
+    let stale = false;
+    if (deployed.appSha !== localAppSha || deployed.workerSha !== localWorkerSha) {
+      console.error('✗ הפריסה החיה מיושנת — הבאנדל הפרוס אינו תואם ל-main');
+      console.error(`  app.bundle.js:           פרוס ${deployed.appSha}`);
+      console.error(`                          main  ${localAppSha}`);
+      console.error(`  engine-worker.bundle.js: פרוס ${deployed.workerSha}`);
+      console.error(`                          main  ${localWorkerSha}`);
+      stale = true;
+    }
+    if (localVersion && deployed.assetVersion && deployed.assetVersion !== localVersion) {
+      console.error(`✗ ASSET_VERSION במסמך (${deployed.assetVersion}) ≠ במקור (${localVersion}) — ה-HTML הפרוס מיושן`);
+      stale = true;
+    }
+    if (!localVersion || !deployed.assetVersion) {
+      log(`⚠ לא ניתן להשוות ASSET_VERSION (פרוס: ${deployed.assetVersion || '—'}, מקור: ${localVersion || '—'}) — ממשיכים על סמך sha256 בלבד`);
+    }
+    if (stale) throw new Error('הפריסה החיה מיושנת — הבאנדל הפרוס אינו תואם ל-main (ראה טביעות sha256 למעלה)');
+  }
 
   // במצב חי: הזרקת ה-fixture ב-base64 (לשרת החי אין את הקובץ)
   if (URL) {
@@ -221,6 +305,25 @@ const gotoView = async () => {
   const report = JSON.parse(reportRaw);
   const s = report.summary || {};
   const st = report.stats || {};
+
+  // **S5.2 (רצפת נפח):** כיסוי מלא של הספר כולו — לא רק "0 בעיות במה שכן רונדר".
+  // עמודים: הקורפוס הקנוני 704 (רצפה 690 — נדיבה בכוונה לשינויי TOC/הערות-סיום
+  // של המנוע). מילים: ספירת הדוח (שורות+הערות+פסים+TOC) מול ה-fixture ביחס
+  // ≥0.98 — תופס מנוע שמדלג תוכן שלם בשקט.
+  const floorFail = [];
+  if (!(pages1 >= EXPECTED_PAGES_MIN)) floorFail.push(`עמודים ${pages1} < רצפת המינימום ${EXPECTED_PAGES_MIN}`);
+  const totalWords = s.totalWords || 0;
+  if (!(totalWords >= EXPECTED_WORDS_MIN_RATIO * fixtureWords)) {
+    floorFail.push(`מילים מרונדרות ${totalWords.toLocaleString()} < ${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()} (= ${EXPECTED_WORDS_MIN_RATIO} × ${fixtureWords.toLocaleString()} מילות ה-fixture)`);
+  }
+  if (floorFail.length) {
+    console.error('✗ רצפת הנפח נכשלה — הספר התקצר בשקט (ספר שחסר תוכן אינו יכול להיות "0 בעיות"):');
+    for (const f of floorFail) console.error('  - ' + f);
+    try { await ab(['close']); } catch (e) {}
+    if (server) server.close();
+    process.exit(1);
+  }
+  log(`רצפת נפח ✓: ${pages1} עמודים (≥${EXPECTED_PAGES_MIN}) | ${totalWords.toLocaleString()} מילים (≥${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()})`);
   log('─'.repeat(62));
   log(`עמודים: ${s.pages}/${s.slots} | שורות: ${(s.totalLines || 0).toLocaleString()} | וירטואלי: ${s.virtualized} | סריקה: ${s.sweep && s.sweep.ms}ms`);
   log(`בעיות (סה"כ): ${s.problems} | לפי סוג: ${JSON.stringify(st.counts || {})}`);
@@ -268,7 +371,7 @@ const gotoView = async () => {
   const ok = s.problems === 0 && detIdentical && s.pages === s.slots;
   console.log('');
   console.log('════════ סיכום האודיט המתמטי המלא ════════');
-  console.log(`pages: ${s.pages}/${s.slots} | lines: ${(s.totalLines || 0).toLocaleString()} | problems: ${s.problems}`);
+  console.log(`pages: ${s.pages}/${s.slots} | lines: ${(s.totalLines || 0).toLocaleString()} | words: ${(s.totalWords || 0).toLocaleString()} | problems: ${s.problems}`);
   console.log(`counts: ${JSON.stringify(st.counts || {})}`);
   console.log(`determinism: ${detIdentical ? 'IDENTICAL' : 'DIFFERENCES!'}`);
   console.log(`reports: ${OUT}`);

@@ -28,6 +28,11 @@ function runRetreatLoop(ctx) {
   let lastSignature = null;
   /** מפת רישומים מהרצה זו: kind@target → record (למניעת כפילויות בין resolved↔persists). */
   const seen = new Map();
+  // **S5.2 (תיקון 1 — קריסה ביציאת תקרה):** allViolations הוגדר בתוך גוף הלולאה
+  // (const) אך נצרך אחריה בנתיב תקרת־האיטרציות ⇒ ReferenceError שהחליף את רישום
+  // הפשרה בקריסה. הועלה מעל הלולאה — ההפרות של האיטרציה האחרונה הן הנשארות
+  // בפועל ונרשמות במלואן (recordRemaining).
+  let allViolations = [];
 
   /**
    * dry ledger אמיתי: create() מחזיר רשומת דמה ואינו כותב ל‑ledger האמיתי.
@@ -50,7 +55,7 @@ function runRetreatLoop(ctx) {
 
   while (iteration < MAX_ITERATIONS) {
     iteration++;
-    const allViolations = [];
+    allViolations = [];
     for (const page of pages) {
       const dry = makeDryLedger();
       const vs = assess(page, settings, dry);

@@ -396,7 +396,7 @@ function writePdf(opts) {
       const fw = pg.folio.w != null ? pg.folio.w : pg.folio.text.length * 6;
       const fx = pg.folio.x != null ? pg.folio.x : pg.width / 2 - fw / 2;
       const fy = pg.folio.baselineY != null ? pg.folio.baselineY : pg.folio.y + 10;
-      emitWord(pg.folio.text, fx, fy, 10);
+      emitWord(pg.folio.text, fx, fy, pg.folio.sizePt || 10);
     }
     // כותרת עליונה — סלוטים לפי מיקום פיזי מהקרן (D-81); נפילה מתועדת לנוסחה הישנה
     if (pg.header) {

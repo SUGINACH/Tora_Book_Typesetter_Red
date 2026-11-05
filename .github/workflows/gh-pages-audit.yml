@@ -1,0 +1,67 @@
+# .github/workflows/gh-pages-audit.yml — אודיט חי מיד אחרי פריסת Pages (S5.2)
+#
+# **S5.2 (פריסה מיושנת — סגירת החלון העיוור):** הפריסה ל-GitHub Pages רצה
+# בענף gh-pages; עד היום האודיט החי הלילי (full-math-audit.yml) היה יכול
+# לפספס חלון של שעות שבו האתר פרוס אך שבור/מיושן. כאן: כל push ל-gh-pages
+# ממתין שבניית ה-Pages תושלם (polling של ה-API הציבורי, ללא אימות) ומיד
+# מריץ את אותו אודיט מתמטי מלא מול האתר החי — כולל אימות sha256 של
+# הבאנדלים הפרוסים מול הענף (run-full-math.js נכשל אם הפריסה מיושנת).
+name: gh-pages-audit
+
+on:
+  push:
+    branches: [ gh-pages ]
+  workflow_dispatch:
+
+jobs:
+  live-audit-after-deploy:
+    runs-on: ubuntu-latest
+    # **S5.2 (P-11):** תקרה מפורשת — המתנה ל-Pages (עד 10 דק') + האודיט החי
+    # (עימוד ~700 עמודים דרך הרשת + דטרמיניזם כפול); 45 דק' כמו הלילי.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # **S5.2 (P-11):** נעילת גרסה — 0.41.2 היא הגרסה האחרונה ב-npm (אין 1.x);
+      # שדרוג לא מבוקר של ה-CLI יכול לשבור את חוזה ה-eval/פלט של האודיט.
+      - name: Install agent-browser + headless browser
+        run: |
+          npm install -g agent-browser@0.41.2
+          agent-browser install --with-deps
+
+      # **S5.2:** המתנה להשלמת בניית ה-Pages — polling ללא אימות של
+      # /pages/builds/latest כל 30 שנ'; תקרה 10 דק'. אם הבנייה נכשלה
+      # ("error") או לא הושלמה בזמן — כשל מיידי (אין טעם לבדוק אתר ישן).
+      - name: Wait for GitHub Pages build to complete (poll up to 10 min)
+        run: |
+          deadline=$((SECONDS + 600))
+          while true; do
+            resp=$(curl -sf "https://api.github.com/repos/SUGINACH/Tora_Book_Typesetter_Red/pages/builds/latest" || true)
+            status=$(printf '%s' "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")
+            echo "pages build status: ${status:-unknown}"
+            if [ "$status" = "built" ]; then echo "✓ Pages build completed"; exit 0; fi
+            if [ "$status" = "error" ]; then echo "✗ בניית ה-Pages נכשלה (status=error) — אין טעם לבדוק אתר מיושן"; exit 1; fi
+            if [ "$SECONDS" -ge "$deadline" ]; then echo "✗ פסק זמן בהמתנה לבניית Pages (10 דק') — status=${status:-unknown}"; exit 1; fi
+            sleep 30
+          done
+
+      # בדיוק כמו ה-job הלילי (live) ב-full-math-audit.yml: האודיט זקוק
+      # ל-checkout (לחישוב sha256 של הבאנדלים מול הפריסה + ה-fixture), אך
+      # בודק את ה-URL החי — לא שרת מקומי.
+      - name: Full math audit — LIVE site right after deploy (fixture injected via base64)
+        run: |
+          node tools/layout-audit/run-full-math.js --tag live \
+            --url https://suginach.github.io/Tora_Book_Typesetter_Red/ \
+            --fixture audits/very_long_test_text.txt
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-math-audit-gh-pages
+          path: red-build/tests/artifacts/full-math-audit/
+          if-no-files-found: ignore

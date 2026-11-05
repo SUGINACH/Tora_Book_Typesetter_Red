@@ -182,12 +182,23 @@ const DISPOSITIONS = {
   'inp-back-shaar-text': { kind: 'mapped', to: 'shaar-back-text', reason: '03.11(ד): טקסט השער האחורי (שמירת זכויות)' },
 
   // ============ הערות שוליים ============
+  // **S5.2 (S2):** מפתח RED-מקורי שנכנס בטעות לנכס ברירות-המחדל המוטמע
+  // (הנכס = v21 + שתי דריסות D-91 מתועדות + מפתח זה) — רישום disposition
+  // מפורש במקום 'unmapped' בייבוא החי.
+  'fn-bar-max-height-px': { kind: 'removed', reason: 'מפתח RED-מקורי (תקרת מרזב ההערות) — נקרא מהמרשם עצמו; אינו מפתח מקור', issue: 'S5.2-S2' },
   'fn-columns': { kind: 'mapped', to: 'footnote-columns', transform: parseInt },
   'fn-layout-mode': { kind: 'mapped', to: 'fn-layout-mode' },
-  'fn-reset-mode': { kind: 'mapped', to: 'footnote-reset-policy' },
+  // **S5.2 (S2):** transform חסר — 'siman' של המקור נחת כערך לא-חוקי בצד
+  // RED (הenum: continuous/page/section/part) והפאנל הציג ערך שבור.
+  'fn-reset-mode': { kind: 'mapped', to: 'footnote-reset-policy', transform: (v) => ({ 'siman': 'section', 'chapter': 'section', 'page': 'page', 'continuous': 'continuous', 'part': 'part' }[v] || 'page') },
   'fn-title-text': { kind: 'mapped', to: 'endnote-title-text' },
   'note-numbering-style': { kind: 'mapped', to: 'footnote-marker-style', transform: (v) => ({ 'gematria': 'hebrew-geresh', 'hebrew': 'hebrew-geresh', 'decimal': 'decimal', 'asterisk': 'asterisk', 'parenthesis': 'parenthesis' }[v] || 'hebrew-geresh') },
-  'note-marker-type': { kind: 'merged', to: 'footnote-marker-style', reason: 'סוג הסמן (super) נגזר מהסגנון ב-RED; אין עילוי-נפרד נפרד' },
+  // **S5.2 (S2):** note-marker-type ('super') אינו סגנון סמן — הוא העלאת
+  // בסיס (עניין רינדור). בעבר מופה merged ל-footnote-marker-style בלי
+  // transform והערך הגולמי 'super' דרס את הסגנון החוקי (ערך מחוץ ל-enum;
+  // ניצל רק בזכות ה-default-branch של markerFor). כעת ui-state — נשמר
+  // להצגה, לא מזהם את ה-enum.
+  'note-marker-type': { kind: 'ui-state', reason: 'סוג הסמן (super) — עניין העלאת-בסיס ברינדור, לא סגנון מספור; הסגנון מגיע מ-note-numbering-style' },
   'note-marker-size': { kind: 'ui-state', reason: 'גודל מילת-הסמן בגוף (ברירת מחדל 8) — מיושם בפרויקטור ה-legacy (S4.20/EXT-17)', issue: 'EXT-17' },
   'note-listing-num-size': { kind: 'ui-state', reason: 'גודל סמן הרישום ברשימת ההערות — מיושם בפרויקטור ה-legacy — S4.20/EXT-17' },
   'note-num-separator': { kind: 'ui-state', reason: 'המפריד אחרי מספר ההערה (ברירת מחדל .) — מיושם ב-markerWord — S4.20/EXT-17' },

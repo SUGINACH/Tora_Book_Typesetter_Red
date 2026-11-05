@@ -531,7 +531,10 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
     const slots = [];
     const mk = (pos, text, sizePt) => {
       if (!text) return;
-      const w = api.measureTextWidth(text, sizePt, 0);
+      // **S5.2 (O3):** מדידת/ציור סלוטי הכותרת ב-DavidLibre-Bold (hApi) —
+      // בדיוק כמו ה-DOM (fontOf של ההגדרות + משקל 700). בעבר נמדדו
+      // בגוף הטקסט וצוירו ב-/F1 — תצוגה≠ייצוא בכל עמוד גוף.
+      const w = hApi.measureTextWidth(text, sizePt, 0);
       let x;
       if (pos === 'right') x = GEO.COL_R_X + GEO.COL_W - 33 - w;
       else if (pos === 'left') x = GEO.COL_L_X + 33;
@@ -547,10 +550,12 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
         const baseY = GEO.HEADER_BASELINE;
         // **S5.1 (תיקון C1/L2):** רוחב התיבה = רוחב הטקסט עצמו (s.w) — לא
         // s.w+40. ה+40 הסיט כל סלוט 40px מהמקום שמכויל מהייחוס ב-mk() לעיל.
-        s.words = placeWords(s.text.split(' '), api, s.x, s.w, s.sizePt,
+        // **S5.2 (O3):** המדידה והצבה ב-hApi (DavidLibre-Bold — כמו ה-DOM)
+        // + fontKey 'heading' — הסלוטים כבר לא נמדדים/מצוירים ב-/F1 גוף-הטקסט.
+        s.words = placeWords(s.text.split(' '), hApi, s.x, s.w, s.sizePt,
           s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
         s.color = pg.headerSlots.color || HDR_COLOR;
-        for (const w of s.words) w.color = s.color;
+        for (const w of s.words) { w.color = s.color; w.fontKey = 'heading'; }
       }
       out.header = { y: GEO.HEADER_BASELINE - 14, baselineY: GEO.HEADER_BASELINE, slots };
     }

@@ -16,6 +16,7 @@
  */
 
 const { usedHeight, pageImbalance } = require('./balancing');
+const { colCapacityOf } = require('./column-flow'); // **S5.2 (P-2):** קיבולת טור — מקור יחיד
 const { MARK_TAG } = require('../notes/markers');
 
 /** עמודים מבניים שאינם זרימת-תוכן — כותרת בודדת בהם היא מכוונת-עיצוב,
@@ -26,12 +27,16 @@ function isStructuralPage(page) {
     page.type === 'toc-general' || page.type === 'toc-detail';
 }
 
-/** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **. */
+/** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **.
+ *  **S5.2 (תיקון 10):** סמן עברי רב-אותיות הוא כעת במוסכמת הגרשיים של הגיליון —
+ *  כ״ג (גרשיים **לפני** האות האחרונה), לא כג׳ הישן — שני האופנים מזוהים. */
 function isNoteMarkerWord(w) {
   const s = String(w);
   if (!s) return false;
-  // אות עברית (1-2 אותיות) + גרש/גרשיים
+  // אות עברית (1-2 אותיות) + גרש/גרשיים בסוף (הצורה הישנה) — או הצורה החדשה:
+  // אות+גרשיים+אות (כ״ג) / אות בודדת+גרש (א׳)
   if (/^[\u05D0-\u05EA]{1,2}[\u05F3\u05F4]$/.test(s)) return true;
+  if (/^[\u05D0-\u05EA]\u05F4[\u05D0-\u05EA]+$/.test(s)) return true;
   // [n] — סוגריים מרובעים עם מספר
   if (/^\[\d{1,4}\]$/.test(s)) return true;
   // (n)
@@ -208,8 +213,12 @@ const CHECKS = {
 
   containment(page, settings, ledger) {
     const out = [];
-    const cap = page.template.contentBox.height;
+    // **S5.2 (P-2 — קיבולת מאוחדת):** קיבולת אפקטיבית פר-טור מ-colCapacityOf
+    // (column-flow) — כולל הפס החוצה־טורים ותקציב ההערות של העמוד (על הטור
+    // האחרון). בעבר נמדד מול contentBox.height גולמי ⇒ גלישה שקטה בעמודים
+    // עם הערות/פס לא זוהתה כלל (הממצא שהביקורת כינתה "silent column overflow").
     for (let c = 0; c < page.columns.length; c++) {
+      const cap = colCapacityOf(page, { colIndex: c });
       const u = usedHeight(page.columns[c]);
       if (u > cap + 0.5) out.push({ kind: 'containment', target: `page#${page.index}c${c}`, page: page.index, evidence: { used: u, cap }, ledgerRef: ledger.create('containment', `p${page.index}c${c}`, page.index, { used: u, cap }, 'protections').issue_id });
     }

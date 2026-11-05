@@ -11,7 +11,12 @@
 const { charWidthEm, FONT_PROFILES } = require('./measure-table');
 const fm = require('./font-metrics');
 
-const DEFAULT_TRACKING = 0.02; // em
+// **S5.2 (תיקון 5 — tracking שאין לאף מרנדר):** ברירת המחדל הייתה 0.02em —
+// המדידה "הרחיבה" כל שורה ב~2% יחסית לדיו: אף מרנדר (DOM/PDF) אינו מצייר
+// letter-spacing, והפרויקטור הגיאומטרי ערבב באותה שורה מדידות עם tracking=0
+// (מפורש) וברירת המחדל. כעת 0 — המודל = הדיו. נתיב המורשת אינו מושפע:
+// כל קריאותיו מעבירות tracking=0 במפורש (אומת בסקירה).
+const DEFAULT_TRACKING = 0; // em
 
 /** גופנים רשומים (פרופיל → פרנסר). ההרשמה מפורשת — אין טעינת רשת (offline). */
 const registeredFonts = new Map();
@@ -37,8 +42,9 @@ function registerFont(profileName, bytes) {
 function unregisterFont(profileName) {
   registeredFonts.delete(String(profileName));
   if (String(profileName) === 'Frank Ruhl Libre') fm.setMissingGlyphFallbackFont(null);
+  _familyApiCache.clear(); // **S5.2:** מטמון ה-API-פר-משפחה נגרר אחרי ההרשמה
 }
-function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); }
+function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); _familyApiCache.clear(); }
 
 class MeasureAPI {
   constructor(settings, impl = 'table') {
@@ -190,6 +196,23 @@ class MeasureAPI {
 
   cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
 }
+
+/** **S5.2 (תיקון 6 — מדידת כותרות בגופן רשום):** API כבול למשפחה שנרשמה ב‑registerFont
+ * (מטריקות אמת hmtx/kern בגודל הכותרת), או null כשהמשפחה אינה רשומה —
+ * דפוס apiFor(family) של legacy-projector, מיוצא כאן כסטטי על המחלקה כדי
+ * שה-pipeline (widthFor) ישתמש בו בלי לרדוף אחרי מפת הגופנים בעצמו.
+ * מטומן לפי משפחה; המטמון מתרוקן בהסרת/איפוס גופנים (unregister/clear). */
+const _familyApiCache = new Map();
+MeasureAPI.forFamily = function forFamily(family, settings) {
+  if (!family || !registeredFonts.has(String(family))) return null;
+  const fam = String(family);
+  const sizeKey = settings && settings['body-font-size-pt'] != null ? String(settings['body-font-size-pt']) : '';
+  const key = `${fam}|${sizeKey}`;
+  if (!_familyApiCache.has(key)) {
+    _familyApiCache.set(key, new MeasureAPI({ ...(settings || {}), 'body-font': fam }, 'font-metrics'));
+  }
+  return _familyApiCache.get(key);
+};
 
 /** **EXT-13 (איחוד מקור המדידה live↔ייצוא):** כשגוף הגוף רשום בפועל
  * (registerFont) — מדידת האמת (font-metrics) מועדפת גם כשההגדרה היא

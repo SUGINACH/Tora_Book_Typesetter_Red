@@ -261,8 +261,14 @@ function parsePairPosSubtable(b, off, kernPairs) {
     const pvCount = u16(b, psOff);
     if (pvCount > MAX_GPOS_PAIRSETS) continue;
     for (let k = 0; k < pvCount; k++) {
-      const rec = psOff + 2 + k * 6; // gid2(2) + value1 XAdvance(2) + value2(2 — ריק כי vf2=0)
-      if (rec + 6 > b.length) break;
+      // **S5.2 (תיקון צעד רשומה — T1):** בחוזה vf1===0x0004 && vf2===0 אין
+      // כלל value2 — PairValueRecord = gid2(2) + XAdvance(2) = **4 בתים**,
+      // לא 6. הצעד 6 קרא כל רשומה אחרי הראשונה מוסטת (מפת קרנינג משובשת:
+      // 171 זוגות זבל מ-Hadassah). היום הקרנינג אינו נצרך במדידה (מדיניות
+      // ללא-קרנינג — תצוגה=ייצוא; ראה font-kerning:none ב-BASE_CSS), אך
+      // הפרסר חייב להיות נכון לכל שימוש עתידי.
+      const rec = psOff + 2 + k * 4; // gid2(2) + value1 XAdvance(2) — vf2=0 ⇒ אין value2
+      if (rec + 4 > b.length) break;
       const right = u16(b, rec);
       const xAdv = s16(b, rec + 2);
       if (xAdv !== 0) kernPairs.set(`${left},${right}`, xAdv);

@@ -59,6 +59,38 @@
     const fonts = new Set();
     for (const p of seq) for (const f of (p.fonts || [])) fonts.add(f);
     report.observedFonts = [...fonts];
+    // **S5.2 (TOC_ROWS):** שורות תוכן-עניינים — תחום המתיחה, חפיפה, התנגשות
+    // עם גיליון/כותרת. אותן סמנטיקה/קוד/ספים כמו full-math-audit.js:
+    // ראשון ברצף (קודמו איננו אותו סוג TOC) ⇒ מתחיל ב-370.7, המשך ⇒ 113.7,
+    // תחתית המתיחה 1005.7 (קבועי legacy-imud-flow: makeTocPages). בנתיב
+    // המודרני (.toc-rows בזרימה) אין מתיחה — רק חפיפה/התנגשות.
+    {
+      const TOC_FIRST_TOP = 370.7, TOC_CONT_TOP = 113.7, TOC_STRETCH_BOTTOM = 1005.7;
+      const TOC_ROW_MIN_PITCH = 21.5; // ערימה חוקית ≥ 23.25 (tocRowH רמה 7) − סובלנות
+      const prevTypeById = new Map();
+      for (let k = 1; k < seq.length; k++) prevTypeById.set(seq[k].idx, seq[k - 1].type);
+      for (const p of seq) {
+        const rows = (p.tocRows || []).slice().sort((a, b) => a.y - b.y);
+        if (!rows.length) continue;
+        if (!p.tocInContainer) {
+          const top = prevTypeById.get(p.idx) !== p.type ? TOC_FIRST_TOP : TOC_CONT_TOP;
+          for (const row of rows) {
+            if (row.y < top - 2 || row.y > TOC_STRETCH_BOTTOM + 2) problems.push({ page: p.idx, type: 'TOC_ROWS', severity: 'high', y: Math.round(row.y * 10) / 10, detail: 'שורת תוכן-עניינים מחוץ לאזור המתיחה (' + top + '..' + TOC_STRETCH_BOTTOM + ')', text: row.text });
+          }
+        }
+        for (let k = 1; k < rows.length; k++) {
+          const pitch = rows[k].y - rows[k - 1].y;
+          if (pitch < TOC_ROW_MIN_PITCH) problems.push({ page: p.idx, type: 'TOC_ROWS', severity: 'high', y: Math.round(rows[k].y * 10) / 10, pitch: Math.round(pitch * 10) / 10, detail: 'שורות תוכן-עניינים חופפות — מרחק ' + Math.round(pitch * 10) / 10 + 'px קטן מהרצפה החוקית (' + TOC_ROW_MIN_PITCH + 'px; ערימה חוקית ≥ 23.25px לפי tocRowH, תיבת DOM 26px); מתיחת ה-TOC דוחסת את השורות זו לזו', text: rows[k].text });
+        }
+        for (const row of rows) {
+          for (const zone of [p.headerBox ? { name: 'כותרת עליונה', y: p.headerBox.top, b: p.headerBox.bottom } : null, p.folioBox ? { name: 'גיליון', y: p.folioBox.top, b: p.folioBox.bottom } : null]) {
+            if (!zone) continue;
+            const oy = Math.min(row.y + row.h, zone.b) - Math.max(row.y, zone.y);
+            if (oy > 1) problems.push({ page: p.idx, type: 'TOC_ROWS', severity: 'high', y: Math.round(row.y * 10) / 10, detail: 'שורת תוכן-עניינים חופפת את ' + zone.name, text: row.text });
+          }
+        }
+      }
+    }
     const bySeverity = {};
     for (const p of problems) bySeverity[p.severity] = (bySeverity[p.severity] || 0) + 1;
     const bodyPages = seq.filter((p) => /regular|sign-open|preface|h3-spread|toc/.test(p.type));
@@ -98,16 +130,27 @@
     if (!/preview-page--placeholder/.test(String(ph.className))) continue;
     const r = R(ph);
     if (r.w < 100 || r.h < 100) {
-      problems.push({ type: 'PLACEHOLDER_GEOMETRY', severity: 'medium', page: Number(ph.getAttribute('data-page-index')), w: Math.round(r.w), h: Math.round(r.h) });
+      problems.push({ type: 'PLACEHOLDER_GEOMETRY', severity: 'medium', page: ph.getAttribute('data-page-index'), w: Math.round(r.w), h: Math.round(r.h) });
     }
   }
 
   // ---------- ביקורת עמוד חי אחד ----------
   function auditLive(pg) {
-    const idx = Number(pg.getAttribute('data-page-index'));
-    if (!Number.isFinite(idx) || audited.has(idx)) return;
+    // **S5.2 (P-11):** data-page-index חסר — בעבר Number(null)===0 זייף את העמוד
+    // כעמוד 0 (דריסה שקטה של העמוד האמיתי); עכשיו — בעיה מדווחת ודילוג מפורש.
+    const idxAttr = pg.getAttribute('data-page-index');
+    const idx = Number(idxAttr);
+    if (idxAttr == null || !Number.isFinite(idx)) {
+      problems.push({ type: 'PAGE_INDEX_MISSING', severity: 'high', detail: 'לעמוד חסר data-page-index — לא ניתן לזהותו (בעבר זויף כעמוד 0)' });
+      return;
+    }
+    if (audited.has(idx)) return;
     const info = { idx, type: typeOf(pg), headerText: null, columns: 0, lines: 0, gates: [], ornaments: 0, fonts: [] };
     audited.set(idx, info);
+    // **S5.2:** סוג לא מזוהה — בעבר עבר בשקט (false-green)
+    if (info.type === 'unknown') {
+      problems.push({ page: idx, type: 'TYPE_UNKNOWN', severity: 'high', detail: 'מסווג סוג העמוד לא זיהה אף מחלקת page--*' });
+    }
 
     const hdr = pg.querySelector('.running-head');
     if (hdr) info.headerText = hdr.textContent.trim().slice(0, 80);
@@ -118,14 +161,29 @@
     if (hdr) {
       const hr = R(hdr);
       const hb = hr.b - pgR.y, ht = hr.y - pgR.y;
+      info.headerBox = { top: ht, bottom: hb }; // **S5.2:** לבדיקת התנגשות שורות TOC
       if (hb > 107.2 + 0.5 || ht < -0.5) problems.push({ page: idx, type: 'HEADER_POSITION', severity: 'high', top: Math.round(ht * 10) / 10, bottom: Math.round(hb * 10) / 10 });
     }
     const fol = pg.querySelector('.folio');
     if (fol && (fol.textContent || '').trim()) {
       const fr2 = R(fol);
       const ft = fr2.y - pgR.y, fb = fr2.b - pgR.y;
+      info.folioBox = { top: ft, bottom: fb }; // **S5.2:** לבדיקת התנגשות שורות TOC
       if (ft < 1022.2 - 0.5 || fb > 1122.5 + 2) problems.push({ page: idx, type: 'FOLIO_POSITION', severity: 'high', top: Math.round(ft * 10) / 10, bottom: Math.round(fb * 10) / 10 });
     }
+
+    // **S5.2 (TOC_ROWS — הזרקת הגלאי גם כאן):** איסוף שורות תוכן-העניינים
+    // (יחסית לעמוד). הבדיקות עצמן ב-finish() — הן חוצות-שורות (חפיפה) ותלויות
+    // בסוג העמוד ה**קודם** (ראשון ברצף ⇒ תיבת 370.7 במקום 113.7) — מידע שמלא
+    // רק בסוף הסריקה. אותם קודי בעיה/ספים כמו full-math-audit.js (P-7: השוואה
+    // בין האודיטים) — כולל הרצפה 21.5px שם (ערימה חוקית של רמות 5/6/7 היא
+    // 24.47/23.6/23.25px לפי tocRowH של המודל, תיבת DOM 26px).
+    const tocWrapEl = pg.querySelector('.toc-rows');
+    info.tocInContainer = !!(tocWrapEl && tocWrapEl.querySelector('.toc-row'));
+    info.tocRows = [...pg.querySelectorAll('.toc-row')].map((rowEl) => {
+      const rr = R(rowEl);
+      return { y: rr.y - pgR.y, h: rr.height, text: (rowEl.textContent || '').trim().slice(0, 24) };
+    });
 
     // תוכן שער (מנוע מורשת): שורות השער הן .band--gate
     info.gates = [...pg.querySelectorAll('.band--gate')].map((b) => b.textContent.trim().slice(0, 48)).filter(Boolean);
@@ -231,16 +289,27 @@
         return { x: x0, r: x1, y: y0, b: y1, n: cnt };
       };
       for (const lr of rects) {
-        if (/line--last|line--heading/.test(String(lr.el.className))) continue; // מדולגות מטבען (מרוכזות/אחרונות)
-        // **S4.26 (חלון שקוע):** שורה 1 של פסקת-חלון עוטפת את מילת-החלון —
-        // השפה הימנית תפוסה בכוונה (כמו float:right במקור); פטורה מבדיקות
-        // היישור (כמו ב-full-math-audit).
-        if (/line--window-wrap/.test(String(lr.el.className))) continue;
+        const cls = String(lr.el.className);
+        const isWinWrap = /line--window-wrap/.test(cls);
+        // **S5.2 (P-7 — השוואה ל-full-math-audit):** INK_OUTSIDE_COLUMN חל על כל
+        // השורות — כולל אחרונות/כותרות/עטיפת-חלון. בעבר הן דולגו כאן (דיו שחורג
+        // מהטור בשורה אחרונה היה בלתי-נראה לאודיט הזה), בזמן ש-full-math-audit —
+        // שכן בודק אותן — ירוק על אותו קורפוס (43,125 שורות, 0 בעיות): אין לו
+        // פטור כזה ואין בעיות — כלומר הפטור כאן היה עיוורון, לא סובלנות.
         const ink = inkOf(lr.el);
-        if (!ink) continue;
-        if (ink.r > cr.r + 2.5 || ink.x < cr.x - 2.5) {
+        if (ink && (ink.r > cr.r + 2.5 || ink.x < cr.x - 2.5)) {
           problems.push({ page: idx, col: ci, type: 'INK_OUTSIDE_COLUMN', severity: 'high', text: lr.el.textContent.slice(0, 25), dx: Math.round(Math.max(ink.r - cr.r, cr.x - ink.x)) });
         }
+        // **S5.2:** שורה מעל ראשית הטור — דיו שנודד לפס הכותרת העליונה (בעבר
+        // נבדקו שמאל/ימין/מטה בלבד). רק עמודי תוכן — לשערים/TOC גיאומטריה משלהם.
+        if (/^(regular|sign-open|preface|h3-spread)$/.test(info.type) && lr.r.y < cr.y - 2) {
+          problems.push({ page: idx, col: ci, type: 'LINE_ABOVE_COLUMN', severity: 'high', text: lr.el.textContent.slice(0, 25), dy: Math.round((cr.y - lr.r.y) * 10) / 10 });
+        }
+        // יישור/חלון — שורות גוף בלבד (אחרונה/כותרת ממורכזות מטבען; שורת-חלון
+        // עוטפת את מילת-החלון — השפה הימנית תפוסה בכוונה; טיפוגרפיה נכונה).
+        if (/line--last|line--heading/.test(cls)) continue;
+        if (isWinWrap) continue;
+        if (!ink) continue;
         if (ink.n >= 2 || ((lr.el.textContent || '').trim().split(/\s+/).filter(Boolean).length >= 2)) {
           const leftGap = ink.x - cr.x, rightGap = cr.r - ink.r;
           if (leftGap > 3 || rightGap > 3) {

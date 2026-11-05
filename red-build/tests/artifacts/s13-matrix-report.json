@@ -5,10 +5,10 @@
     {
       "config": "default",
       "pages": 36,
-      "ms": 58,
+      "ms": 54,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "ace26c5b5dc94a85626df7a8cc3b82aa95e03e1eb366de78b8d3bf0108c32c86",
+      "layoutHash": "e04adbb16ea29de776b77ed23ba3e5d0fb8c2c3ef91e3789d5eda8608aeaa1df",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -22,10 +22,10 @@
     {
       "config": "ornaments",
       "pages": 36,
-      "ms": 52,
+      "ms": 25,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "ace26c5b5dc94a85626df7a8cc3b82aa95e03e1eb366de78b8d3bf0108c32c86",
+      "layoutHash": "e04adbb16ea29de776b77ed23ba3e5d0fb8c2c3ef91e3789d5eda8608aeaa1df",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -39,10 +39,10 @@
     {
       "config": "aq-on",
       "pages": 36,
-      "ms": 32,
+      "ms": 27,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "ace26c5b5dc94a85626df7a8cc3b82aa95e03e1eb366de78b8d3bf0108c32c86",
+      "layoutHash": "e04adbb16ea29de776b77ed23ba3e5d0fb8c2c3ef91e3789d5eda8608aeaa1df",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -56,10 +56,10 @@
     {
       "config": "continuous-notes",
       "pages": 36,
-      "ms": 24,
+      "ms": 20,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "e0fc51fbe8e736f40ba45cf7d38c4be75cdc0bd29bf4f06bfb2fcba9dbc1164b",
+      "layoutHash": "8ba47e44bc077df96d309339a2d249325e1c402b1cbefa42bf92fb4b6d6b28b2",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -73,10 +73,10 @@
     {
       "config": "verso-headers",
       "pages": 36,
-      "ms": 19,
+      "ms": 16,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "ace26c5b5dc94a85626df7a8cc3b82aa95e03e1eb366de78b8d3bf0108c32c86",
+      "layoutHash": "e04adbb16ea29de776b77ed23ba3e5d0fb8c2c3ef91e3789d5eda8608aeaa1df",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {
@@ -90,10 +90,10 @@
     {
       "config": "custom-styles",
       "pages": 36,
-      "ms": 21,
+      "ms": 22,
       "contentPreserved": true,
       "geometryNeutral": true,
-      "layoutHash": "ace26c5b5dc94a85626df7a8cc3b82aa95e03e1eb366de78b8d3bf0108c32c86",
+      "layoutHash": "e04adbb16ea29de776b77ed23ba3e5d0fb8c2c3ef91e3789d5eda8608aeaa1df",
       "findingsOpen": 17,
       "findingsHigh": 0,
       "openByKind": {

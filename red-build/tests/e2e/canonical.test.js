@@ -84,8 +84,11 @@ describe('canonical corpus (מסמך מלא — תנאי מיזוג)', () => {
       assert('status' in f, 'status transparency');
     }
     // corpus findings are honest — they exist and are reported (not hidden)
+    // **S5.2 (P-11c):** בעבר assert(Array.isArray(openFindings)) — ריקנית תמידית
+    // (filter מחזיר מערך מעצם הגדרתו). הכוונה האמיתית: לקורפוס יש ממצאים פתוחים
+    // (rollback-compromise/column-imbalance) והם מדווחים בדוח ולא נבלעים.
     const openFindings = rep.findings.filter(f => f.status !== 'resolved');
-    assert(Array.isArray(openFindings), 'findings list present');
+    assert(openFindings.length > 0, `open findings reported, not hidden (got ${openFindings.length})`);
   });
 });
 

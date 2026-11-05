@@ -31,6 +31,11 @@ function assertOfflineSafe(html) {
 
 const BASE_CSS = `
 html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',serif;direction:rtl}
+/* **S5.2 (מדיניות ללא-קרנינג — תצוגה=ייצוא):** המודל מודד ללא קרנינג
+   (kernPairs אינו נצרך במדידה) וה-PDF מצייר לפי רוחבי hmtx בלבד — אבל
+   הדפדפן מקרן גופנים עם טבלאות kern/GPOS כברירת מחדל ⇒ רוחב מילה ב-DOM
+   היה שונה מהמודל ומה-PDF. font-kerning:none משווה את שלושת הנתיבים. */
+html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
 .book{display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 0}
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}

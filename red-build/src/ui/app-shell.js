@@ -21,7 +21,7 @@ const { importDocx } = require('../engine/import/docx-import');
 const { applyEdit } = require('../engine/audit/text-edits'); // **S11:** מקור יחיד טהור — בלי pipeline
 const { buildPreviewTab } = require('./preview-tab');
 const { buildTestingTab } = require('./testing-tab');
-const { WorkerEngineClient } = require('./worker-client');
+const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
 const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
 const { buildCaretMap } = require('./caret-map');
 
@@ -38,6 +38,7 @@ function createApp(doc, opts = {}) {
   let result = null;            // תוצאה מסוריאליזת פרוטוקול (D-65)
   let caretMapObj = null;
   let lightDirty = false, heavyDirty = false;
+  let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
   let lightTimer = null;
   let lastLightRefreshMs = null;
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
@@ -112,10 +113,18 @@ function createApp(doc, opts = {}) {
     }
     const wantRetypeset = opts2.retypeset !== undefined ? opts2.retypeset : true;
     if (wantRetypeset) onExplicitRetypeset();
+    // **S5.2 (4):** מרוץ אתחול: החלה עם {retypeset:false} כשכבר קיימת תוצאה
+    // (המשתמש הדביק במהלך האתחול) — ההגדרות השתנו אך שום דגל לא סומן ⇒
+    // פער שקט בין התצוגה לבין מה שייצא. סימון כבד: ⚡ מהבהב עד עימוד.
+    else if (result) markHeavyDirty('ברירות המחדל הוחלו — נדרש עימוד (⚡)');
   }
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
   // שינוי הרחבות = כבד (F-06): אין עימוד אוטומטי — ⚡ בלבד.
+  // **S5.2 (4):** האירוע ההתחלתי של הפאנל (bundle=null בבנייה) אינו "שינוי" —
+  // בלי זה כל אפליקציה נולדת "מלוכלכת" (⚡ מהבהב בריק, לפני שאפשר בכלל לייצא
+  // משהו) ודגל הכבד מאבד משמעות לחייץ הייצוא ולמרוץ האתחול.
+  let extensionsHadBundle = false;
   const extensions = buildExtensionsPanel(doc, {
     onBundleChange: (bundle) => {
       if (bundle && bundle.styles.length) {
@@ -127,8 +136,8 @@ function createApp(doc, opts = {}) {
       if (bundle && bundle.pages.length) {
         settings._customPages = JSON.stringify({ pages: bundle.pages });
       } else delete settings._customPages;
-      if (bundle) markHeavyDirty('הרחבות השתנו');
-      else markHeavyDirty('הרחבות הוסרו');
+      if (bundle) { extensionsHadBundle = true; markHeavyDirty('הרחבות השתנו'); }
+      else if (extensionsHadBundle) { extensionsHadBundle = false; markHeavyDirty('הרחבות הוסרו'); }
     },
     onRequestImport: () => opts.onRequestExtensionsImport && opts.onRequestExtensionsImport(),
     onExport: () => opts.onSaveExtensions && opts.onSaveExtensions(extensions.exportText()),
@@ -230,11 +239,16 @@ function createApp(doc, opts = {}) {
     promise.then((res) => {
       if (res && res.cancelled) return;
       result = res;
+      typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
       applyResultToViews();
       status.setEngineState('idle');
       status.setPages(result.pages.length);
     }).catch((e) => {
-      status.setEngineState('error', { message: e && e.message ? e.message : String(e) });
+      const msg = e && e.message ? e.message : String(e);
+      // **S5.2:** בקשה שהוחלפה/בוטלה (single-flight) — ה-Worker הוזרם מחדש והבקשה
+      // שירשרה אותה כבר בדרך; זו אינה שגיאת מנוע אמיתית ואין להציג "שגיאה" למשתמש.
+      if (msg === RESTART_ERROR) return;
+      status.setEngineState('error', { message: msg });
     });
     return started;
   }
@@ -300,7 +314,9 @@ function createApp(doc, opts = {}) {
   function runLightRefresh() {
     if (!result) { lightDirty = false; status.setPending({ light: false, heavy: heavyDirty }); return; }
     const t0 = perf.now();
-    preview.setResult(result, settings); // רינדור בלבד — אותם עמודים, הגדרות חדשות
+    // **S5.2 (7):** רינדור־קל שומר זום ויעד גלילה (עדכון צבע רקע לא אמור לקפוץ
+    // לראש המסמך); רק מסמך חדש באמת מאפס תצוגה — הנתיב הזה הוא keepView.
+    preview.setResult(result, settings, { keepView: true }); // רינדור בלבד — אותם עמודים, הגדרות חדשות
     lastLightRefreshMs = perf.now() - t0;
     lightDirty = false;
     status.setPending({ light: false, heavy: heavyDirty });
@@ -352,6 +368,11 @@ function createApp(doc, opts = {}) {
    * (בדפדפן: הורדה; בבדיקות: בדיקת הבתים). PDF דורש גופן מוטמע — opts.embeddedFont (בתים)
    * או נתיב הדפדפן: opts.remoteExport + opts.getExportFont (TTF לפי שם משפחה, אסינכרוני)
    * ⇒ הייצוא הכבד רץ ב־Worker (03.11). */
+  /** **S5.2 (3):** נעילת כפתורי הייצוא בזמן ייצוא מרוחק — מנע לחיצה כפולה ⇒ ייצוא כפול. */
+  function setExportBusy(busy) {
+    if (preview && typeof preview.setExportBusy === 'function') preview.setExportBusy(!!busy);
+  }
+
   async function runRemotePdfExport() {
     try {
       const font = await opts.getExportFont(settings['body-font']);
@@ -386,6 +407,14 @@ function createApp(doc, opts = {}) {
 
   function onExportRequest(kind) {
     if (!result) { status.setNotice('אין תוצאה לייצוא — העמוד עוד לא בוצע.'); return null; }
+    // **S5.2 (3):** ייצוא = צילום מצב אחד. בעבר, PDF/ZIP הוזרמו למנוע עם הטקסט/ההגדרות
+    // **הנוכחיים** בזמן ש-HTML רינדר את **התוצאה האחרונה** — שני קבצים סותרים
+    // מאותו "ייצוא". אם יש שינויים שלא הוחלו (קלים/כבדים) — ייצוא נעצר בהודעה;
+    // המשתמש ילחץ ⚡ ואז כל הנתיבים יצאו מאותו מצב בדיוק.
+    if (lightDirty || heavyDirty) {
+      status.setNotice('קיימים שינויים שלא הוחלו — הפעילו עימוד (⚡) לפני ייצוא');
+      return { ok: false, kind, reason: 'dirty' };
+    }
     const { exportHtml, exportPdf, exportProjectZip } = require('../engine/output/export-api');
     try {
       if (kind === 'html') {
@@ -399,7 +428,9 @@ function createApp(doc, opts = {}) {
         // **נתיב הדפדפן (03.11):** המנוע הכבד חי ב־Worker — הייצוא שם עם TTF שנשלף לפי הגופן.
         if (opts.remoteExport && typeof opts.getExportFont === 'function') {
           status.setNotice('מייצא PDF במנוע (Worker)…');
-          runRemotePdfExport(); // fire-and-forget — ההורדה וההודעות בסיום
+          setExportBusy(true);
+          // fire-and-forget — ההורדה וההודעות בסיום; **S5.2 (3):** שחרור הנעילה בסיום/כשל
+          runRemotePdfExport().then(() => setExportBusy(false), () => setExportBusy(false));
           return { ok: true, kind, pending: true };
         }
         if (typeof Buffer === 'undefined') {
@@ -421,7 +452,8 @@ function createApp(doc, opts = {}) {
         // **נתיב הדפדפן (03.11):** חבילת הפרויקט נבנית ב־Worker (zip-writer חי שם)
         if (opts.remoteExport) {
           status.setNotice('מייצא חבילת ZIP במנוע (Worker)…');
-          runRemoteZipExport();
+          setExportBusy(true);
+          runRemoteZipExport().then(() => setExportBusy(false), () => setExportBusy(false)); // **S5.2 (3):** שחרור הנעילה בסיום/כשל
           return { ok: true, kind, pending: true };
         }
         const bytes = exportProjectZip(text, settings, {
@@ -582,7 +614,7 @@ function createApp(doc, opts = {}) {
     refreshFontCatalog: (families) => settingsPanel.refreshFontCatalog && settingsPanel.refreshFontCatalog(families), // **03.11**
     imudLibrary: opts.imudLibrary || null, // **03.11:** ספריית IMUD לניפוי/הרחבות
     applyLegacyDefaults, // **03.11(ד):** נתיב יחיד להחלת ברירות המקור (פאנל + אתחול)
-    getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
+    getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null, gen: typesetGen }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
     getSettings: () => settings

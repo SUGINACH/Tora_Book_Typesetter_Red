@@ -19,8 +19,10 @@ on:
     branches: [ main ]
   # **S5.1 (W1):** גם על PRs — האודיט המחמיר רץ גם *לפני* המיזוג; בעבר רגרסיה
   # במשפחות ש-audit-in-page חסר נכנסה ל-main ירוקה והאדימה רק אחרי המיזוג.
+  # **S5.2 (P-11):** UNIFIED כמו ב-ci.yml/layout-parity.yml — ענף האינטגרציה
+  # נבדק באותה חומרה לפני המיזוג ל-main.
   pull_request:
-    branches: [ main ]
+    branches: [ main, UNIFIED ]
   workflow_dispatch:
     inputs:
       target:
@@ -38,15 +40,19 @@ jobs:
   local:
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.target == 'local') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # **S5.2 (P-11):** תקרה מפורשת לכל job — בלי זה ריצה שנתקעה תחזיק ראנר
+    # עד חיתוך ברירת המחדל של GitHub (360 דק') ותבלע את המכסה.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # **S5.2 (P-11):** נעילת גרסה — 0.41.2 היא הגרסה האחרונה ב-npm (אין 1.x);
+      # שדרוג לא מבוקר של ה-CLI יכול לשבור את חוזה ה-eval/פלט של האודיט.
       - name: Install agent-browser + headless browser
         run: |
-          npm install -g agent-browser
+          npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
       - name: Full math audit — the very large corpus (~700 pages, ink-level)
         run: node tools/layout-audit/run-full-math.js --tag local --fixture audits/very_long_test_text.txt
@@ -68,9 +74,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # **S5.2 (P-11):** נעילת גרסה — 0.41.2 (אין 1.x ב-npm) — כמו ב-local.
       - name: Install agent-browser + headless browser
         run: |
-          npm install -g agent-browser
+          npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
       - name: Wait for Pages (nightly may run mid-deploy)
         run: sleep 30

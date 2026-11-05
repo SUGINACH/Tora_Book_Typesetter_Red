@@ -1,7 +1,10 @@
 #!/bin/bash
 # מטריצת ניסויים S4.19: מודל התאמת-DOM לעומת אריתמטיקה מדויקת
 set -e
-cd /home/z/my-project/Tora_Book_Typesetter_Red
+# **S5.2 (P-11a):** שורש ה-repo נגזר ממיקום הסקריפט — נתיב קשיח לא שורד
+# העתקה של העץ / רצף ב- runner אחר (והיה שגוי כבר במקור: audit/…)
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO"
 run_one () {
   local label="$1"; shift
   env "$@" node tools/layout-parity/run-ours.js > /tmp/fit-run.log 2>&1 || { echo "$label: RUN FAILED"; return; }

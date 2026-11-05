@@ -35,4 +35,32 @@ function isFullWidthBlock(block, settings) {
   return block.fullWidth === true;
 }
 
-module.exports = { columnWidths, blockGapPx, isFullWidthBlock, buildPageTemplate };
+/**
+ * **S5.2 (P-2 — איחוד חישוב קיבולת טור):** המקור היחיד לקיבולת האפקטיבית
+ * של טור בעמוד DP: גובה תיבת התוכן מהתבנית, בהפחתת:
+ *  - הפס החוצה־טורים (spanning band, FWD-1) — הטורים מתחילים מתחתיו;
+ *  - תקציב ההערות של העמוד (fnReservedHeightPx, F-17) — נרשם על הטור האחרון.
+ * בעבר חושבו 4 העתקים מקבילים (balancing.balancePage/autoQualityPass,
+ * dp-planner.balancePageSafe, protections-matrix.containment) שהתעלמו מהפס
+ * ו/או מהתקציב ⇒ גלישת טור שקטה בעמודים עם הערות או פס כותרת.
+ *
+ * @param {object} page - עמוד DP: template.contentBox, spanning?, fnReservedHeightPx?, columns
+ * @param {{colIndex?:number, fnBudget?:boolean}} [opts]
+ *  - colIndex: הטור שאליו שייכת הקיבולת (ברירת מחדל: האחרון — המחמיר);
+ *    תקציב ההערות מופחת רק מהטור האחרון (שם הוא נרשם).
+ *  - fnBudget:false — ביטול הפחתת תקציב ההערות (למי שמודד usage כולל
+ *    התקציב בעצמו — כמו usedHeight של dp-planner או extraLast של optimalSplit).
+ */
+function colCapacityOf(page, opts = {}) {
+  if (!page || !page.template || !page.template.contentBox) return 0;
+  let cap = page.template.contentBox.height;
+  if (page.spanning && page.spanning.heightPx) cap -= page.spanning.heightPx;
+  const fn = opts.fnBudget !== false && page.fnReservedHeightPx > 0 ? page.fnReservedHeightPx : 0;
+  if (fn && page.columns && page.columns.length) {
+    const idx = opts.colIndex != null ? opts.colIndex : page.columns.length - 1;
+    if (idx === page.columns.length - 1) cap -= fn;
+  }
+  return cap;
+}
+
+module.exports = { columnWidths, blockGapPx, isFullWidthBlock, colCapacityOf, buildPageTemplate };

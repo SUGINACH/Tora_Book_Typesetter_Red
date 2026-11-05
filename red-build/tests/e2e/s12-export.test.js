@@ -496,6 +496,10 @@ describe('S12.2 שערים 1+2 — PDF: טקסט אמיתי, סימניות, ק�
     for (const pgIdx of sample) {
       const p = path.join(ART, 's12-canonical.pdf');
       const prefix = path.join(ART, '_tmp-par');
+      // **S5.2 (יציבות המבחן):** מניעת רסטר מיושן — בעבר קובץ _tmp-par-NN מריצה
+      // קודמת (מספר עמוד גבוה יותר, ממוין אחרון) הושווה מול המודל של עמוד אחר
+      // ⇒ כשל פתאומי 'Δ10-16px' שאינו קשור לקוד. כעת כל ריצה מתחילה נקייה.
+      for (const f of fs.readdirSync(ART).filter(f => f.startsWith('_tmp-par-'))) fs.unlinkSync(path.join(ART, f));
       execFileSync('pdftoppm', ['-r', '96', '-f', String(pgIdx + 1), '-l', String(pgIdx + 1), p, prefix]);
       const files = fs.readdirSync(ART).filter(f => f.startsWith('_tmp-par-')).sort();
       const raw = fs.readFileSync(path.join(ART, files[files.length - 1]));

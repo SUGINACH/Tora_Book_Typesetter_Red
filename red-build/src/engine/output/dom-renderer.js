@@ -631,25 +631,38 @@ function renderLegacyPage(pg, settings, doc) {
     // את הסלוטים לקצוות הדף — 94px/97px ממיקום הטקסט בייחוס (עמ' 12:
     // ימין x1=479.84pt=639.8px, שמאל x0=117.68pt=156.9px, מרכז 297.65pt).
     // הקבועים משוקפים מ-mk() של המקרן (COL_R_X+COL_W−33 / COL_L_X+33) —
-    // מרכז התיבה = מרכז הדף בדיוק, ו-space-between מנחה את הסלוט האמצעי
-    // למרכז. התצוגה = הייצוא = הייחוס.
+    // מרכז התיבה = מרכז הדף בדיוק. התצוגה = הייצוא = הייחוס.
+    // **S5.2 (O3 — ריתוק דטרמיניסטי של הבסיס):** במקום flex baseline
+    // (תלוי-פלטפורמה: 67.6–73.6px מול 71.9 ב-PDF) — סלוטים אבסולוטיים
+    // בתוך אותה תיבה; הבסיס = HEADER_BASELINE (71.9) באמצעות line-height:1
+    // + מטריקות DavidLibre-Bold (asc 0.7461 / desc 0.2192 ⇒ היסט 0.7635·S),
+    // ומשקל 700 מפורש (פנים ה-Bold הרשומים). מרכז = מרכז הדף (כמו ה-PDF),
+    // לא מרכז space-between.
     position(hdr, GEO.COL_L_X + 33, 52, (GEO.COL_R_X + GEO.COL_W - 33) - (GEO.COL_L_X + 33), 22);
-    hdr.style.display = 'flex';
-    hdr.style.justifyContent = 'space-between';
-    hdr.style.alignItems = 'baseline';
     hdr.style.color = 'rgb(15,23,73)';
+    const HDR_BASELINE_Y = 71.9;
+    const DLB_BASELINE_FACTOR = 0.5 + (0.7461 - 0.2192) / 2; // DavidLibre-Bold, line-height:1
     const slots = [
-      ['rh rh--r', hs.right, SZ.hdrR, 'header-recto-right-font'],
-      ['rh rh--c', hs.center, SZ.hdrC, 'header-recto-center-font'],
-      ['rh rh--l', hs.left, SZ.hdrL, 'header-recto-left-font']
+      ['rh rh--r', hs.right, SZ.hdrR, 'header-recto-right-font', 'right'],
+      ['rh rh--c', hs.center, SZ.hdrC, 'header-recto-center-font', 'center'],
+      ['rh rh--l', hs.left, SZ.hdrL, 'header-recto-left-font', 'left']
     ];
-    for (const [cls, txt, sz, fk] of slots) {
+    for (const [cls, txt, sz, fk, posKind] of slots) {
+      if (!txt) continue;
       const s = doc.createElement('span');
       s.className = cls;
-      s.textContent = txt || '';
-      s.style.fontSize = `${pt2px(sz)}px`;
+      s.textContent = txt;
+      const szPx = pt2px(sz);
+      s.style.fontSize = `${szPx}px`;
       const ff = fontOf(fk);
       if (ff) s.style.fontFamily = ff; // **S4.26:** גופן הסלוט מההגדרות (ברירת מחדל: David Libre)
+      s.style.fontWeight = '700';
+      s.style.position = 'absolute';
+      s.style.lineHeight = '1';
+      s.style.top = `${(HDR_BASELINE_Y - 52) - szPx * DLB_BASELINE_FACTOR}px`;
+      if (posKind === 'right') s.style.right = '0';
+      else if (posKind === 'left') s.style.left = '0';
+      else { s.style.left = '50%'; s.style.transform = 'translateX(-50%)'; }
       hdr.appendChild(s);
     }
     root.appendChild(hdr);
@@ -750,9 +763,26 @@ function renderLegacyPage(pg, settings, doc) {
       // מסומנות ומדולגות באודיט). סדר ההצהרות חשוב: רק שורות גוף מלאות
       // מקבלות את text-align-last — אחרת הוא היה מיישר גם שורות אחרונות
       // (שהגדרתן center/right) ומקורן של הסמנים.
-      if (ln.kind === 'heading' || ln.isLast) {
+      // **S5.2 (S5 — חיווט body-last-line-align במורשת):** ברירת המחדל 'center'
+      // = ההתנהגות הקיימת בדיוק; 'right' = הצמדה לתחילת השורה (ימין ב-RTL),
+      // 'stretch' = יישור מלא גם לשורה האחרונה. בעבר המפתח סווג 'light' אך
+      // מעולם לא מומש בנתיב החי — שינוי הגדרה לא שינה דבר.
+      const lastAlign = String((settings && settings['body-last-line-align']) || 'center');
+      if (ln.kind === 'heading') {
         el.style.whiteSpace = 'nowrap';
         el.style.textAlign = 'center';
+      } else if (ln.isLast) {
+        if (lastAlign === 'right') {
+          el.style.whiteSpace = 'nowrap';
+          el.style.textAlign = 'right';
+        } else if (lastAlign === 'stretch') {
+          el.style.whiteSpace = 'normal';
+          el.style.textAlign = 'justify';
+          el.style.textAlignLast = 'justify';
+        } else {
+          el.style.whiteSpace = 'nowrap';
+          el.style.textAlign = 'center';
+        }
       } else {
         el.style.whiteSpace = 'normal';
         el.style.textAlign = 'justify';

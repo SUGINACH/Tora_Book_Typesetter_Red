@@ -98,7 +98,9 @@ function buildEditorTab(doc, opts) {
     const data = ev && ev.clipboardData && typeof ev.clipboardData.getData === 'function'
       ? ev.clipboardData.getData('text/plain')
       : (ev && ev.text != null ? ev.text : null);
-    if (data != null) {
+    // **S5.2 (11):** הדבקה ריקה (רווחים בלבד) עברה את השומה data != null ומחקה
+    // את המסמך כולו ללא אישור. פעולת ניקוי מכוונת קיימת (🗑) — הדבקה ריקה אינה נכשלת בשקט.
+    if (data != null && String(data).trim() !== '') {
       if (ev && ev.preventDefault) ev.preventDefault();
       opts.onDocumentAction && opts.onDocumentAction('paste', String(data));
     }

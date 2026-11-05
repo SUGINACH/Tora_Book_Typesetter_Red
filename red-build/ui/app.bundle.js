@@ -363,9 +363,11 @@ var __paths = {
   "src/engine/layout/dp-planner.js|./balancing": "src/engine/layout/balancing.js",
   "src/engine/layout/dp-planner.js|./footnote-budget": "src/engine/layout/footnote-budget.js",
   "src/engine/layout/protections-matrix.js|./balancing": "src/engine/layout/balancing.js",
+  "src/engine/layout/protections-matrix.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/protections-matrix.js|../notes/markers": "src/engine/notes/markers.js",
-  "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
+  "src/engine/layout/balancing.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/ui/caret-map.js|../engine/parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
   "src/engine/output/export-api.js|../core/settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/output/export-api.js|./dom-renderer": "src/engine/output/dom-renderer.js",
@@ -463,11 +465,12 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-06-s5.1'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
-  const worker = new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`);
-  // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
-  // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.
-  const engine = new WorkerEngineClient(workerTransport(worker));
+  const ASSET_VERSION = '2026-11-06-s5.2'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  // **S5.2:** התעבורה מקבלת מפעל () => new Worker(url) במקום מופע קיים —
+  // cancel/קריסה (terminate) נטרלו בעבר את המנוע לצמיתות; עכשיו הפוסט הבא
+  // בונה מופע חדש מאותו URL (כולל ?v=). בלי זה כל בקשה אחרי ביטול הוחברה
+  // ל-Worker מת והאפליקציה נתקעה ב"מנוע: עמל…".
+  const engine = new WorkerEngineClient(workerTransport(() => new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`)));
   const imud = createImudLibrary(engine);
   const app = createApp(document, {
     engineClient: engine,
@@ -483,8 +486,14 @@ function boot() {
       // **03.11(ג):** הגוף המבוקש לא בספרייה (למשל שם אנגלי כשהקטלוג בעברית) —
       // נפילה מפורשת לגופן יציב מהסט המוטמע (ברירות מחדל בעברית של IMUD),
       // כך שייצוא PDF עובד מהקופסה גם בלי בחירת גופן מהספרייה. ההודעה מדווחת.
-      const buf = await imud.loadFont(family);
-      if (buf) return { name: family, bytes: buf };
+      // **S5.2:** מחסנית גופן ("David Libre, serif") — loadFont היה נכשל בשקט
+      // לפני שהיה בקטלוג; loadFontStack פותר את המחסנית למשפחה המוטמעת
+      // הראשונה, והשם שמוחזר הוא המשפחה שפועלה בפועל (מדידה/ייצוא עקביים).
+      const buf = await imud.loadFontStack(family);
+      if (buf) {
+        const resolved = (typeof imud.resolveFamily === 'function' && imud.resolveFamily(family)) || String(family).split(',')[0].trim();
+        return { name: resolved, bytes: buf };
+      }
       const fb = await imud.loadDefaultExportFont();
       return fb ? { name: fb.family, bytes: fb.bytes, fallbackFor: family } : null;
     },
@@ -507,6 +516,21 @@ function boot() {
     onOpenBuilder: () => { /* הבורר חי בפאנל ההגדרות (settings-panel) מאז 03.11 */ }
   });
   mount.appendChild(app.root);
+  // **S5.2:** נתיב כשל טעינה של ה-Worker — בעבר לא היה כלל: הסטטוס היה תקוע
+  // ב"עמל…" לנצח בלי הודעה. הלקוח כבר דחה את ההבטחות שבטיסה (reject in-flight);
+  // כאן נדווח למשתמש בעברית בפס המצב. ה-respawn מאחורי הקלעים: הפוסט הבא יבנה מופע חדש.
+  engine.onError(() => {
+    app.status.setEngineState('error', {
+      message: 'טעינת מנוע העימוד נכשלה — תבוצע הפעלה מחדש בפעולה הבאה. אם הבעיה חוזרת, רעננו את הדף (F5).'
+    });
+  });
+  // **S5.2 (4):** עימוד האתחול אחרי החלת ברירות המחדל — לא לדרוס עימוד פעיל
+  // של המשתמש (הדבקה במהלך האתחול): נמתין לפנוי, ואז נעמוד עם ההגדרות הטריות.
+  // חסם עליון (~10 שניות) — אחריו ממשיכים בכל זאת; ה-single-flight בטוח מ-S5.2.
+  function retypesetWhenIdle(attempt = 0) {
+    if (engine.busy && attempt < 200) { setTimeout(() => retypesetWhenIdle(attempt + 1), 50); return; }
+    app.onExplicitRetypeset();
+  }
   // אחרי ההרכבה: קטלוג הפונטים מתעדכן בפיקרים ברגע שהספרייה נטענת (TDZ-safe)
   imud.loadFontCatalog().then((families) => {
     app.refreshFontCatalog && app.refreshFontCatalog(families);
@@ -522,7 +546,7 @@ function boot() {
     return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
   }).then(() => {
     // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
-    if (app.getText && app.getText().trim()) app.onExplicitRetypeset();
+    if (app.getText && app.getText().trim()) retypesetWhenIdle();
   }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
@@ -571,7 +595,7 @@ const { importDocx } = require('../engine/import/docx-import');
 const { applyEdit } = require('../engine/audit/text-edits'); // **S11:** מקור יחיד טהור — בלי pipeline
 const { buildPreviewTab } = require('./preview-tab');
 const { buildTestingTab } = require('./testing-tab');
-const { WorkerEngineClient } = require('./worker-client');
+const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
 const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
 const { buildCaretMap } = require('./caret-map');
 
@@ -588,6 +612,7 @@ function createApp(doc, opts = {}) {
   let result = null;            // תוצאה מסוריאליזת פרוטוקול (D-65)
   let caretMapObj = null;
   let lightDirty = false, heavyDirty = false;
+  let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
   let lightTimer = null;
   let lastLightRefreshMs = null;
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
@@ -662,10 +687,18 @@ function createApp(doc, opts = {}) {
     }
     const wantRetypeset = opts2.retypeset !== undefined ? opts2.retypeset : true;
     if (wantRetypeset) onExplicitRetypeset();
+    // **S5.2 (4):** מרוץ אתחול: החלה עם {retypeset:false} כשכבר קיימת תוצאה
+    // (המשתמש הדביק במהלך האתחול) — ההגדרות השתנו אך שום דגל לא סומן ⇒
+    // פער שקט בין התצוגה לבין מה שייצא. סימון כבד: ⚡ מהבהב עד עימוד.
+    else if (result) markHeavyDirty('ברירות המחדל הוחלו — נדרש עימוד (⚡)');
   }
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
   // שינוי הרחבות = כבד (F-06): אין עימוד אוטומטי — ⚡ בלבד.
+  // **S5.2 (4):** האירוע ההתחלתי של הפאנל (bundle=null בבנייה) אינו "שינוי" —
+  // בלי זה כל אפליקציה נולדת "מלוכלכת" (⚡ מהבהב בריק, לפני שאפשר בכלל לייצא
+  // משהו) ודגל הכבד מאבד משמעות לחייץ הייצוא ולמרוץ האתחול.
+  let extensionsHadBundle = false;
   const extensions = buildExtensionsPanel(doc, {
     onBundleChange: (bundle) => {
       if (bundle && bundle.styles.length) {
@@ -677,8 +710,8 @@ function createApp(doc, opts = {}) {
       if (bundle && bundle.pages.length) {
         settings._customPages = JSON.stringify({ pages: bundle.pages });
       } else delete settings._customPages;
-      if (bundle) markHeavyDirty('הרחבות השתנו');
-      else markHeavyDirty('הרחבות הוסרו');
+      if (bundle) { extensionsHadBundle = true; markHeavyDirty('הרחבות השתנו'); }
+      else if (extensionsHadBundle) { extensionsHadBundle = false; markHeavyDirty('הרחבות הוסרו'); }
     },
     onRequestImport: () => opts.onRequestExtensionsImport && opts.onRequestExtensionsImport(),
     onExport: () => opts.onSaveExtensions && opts.onSaveExtensions(extensions.exportText()),
@@ -780,11 +813,16 @@ function createApp(doc, opts = {}) {
     promise.then((res) => {
       if (res && res.cancelled) return;
       result = res;
+      typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
       applyResultToViews();
       status.setEngineState('idle');
       status.setPages(result.pages.length);
     }).catch((e) => {
-      status.setEngineState('error', { message: e && e.message ? e.message : String(e) });
+      const msg = e && e.message ? e.message : String(e);
+      // **S5.2:** בקשה שהוחלפה/בוטלה (single-flight) — ה-Worker הוזרם מחדש והבקשה
+      // שירשרה אותה כבר בדרך; זו אינה שגיאת מנוע אמיתית ואין להציג "שגיאה" למשתמש.
+      if (msg === RESTART_ERROR) return;
+      status.setEngineState('error', { message: msg });
     });
     return started;
   }
@@ -850,7 +888,9 @@ function createApp(doc, opts = {}) {
   function runLightRefresh() {
     if (!result) { lightDirty = false; status.setPending({ light: false, heavy: heavyDirty }); return; }
     const t0 = perf.now();
-    preview.setResult(result, settings); // רינדור בלבד — אותם עמודים, הגדרות חדשות
+    // **S5.2 (7):** רינדור־קל שומר זום ויעד גלילה (עדכון צבע רקע לא אמור לקפוץ
+    // לראש המסמך); רק מסמך חדש באמת מאפס תצוגה — הנתיב הזה הוא keepView.
+    preview.setResult(result, settings, { keepView: true }); // רינדור בלבד — אותם עמודים, הגדרות חדשות
     lastLightRefreshMs = perf.now() - t0;
     lightDirty = false;
     status.setPending({ light: false, heavy: heavyDirty });
@@ -902,6 +942,11 @@ function createApp(doc, opts = {}) {
    * (בדפדפן: הורדה; בבדיקות: בדיקת הבתים). PDF דורש גופן מוטמע — opts.embeddedFont (בתים)
    * או נתיב הדפדפן: opts.remoteExport + opts.getExportFont (TTF לפי שם משפחה, אסינכרוני)
    * ⇒ הייצוא הכבד רץ ב־Worker (03.11). */
+  /** **S5.2 (3):** נעילת כפתורי הייצוא בזמן ייצוא מרוחק — מנע לחיצה כפולה ⇒ ייצוא כפול. */
+  function setExportBusy(busy) {
+    if (preview && typeof preview.setExportBusy === 'function') preview.setExportBusy(!!busy);
+  }
+
   async function runRemotePdfExport() {
     try {
       const font = await opts.getExportFont(settings['body-font']);
@@ -936,6 +981,14 @@ function createApp(doc, opts = {}) {
 
   function onExportRequest(kind) {
     if (!result) { status.setNotice('אין תוצאה לייצוא — העמוד עוד לא בוצע.'); return null; }
+    // **S5.2 (3):** ייצוא = צילום מצב אחד. בעבר, PDF/ZIP הוזרמו למנוע עם הטקסט/ההגדרות
+    // **הנוכחיים** בזמן ש-HTML רינדר את **התוצאה האחרונה** — שני קבצים סותרים
+    // מאותו "ייצוא". אם יש שינויים שלא הוחלו (קלים/כבדים) — ייצוא נעצר בהודעה;
+    // המשתמש ילחץ ⚡ ואז כל הנתיבים יצאו מאותו מצב בדיוק.
+    if (lightDirty || heavyDirty) {
+      status.setNotice('קיימים שינויים שלא הוחלו — הפעילו עימוד (⚡) לפני ייצוא');
+      return { ok: false, kind, reason: 'dirty' };
+    }
     const { exportHtml, exportPdf, exportProjectZip } = require('../engine/output/export-api');
     try {
       if (kind === 'html') {
@@ -949,7 +1002,9 @@ function createApp(doc, opts = {}) {
         // **נתיב הדפדפן (03.11):** המנוע הכבד חי ב־Worker — הייצוא שם עם TTF שנשלף לפי הגופן.
         if (opts.remoteExport && typeof opts.getExportFont === 'function') {
           status.setNotice('מייצא PDF במנוע (Worker)…');
-          runRemotePdfExport(); // fire-and-forget — ההורדה וההודעות בסיום
+          setExportBusy(true);
+          // fire-and-forget — ההורדה וההודעות בסיום; **S5.2 (3):** שחרור הנעילה בסיום/כשל
+          runRemotePdfExport().then(() => setExportBusy(false), () => setExportBusy(false));
           return { ok: true, kind, pending: true };
         }
         if (typeof Buffer === 'undefined') {
@@ -971,7 +1026,8 @@ function createApp(doc, opts = {}) {
         // **נתיב הדפדפן (03.11):** חבילת הפרויקט נבנית ב־Worker (zip-writer חי שם)
         if (opts.remoteExport) {
           status.setNotice('מייצא חבילת ZIP במנוע (Worker)…');
-          runRemoteZipExport();
+          setExportBusy(true);
+          runRemoteZipExport().then(() => setExportBusy(false), () => setExportBusy(false)); // **S5.2 (3):** שחרור הנעילה בסיום/כשל
           return { ok: true, kind, pending: true };
         }
         const bytes = exportProjectZip(text, settings, {
@@ -1132,7 +1188,7 @@ function createApp(doc, opts = {}) {
     refreshFontCatalog: (families) => settingsPanel.refreshFontCatalog && settingsPanel.refreshFontCatalog(families), // **03.11**
     imudLibrary: opts.imudLibrary || null, // **03.11:** ספריית IMUD לניפוי/הרחבות
     applyLegacyDefaults, // **03.11(ד):** נתיב יחיד להחלת ברירות המקור (פאנל + אתחול)
-    getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null }),
+    getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null, gen: typesetGen }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
     getSettings: () => settings
@@ -1743,7 +1799,9 @@ function buildEditorTab(doc, opts) {
     const data = ev && ev.clipboardData && typeof ev.clipboardData.getData === 'function'
       ? ev.clipboardData.getData('text/plain')
       : (ev && ev.text != null ? ev.text : null);
-    if (data != null) {
+    // **S5.2 (11):** הדבקה ריקה (רווחים בלבד) עברה את השומה data != null ומחקה
+    // את המסמך כולו ללא אישור. פעולת ניקוי מכוונת קיימת (🗑) — הדבקה ריקה אינה נכשלת בשקט.
+    if (data != null && String(data).trim() !== '') {
       if (ev && ev.preventDefault) ev.preventDefault();
       opts.onDocumentAction && opts.onDocumentAction('paste', String(data));
     }
@@ -6483,6 +6541,9 @@ const PAGE_TYPES = {
 
 const MM_TO_PX = 96 / 25.4;
 const PAGE_SIZES = {
+  // **S5.2 (O14 — A4 מדויק):** 210×297מ״מ @96dpi = 793.70×1122.52px — הערכים
+  // המעוגלים (794×1123) הזיזו את גוף ה-DP ב-0.3px ויצרו MediaBox שאינו זהה
+  // לגיאומטריית המורשת (793.7×1122.5). כעת זהה ל-GEO של legacy-imud-flow.
   A4: { w: Math.round(210 * MM_TO_PX), h: Math.round(297 * MM_TO_PX) },
   A5: { w: Math.round(148 * MM_TO_PX), h: Math.round(210 * MM_TO_PX) },
   '16x16': { w: Math.round(165 * MM_TO_PX), h: Math.round(165 * MM_TO_PX) }
@@ -7272,6 +7333,19 @@ function parseHebrewNumber(s) {
   return n >= 1 ? n : null;
 }
 
+/** **S5.2 (12):** חילוץ מספר הגיליון מתצוגתו (page.folioDisplay) — תומך בפורמטים
+ * hebrew ("כ״ב"), daf-hebrew ("דף כ״ב"), decimal ("22"/"[22]") ובמסגרות
+ * (סוגריים/מרובעים/פרחוני/מעוין — כללי ה-frame של folio.js). null = אין גיליון. */
+function folioNumberOf(display) {
+  let s = String(display == null ? '' : display).trim();
+  if (!s) return null;
+  s = s.replace(/^\s*דף\s*/, '');            // daf-hebrew: "דף כ״ב"
+  const dec = s.match(/[0-9]+/);               // decimal: "22" / "[22]"
+  if (dec) { const d = Number(dec[0]); return d >= 1 ? d : null; }
+  const letters = s.replace(/[^\u05D0-\u05EA]/g, ''); // הסרת מסגרות/גרשיים — אותיות בלבד
+  return parseHebrewNumber(letters);
+}
+
 function buildPreviewTab(doc, opts) {
   const root = doc.createElement('section');
   root.className = 'tab-panel';
@@ -7331,8 +7405,15 @@ function buildPreviewTab(doc, opts) {
     b.type = 'button'; b.className = 'btn btn--ghost'; b.textContent = label;
     b.setAttribute('aria-label', aria);
     b.addEventListener('click', () => opts.onExport && opts.onExport(id));
+    exportBtns.push(b);
     return b;
   };
+  // **S5.2 (3):** נעילת כפתורי הייצוא בזמן ייצוג מרוחק (PDF/ZIP ב-Worker) — מנע
+  // לחיצה כפולה ⇒ שני קבצים. app-shell מפעיל/משחרר דרך setExportBusy.
+  const exportBtns = [];
+  function setExportBusy(busy) {
+    for (const b of exportBtns) b.disabled = !!busy;
+  }
   exportBar.appendChild(mkExport('html', '🌐 HTML עצמאי', 'ייצוא HTML עצמאי חד־קובץ'));
   exportBar.appendChild(mkExport('pdf', '📄 PDF', 'ייצוא PDF עם טקסט נבחר, סימניות וקישורי תוכן'));
   exportBar.appendChild(mkExport('zip', '🗜 חבילת פרויקט', 'ייצוא חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות)'));
@@ -7462,15 +7543,90 @@ function buildPreviewTab(doc, opts) {
   }
 
   /** אומדן הטווח הנראה מהגלילה — יחסי (עמיד לזום/מרווחים): scrollTop/scrollHeight × n.
-   *  הגולל האמיתי הוא root (.tab-panel עם overflow:auto) — לא ה-canvas. */
+   *  הגולל האמיתי הוא root (.tab-panel עם overflow:auto) — לא ה-canvas.
+   * **S5.2 (6):** במצב אופקי הגולל האמיתי הוא ה-canvas (overflow-x) — המיפוי
+   *  האנכי נשאר תמיד על ~0 (אין גלילה אנכית) ⇒ בספרים >60 עמודים העמודים
+   *  שמעבר ~51% לעולם לא רונדרו (תיבות ריקות). במצב אופקי — טווח לפי גאומטריה
+   *  אופקית; המצב האנכי נשאר בדיוק כפי שהיה. */
   function visibleRange() {
     const n = virtual.pages.length;
+    if (!n) return [0, 0];
+    if (horizontal) {
+      const hr = horizontalVisibleRange();
+      if (hr) return hr;
+    }
     const scroller = (root.scrollHeight || root.clientHeight) ? root : canvas;
     const sh = scroller.scrollHeight, st = scroller.scrollTop, ch = scroller.clientHeight;
     if (!n || !sh || !isFinite(sh) || !isFinite(st) || !isFinite(ch)) return [0, 0];
     const first = Math.max(0, Math.floor((st / sh) * n) - 1);
     const last = Math.min(n - 1, Math.ceil(((st + ch) / sh) * n));
     return [first, last];
+  }
+
+  /** **S5.2 (6):** הריווח בין עמודים במצב אופקי — תואם ל-gap של .preview-canvas
+   *  ב-styles.css (24px). נצרך למודל המצטבר בסביבות בלי מנוע פריסה. */
+  const H_GAP = 24;
+
+  /** מיקומי עמודים לאורך ציר הזרימה (0=תחילת הזרימה): [x0,x1] לכל עמוד —
+   *  רוחבי התבניות בפועל + ריווח. משמש את הטווח הנראה במצב אופקי. */
+  function horizontalPageExtents() {
+    const out = [];
+    let x = 0;
+    for (let i = 0; i < virtual.pages.length; i++) {
+      const pg = virtual.pages[i];
+      const w = (pg && pg.template && Number(pg.template.width) > 0) ? Number(pg.template.width) : virtual.phW;
+      out.push([x, x + w]);
+      x += w + H_GAP;
+    }
+    return out;
+  }
+
+  /** **S5.2 (6):** הטווח הנראה במצב אופקי. 1) דפדפן: מלבן הקנבס (הגולל) מול
+   *  מלבני העמודים — פיזי, עמיד ל-RTL (dir=rtl: הזרימה מתחילה מימין), לזום
+   *  (transform נכלל ב-getBoundingClientRect) ולסדר placeholders/חיים.
+   *  2) נפילה (shim/בדיקות, בלי מנוע פריסה): מודל מצטבר + חלון לפי
+   *  scrollLeft/clientWidth/scrollWidth (RTL מודרני: שלילי מהקצה הימני=התחלה).
+   *  null = אין גאומטריה — הקורא ייפול למסלול האנכי המקורי. */
+  function horizontalVisibleRange() {
+    const n = virtual.pages.length;
+    if (!n) return null;
+    if (typeof canvas.getBoundingClientRect === 'function'
+      && canvas.children.length === n
+      && canvas.children[0] && typeof canvas.children[0].getBoundingClientRect === 'function') {
+      try {
+        const cr = canvas.getBoundingClientRect();
+        if (cr && Number.isFinite(cr.width) && cr.width > 0) {
+          let first = -1, last = -1;
+          for (let i = 0; i < n; i++) {
+            const el = canvas.children[i];
+            if (!el || typeof el.getBoundingClientRect !== 'function') continue;
+            const r = el.getBoundingClientRect();
+            if (!r || !Number.isFinite(r.width) || r.width <= 0) continue;
+            if (r.right > cr.left + 1 && r.left < cr.right - 1) {
+              if (first < 0) first = i;
+              last = i;
+            }
+          }
+          if (first >= 0) return [first, last];
+        }
+      } catch (e) { /* נפילה למודל החשבוני */ }
+    }
+    const st = canvas.scrollLeft, cw = canvas.clientWidth, sw = canvas.scrollWidth;
+    if (typeof st !== 'number' || typeof cw !== 'number' || typeof sw !== 'number') return null;
+    if (!isFinite(st) || !isFinite(cw) || !isFinite(sw) || cw <= 0 || sw <= 0) return null;
+    const ext = horizontalPageExtents();
+    // RTL: מודרני — scrollLeft ≤ 0 (0=התחלה, שלילי=התקדמות); מורשת — חיובי הפוך
+    const S = st <= 0 ? -st : Math.max(0, (sw - cw) - st);
+    const viewEnd = S + cw;
+    let first = -1, last = -1;
+    for (let i = 0; i < n; i++) {
+      const [x0, x1] = ext[i];
+      if (x1 > S && x0 < viewEnd) {
+        if (first < 0) first = i;
+        last = i;
+      }
+    }
+    return first >= 0 ? [first, last] : null;
   }
 
   function onVirtualScroll() {
@@ -7545,8 +7701,40 @@ function buildPreviewTab(doc, opts) {
   });
 
   // ---- ניהול עמודים ----
-  function setResult(serializedResult, settings) {
+  // **S5.2 (12):** מפת גיליון→אינדקס לקפיצה לפי מספר עברי — אל העמוד שמציג
+  // את הגיליון המבוקש, לא אל האינדקס הפיזי (פער מלא כשעמודי שער/תוכן אינם
+  // נספרים). עמוד ללא גיליון נכנס תחת אינדקס+1 (ההתנהגות הקודמת).
+  let folioIndex = new Map();
+  function rebuildFolioIndex() {
+    folioIndex = new Map();
+    const pages = (lastResult && lastResult.pages) || [];
+    for (let i = 0; i < pages.length; i++) { // מעבר ראשון: גיליונות אמיתיים — עדיפות
+      const n = folioNumberOf(pages[i] && pages[i].folioDisplay);
+      if (n != null && !folioIndex.has(n)) folioIndex.set(n, i);
+    }
+    for (let i = 0; i < pages.length; i++) { // מעבר שני: בלי גיליון — מספר פיזי (אם פנוי)
+      if (folioNumberOf(pages[i] && pages[i].folioDisplay) != null) continue;
+      const phys = i + 1;
+      if (!folioIndex.has(phys)) folioIndex.set(phys, i);
+    }
+  }
+
+  /** **S5.2 (7):** עוגן הגלילה הנוכחי — היעד האחרון שהמשתמש קיפץ/לחץ אליו,
+   *  ואם אין — העמוד העליון הנראה (וירטואלי/רגיל). לשחזור אחרי רינדור־קל. */
+  function currentScrollAnchor() {
+    if (lastScrollTarget != null) return lastScrollTarget;
+    const [a] = visibleRange();
+    return a || 0;
+  }
+
+  function setResult(serializedResult, settings, options) {
+    // **S5.2 (7):** keepView — רינדור־קל (רקע/קישוט) שומר זום ויעד גלילה;
+    // מסמך חדש באמת (בלי options) ממשיך לאפס תצוגה כמקודם.
+    const keepView = !!(options && options.keepView);
+    const prevZoom = keepView ? zoom : null;
+    const anchor = keepView ? currentScrollAnchor() : null;
     lastResult = serializedResult;
+    rebuildFolioIndex(); // **S5.2 (12):** המפה נבנית מחדש עם כל תוצאה
     canvas.textContent = '';
     pageEls = new Map();
     virtual.on = Array.isArray(serializedResult.pages) && serializedResult.pages.length > VIRTUAL_THRESHOLD;
@@ -7573,7 +7761,14 @@ function buildPreviewTab(doc, opts) {
     }
     pageIndicator.textContent = serializedResult.pages.length
       ? `עמוד 1 מתוך ${serializedResult.pages.length}${virtual.on ? ' (תצוגת חלון)' : ''}` : 'אין עמודים';
-    setZoom(100);
+    if (keepView) {
+      // **S5.2 (7):** שחזור הזום והיעד שנשמרו לפני פינוי הקנבס (scrollToPage
+      // מעדכן גם את מחוון העמוד); רק מסמך חדש באמת מאפס ל-100% ולראש.
+      setZoom(prevZoom != null ? prevZoom : 100);
+      if (anchor != null && anchor <= virtual.pages.length - 1) scrollToPage(anchor);
+    } else {
+      setZoom(100);
+    }
   }
 
   function scrollToPage(pageIndex) {
@@ -7586,10 +7781,17 @@ function buildPreviewTab(doc, opts) {
 
   // קפיצה לפי מספר עברי — שקוף לפורמט המספור שנבחר (hebrew/daf-hebrew)
   function jumpByHebrew(text) {
-    const n = parseHebrewNumber(text);
+    let n = parseHebrewNumber(text);
+    if (n == null) {
+      // **S5.2 (12):** קלט עשרוני נקלט גם — פורמט decimal מציג ספרות בגיליון
+      const dec = String(text == null ? '' : text).trim();
+      if (/^[0-9]+$/.test(dec)) n = Number(dec);
+    }
     if (n == null) { pageIndicator.textContent = 'מספר עברי לא תקין'; return null; }
-    const idx = n - 1;
-    if (!lastResult || idx < 0 || idx >= lastResult.pages.length) {
+    // **S5.2 (12):** גיליון אמיתי (folioDisplay) גובר על האינדקס הפיזי; עמודים
+    // ללא גיליון נכנסו למפה תחת אינדקס+1 — מספר שאינו במפה ⇒ "אין עמוד".
+    const idx = folioIndex.has(n) ? folioIndex.get(n) : null;
+    if (!lastResult || idx == null) {
       pageIndicator.textContent = `אין עמוד ${n}`; return null;
     }
     scrollToPage(idx);
@@ -7648,6 +7850,7 @@ function buildPreviewTab(doc, opts) {
 
   return {
     root, setResult, scrollToPage, jumpByHebrew, highlightIssue, clearHighlights, setCaretHighlight,
+    setExportBusy, // **S5.2 (3):** נעילת כפתורי הייצוא בזמן ייצוא מרוחק (מנע לחיצה כפולה)
     getZoom: () => zoom, _lastScrollTarget: () => lastScrollTarget,
     // D-84: חשיפה לבדיקות/אבחון של מצב הווירטואליזציה
     isVirtual: () => virtual.on,
@@ -8293,25 +8496,38 @@ function renderLegacyPage(pg, settings, doc) {
     // את הסלוטים לקצוות הדף — 94px/97px ממיקום הטקסט בייחוס (עמ' 12:
     // ימין x1=479.84pt=639.8px, שמאל x0=117.68pt=156.9px, מרכז 297.65pt).
     // הקבועים משוקפים מ-mk() של המקרן (COL_R_X+COL_W−33 / COL_L_X+33) —
-    // מרכז התיבה = מרכז הדף בדיוק, ו-space-between מנחה את הסלוט האמצעי
-    // למרכז. התצוגה = הייצוא = הייחוס.
+    // מרכז התיבה = מרכז הדף בדיוק. התצוגה = הייצוא = הייחוס.
+    // **S5.2 (O3 — ריתוק דטרמיניסטי של הבסיס):** במקום flex baseline
+    // (תלוי-פלטפורמה: 67.6–73.6px מול 71.9 ב-PDF) — סלוטים אבסולוטיים
+    // בתוך אותה תיבה; הבסיס = HEADER_BASELINE (71.9) באמצעות line-height:1
+    // + מטריקות DavidLibre-Bold (asc 0.7461 / desc 0.2192 ⇒ היסט 0.7635·S),
+    // ומשקל 700 מפורש (פנים ה-Bold הרשומים). מרכז = מרכז הדף (כמו ה-PDF),
+    // לא מרכז space-between.
     position(hdr, GEO.COL_L_X + 33, 52, (GEO.COL_R_X + GEO.COL_W - 33) - (GEO.COL_L_X + 33), 22);
-    hdr.style.display = 'flex';
-    hdr.style.justifyContent = 'space-between';
-    hdr.style.alignItems = 'baseline';
     hdr.style.color = 'rgb(15,23,73)';
+    const HDR_BASELINE_Y = 71.9;
+    const DLB_BASELINE_FACTOR = 0.5 + (0.7461 - 0.2192) / 2; // DavidLibre-Bold, line-height:1
     const slots = [
-      ['rh rh--r', hs.right, SZ.hdrR, 'header-recto-right-font'],
-      ['rh rh--c', hs.center, SZ.hdrC, 'header-recto-center-font'],
-      ['rh rh--l', hs.left, SZ.hdrL, 'header-recto-left-font']
+      ['rh rh--r', hs.right, SZ.hdrR, 'header-recto-right-font', 'right'],
+      ['rh rh--c', hs.center, SZ.hdrC, 'header-recto-center-font', 'center'],
+      ['rh rh--l', hs.left, SZ.hdrL, 'header-recto-left-font', 'left']
     ];
-    for (const [cls, txt, sz, fk] of slots) {
+    for (const [cls, txt, sz, fk, posKind] of slots) {
+      if (!txt) continue;
       const s = doc.createElement('span');
       s.className = cls;
-      s.textContent = txt || '';
-      s.style.fontSize = `${pt2px(sz)}px`;
+      s.textContent = txt;
+      const szPx = pt2px(sz);
+      s.style.fontSize = `${szPx}px`;
       const ff = fontOf(fk);
       if (ff) s.style.fontFamily = ff; // **S4.26:** גופן הסלוט מההגדרות (ברירת מחדל: David Libre)
+      s.style.fontWeight = '700';
+      s.style.position = 'absolute';
+      s.style.lineHeight = '1';
+      s.style.top = `${(HDR_BASELINE_Y - 52) - szPx * DLB_BASELINE_FACTOR}px`;
+      if (posKind === 'right') s.style.right = '0';
+      else if (posKind === 'left') s.style.left = '0';
+      else { s.style.left = '50%'; s.style.transform = 'translateX(-50%)'; }
       hdr.appendChild(s);
     }
     root.appendChild(hdr);
@@ -8412,9 +8628,26 @@ function renderLegacyPage(pg, settings, doc) {
       // מסומנות ומדולגות באודיט). סדר ההצהרות חשוב: רק שורות גוף מלאות
       // מקבלות את text-align-last — אחרת הוא היה מיישר גם שורות אחרונות
       // (שהגדרתן center/right) ומקורן של הסמנים.
-      if (ln.kind === 'heading' || ln.isLast) {
+      // **S5.2 (S5 — חיווט body-last-line-align במורשת):** ברירת המחדל 'center'
+      // = ההתנהגות הקיימת בדיוק; 'right' = הצמדה לתחילת השורה (ימין ב-RTL),
+      // 'stretch' = יישור מלא גם לשורה האחרונה. בעבר המפתח סווג 'light' אך
+      // מעולם לא מומש בנתיב החי — שינוי הגדרה לא שינה דבר.
+      const lastAlign = String((settings && settings['body-last-line-align']) || 'center');
+      if (ln.kind === 'heading') {
         el.style.whiteSpace = 'nowrap';
         el.style.textAlign = 'center';
+      } else if (ln.isLast) {
+        if (lastAlign === 'right') {
+          el.style.whiteSpace = 'nowrap';
+          el.style.textAlign = 'right';
+        } else if (lastAlign === 'stretch') {
+          el.style.whiteSpace = 'normal';
+          el.style.textAlign = 'justify';
+          el.style.textAlignLast = 'justify';
+        } else {
+          el.style.whiteSpace = 'nowrap';
+          el.style.textAlign = 'center';
+        }
       } else {
         el.style.whiteSpace = 'normal';
         el.style.textAlign = 'justify';
@@ -8894,6 +9127,17 @@ __modules["src/engine/notes/markers.js"] = function (require, module, exports) {
 
 const HEB_LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת'];
 
+/** **S5.2 (תיקון 10 — מוסכמת הגרשיים של הגיליון):** סיומת סמן לפי המוסכמה
+ *  שמממש folio.toHebrewNumber/finish: אות בודדת ⇒ אות+גרש (א׳);
+ *  שתי אותיות ומעלה ⇒ גרשיים **לפני האות האחרונה** (כ״ג — לא כג׳ הישן).
+ *  יישום מקומי בעל אותה צורה (shared-shaped) — בלי ייבוא folio.js
+ *  (מניעת תלות decoration↔notes; נבדק — folio.js אינו דורש את markers,
+ *  כך שאין מעגל, אבל ההפרדה מונעת תלות עתידית). */
+function hebrewMarkFinish(letters) {
+  if (letters.length <= 1) return letters + '\u05F3';            // א׳ — גרש
+  return letters.slice(0, -1) + '\u05F4' + letters.slice(-1);   // כ״ג — גרשיים לפני האחרונה
+}
+
 /** סמן בודד לפי סגנון הרישום (footnote-marker-style). */
 function markerFor(index1Based, style) {
   switch (style) {
@@ -8908,7 +9152,9 @@ function markerFor(index1Based, style) {
       let i = index1Based - 1, s = '';
       if (i < 0) return 'א׳';
       do { s = HEB_LETTERS[i % 22] + s; i = Math.floor(i / 22) - 1; } while (i >= 0);
-      return `${s}\u05F3`; // גרש — סמן (לא מספר עמוד); תמיד אות+גרש
+      // **S5.2 (תיקון 10):** בעבר תמיד גרש בסוף (כג׳) — בניגוד למוסכמת
+      // הגרשיים של הגיליון. כעת hebrewMarkFinish: א׳/כ״ג.
+      return hebrewMarkFinish(s);
     }
   }
 }
@@ -8942,19 +9188,11 @@ function makeCounter(policy, start = 0) {
   };
 }
 
-/**
- * פיצול placeholder `סמן:טקסט` לייצוג מנייה (D-30): הסמן נספר פעם אחת (בגוף,
- * בעוגן), טקסט ההערה נספר פעם אחת ממקום הצגתו. הפורמט בגוף: `${marker}:${text}`
- * עם \uE000 בין המרכיבים — מדידה אטומית, ופיצול בניתוח לשם זהות צדדים.
- */
-function splitPlaceholder(word) {
-  const s = String(word).replace(/\u00A0/g, ' ');
-  const at = s.indexOf(':');
-  if (at > 0 && !s.startsWith('http')) return { marker: s.slice(0, at), text: s.slice(at + 1) };
-  return null;
-}
+// **S5.2 (תיקון 11):** splitPlaceholder הוסר — קוד מת מלכודתי: פיצול על ':'
+// היה מבתק שעות (12:30) אם אי־פעם היה נעשה בו שימוש חוזר; ה-placeholder
+// האמיתי של D-30 משתמש ב-U+E000 (ראה explodePlaceholderWord ב-pipeline).
 
-module.exports = { markerFor, makeCounter, splitPlaceholder, HEB_LETTERS, MARK_TAG: '\uE102' };
+module.exports = { markerFor, makeCounter, hebrewMarkFinish, HEB_LETTERS, MARK_TAG: '\uE102' };
 
 };
 __modules["src/engine/decoration/page-decorations.js"] = function (require, module, exports) {
@@ -10331,7 +10569,10 @@ function toGematria(num) {
   // בייחוס; מונע undefined ושומר דטרמיניזם — הקורפוס הגדול מגיע ל־~730).
   if (num >= 1000) {
     const th = Math.floor(num / 1000);
-    return toGematria(th) + "'" + toGematria(num % 1000);
+    // **S5.2 (אחידות D-31):** גרש עברי (U+05F3) במקום ASCII ' — כמו
+    // toHebrewNumber של folio.js (ה׳תש״ב); שני מחלקי המספור במאגר חייבים
+    // להסכים על אותו תו.
+    return toGematria(th) + '\u05F3' + toGematria(num % 1000);
   }
   const hundreds = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
   const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
@@ -10456,7 +10697,10 @@ function readConfig(imud) {
     hdrCType: String(g('hdr-c-type', 'h2_without_siman')),
     hdrLType: String(g('hdr-l-type', 'book_title_split_l')),
     gtocShow: imud && 'gtoc-show' in imud ? imud['gtoc-show'] : [1, 2, 3, 4, 5, 6],
-    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6]
+    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6],
+    // **S5.2 (F2 — הערות סיום):** כותרת עמודי הערות-הסיום מהמקור
+    // (fn-title-text; ממופה ב-legacy-settings-map ל-endnote-title-text).
+    fnTitleText: String(g('fn-title-text', 'הערות'))
   };
 }
 
@@ -10529,6 +10773,19 @@ function tokenizeDoc(rawText, cfg) {
       });
       pendingSideNote = null; pendingEndNote = null;
     }
+  }
+  // **S5.2 (מיפוי מוקשים F4):** פלוש שאריות בסוף מסמך — הערת-צד (h7) או
+  // הערת-סיום שהמתינו לפסקה שלא באה אבדו בשקט (pendingSideNote/pendingEndNote
+  // מעולם לא נצרכו). כעת: הערת-צד זנבורית נשפכת כפסקה גלויה (התוכן נשמר
+  // ונראה — עדיף על אובדן), והערת-סיום זנבורית נסגרר לפסקה ריקה הנושאת
+  // את ה-endNote (עמודי הערות-הסיום אוספים מהטוקנים ישירות).
+  if (pendingSideNote || pendingEndNote) {
+    tokens.push({
+      id: tokens.length, type: 'p',
+      text: pendingSideNote || '',
+      sideNote: null, endNote: pendingEndNote,
+      syntheticTail: true
+    });
   }
   return { meta, tokens };
 }
@@ -11080,7 +11337,11 @@ function legacyTypeset(rawText, settings, env) {
       cur.tokens.push(t);
     }
   }
-  if (cur.tokens.length) sections.push(cur);
+  // **S5.2 (מיפוי מוקשים F3):** סעיף שנפתח ב-newPage (h0/h2 פותח עמוד) אך לא
+  // קיבל אף token אחריו — בעבר לא נדחף כלל: הכותרת אבדה (לא נוצר עמוד שער
+  // לפרק) ושורת תוכן-העניינים שלו קיבלה folio ריק. כעת הסעיף נדחף גם ריק —
+  // עמוד הפתיחה נבנה עם הכותרת בלבד.
+  if (cur.tokens.length || cur.newPage) sections.push(cur);
 
   const pages = [];
   const headingFolio = new Map();
@@ -11208,7 +11469,9 @@ function legacyTypeset(rawText, settings, env) {
     const paraNotes = new Map(); // tokenId -> [{text}] (מופקות בפעם הראשונה)
     const tokPages = new Map();  // tokenId -> Set(pageIndex)
 
-    while (ti < toks.length || pending) {
+    while (ti < toks.length || pending || (sectionFirst && sec.newPage)) {
+      // **S5.2 (F3):** סעיף עם newPage ובלי אף token — עמוד הפתיחה (הכותרת)
+      // עדיין חייב להיווצר; בלי התנאי הזה הלולאה לא רצה כלל והכותרת אבדה.
       const pageIsSectionOpen = sectionFirst && !!sec.newPage; // **S4.19:** להזזת אזור-h2/h0 בסוף העמוד
       const pg = newPage(isH0 ? (sectionFirst ? 'preface' : 'regular')
         : (sectionFirst && isH2 ? 'sign-open' : 'regular'));
@@ -11752,6 +12015,10 @@ function legacyTypeset(rawText, settings, env) {
         }
         const startIdx = pending ? pending.lineIdx : 0;
         const total = lines.length - startIdx;
+        // **S5.2 (F4):** פסקה ריקה (למשל ה-syntheticTail של הערת-סיום זנבורית)
+        // — אין שורות להציב; מדלגים בבטחה (ה-endNote נאסף מהטוקנים ישירות,
+        // ואין תוכן-מקור לאבד). בלי זה — fit מאולץ 1 על מערך ריק ⇒ קריסת ln.words.
+        if (total <= 0) { pending = null; ti++; continue; }
 
         // תקציב מוקדם: כל ההערות של הפסקה (מהשבירה המלאה) נכנסות לתור העמוד
         // כבר בעמוד הראשון שלה — כך התקציב מצטמצם מוקדם כמו במקור.
@@ -12394,10 +12661,27 @@ function legacyTypeset(rawText, settings, env) {
     }
     const pagesRows = [];
     let curRows = [], curH = 0, first = true;
+    // **S5.2 (מיפוי מוקשים F1 — עימוד תוכן-העניינים):** הקיבולת חושבה מ-GEO.FLOW_H
+    // (702px עמוד ראשון / 915px המשך) בעוד שהשורות ממוקמות בפועל בין
+    // TOC_FIRST_TOP/TOC_CONT_TOP לבין TOC_STRETCH_BOTTOM — כלומר 635/892px
+    // בלבד. ה-67/23px העודפים אפשרו דחיסה שדרסה שורות את שורות (מרווח 15.9px
+    // מול תיבת שורה 26px), התנגשות עם אזור הפוליו ואף שורות שירדו מתחת לתחתית
+    // העמוד. בנוסף, אצווה אטומית (h2 + כל תתי-הרשומות) שגדולה מהקיבולת הוצבה
+    // בכל זאת כשהעמוד ריק (ללא חלוקה). תוקן: קיבולת מהקבועים המכוילים בפועל,
+    // ואצווה גדולה מעמוד נחלקת בגבולות שורות בין עמודי ה-TOC.
+    const availOf = (f) => TOC_STRETCH_BOTTOM - (f ? TOC_FIRST_TOP : TOC_CONT_TOP);
     for (const u of units) {
       const uH = u.reduce((a, r) => a + r.h, 0);
-      const avail = first ? GEO.FLOW_H - TOC_TITLE_BLOCK_H : GEO.FLOW_H;
-      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; }
+      let avail = availOf(first);
+      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; avail = availOf(false); }
+      if (uH > avail && !curRows.length) {
+        // אצווה אטומית גדולה מעמוד שלם — פיצול בגבולות שורות (עדיף על דריסה/גלישה)
+        for (const r of u) {
+          if (curH + r.h > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; avail = availOf(false); }
+          curRows.push(r); curH += r.h;
+        }
+        continue;
+      }
       curRows.push(...u); curH += uH;
     }
     if (curRows.length) pagesRows.push({ rows: curRows, first });
@@ -12410,8 +12694,21 @@ function legacyTypeset(rawText, settings, env) {
       const top = pr.first ? TOC_FIRST_TOP : TOC_CONT_TOP;
       const rowYs = [];
       if (!isLast && pr.rows.length > 1) {
-        const gap = (TOC_STRETCH_BOTTOM - top) / (pr.rows.length - 1);
-        pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+        // **S5.2 (F1):** רצפה למרווח המתיחה — לא קטן מגובה השורה המרבי בעמוד;
+        // ואם הרצפה דוחפת את השורה האחרונה מעבר לתחתית אזור המתיחה — מערך טבעי
+        // (מוכרח להיכנס: סכום הגבהים ≤ הקיבולת). בלי הרצפה ה-gap ירד עד ~6px
+        // והשורות נדרסו זו על זו.
+        const maxH = Math.max.apply(null, pr.rows.map(r => r.h));
+        const hLast = pr.rows[pr.rows.length - 1].h;
+        const naturalGap = (TOC_STRETCH_BOTTOM - top) / (pr.rows.length - 1);
+        const gap = Math.max(naturalGap, maxH);
+        const lastTop = top + (pr.rows.length - 1) * gap;
+        if (lastTop <= TOC_STRETCH_BOTTOM - hLast + 0.5) {
+          pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+        } else {
+          let yy = top;
+          for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
+        }
       } else {
         let yy = top;
         for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
@@ -12436,6 +12733,70 @@ function legacyTypeset(rawText, settings, env) {
   for (const p of pages) ((p.type === 'shaar-main' || p.type === 'shaar-back') ? gates : bodies).push(p);
   const genPages = cfg.enableGeneralToc && genEntries.length ? makeTocPages('toc-general', genEntries, 'תוכן עניינים כללי') : [];
   const detPages = cfg.enableDetailedToc && detEntries.length ? makeTocPages('toc-detailed', detEntries, 'תוכן עניינים מפורט') : [];
+
+  // **S5.2 (מיפוי מוקשים F2 — הערות סיום בנתיב המורשת):** שורות "הערת סיום - …"
+  // (en-line-prefix של המקור; המפתח קיים ב-default_settings של כל 8 קובצי
+  // המקור) נצרכו בטוקניזציה ל-token.endNote — אך אף קוד מעולם לא קרא אותו:
+  // התוכן אבד בשקט. כאן נבנים עמודי הערות-הסיום בסוף הספר: כותרת
+  // (fn-title-text) בעמוד הראשון, שני טורים (COL_W), סמן גימטריה רציף
+  // בגודל הרישום + גוף ההערה ב-FRL 8.5pt — אותם כללי עטיפה כמו רשימת
+  // ההערות (wrapText ברוחב טור−סמן, FIT_EPS בכל נקודות השבירה). המשך
+  // חתוך בין עמודים/טורים מסומן '(המשך)' — כמו זרימת ההערות.
+  const endNoteTokens = tokens.filter(t => t.type === 'p' && t.endNote);
+  const endnotePagesBuilt = [];
+  if (endNoteTokens.length) {
+    const EN_TITLE_H = 44;
+    const mkSpaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+    let enPg = null, enCol = 0, enY = 0, enFirst = true;
+    const openEndPage = () => {
+      enPg = newPage('endnotes');
+      setHeader(enPg, cfg.fnTitleText);
+      enPg._enFirst = enFirst;
+      if (enFirst) enPg.bands.push({ kind: 'endnote-title', text: cfg.fnTitleText, sizePt: SZ.h2, y: GEO.FLOW_TOP, h: EN_TITLE_H, tokenId: null });
+      enCol = 0; enY = GEO.FLOW_TOP + (enFirst ? EN_TITLE_H : 0);
+      endnotePagesBuilt.push(enPg);
+    };
+    const nextColOrPage = () => {
+      if (enCol === 0) { enCol = 1; enY = GEO.FLOW_TOP + (enPg._enFirst ? EN_TITLE_H : 0); return true; }
+      enFirst = false; openEndPage(); return true;
+    };
+    openEndPage();
+    endNoteTokens.forEach((tok, ni) => {
+      const marker = LineBreaker.markerWord(ni + 1, cfg.fnNumSeparator);
+      const mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0) + mkSpaceW;
+      const contW = fnApi.measureTextWidth('(המשך)', cfg.fnListingNumSize, 0) + mkSpaceW;
+      const noteLines = wrapText(tok.endNote, fnApi, GEO.COL_W - Math.max(mkW, contW), SZ.fnBody);
+      let li = 0, seg = 0;
+      while (li < noteLines.length) {
+        const room = Math.floor((FLOW_BOTTOM - enY) / GEO.FN_PITCH);
+        if (room <= 0) { nextColOrPage(); continue; }
+        // אטומיות: הערה שלמה בעמוד-טור אחד כשהיא נכנסת; אחרת חלוקה בגבולות שורות
+        const need = noteLines.length - li;
+        if (need > room && need <= Math.floor((FLOW_BOTTOM - (GEO.FLOW_TOP + (enPg._enFirst && enCol === 0 ? EN_TITLE_H : 0))) / GEO.FN_PITCH)) {
+          nextColOrPage(); continue; // מעבר לטור/עמוד פנוי — וההערה תיכנס שלמה
+        }
+        const take = Math.min(room, need);
+        for (let k = 0; k < take; k++, li++) {
+          const words = String(noteLines[li]).split(' ').filter(Boolean);
+          let markerIdx = [];
+          if (k === 0) {
+            const head = seg === 0 ? marker : '(המשך)';
+            words.unshift(head);
+            markerIdx = [0];
+          }
+          enPg.columns[enCol].push({
+            words, markerIdx, parenFlags: null, parenStarts: null, parenEnds: null,
+            sizePt: SZ.fnBody, heightPx: GEO.FN_PITCH, kind: 'paragraph',
+            isLast: li === noteLines.length - 1,
+            tokenId: tok.id, window: false, windowWords: null,
+            y: enY, paraId: null, lineIdx: null, align: null
+          });
+          enY += GEO.FN_PITCH;
+        }
+        if (li < noteLines.length) { seg++; nextColOrPage(); }
+      }
+    });
+  }
   const subIdx = bodies.findIndex(p => p.type === 'shaar-sub');
   const before = subIdx >= 0 ? bodies.slice(0, subIdx + 1) : [];
   const after = subIdx >= 0 ? bodies.slice(subIdx + 1) : bodies;
@@ -12446,7 +12807,7 @@ function legacyTypeset(rawText, settings, env) {
   // אי-זוגי (עמוד זוגי פיזי = גב) — מוכנס עמוד ריק. מחליף את המקרה הפרטי
   // של שער-המשנה (needBlank) בכלל הכללי; ברירות המחדל של המקור:
   // odd-h0=true, odd-h1=true, odd-h2=false.
-  const seq = [...gates, ...genPages, ...before, ...detPages, ...after];
+  const seq = [...gates, ...genPages, ...before, ...detPages, ...after, ...endnotePagesBuilt];
   const final = [];
   for (const p of seq) {
     if (p._secStartLevel != null) {
@@ -12515,6 +12876,80 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
   const ledger = new Ledger();
 
+  // **S5.2 (מיפוי מוקשים S1 — חשבונאות שימור תוכן אמיתית לנתיב החי):** עד כאן
+  // הוחזר contentPreserved: true קבוע-קשה — כל רגרסיה בזרימת ההערות/המשכים/
+  // הטוקנים עברה בשקט (הבדיקות שהחזיקו בדגל היו טאוטולוגיות — המחלק של
+  // D-30 קיים רק בנתיב ה-DP). כעת: מולטיסט מילות מקור (מטא-דאטה + כל
+  // הטוקנים: גוף, כותרות, הערות-צד, הערות-סיום) מול מולטיסט פלט (שורות
+  // העמודים: גוף+כותרות+חלונות+הערות-שוליים+הערות+הערות-סיום+שערים;
+  // בלי תוכן-עניינים ובלי פוליו — הם תוספות/העתקות של המנוע). יעד: כל מילת
+  // מקור מופיעה בפלט לפחות כמספר הופעותיה במקור; סמנים/(המשך)/גימטריה
+  // שהמנוע מוסיף אינם נספרים כחובה. כשל ⇒ ממצא high ב-ledger + דגל שקרי.
+  const contentStats = (() => {
+    const norm = (s) => String(s == null ? '' : s).split(/[\s\u00A0]+/).filter(Boolean);
+    const bump = (m, words) => { for (const w of words) m.set(w, (m.get(w) || 0) + 1); };
+    const src = new Map();
+    // **S5.2:** שדה השנה/מקום (meta.year) אינו מוצג בשער המכויל-ייחוס — כמו
+    // בתוכנת המקור (השדה נקלט למטא ואינו מרונדר באף שער; נבדק ב-snapshot
+    // וב-v20.4). לכן אינו נספר כחובת-תוכן.
+    for (const [mk, mv] of Object.entries(meta)) if (mk !== 'year') bump(src, norm(mv));
+    // **S5.2:** מסיר את תוחמי ההערה ([ ]) מצד המקור — המנוע מחלץ את גוף
+    // ההערה מבלי לכלול את התוחמים בפלט (הם תחביר, לא תוכן).
+    const srcTextOf = (t) => {
+      let s = String(t.text == null ? '' : t.text);
+      if (cfg.fnOpen) s = s.split(cfg.fnOpen).join(' ');
+      if (cfg.fnClose) s = s.split(cfg.fnClose).join(' ');
+      // **S5.2:** כותרת h1 מפוצלת בשער-המשנה לכותרת + משנה (split לפי
+      // המקף; join(' - ') לשאר) — מקף-ההפרדה הראשון הוא תחביר עימוד,
+      // כמו קידומת 'כותרת N -'. משקפים את אותה טרנספורמציה בצד המקור.
+      if (t.type === 'h1') {
+        const parts = s.split(/[-–—]/).map(x => x.trim()).filter(Boolean);
+        if (parts.length >= 2) s = parts[0] + ' ' + parts.slice(1).join(' - ');
+      }
+      return s;
+    };
+    for (const t of tokens) {
+      bump(src, norm(srcTextOf(t)));
+      if (t.sideNote) bump(src, norm(t.sideNote));
+      if (t.endNote) bump(src, norm(t.endNote));
+    }
+    const out = new Map();
+    const addText = (s) => bump(out, norm(s));
+    const addWords = (ws) => { if (!ws) return; for (const w of ws) addText(w && w.t != null ? w.t : w); };
+    for (const p of pages) {
+      for (const col of p.columns || []) for (const ln of col) {
+        addWords(ln.words); addWords(ln.windowWords);
+      }
+      for (const it of p.footnotes || []) {
+        if (it.marker) addText(it.marker);
+        for (const ln of it.lines || []) addWords(ln.words);
+      }
+      for (const mn of p.marginNotes || []) for (const ln of mn.lines || []) addText(ln.text);
+      for (const b of p.bands || []) addText(b.text);
+      for (const g of p.gateLines || []) addText(g.text);
+      // תוכן-העניינים (p.toc) והפוליו לא נספרים — העתקות/מספור של המנוע
+    }
+    const missing = [];
+    let srcTotal = 0, outTotal = 0;
+    for (const [w, c] of src) {
+      srcTotal += c;
+      const oc = out.get(w) || 0;
+      if (oc < c) missing.push(`${w} (${oc}/${c})`);
+    }
+    for (const c of out.values()) outTotal += c;
+    return { sourceWords: srcTotal, outputWords: outTotal, missing };
+  })();
+  const contentPreservedFlag = contentStats.missing.length === 0;
+  if (!contentPreservedFlag) {
+    ledger.create('content-loss', 'legacy-flow', 0,
+      { missing: contentStats.missing.length, sample: contentStats.missing.slice(0, 8).join(', ') },
+      'legacy-flow');
+    events.emit('render', 'legacy-imud: אובדן תוכן — החשבונאות אדומה', {
+      missing: contentStats.missing.length,
+      sample: contentStats.missing.slice(0, 8).join(', ')
+    });
+  }
+
   // **EXT-4 (שארית — S4.21): חיבור ornament-plan לנתיב ה-legacy.** רץ אחרי
   // חישוב ה-hash — overlay בלבד (אינווריאנט T1; דפוס D-47). ברירות המחדל
   // של המקור = 'none' לכל עיטור ⇒ אפס rectים ואפס השפעה; החיבור מוכיח את
@@ -12522,8 +12957,10 @@ function legacyTypeset(rawText, settings, env) {
   // legacy-projector מצייר pg.decorations באותו דיו (ornament-ink) כמו
   // נתיב ה-DP — pdfOps ל-PDF, data-URI ל-DOM.
   const { planLegacyOrnaments } = require('../decoration/legacy-ornaments');
+  // **S5.2 (אחידות מדידה):** tracking=0 מפורש — כמו כל נקודות המדידה של
+  // המורשת (ברירת המחדל של measure-api היא כעת 0, אך מפורש עדיף).
   const ornPass = planLegacyOrnaments(pages, settings,
-    (t, s2) => api.measureTextWidth(t, s2), {
+    (t, s2) => api.measureTextWidth(t, s2, 0), {
     ledger, eventLog: events,
     bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
     flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
@@ -12591,12 +13028,13 @@ function legacyTypeset(rawText, settings, env) {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
     tocPages: [], numberingAudit: null, settings,
-    contentPreserved: true,
+    contentPreserved: contentPreservedFlag,
+    contentStats: { sourceWords: contentStats.sourceWords, outputWords: contentStats.outputWords, missingCount: contentStats.missing.length, missingSample: contentStats.missing.slice(0, 8) },
     layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
     ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
     retreat: null, sideNotes: null, endnotePages: null,
-    endnotePagesInfo: { count: 0, pages: [] },
+    endnotePagesInfo: { count: endNoteTokens.length, pages: endnotePagesBuilt.map(p => p.index) },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true
   };
@@ -12637,7 +13075,12 @@ __modules["src/engine/typography/measure-api.js"] = function (require, module, e
 const { charWidthEm, FONT_PROFILES } = require('./measure-table');
 const fm = require('./font-metrics');
 
-const DEFAULT_TRACKING = 0.02; // em
+// **S5.2 (תיקון 5 — tracking שאין לאף מרנדר):** ברירת המחדל הייתה 0.02em —
+// המדידה "הרחיבה" כל שורה ב~2% יחסית לדיו: אף מרנדר (DOM/PDF) אינו מצייר
+// letter-spacing, והפרויקטור הגיאומטרי ערבב באותה שורה מדידות עם tracking=0
+// (מפורש) וברירת המחדל. כעת 0 — המודל = הדיו. נתיב המורשת אינו מושפע:
+// כל קריאותיו מעבירות tracking=0 במפורש (אומת בסקירה).
+const DEFAULT_TRACKING = 0; // em
 
 /** גופנים רשומים (פרופיל → פרנסר). ההרשמה מפורשת — אין טעינת רשת (offline). */
 const registeredFonts = new Map();
@@ -12663,8 +13106,9 @@ function registerFont(profileName, bytes) {
 function unregisterFont(profileName) {
   registeredFonts.delete(String(profileName));
   if (String(profileName) === 'Frank Ruhl Libre') fm.setMissingGlyphFallbackFont(null);
+  _familyApiCache.clear(); // **S5.2:** מטמון ה-API-פר-משפחה נגרר אחרי ההרשמה
 }
-function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); }
+function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); _familyApiCache.clear(); }
 
 class MeasureAPI {
   constructor(settings, impl = 'table') {
@@ -12817,6 +13261,23 @@ class MeasureAPI {
   cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
 }
 
+/** **S5.2 (תיקון 6 — מדידת כותרות בגופן רשום):** API כבול למשפחה שנרשמה ב‑registerFont
+ * (מטריקות אמת hmtx/kern בגודל הכותרת), או null כשהמשפחה אינה רשומה —
+ * דפוס apiFor(family) של legacy-projector, מיוצא כאן כסטטי על המחלקה כדי
+ * שה-pipeline (widthFor) ישתמש בו בלי לרדוף אחרי מפת הגופנים בעצמו.
+ * מטומן לפי משפחה; המטמון מתרוקן בהסרת/איפוס גופנים (unregister/clear). */
+const _familyApiCache = new Map();
+MeasureAPI.forFamily = function forFamily(family, settings) {
+  if (!family || !registeredFonts.has(String(family))) return null;
+  const fam = String(family);
+  const sizeKey = settings && settings['body-font-size-pt'] != null ? String(settings['body-font-size-pt']) : '';
+  const key = `${fam}|${sizeKey}`;
+  if (!_familyApiCache.has(key)) {
+    _familyApiCache.set(key, new MeasureAPI({ ...(settings || {}), 'body-font': fam }, 'font-metrics'));
+  }
+  return _familyApiCache.get(key);
+};
+
 /** **EXT-13 (איחוד מקור המדידה live↔ייצוא):** כשגוף הגוף רשום בפועל
  * (registerFont) — מדידת האמת (font-metrics) מועדפת גם כשההגדרה היא
  * 'table' (ברירת המחדל). בלי זה ה-live מדד בטבלאות המקורבות בזמן שהייצוא
@@ -12851,7 +13312,10 @@ const HEBREW_WIDTHS = {
   'י': 0.32, 'כ': 0.58, 'ך': 0.58, 'ל': 0.52, 'מ': 0.70, 'ם': 0.72, 'נ': 0.60, 'ן': 0.60, 'ס': 0.62,
   'ע': 0.62, 'פ': 0.60, 'ף': 0.62, 'צ': 0.62, 'ץ': 0.64, 'ק': 0.64, 'ר': 0.52, 'ש': 0.66, 'ת': 0.60
 };
-const WIDE_MARKS = { ' ': 0.26, '\uE000': 0.26, '.': 0.24, ',': 0.24, ';': 0.24, ':': 0.24, '-': 0.34, '–': 0.5, '"': 0.28, "'": 0.16, '“': 0.4, '”': 0.4, '״': 0.36, '׳': 0.18, '[': 0.3, ']': 0.3, '(': 0.3, ')': 0.3 };
+// **S5.2 (T7):** NBSP (U+00A0) = רוחב הרווח (0.26) — בעבר נפל לסל 0.4em
+// (+2.24px @12pt לכל NBSP) במימוש A כשנמדד גולמי (יחידות מודבקות לפני
+// רישום הגופנים / טסטים). impl B בטוח כבר היום (הפיצול מבוצע לפני המדידה).
+const WIDE_MARKS = { ' ': 0.26, '\\u00A0': 0.26, '\uE000': 0.26, '.': 0.24, ',': 0.24, ';': 0.24, ':': 0.24, '-': 0.34, '–': 0.5, '"': 0.28, "'": 0.16, '“': 0.4, '”': 0.4, '״': 0.36, '׳': 0.18, '[': 0.3, ']': 0.3, '(': 0.3, ')': 0.3 };
 
 /** פרופילי רוחב לפי שם גופן (fontFactor מתוקן ב־endnote-pages; כאן — רוחב בסיס). */
 const FONT_PROFILES = {
@@ -13140,8 +13604,14 @@ function parsePairPosSubtable(b, off, kernPairs) {
     const pvCount = u16(b, psOff);
     if (pvCount > MAX_GPOS_PAIRSETS) continue;
     for (let k = 0; k < pvCount; k++) {
-      const rec = psOff + 2 + k * 6; // gid2(2) + value1 XAdvance(2) + value2(2 — ריק כי vf2=0)
-      if (rec + 6 > b.length) break;
+      // **S5.2 (תיקון צעד רשומה — T1):** בחוזה vf1===0x0004 && vf2===0 אין
+      // כלל value2 — PairValueRecord = gid2(2) + XAdvance(2) = **4 בתים**,
+      // לא 6. הצעד 6 קרא כל רשומה אחרי הראשונה מוסטת (מפת קרנינג משובשת:
+      // 171 זוגות זבל מ-Hadassah). היום הקרנינג אינו נצרך במדידה (מדיניות
+      // ללא-קרנינג — תצוגה=ייצוא; ראה font-kerning:none ב-BASE_CSS), אך
+      // הפרסר חייב להיות נכון לכל שימוש עתידי.
+      const rec = psOff + 2 + k * 4; // gid2(2) + value1 XAdvance(2) — vf2=0 ⇒ אין value2
+      if (rec + 4 > b.length) break;
       const right = u16(b, rec);
       const xAdv = s16(b, rec + 2);
       if (xAdv !== 0) kernPairs.set(`${left},${right}`, xAdv);
@@ -13285,7 +13755,12 @@ function buildItems(words, measure) {
     const parts = w.split('\u00A0');
     for (let k = 0; k < parts.length; k++) {
       if (k > 0) items.push({ kind: 'penalty', forbidden: true, cost: INF });
-      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(1, measure(parts[k])) });
+      // **S5.2 (תיקון 4 — תיבת פנטום 1px):** חלק ריק (NBSP כפול, פתיחה/סיום
+      // ב-NBSP) נמדד עכשיו ברוחב 0 — בעבר Math.max(1,…) יצר תיבת 1px שאינה
+      // קיימת בדיו והעלתה את רוחב השורה. אין חשש מכניסה לרווח: מנגנוני ה-badness
+      // מוגנים (effStretch>0 / shrink>0 — ראה breakLines) וההתקדמות מובטחת
+      // (תיבה ריקה אינה מקום שבירה; הטוקן שלה משוחזר עם ה-NBSP שלו).
+      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(0, measure(parts[k])) });
       if (k < parts.length - 1) items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO, internal: true });
     }
     if (i < words.length - 1) {
@@ -13360,9 +13835,16 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
       }
       // **S5.1 (D-92-DP):** הדפדפן מרנדר רוחב טבעי (white-space:normal) —
       // שורה שרוחבה הטבעי חורג מהטור נעטפת בתצוגה (טקסט-על-טקסט) גם אם
-      // היישוב יכול לכווץ רווחים ב-PDF. לכן המבחן ברוחב הטבעי, בלי shrink,
-      // עם רווח-ביטחון 0.75px — כמו FIT_EPS במנוע המורשת (תת-פיקסל LayoutUnit).
-      if (w > maxWidthPx + 0.75) break; // חריגה שאינה ניתנת לתיקון
+      // היישוב יכול לכווץ רווחים ב-PDF. לכן המבחן ברוחב הטבעי, בלי shrink.
+      // **S5.2 (תיקון 3 — המבחן היה מרחיב, לא שמרני):** בעבר `w > maxWidth+0.75`
+      // אִפשר קווים ברוחב טבעי עד maxWidth+0.75px (ובכך גם קבלת חיתוכים עם
+      // slack שלילי דרך כיווץ) — בזמן ש-FIT_EPS של המורשת שמרן (limit−eps).
+      // כעת החיתוך נעצר מוקדם: שורה שאינה נכנסת ב-maxWidth−0.75 אינה מוארכת
+      // עוד, וכל קו מקובל הוא ברוחב טבעי ≤ maxWidth−0.75 (גם בסוף פסקה —
+      // הפנלטי הסופי נמדר רק אחרי שכל הפריטים עברו את אותו מבחן). מילה רחבה
+      // מהטור עדיין יוצאת כשורה בפני עצמה דרך הגיבוי הגרידי (greedyFallback —
+      // התקדמות מובטחת, טוקן בודד אינו נחסם: pushTok עם toks ריק אינו מוסף).
+      if (w > maxWidthPx - 0.75) break; // חריגה שאינה ניתנת לתיקון — שמרני כמו FIT_EPS
 
       if (it.kind === 'box') {
         // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
@@ -13372,6 +13854,10 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
         const cut = j + 1; // נקודת שבירה חוקית: אחרי תיבה, לפני ה‑glue העוקב
         if (!(items[cut].kind === 'glue' && !items[cut].internal && items[cut + 1] && items[cut + 1].kind === 'box')) continue;
         const slack = maxWidthPx - w;
+        // **S5.2 (תיקון 3 — שמרנות בקבלת חיתוך):** קו שאינו נכנס ברוחב הטבעי
+        // (slack < −FIT_EPS) הוא בלתי-אפשרי — badness INF, לא "כיווץ". המבחן
+        // השמרני למעלה אמור למנוע הגעה לכאן; השמירה הכפולה מתעדת את הכוונה.
+        if (slack < -0.75) continue;
         const raggedEnd = opts.raggedEnd !== false;
         const effStretch = stretch + (raggedEnd ? maxWidthPx * RAGGED_END_STRETCH_FACTOR : 0);
         const ratio = slack >= 0 ? (effStretch > 0 ? slack / effStretch : 0) : (shrink > 0 ? slack / shrink : -2);
@@ -13821,7 +14307,8 @@ function buildTestingTab(doc, opts) {
     tbody.textContent = '';
     let shown = 0;
     for (const f of sorted) {
-      const hay = `${f.kindHe || ''} ${f.kind} ${f.page != null ? f.page : ''} ${f.id}`.toLowerCase();
+      // **S5.2 (8):** החיפוש לפי מספר עמוד תואם לתצוגה (1-based) — כמו שאר הממשק
+      const hay = `${f.kindHe || ''} ${f.kind} ${f.page != null ? f.page + 1 : ''} ${f.id}`.toLowerCase();
       if (q && !hay.includes(q)) continue;
       shown++;
       const tr = doc.createElement('tr');
@@ -13830,7 +14317,7 @@ function buildTestingTab(doc, opts) {
       tr.setAttribute('tabindex', '0');
       const cells = [
         f.kindHe || GEOM_KIND_NAMES[f.kind] || f.kind,
-        f.page != null ? String(f.page) : '—',
+        f.page != null ? String(f.page + 1) : '—', // **S5.2 (8):** תצוגה 1-based — כמו ההמלצות/הפטורים/הגיליונות
         STATUS_HE[f.status] || f.status,
         f.id
       ];
@@ -14204,7 +14691,7 @@ const { Ledger } = require('../core/ledger');
 const { runProtections } = require('./protections-matrix');
 const { runRetreatLoop } = require('./retreat-loop');
 const { generateCandidates } = require('./candidate-generator');
-const { blockGapPx } = require('./column-flow');
+const { blockGapPx, colCapacityOf } = require('./column-flow');
 const { fixDropWordInColumns } = require('../typography/protectors');
 const { MARK_TAG } = require('../notes/markers');
 const { moveLineForward } = require('./ordering');
@@ -14316,7 +14803,11 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   // מלא מוצבת בפס עליון חוצה־טורים במקום בטור חצי־רוחב (בעבר: נמדדה ברוחב מלא
   // והוצבה בטור רגיל ⇒ גלישה אופקית שקטה). הטורים מתחילים מתחת לפס.
   const spanH = (page) => (page && page.spanning ? page.spanning.heightPx : 0);
-  const colCapacity = (tpl, page) => tpl.contentBox.height - spanH(page);
+  // **S5.2 (P-2 — קיבולת מאוחדת):** כל חישובי הקיבולת עוברים דרך colCapacityOf
+  // (column-flow — מקור יחיד). כאן usedHeight כבר כולל את תקציב ההערות על
+  // הטור האחרון (F-17) — ולכן הקיבולת נלקחת בלי התקציב (fnBudget:false;
+  // שקול מתמטית: used+fn ≤ cap ⟺ used ≤ cap−fn). הפס החוצה־טורים נכלל תמיד.
+  const colCapacity = (tpl, page) => colCapacityOf(page, { fnBudget: false }) || (tpl && tpl.contentBox ? tpl.contentBox.height - spanH(page) : 0);
 
   /**
    * גובה תפוס = שורות + **יתרת תקציב ההערות של העמוד** — כך ה‑probe וה‑reservation
@@ -14368,7 +14859,10 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
         }
       }
       // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
-      if (fixDropWordInColumns(cur.columns) ) {
+      // **S5.2 (תיקון 2):** המיזוג מותר רק אם השורה המקבלת נכנסת ברוחב הטור
+      // (מדידה מחדש + FIT_EPS שמרני) — אותה מדידה של המתכנן; מילה שאינה
+      // נכנסת נשארת בטור המקורי (בלי גלישה אופקית שקטה — מחלקת D-92).
+      if (fixDropWordInColumns(cur.columns, 3, { measure: (t) => measureFn(t), colW: cur.template.columns[0].w })) {
         eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
       }
       const a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
@@ -14660,7 +15154,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
           if (room !== -1) {
             eventLog.emit('page-plan', 'heading-escort-push', { token: blk.tokenId, page: cur.index }, cur.index);
           } else {
-            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template), lineHPx: lineH }, 'protections');
+            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template, cur), lineHPx: lineH }, 'protections');
             ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no column fits heading+escort even on fresh page (oversized block)');
           }
         }
@@ -14703,7 +15197,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   // terminal residual fallback (REQ-BAL-04): אם העמוד האחרון ריק למחצה ויש מצב natural — סמן
   if (settings['allow-terminal-residual-fallback']) {
     const last = pages[pages.length - 1];
-    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template) * 0.5)) {
+    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template, last) * 0.5)) {
       last.terminalResidual = true; // לא מדווח כ‑underfill (B4)
     }
   }
@@ -14758,7 +15252,10 @@ function balancePageSafe(page, settings, ledger) {
   const maxDelta = settings['imbalance-max-delta-px'];
   if (deltaOf() <= maxDelta) return true; // כבר מאוזן — אין התערבות (יציבות פריסה)
   if (!page.columns || page.columns.length < 2) return false;
-  const cap = page.template.contentBox.height;
+  // **S5.2 (P-2 — קיבולת מאוחדת):** colCapacityOf — כולל הפס החוצה־טורים
+  // (בעבר חושב מ-contentBox.height גולמי ⇒ איזון שגלש מתחת לפס בעמודי H2);
+  // תקציב ההערות עובר כ-extraLast (P1-8) — בלי כפילה.
+  const cap = colCapacityOf(page, { fnBudget: false });
   const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
   if (!best || best.k === page.columns[0].length) {
     // **EXT-8:** אין פיצול חוקי, או שהנוכחי כבר האופטימלי הגלובלי — הפרש שנותר
@@ -14777,10 +15274,10 @@ function balancePageSafe(page, settings, ledger) {
   page.columns[0] = seq.slice(0, best.k);
   page.columns[1] = seq.slice(best.k);
   // hard reject: חריגת קיבולת אחרי ההחלפה (הגנה כפולה — optimalSplit כבר מסנן) → rollback מלא
-  const overflows = (c) => {
-    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0)
-      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
-    return hh > cap + 0.5;
+  // **S5.2 (P-2):** קיבולת אפקטיבית פר-טור (פס + תקציב על הטור האחרון) — מקור יחיד.
+  const overflows = (c, ci) => {
+    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0);
+    return hh > colCapacityOf(page, { colIndex: ci }) + 0.5;
   };
   if (page.columns.some(overflows)) {
     page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
@@ -14831,6 +15328,7 @@ __modules["src/engine/layout/protections-matrix.js"] = function (require, module
  */
 
 const { usedHeight, pageImbalance } = require('./balancing');
+const { colCapacityOf } = require('./column-flow'); // **S5.2 (P-2):** קיבולת טור — מקור יחיד
 const { MARK_TAG } = require('../notes/markers');
 
 /** עמודים מבניים שאינם זרימת-תוכן — כותרת בודדת בהם היא מכוונת-עיצוב,
@@ -14841,12 +15339,16 @@ function isStructuralPage(page) {
     page.type === 'toc-general' || page.type === 'toc-detail';
 }
 
-/** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **. */
+/** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **.
+ *  **S5.2 (תיקון 10):** סמן עברי רב-אותיות הוא כעת במוסכמת הגרשיים של הגיליון —
+ *  כ״ג (גרשיים **לפני** האות האחרונה), לא כג׳ הישן — שני האופנים מזוהים. */
 function isNoteMarkerWord(w) {
   const s = String(w);
   if (!s) return false;
-  // אות עברית (1-2 אותיות) + גרש/גרשיים
+  // אות עברית (1-2 אותיות) + גרש/גרשיים בסוף (הצורה הישנה) — או הצורה החדשה:
+  // אות+גרשיים+אות (כ״ג) / אות בודדת+גרש (א׳)
   if (/^[\u05D0-\u05EA]{1,2}[\u05F3\u05F4]$/.test(s)) return true;
+  if (/^[\u05D0-\u05EA]\u05F4[\u05D0-\u05EA]+$/.test(s)) return true;
   // [n] — סוגריים מרובעים עם מספר
   if (/^\[\d{1,4}\]$/.test(s)) return true;
   // (n)
@@ -15023,8 +15525,12 @@ const CHECKS = {
 
   containment(page, settings, ledger) {
     const out = [];
-    const cap = page.template.contentBox.height;
+    // **S5.2 (P-2 — קיבולת מאוחדת):** קיבולת אפקטיבית פר-טור מ-colCapacityOf
+    // (column-flow) — כולל הפס החוצה־טורים ותקציב ההערות של העמוד (על הטור
+    // האחרון). בעבר נמדד מול contentBox.height גולמי ⇒ גלישה שקטה בעמודים
+    // עם הערות/פס לא זוהתה כלל (הממצא שהביקורת כינתה "silent column overflow").
     for (let c = 0; c < page.columns.length; c++) {
+      const cap = colCapacityOf(page, { colIndex: c });
       const u = usedHeight(page.columns[c]);
       if (u > cap + 0.5) out.push({ kind: 'containment', target: `page#${page.index}c${c}`, page: page.index, evidence: { used: u, cap }, ledgerRef: ledger.create('containment', `p${page.index}c${c}`, page.index, { used: u, cap }, 'protections').issue_id });
     }
@@ -15087,6 +15593,8 @@ __modules["src/engine/layout/balancing.js"] = function (require, module, exports
  */
 
 // (moveLineForward אינו נדרש עוד באיזון: optimalSplit מכסה את מרחב המצבים כולו — EXT-8)
+
+const { colCapacityOf } = require('./column-flow'); // **S5.2 (P-2):** קיבולת הטור — מקור יחיד
 
 function usedHeight(col) {
   // **EXT-20:** גובה בפועל — כולל מקדם ה-AQ האנכי (לפני ה-AQ כל המקדמים 1).
@@ -15175,8 +15683,11 @@ function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
   if (before <= maxDelta) return { changed: false, before, after: before, moves: 0 };
   if (!page.columns || page.columns.length < 2) return { changed: false, before, after: before };
-  const cap = page.template.contentBox.height;
-  const best = optimalSplit(page.columns, { cap });
+  // **S5.2 (P-2 — קיבולת מאוחדת):** colCapacityOf (column-flow) — כולל הפס
+  // החוצה־טורים; תקציב ההערות עובר כ-extraLast של הטור האחרון (כמו ב-dp-planner,
+  // P1-8) — בעבר חושב מ-contentBox.height גולמי והתעלם משניהם.
+  const cap = colCapacityOf(page, { fnBudget: false });
+  const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
   if (!best || best.k === page.columns[0].length) {
     // אין פיצול חוקי-קיבולת, או שהנוכחי כבר האופטימלי — לא מדווח שינוי
     return { changed: false, before, after: before, rollback_reason: best ? 'at-optimum' : 'capacity' };
@@ -15236,11 +15747,13 @@ function autoQualityPass(pages, settings, eventLog) {
   const compressFirst = settings['aq-compress-first'] !== false;
   let applied = 0;
   for (const page of pages) {
-    const cap = page.template.contentBox.height;
     for (let c = 0; c < page.columns.length; c++) {
       const lines = page.columns[c];
       const used = usedHeight(lines);
       if (!lines.length) continue;
+      // **S5.2 (P-2):** קיבולת אפקטיבית פר-טור — כולל הפס החוצה־טורים ותקציב
+      // ההערות (על הטור האחרון). המתיחה עד לתחתית האמיתית של הטור.
+      const cap = colCapacityOf(page, { colIndex: c });
       const deficit = cap - used;
       if (deficit > 4 && mayStretch) {
         const perLine = deficit / lines.length;
@@ -15282,6 +15795,75 @@ function autoQualityPass(pages, settings, eventLog) {
 module.exports = { balancePage, optimalSplit, pageImbalance, applyChapterEndMode, autoQualityPass, usedHeight };
 
 };
+__modules["src/engine/layout/column-flow.js"] = function (require, module, exports) {
+// src/engine/layout/column-flow.js — Column geometry + block→column flow (S4 consumers registration)
+// צרכנים אמיתיים: grid-col-width-pct, grid-gutter-pct, grid-block-gap-pct
+'use strict';
+
+const { buildPageTemplate } = require('./page-templates');
+
+/**
+ * רוחב טור יחיד בפיקסלים מתוך settings (מקור־האמת יחיד שמשמש גם dp-planner וגם pipeline).
+ * grid-col-width-pct: אחוז רוחב טור מתוך שטח התוכן (צמוד ל‑PT-01..PT-10).
+ * grid-gutter-pct: בולטה בין הטורים.
+ */
+function columnWidths(settings, pageWidthPx, contentWidthPx) {
+  const gutter = (contentWidthPx * settings['grid-gutter-pct']) / 100;
+  const cw = (contentWidthPx * settings['grid-col-width-pct']) / 100;
+  return { colW: cw, gutter, totalUsed: cw * 2 + gutter, pageWidthPx };
+}
+
+/**
+ * מרווח אנכי בין בלוקים בתוך טור (פסקה↔פסקה). נצרך ע"י flowing: כל בלוק חדש
+ * בטור פותח ב‑gap הזה אלא אם הוא הראשון בטור.
+ */
+function blockGapPx(settings, lineH) {
+  // grid-block-gap-pct נתון באחוזי גובה־שורת־גוף כדי שיישאר פרופורציונלי לגודל דפוס
+  return Math.round((Number(settings['grid-block-gap-pct']) || 0) / 100 * lineH * 10);
+}
+
+/**
+ * האם בלוק חוסם מעבר טור רגיל (full-width headings H1/H2 לפי mode).
+ */
+function isFullWidthBlock(block, settings) {
+  if (block.kind === 'heading') {
+    const mode = settings[`heading-${block.level}-mode`];
+    return mode === 'full-width' || mode === 'new-page';
+  }
+  return block.fullWidth === true;
+}
+
+/**
+ * **S5.2 (P-2 — איחוד חישוב קיבולת טור):** המקור היחיד לקיבולת האפקטיבית
+ * של טור בעמוד DP: גובה תיבת התוכן מהתבנית, בהפחתת:
+ *  - הפס החוצה־טורים (spanning band, FWD-1) — הטורים מתחילים מתחתיו;
+ *  - תקציב ההערות של העמוד (fnReservedHeightPx, F-17) — נרשם על הטור האחרון.
+ * בעבר חושבו 4 העתקים מקבילים (balancing.balancePage/autoQualityPass,
+ * dp-planner.balancePageSafe, protections-matrix.containment) שהתעלמו מהפס
+ * ו/או מהתקציב ⇒ גלישת טור שקטה בעמודים עם הערות או פס כותרת.
+ *
+ * @param {object} page - עמוד DP: template.contentBox, spanning?, fnReservedHeightPx?, columns
+ * @param {{colIndex?:number, fnBudget?:boolean}} [opts]
+ *  - colIndex: הטור שאליו שייכת הקיבולת (ברירת מחדל: האחרון — המחמיר);
+ *    תקציב ההערות מופחת רק מהטור האחרון (שם הוא נרשם).
+ *  - fnBudget:false — ביטול הפחתת תקציב ההערות (למי שמודד usage כולל
+ *    התקציב בעצמו — כמו usedHeight של dp-planner או extraLast של optimalSplit).
+ */
+function colCapacityOf(page, opts = {}) {
+  if (!page || !page.template || !page.template.contentBox) return 0;
+  let cap = page.template.contentBox.height;
+  if (page.spanning && page.spanning.heightPx) cap -= page.spanning.heightPx;
+  const fn = opts.fnBudget !== false && page.fnReservedHeightPx > 0 ? page.fnReservedHeightPx : 0;
+  if (fn && page.columns && page.columns.length) {
+    const idx = opts.colIndex != null ? opts.colIndex : page.columns.length - 1;
+    if (idx === page.columns.length - 1) cap -= fn;
+  }
+  return cap;
+}
+
+module.exports = { columnWidths, blockGapPx, isFullWidthBlock, colCapacityOf, buildPageTemplate };
+
+};
 __modules["src/engine/layout/retreat-loop.js"] = function (require, module, exports) {
 // src/engine/layout/retreat-loop.js — Unified retreat loop + oscillation detector (S5.1.5, K-3)
 'use strict';
@@ -15313,6 +15895,11 @@ function runRetreatLoop(ctx) {
   let lastSignature = null;
   /** מפת רישומים מהרצה זו: kind@target → record (למניעת כפילויות בין resolved↔persists). */
   const seen = new Map();
+  // **S5.2 (תיקון 1 — קריסה ביציאת תקרה):** allViolations הוגדר בתוך גוף הלולאה
+  // (const) אך נצרך אחריה בנתיב תקרת־האיטרציות ⇒ ReferenceError שהחליף את רישום
+  // הפשרה בקריסה. הועלה מעל הלולאה — ההפרות של האיטרציה האחרונה הן הנשארות
+  // בפועל ונרשמות במלואן (recordRemaining).
+  let allViolations = [];
 
   /**
    * dry ledger אמיתי: create() מחזיר רשומת דמה ואינו כותב ל‑ledger האמיתי.
@@ -15335,7 +15922,7 @@ function runRetreatLoop(ctx) {
 
   while (iteration < MAX_ITERATIONS) {
     iteration++;
-    const allViolations = [];
+    allViolations = [];
     for (const page of pages) {
       const dry = makeDryLedger();
       const vs = assess(page, settings, dry);
@@ -15477,47 +16064,6 @@ function generateCandidates(blk, cur, colCapacityPx, settings, ledger) {
 module.exports = { generateCandidates };
 
 };
-__modules["src/engine/layout/column-flow.js"] = function (require, module, exports) {
-// src/engine/layout/column-flow.js — Column geometry + block→column flow (S4 consumers registration)
-// צרכנים אמיתיים: grid-col-width-pct, grid-gutter-pct, grid-block-gap-pct
-'use strict';
-
-const { buildPageTemplate } = require('./page-templates');
-
-/**
- * רוחב טור יחיד בפיקסלים מתוך settings (מקור־האמת יחיד שמשמש גם dp-planner וגם pipeline).
- * grid-col-width-pct: אחוז רוחב טור מתוך שטח התוכן (צמוד ל‑PT-01..PT-10).
- * grid-gutter-pct: בולטה בין הטורים.
- */
-function columnWidths(settings, pageWidthPx, contentWidthPx) {
-  const gutter = (contentWidthPx * settings['grid-gutter-pct']) / 100;
-  const cw = (contentWidthPx * settings['grid-col-width-pct']) / 100;
-  return { colW: cw, gutter, totalUsed: cw * 2 + gutter, pageWidthPx };
-}
-
-/**
- * מרווח אנכי בין בלוקים בתוך טור (פסקה↔פסקה). נצרך ע"י flowing: כל בלוק חדש
- * בטור פותח ב‑gap הזה אלא אם הוא הראשון בטור.
- */
-function blockGapPx(settings, lineH) {
-  // grid-block-gap-pct נתון באחוזי גובה־שורת־גוף כדי שיישאר פרופורציונלי לגודל דפוס
-  return Math.round((Number(settings['grid-block-gap-pct']) || 0) / 100 * lineH * 10);
-}
-
-/**
- * האם בלוק חוסם מעבר טור רגיל (full-width headings H1/H2 לפי mode).
- */
-function isFullWidthBlock(block, settings) {
-  if (block.kind === 'heading') {
-    const mode = settings[`heading-${block.level}-mode`];
-    return mode === 'full-width' || mode === 'new-page';
-  }
-  return block.fullWidth === true;
-}
-
-module.exports = { columnWidths, blockGapPx, isFullWidthBlock, buildPageTemplate };
-
-};
 __modules["src/engine/typography/protectors.js"] = function (require, module, exports) {
 // src/engine/typography/protectors.js — NBSP gluing rules (REQ-LB-03) + fixDropWordInColumns port (Gold)
 'use strict';
@@ -15586,17 +16132,46 @@ function protectWords(words, measure, colWidthPx) {
  * fixDropWordInColumns (פורטר מ‑Gold): אם המילה האחרונה בטור "נופלת" לבדה
  * לשורה הבאה באורך <3 אותיות — מושכים אותה חזרה או דוחפים שורה.
  * כאן: החזר true אם בוצע תיקון (הקורא יריץ rerun הגנות).
+ *
+ * **S5.2 (תיקון 2 — מיזוג ללא בדיקת רוחב):** בעבר המילה נדחפה לשורה הראשונה
+ * של הטור הבא (`unshift` + `pop`) ללא מדידה מחדש — השורה המקבלת יכלה לגלוש
+ * מהטור (נמדד +1.95..25px בביקורת) ⇒ הדפדפן עוטף מחדש ⇒ טקסט-על-טקסט
+ * (מחלקת D-92). כעת: המיזוג נשמר רק אם הרוחב הטבעי הממוזג נכנס ב‑colW−FIT_EPS
+ * (אותה מדידה של המתכנן: widthPx הקיים של השורה המקבלת + רווח + מדידת המילה);
+ * לא ממזגים לתוך שורת כותרת/שורה אחרונה (isLast), לא מוציאים מילה מכותרת;
+ * וללא מדידה (opts.measure) — אין מיזוג בכלל (שמרנות: מי שלא מודד לא מוכיח התאמה).
+ * @param {Array<Array<object>>} columnLines
+ * @param {number} minLen - אורך מינימלי של מילה "נופלת"
+ * @param {{measure?:(t:string)=>number, colW?:number, fitEps?:number}} [opts]
  */
-function fixDropWordInColumns(columnLines, minLen = 3) {
+function fixDropWordInColumns(columnLines, minLen = 3, opts = {}) {
+  const measure = typeof opts.measure === 'function' ? opts.measure : null;
+  const colW = Number(opts.colW) || 0;
+  // FIT_EPS שמרני — כמו במנוע המורשת ובשבירת השורות (kp-linebreak, D-92-DP)
+  const fitEps = Number.isFinite(opts.fitEps) ? opts.fitEps : 0.75;
   let fixed = false;
   for (let c = 0; c < columnLines.length - 1; c++) {
     const lines = columnLines[c];
     const nextFirst = columnLines[c + 1][0];
     if (!lines.length || !nextFirst) continue;
     const last = lines[lines.length - 1];
+    // לא ממזגים לתוך כותרת או שורה אחרונה של פסקה (יישור/סופית נשברים),
+    // ולא מוציאים מילה משורת כותרת (הכותרת מאבדת את מילתה).
+    if (nextFirst.kind === 'heading' || nextFirst.isLast === true) continue;
+    if (last.kind === 'heading') continue;
     if (last.words.length === 1 && last.words[0].length < minLen && nextFirst.words.length > 1) {
+      // רוחב טבעי ממוזג = widthPx שנמדד לשורה המקבלת + רווח + המילה הנמשכת.
+      // התג (MARK_TAG, D-53) מוסר מהמדידה — כמו ב-measureWithParen של ה-pipeline;
+      // NBSP נמדד כרווח (כמו internal-glue ב-kp).
+      let mergedW = null;
+      if (measure && colW > 0) {
+        const word = String(last.words[0]).replace(/\uE102/g, '').replace(/\u00A0/g, ' ');
+        mergedW = (nextFirst.widthPx || 0) + measure(' ') + measure(word);
+      }
+      if (mergedW == null || mergedW > colW - fitEps) continue; // לא נכנס — המילה נשארת (status quo)
       // משלבים את המילה הנופלת לתוך השורה הראשונה של הטור הבא (גרירה)
       nextFirst.words.unshift(...last.words);
+      nextFirst.widthPx = mergedW; // רוחב השורה אחרי המיזוג (נצרך ל-runt/balance)
       lines.pop();
       fixed = true;
     }
@@ -15670,7 +16245,13 @@ function noteHeight(note, settings, measure) {
   return lines * lh;
 }
 
-/** רוחב נתיב אחד במרזב לפי footnote-columns (1 ⇒ רוחב מלא; 2 ⇒ חצי). */
+/**
+ * רוחב נתיב אחד במרזב לפי footnote-columns.
+ * **S5.2 (P-4):** _fnColWidthPx מכוין כעת ב-pipeline מהגיאומטריה —
+ * 1 ⇒ רוחב תיבת התוכן המלא (674.90px בברירת המחדל; כמו שמוקרן בגיאומטריה:
+ * x=colLeftOf, w=colWidthOf); 2 ⇒ (רוחב מלא − מרזב התבנית)/2. הפונקציה
+ * נשארת פשוטה — ההכוונה נעשתה במקור היחיד (pipeline) ולא כאן.
+ */
 function laneWidth(settings) {
   const base = settings._fnColWidthPx || 200;
   return settings['footnote-columns'] === 2 ? base : base;
@@ -15705,9 +16286,18 @@ __modules["src/ui/worker-client.js"] = function (require, module, exports) {
 // אינו גורר את המנוע פעמיים (המנוע נטען רק ב־engine-worker.bundle.js — D-65).
 
 let jobSeq = 0;
+
+/** **S5.2:** קוד שגיאה קבוע לעבודות שמתו עם terminate של ה־Worker (ביטול/החלפה).
+ * חוזה יציב: המאזינים (app-shell/imud-library) מזהים אותו במחרוזת ההודעה. */
+const RESTART_ERROR = 'worker-restarted';
+
+/** **S5.2:** קידומת לשגיאות worker.onerror (קריסה/כשל טעינה) — שונה מ-RESTART_ERROR:
+ * הפעלה מחדש ביוזמתנו = שקט; כשל אמיתי של המנוע = מדווח למשתמש. */
+const WORKER_ERROR_PREFIX = 'worker-error: ';
+
 class WorkerEngineClient {
   /**
-   * @param {{post:(m:object)=>void, setHandler:(cb:(m:object)=>void)=>void, terminate?:()=>void}} transport
+   * @param {{post:(m:object)=>void, setHandler:(cb:(m:object)=>void)=>void, terminate?:()=>void, setOnError?:(cb:(e:object)=>void)=>void}} transport
    */
   constructor(transport) {
     if (!transport || typeof transport.post !== 'function' || typeof transport.setHandler !== 'function') {
@@ -15716,7 +16306,51 @@ class WorkerEngineClient {
     this.transport = transport;
     this.activeJob = null;      // {jobId, resolve, reject, onProgress, cancelled}
     this.pending = new Map();   // **03.11:** עבודות צד (ייצוא/רישום גופן) — מקבילות לעימוד
+    this._errorCbs = [];       // **S5.2:** מאזיני כשל של התעבורה (worker.onerror)
     transport.setHandler((m) => this._onMessage(m));
+    if (typeof transport.setOnError === 'function') transport.setOnError((e) => this._onTransportError(e));
+  }
+
+  /** **S5.2:** רישום מאזין לכשל/קריסה של ה־Worker (למשל דפדפן: הודעת מצב עברית).
+   * @returns {()=>void} ביטול רישום. */
+  onError(cb) {
+    if (typeof cb !== 'function') return () => {};
+    this._errorCbs.push(cb);
+    return () => {
+      const i = this._errorCbs.indexOf(cb);
+      if (i >= 0) this._errorCbs.splice(i, 1);
+    };
+  }
+
+  _notifyError(err) {
+    for (const cb of this._errorCbs.slice()) {
+      try { cb(err); } catch (e) { /* מאזין קולקני — לא חוסם */ }
+    }
+  }
+
+  /** **S5.2:** worker.onerror — המנוע מת/לא נטען: דחיית כל הבטחות בטיסה + הודעה
+   * למאזינים. התעבורה כבר סימנה את עצמה ל-respawn בפוסט הבא — בקשה חדשה
+   * תעבוד על מופע טרי (זה תיקון התלייה: לפני כן הפוסט היה מגיע ל-Worker מת). */
+  _onTransportError(ev) {
+    const detail = (ev && (ev.message || (ev.error && ev.error.message))) || 'worker failed to load';
+    const reason = WORKER_ERROR_PREFIX + detail;
+    const job = this.activeJob;
+    if (job) {
+      this.activeJob = null;
+      const rej = job.reject; job.resolve = null; job.reject = null;
+      if (rej) try { rej(new Error(reason)); } catch (e) { /* נקי כבר */ }
+    }
+    this._rejectPending(reason);
+    this._notifyError(new Error(reason));
+  }
+
+  /** **S5.2:** דחיית כל עבודות הצד הממתינות (ייצוא/רישום גופן) — הן לעולם לא
+   * ייענו על Worker שמת; בלי זה ההבטחות נתלות לנצח ("הייצוא נתקע"). */
+  _rejectPending(reason) {
+    for (const [jid, p] of Array.from(this.pending)) {
+      this.pending.delete(jid);
+      try { p.reject(new Error(reason)); } catch (e) { /* נקי כבר */ }
+    }
   }
 
   _onMessage(m) {
@@ -15791,32 +16425,81 @@ class WorkerEngineClient {
     return { promise, jobId, cancel: () => this.cancel() };
   }
 
-  /** ביטול העבודה הפעילה: סימון + הודעת cancel (+terminate בזמן ריצה ארוכה). */
+  /** **S5.2:** ביטול העבודה הפעילה: סימון + הודעת cancel + terminate (המנוע סינכרוני —
+   * זו הדרך היחידה לקטוע ריצה ארוכה ב־Worker). ה-respawn ממומש כעת בתעבורה
+   * (workerTransport): הפוסט הבא בונה מופע חדש — בעבר ההערה "respawn בעת הבקשה
+   * הבאה" לא מומשה בשום מקום ⇒ כל בקשה אחרי ביטול נשלחה ל־Worker מת ⇒ האפליקציה
+   * נתקעה לנצח ב"מנוע: עמל…".
+   * כשהתעבורה מסוגלת להרוג (terminate): העבודה הפעילה ועבודות הצד שבטיסה
+   * נדחות ב־RESTART_ERROR — הן לעולם לא ייענו; בלי זה ההבטחות נתלות (bug S5.2).
+   * תעבורה בלי terminate (תיאורטי): המנוע חי — הפרדה {cancelled:true} המקורית. */
   cancel() {
     const job = this.activeJob;
     if (!job) return;
     job.cancelled = true;
     this.transport.post({ type: 'cancel', jobId: job.jobId });
-    if (typeof this.transport.terminate === 'function') this.transport.terminate(); // respawn בעת הבקשה הבאה
+    const killed = typeof this.transport.terminate === 'function';
+    if (killed) this.transport.terminate(); // ה-respawn: בפוסט הבא (workerTransport)
     this.activeJob = null;
-    const resolve = job.resolve;
+    const resolve = job.resolve, reject = job.reject;
     job.resolve = null; job.reject = null;
-    if (resolve) resolve({ cancelled: true }); // ההבטחה נפרדת במפורש — לא נתלית לנצח
+    if (killed) {
+      // **S5.2:** המנוע מת — התוצאה לעולם לא תחזור: דחייה מפורשת, לא הבטחה תלויה.
+      if (reject) reject(new Error(RESTART_ERROR));
+      this._rejectPending(RESTART_ERROR); // עבודות צד (ייצוא/רישום) מתות עמו
+    } else if (resolve) {
+      resolve({ cancelled: true }); // ההבטחה נפרדת במפורש — לא נתלית לנצח
+    }
   }
 
   get busy() { return this.activeJob != null; }
 }
 
-/** מתאם Worker אמיתי (דפדפן). */
-function workerTransport(worker) {
+/** **S5.2:** מתאם Worker אמיתי (דפדפן) — עם respawn.
+ * בעבר קיבל מופע קיים; עכשיו מפעל () => new Worker(url): ה־terminate (ביטול/
+ * קריסה) מסמן דגל terminated, וה-post הבא בונה מופע חדש מאותו URL
+ * (כולל ?v= — אותו cache-busting גם אחרי respawn) ומחדש את המאזינים.
+ * כך בקשה אחרי cancel/קריסה לא נשלחת ל־Worker מת. */
+function workerTransport(factory) {
+  if (typeof factory !== 'function') throw new Error('workerTransport: factory () => Worker required');
+  let worker = null;      // המופע החי (null ⇒ עדיין לא נוצר)
+  let terminated = false; // **S5.2:** דגל מוות — true עד respawn בפוסט הבא
+  let handler = null;     // פונקציית ההודעות של הלקוח
+  let errorSink = null;   // **S5.2:** worker.onerror → הלקוח (דחיית בטיסה + הודעה)
+
+  function attach(w) {
+    w.onmessage = (ev) => { if (handler) handler(ev.data); };
+    w.onerror = (e) => {
+      // המופע שבדק כשל (כולל כשל טעינה) — נסגר ויבוא חדש בפוסט הבא
+      try { w.terminate(); } catch (e2) { /* כבר מת */ }
+      terminated = true;
+      if (errorSink) { try { errorSink(e); } catch (e2) { /* מאזין קולקני */ } }
+    };
+  }
+
+  function ensure() {
+    if (worker && !terminated) return worker;
+    worker = factory();       // respawn — אותו URL (?v=) כמו בעלייה הראשונה
+    terminated = false;
+    attach(worker);
+    return worker;
+  }
+
   return {
-    post: (m) => worker.postMessage(m),
-    setHandler: (cb) => { worker.onmessage = (ev) => cb(ev.data); },
-    terminate: () => worker.terminate()
+    post: (m) => { ensure().postMessage(m); },
+    setHandler: (cb) => {
+      handler = cb;
+      if (worker && !terminated) attach(worker); // רישום חוזר — מחדש גם על מופע קיים
+    },
+    setOnError: (cb) => { errorSink = cb; }, // **S5.2:** אופציונלי — inline אין לו
+    terminate: () => {
+      if (worker && !terminated) { try { worker.terminate(); } catch (e) { /* כבר מת */ } }
+      terminated = true; // הפוסט הבא יבנה מחדש (respawn)
+    }
   };
 }
 
-module.exports = { WorkerEngineClient, workerTransport };
+module.exports = { WorkerEngineClient, workerTransport, RESTART_ERROR, WORKER_ERROR_PREFIX };
 
 };
 __modules["src/ui/retypeset-policy.js"] = function (require, module, exports) {
@@ -16220,7 +16903,14 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
       if (pg.header) for (const s of pg.header.slots) drawnParts.push(s.text);
     }
     const inventory = charInventory(drawnParts.join(' '));
-    const subset = buildSubset(font, inventory);
+    // **S5.2 (O1 — קריסת ייצוא על תו זר):** מלאי ה-F1 כלל גם תווים שחסרים
+    // בגוף הטקסט (כל אות לטינית — "PDF", ® וכו') ו-buildSubset נכשל
+    // (subset:tofu) לפני שרשת ה-fallback הפר-תו הספיקה לפעול: הדפדפן
+    // הציג את המילה דרך המחסנית וה-PDF סירב להיווצר — תצוגה≠ייצוא בכלל
+    // גרוע. כעת: מלאי ה-F1 = תווים שקיימים בו בפועל; השאר נופלים ל-/F4
+    // (הסריקה שלמטה אוספת אותם למלאי ה-F4) או מושמטים אם אינם בשום גופן.
+    const f1Inventory = inventory.filter(ch => glyphIdOf(font, ch) !== 0);
+    const subset = buildSubset(font, f1Inventory);
     if (!subset.ok) return { ok: false, error: `subset:${subset.error}` };
 
     // סימניות: H1 → רמה 1; H2 → רמה 2 (עץ מכותרות המודל)
@@ -16572,8 +17262,14 @@ function round2mm(v) { return Math.round(v * 100) / 100; }
 /** הגדרות נקיות לייצוא: מפתחות פנימיים (מקווקוות) מוסרים — נכסי זמן־ריצה. */
 function cleanSettings(settings) {
   const out = {};
+  // **S5.2 (O16 — תלכיד ZIP מאבד הגדרות מורשת):** בעבר כל מפתח שמתחיל
+  // ב '_' נזרק — כולל _imudRaw (שממנו נתיב המורשת קורא ~12 מפתחות
+  // חיים: hdr-r/c/l-type, note-marker-size, note-num-separator ועוד),
+  // _layout-profile (מפעיל את המנוע) ו-_legacy-ui-state. פרויקט שנשמר
+  // ונטען איבד את ההגדרות והעימוד השתנה בשקט. כעת המפתחות החיים נשמרים.
+  const KEEP = new Set(['_imudRaw', '_layout-profile', '_legacy-ui-state', '_customPages', '_customStyles']);
   for (const [k, v] of Object.entries(settings || {})) {
-    if (k.startsWith('_')) continue;
+    if (k.startsWith('_') && !KEEP.has(k)) continue;
     out[k] = v;
   }
   return out;
@@ -16618,6 +17314,11 @@ function assertOfflineSafe(html) {
 
 const BASE_CSS = `
 html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',serif;direction:rtl}
+/* **S5.2 (מדיניות ללא-קרנינג — תצוגה=ייצוא):** המודל מודד ללא קרנינג
+   (kernPairs אינו נצרך במדידה) וה-PDF מצייר לפי רוחבי hmtx בלבד — אבל
+   הדפדפן מקרן גופנים עם טבלאות kern/GPOS כברירת מחדל ⇒ רוחב מילה ב-DOM
+   היה שונה מהמודל ומה-PDF. font-kerning:none משווה את שלושת הנתיבים. */
+html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
 .book{display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 0}
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}
@@ -17294,7 +17995,10 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
     const slots = [];
     const mk = (pos, text, sizePt) => {
       if (!text) return;
-      const w = api.measureTextWidth(text, sizePt, 0);
+      // **S5.2 (O3):** מדידת/ציור סלוטי הכותרת ב-DavidLibre-Bold (hApi) —
+      // בדיוק כמו ה-DOM (fontOf של ההגדרות + משקל 700). בעבר נמדדו
+      // בגוף הטקסט וצוירו ב-/F1 — תצוגה≠ייצוא בכל עמוד גוף.
+      const w = hApi.measureTextWidth(text, sizePt, 0);
       let x;
       if (pos === 'right') x = GEO.COL_R_X + GEO.COL_W - 33 - w;
       else if (pos === 'left') x = GEO.COL_L_X + 33;
@@ -17310,10 +18014,12 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
         const baseY = GEO.HEADER_BASELINE;
         // **S5.1 (תיקון C1/L2):** רוחב התיבה = רוחב הטקסט עצמו (s.w) — לא
         // s.w+40. ה+40 הסיט כל סלוט 40px מהמקום שמכויל מהייחוס ב-mk() לעיל.
-        s.words = placeWords(s.text.split(' '), api, s.x, s.w, s.sizePt,
+        // **S5.2 (O3):** המדידה והצבה ב-hApi (DavidLibre-Bold — כמו ה-DOM)
+        // + fontKey 'heading' — הסלוטים כבר לא נמדדים/מצוירים ב-/F1 גוף-הטקסט.
+        s.words = placeWords(s.text.split(' '), hApi, s.x, s.w, s.sizePt,
           s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
         s.color = pg.headerSlots.color || HDR_COLOR;
-        for (const w of s.words) w.color = s.color;
+        for (const w of s.words) { w.color = s.color; w.fontKey = 'heading'; }
       }
       out.header = { y: GEO.HEADER_BASELINE - 14, baselineY: GEO.HEADER_BASELINE, slots };
     }
@@ -17583,12 +18289,23 @@ const DISPOSITIONS = {
   'inp-back-shaar-text': { kind: 'mapped', to: 'shaar-back-text', reason: '03.11(ד): טקסט השער האחורי (שמירת זכויות)' },
 
   // ============ הערות שוליים ============
+  // **S5.2 (S2):** מפתח RED-מקורי שנכנס בטעות לנכס ברירות-המחדל המוטמע
+  // (הנכס = v21 + שתי דריסות D-91 מתועדות + מפתח זה) — רישום disposition
+  // מפורש במקום 'unmapped' בייבוא החי.
+  'fn-bar-max-height-px': { kind: 'removed', reason: 'מפתח RED-מקורי (תקרת מרזב ההערות) — נקרא מהמרשם עצמו; אינו מפתח מקור', issue: 'S5.2-S2' },
   'fn-columns': { kind: 'mapped', to: 'footnote-columns', transform: parseInt },
   'fn-layout-mode': { kind: 'mapped', to: 'fn-layout-mode' },
-  'fn-reset-mode': { kind: 'mapped', to: 'footnote-reset-policy' },
+  // **S5.2 (S2):** transform חסר — 'siman' של המקור נחת כערך לא-חוקי בצד
+  // RED (הenum: continuous/page/section/part) והפאנל הציג ערך שבור.
+  'fn-reset-mode': { kind: 'mapped', to: 'footnote-reset-policy', transform: (v) => ({ 'siman': 'section', 'chapter': 'section', 'page': 'page', 'continuous': 'continuous', 'part': 'part' }[v] || 'page') },
   'fn-title-text': { kind: 'mapped', to: 'endnote-title-text' },
   'note-numbering-style': { kind: 'mapped', to: 'footnote-marker-style', transform: (v) => ({ 'gematria': 'hebrew-geresh', 'hebrew': 'hebrew-geresh', 'decimal': 'decimal', 'asterisk': 'asterisk', 'parenthesis': 'parenthesis' }[v] || 'hebrew-geresh') },
-  'note-marker-type': { kind: 'merged', to: 'footnote-marker-style', reason: 'סוג הסמן (super) נגזר מהסגנון ב-RED; אין עילוי-נפרד נפרד' },
+  // **S5.2 (S2):** note-marker-type ('super') אינו סגנון סמן — הוא העלאת
+  // בסיס (עניין רינדור). בעבר מופה merged ל-footnote-marker-style בלי
+  // transform והערך הגולמי 'super' דרס את הסגנון החוקי (ערך מחוץ ל-enum;
+  // ניצל רק בזכות ה-default-branch של markerFor). כעת ui-state — נשמר
+  // להצגה, לא מזהם את ה-enum.
+  'note-marker-type': { kind: 'ui-state', reason: 'סוג הסמן (super) — עניין העלאת-בסיס ברינדור, לא סגנון מספור; הסגנון מגיע מ-note-numbering-style' },
   'note-marker-size': { kind: 'ui-state', reason: 'גודל מילת-הסמן בגוף (ברירת מחדל 8) — מיושם בפרויקטור ה-legacy (S4.20/EXT-17)', issue: 'EXT-17' },
   'note-listing-num-size': { kind: 'ui-state', reason: 'גודל סמן הרישום ברשימת ההערות — מיושם בפרויקטור ה-legacy — S4.20/EXT-17' },
   'note-num-separator': { kind: 'ui-state', reason: 'המפריד אחרי מספר ההערה (ברירת מחדל .) — מיושם ב-markerWord — S4.20/EXT-17' },
@@ -17789,7 +18506,7 @@ const DESIGN_FILES = {
 };
 
 function createImudLibrary(engine) {
-  const fontCatalog = { loaded: false, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set(), extended: [], extendedByFamily: new Map() };
+  const fontCatalog = { loaded: false, loading: null, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set(), extended: [], extendedByFamily: new Map() };
   const designs = new Map(); // collection → {loaded, items:[{id,name,box}]}
   const appliedFontsReady = new Map(); // family → Promise<ArrayBuffer|null>
 
@@ -17807,18 +18524,31 @@ function createImudLibrary(engine) {
    * @returns {Promise<Array<{value:string,label:string,embedded:boolean}>>} */
   async function loadFontCatalog() {
     if (fontCatalog.loaded) return catalogEntries();
-    const list = await fetchJson(`${BASE}/imud-fonts.json`);
-    fontCatalog.families = list.map(e => e.family);
-    for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
-    fontCatalog.loaded = true;
-    // הקטלוג המורחב — קטלוג-שמות בלבד (הכשלון אינו חוסם: הפיקרים יציגו את
-    // המוטמעות בלבד, כמו קודם)
+    // **S5.2:** מטמון הבטחה בטיסה — שתי קריאות מקבילות (עלייה: פיקרים + ברירות
+    // מחדל) תפיקו טעינה אחת בלבד; בעבר נבדק רק loaded אחרי הפתרון ⇒ כל קריאה
+    // בזמן טעינה שיכפלה את ה-fetch (~400KB חינם). כישלון מנקה את המטמון —
+    // קריאה חוזרת תנסה שוב (לא תיתקע על הבטחה שנכשלה).
+    if (fontCatalog.loading) return fontCatalog.loading;
+    const p = (async () => {
+      const list = await fetchJson(`${BASE}/imud-fonts.json`);
+      fontCatalog.families = list.map(e => e.family);
+      for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
+      fontCatalog.loaded = true;
+      // הקטלוג המורחב — קטלוג-שמות בלבד (הכשלון אינו חוסם: הפיקרים יציגו את
+      // המוטמעות בלבד, כמו קודם)
+      try {
+        const ext = await fetchJson(`${BASE}/fonts-extended.json`);
+        fontCatalog.extended = ext.map(e => e.family);
+        fontCatalog.extendedByFamily = new Map(ext.map(e => [e.family, e]));
+      } catch (e) { fontCatalog.extended = []; fontCatalog.extendedByFamily = new Map(); }
+      return catalogEntries();
+    })();
+    fontCatalog.loading = p;
     try {
-      const ext = await fetchJson(`${BASE}/fonts-extended.json`);
-      fontCatalog.extended = ext.map(e => e.family);
-      fontCatalog.extendedByFamily = new Map(ext.map(e => [e.family, e]));
-    } catch (e) { fontCatalog.extended = []; fontCatalog.extendedByFamily = new Map(); }
-    return catalogEntries();
+      return await p;
+    } finally {
+      fontCatalog.loading = null;
+    }
   }
 
   /** רשימת הפיקרים: מוטמעות ראשונות, אחר-כך הקטלוג המורחב עם סימון ברור. */
@@ -17859,9 +18589,15 @@ function createImudLibrary(engine) {
         fontCatalog.bytesB64.set(family, btoa(bin));
       } catch (e) { /* אין btoa (סביבה חריגה) — הייצוא ידלג על ההטמעה */ }
       // 1) Worker: מדידת גופן אמיתי (measure-impl=font-metrics) + ייצוא PDF
+      // **S5.2:** רישום שמת עם ה-Worker (terminate/ביטול single-flight) — עדכון
+      // במפורש: הגופן לא נרשם במנוע. בלי זה ההבטחה היתה נפתרת ב"הכל בסדר"
+      // והמטמון (appliedFontsReady) היה מחזיר אותה לנצח ⇒ ייצוא תלוי/מדידה שגויה.
       try {
         await engine.registerFont({ name: family, bytes: buf.slice(0) });
-      } catch (e) { /* רישום נכשל — נמשיך ל-FontFace; הייצוא ידווח בבירור */ }
+      } catch (e) {
+        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+        /* רישום נכשל (סיבה אחרת) — נמשיך ל-FontFace; הייצוא ידווח בבירור */
+      }
       // 2) תצוגה: @font-face חי
       if (!fontCatalog.faces.has(family) && typeof FontFace !== 'undefined') {
         try {
@@ -17874,6 +18610,9 @@ function createImudLibrary(engine) {
       return buf;
     })();
     appliedFontsReady.set(family, p);
+    // **S5.2:** הבטחה שנדחתה (restart/קריסה) מנקה את המטמון — קריאה חוזרת
+    // תרשום מחדש על ה-Worker שהוזרם (respawn) ולא תחזיר הבטחה מתה לנצח.
+    p.catch(() => { appliedFontsReady.delete(family); });
     return p;
   }
 
@@ -17943,14 +18682,19 @@ function createImudLibrary(engine) {
     return null;
   }
 
-  /** **03.11(ד):** טעינת גופן לפי ערך הגדרה — תומך גם במחסנית (נפתרת מול
-   * הקטלוג) וגם במשפחה בודדת. מחזיר Promise<ArrayBuffer|null>. */
-  function loadFontStack(value) {
-    if (value == null) return Promise.resolve(null);
+  /** **03.11(ד) + S5.2:** טעינת גופן לפי ערך הגדרה — תומך גם במחסנית (נפתרת מול
+   * הקטלוג) וגם במשפחה בודדת. מחזיר Promise<ArrayBuffer|null>.
+   * **S5.2:** ממתין קודם לטעינת הקטלוג — בעבר, קריאה לפני שהקטלוג נטען החזירה
+   * null בשקט (byFamily ריק) גם כשהמשפחה קיימת בספרייה (נתיב getExportFont). */
+  async function loadFontStack(value) {
+    if (value == null) return null;
+    if (!fontCatalog.loaded) {
+      try { await loadFontCatalog(); } catch (e) { /* ספרייה לא זמינה — ההגדרה תיפול לגופן מערכת */ }
+    }
     const direct = fontCatalog.byFamily.get(String(value).trim());
     if (direct) return loadFont(String(value).trim());
     const resolved = resolveFamily(value);
-    return resolved ? loadFont(resolved) : Promise.resolve(null);
+    return resolved ? loadFont(resolved) : null;
   }
 
   /** **EXT-14 (05.11): ערכות סגנון-ספר מהמקור (setting_sets/):** תלמוד/פרשנות/קונטרס —
@@ -18019,7 +18763,12 @@ function createImudLibrary(engine) {
       } catch (e) { /* אין btoa — הייצוא ידלג */ }
       try {
         await engine.registerFont({ name: 'FrankReal', bytes: buf.slice(0) });
-      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      } catch (e) {
+        // **S5.2:** מוות ה-Worker (restart) — דחייה מפורשת + ניקוי המטמון (רישום
+        // חוזר בקריאה הבאה על המופע שהוזרם); כשל אחר — תצוגה בלבד כמו קודם.
+        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+        /* רישום נכשל — תצוגה בלבד */
+      }
       if (!fontCatalog.faces.has('FrankReal') && typeof FontFace !== 'undefined') {
         try {
           const face = new FontFace('FrankReal', buf);
@@ -18031,6 +18780,7 @@ function createImudLibrary(engine) {
       return buf;
     })();
     appliedFontsReady.set('FrankReal', p);
+    p.catch(() => { appliedFontsReady.delete('FrankReal'); }); // **S5.2:**
     return p;
   }
 
@@ -18047,7 +18797,11 @@ function createImudLibrary(engine) {
       const buf = await r.arrayBuffer();
       try {
         await engine.registerFont({ name: 'DavidLibre-Bold', bytes: buf.slice(0) });
-      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      } catch (e) {
+        // **S5.2:** מוות ה-Worker (restart) — דחייה מפורשת + ניקוי המטמון.
+        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+        /* רישום נכשל — תצוגה בלבד */
+      }
       if (typeof FontFace !== 'undefined') {
         try {
           const face = new FontFace('David Libre', buf, { weight: '700' });
@@ -18059,6 +18813,7 @@ function createImudLibrary(engine) {
       return buf;
     })();
     appliedFontsReady.set('DavidLibre-Bold', p);
+    p.catch(() => { appliedFontsReady.delete('DavidLibre-Bold'); }); // **S5.2:**
     return p;
   }
 

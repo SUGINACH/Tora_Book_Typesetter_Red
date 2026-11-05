@@ -29,7 +29,7 @@ const DESIGN_FILES = {
 };
 
 function createImudLibrary(engine) {
-  const fontCatalog = { loaded: false, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set(), extended: [], extendedByFamily: new Map() };
+  const fontCatalog = { loaded: false, loading: null, families: [], byFamily: new Map(), bytesB64: new Map(), faces: new Set(), extended: [], extendedByFamily: new Map() };
   const designs = new Map(); // collection → {loaded, items:[{id,name,box}]}
   const appliedFontsReady = new Map(); // family → Promise<ArrayBuffer|null>
 
@@ -47,18 +47,31 @@ function createImudLibrary(engine) {
    * @returns {Promise<Array<{value:string,label:string,embedded:boolean}>>} */
   async function loadFontCatalog() {
     if (fontCatalog.loaded) return catalogEntries();
-    const list = await fetchJson(`${BASE}/imud-fonts.json`);
-    fontCatalog.families = list.map(e => e.family);
-    for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
-    fontCatalog.loaded = true;
-    // הקטלוג המורחב — קטלוג-שמות בלבד (הכשלון אינו חוסם: הפיקרים יציגו את
-    // המוטמעות בלבד, כמו קודם)
+    // **S5.2:** מטמון הבטחה בטיסה — שתי קריאות מקבילות (עלייה: פיקרים + ברירות
+    // מחדל) תפיקו טעינה אחת בלבד; בעבר נבדק רק loaded אחרי הפתרון ⇒ כל קריאה
+    // בזמן טעינה שיכפלה את ה-fetch (~400KB חינם). כישלון מנקה את המטמון —
+    // קריאה חוזרת תנסה שוב (לא תיתקע על הבטחה שנכשלה).
+    if (fontCatalog.loading) return fontCatalog.loading;
+    const p = (async () => {
+      const list = await fetchJson(`${BASE}/imud-fonts.json`);
+      fontCatalog.families = list.map(e => e.family);
+      for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
+      fontCatalog.loaded = true;
+      // הקטלוג המורחב — קטלוג-שמות בלבד (הכשלון אינו חוסם: הפיקרים יציגו את
+      // המוטמעות בלבד, כמו קודם)
+      try {
+        const ext = await fetchJson(`${BASE}/fonts-extended.json`);
+        fontCatalog.extended = ext.map(e => e.family);
+        fontCatalog.extendedByFamily = new Map(ext.map(e => [e.family, e]));
+      } catch (e) { fontCatalog.extended = []; fontCatalog.extendedByFamily = new Map(); }
+      return catalogEntries();
+    })();
+    fontCatalog.loading = p;
     try {
-      const ext = await fetchJson(`${BASE}/fonts-extended.json`);
-      fontCatalog.extended = ext.map(e => e.family);
-      fontCatalog.extendedByFamily = new Map(ext.map(e => [e.family, e]));
-    } catch (e) { fontCatalog.extended = []; fontCatalog.extendedByFamily = new Map(); }
-    return catalogEntries();
+      return await p;
+    } finally {
+      fontCatalog.loading = null;
+    }
   }
 
   /** רשימת הפיקרים: מוטמעות ראשונות, אחר-כך הקטלוג המורחב עם סימון ברור. */
@@ -99,9 +112,15 @@ function createImudLibrary(engine) {
         fontCatalog.bytesB64.set(family, btoa(bin));
       } catch (e) { /* אין btoa (סביבה חריגה) — הייצוא ידלג על ההטמעה */ }
       // 1) Worker: מדידת גופן אמיתי (measure-impl=font-metrics) + ייצוא PDF
+      // **S5.2:** רישום שמת עם ה-Worker (terminate/ביטול single-flight) — עדכון
+      // במפורש: הגופן לא נרשם במנוע. בלי זה ההבטחה היתה נפתרת ב"הכל בסדר"
+      // והמטמון (appliedFontsReady) היה מחזיר אותה לנצח ⇒ ייצוא תלוי/מדידה שגויה.
       try {
         await engine.registerFont({ name: family, bytes: buf.slice(0) });
-      } catch (e) { /* רישום נכשל — נמשיך ל-FontFace; הייצוא ידווח בבירור */ }
+      } catch (e) {
+        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+        /* רישום נכשל (סיבה אחרת) — נמשיך ל-FontFace; הייצוא ידווח בבירור */
+      }
       // 2) תצוגה: @font-face חי
       if (!fontCatalog.faces.has(family) && typeof FontFace !== 'undefined') {
         try {
@@ -114,6 +133,9 @@ function createImudLibrary(engine) {
       return buf;
     })();
     appliedFontsReady.set(family, p);
+    // **S5.2:** הבטחה שנדחתה (restart/קריסה) מנקה את המטמון — קריאה חוזרת
+    // תרשום מחדש על ה-Worker שהוזרם (respawn) ולא תחזיר הבטחה מתה לנצח.
+    p.catch(() => { appliedFontsReady.delete(family); });
     return p;
   }
 
@@ -183,14 +205,19 @@ function createImudLibrary(engine) {
     return null;
   }
 
-  /** **03.11(ד):** טעינת גופן לפי ערך הגדרה — תומך גם במחסנית (נפתרת מול
-   * הקטלוג) וגם במשפחה בודדת. מחזיר Promise<ArrayBuffer|null>. */
-  function loadFontStack(value) {
-    if (value == null) return Promise.resolve(null);
+  /** **03.11(ד) + S5.2:** טעינת גופן לפי ערך הגדרה — תומך גם במחסנית (נפתרת מול
+   * הקטלוג) וגם במשפחה בודדת. מחזיר Promise<ArrayBuffer|null>.
+   * **S5.2:** ממתין קודם לטעינת הקטלוג — בעבר, קריאה לפני שהקטלוג נטען החזירה
+   * null בשקט (byFamily ריק) גם כשהמשפחה קיימת בספרייה (נתיב getExportFont). */
+  async function loadFontStack(value) {
+    if (value == null) return null;
+    if (!fontCatalog.loaded) {
+      try { await loadFontCatalog(); } catch (e) { /* ספרייה לא זמינה — ההגדרה תיפול לגופן מערכת */ }
+    }
     const direct = fontCatalog.byFamily.get(String(value).trim());
     if (direct) return loadFont(String(value).trim());
     const resolved = resolveFamily(value);
-    return resolved ? loadFont(resolved) : Promise.resolve(null);
+    return resolved ? loadFont(resolved) : null;
   }
 
   /** **EXT-14 (05.11): ערכות סגנון-ספר מהמקור (setting_sets/):** תלמוד/פרשנות/קונטרס —
@@ -259,7 +286,12 @@ function createImudLibrary(engine) {
       } catch (e) { /* אין btoa — הייצוא ידלג */ }
       try {
         await engine.registerFont({ name: 'FrankReal', bytes: buf.slice(0) });
-      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      } catch (e) {
+        // **S5.2:** מוות ה-Worker (restart) — דחייה מפורשת + ניקוי המטמון (רישום
+        // חוזר בקריאה הבאה על המופע שהוזרם); כשל אחר — תצוגה בלבד כמו קודם.
+        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+        /* רישום נכשל — תצוגה בלבד */
+      }
       if (!fontCatalog.faces.has('FrankReal') && typeof FontFace !== 'undefined') {
         try {
           const face = new FontFace('FrankReal', buf);
@@ -271,6 +303,7 @@ function createImudLibrary(engine) {
       return buf;
     })();
     appliedFontsReady.set('FrankReal', p);
+    p.catch(() => { appliedFontsReady.delete('FrankReal'); }); // **S5.2:**
     return p;
   }
 
@@ -287,7 +320,11 @@ function createImudLibrary(engine) {
       const buf = await r.arrayBuffer();
       try {
         await engine.registerFont({ name: 'DavidLibre-Bold', bytes: buf.slice(0) });
-      } catch (e) { /* רישום נכשל — תצוגה בלבד */ }
+      } catch (e) {
+        // **S5.2:** מוות ה-Worker (restart) — דחייה מפורשת + ניקוי המטמון.
+        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+        /* רישום נכשל — תצוגה בלבד */
+      }
       if (typeof FontFace !== 'undefined') {
         try {
           const face = new FontFace('David Libre', buf, { weight: '700' });
@@ -299,6 +336,7 @@ function createImudLibrary(engine) {
       return buf;
     })();
     appliedFontsReady.set('DavidLibre-Bold', p);
+    p.catch(() => { appliedFontsReady.delete('DavidLibre-Bold'); }); // **S5.2:**
     return p;
   }
 

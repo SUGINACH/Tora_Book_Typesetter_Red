@@ -591,7 +591,7 @@ describe('S10.2 שער 5 — דיבאג פר־עמוד + highlightIssue נראה
     assert(flashed.style.outline && flashed.style.outline.includes('e03131'), 'סימון נראה (קו מיתאר inline — הוכחה בלי CSS)');
     const tds = rowWithPage.querySelectorAll('td');
     assertEq(String(Number(tds[1].textContent)), tds[1].textContent, 'עמוד בטבלה הוא מספר');
-    assertEq(Number(flashed.dataset.pageIndex), Number(tds[1].textContent), 'העמוד המסומן = העמוד בממצא');
+    assertEq(Number(flashed.dataset.pageIndex), Number(tds[1].textContent) - 1, 'העמוד המסומן = העמוד המוצג בטבלה (1-based)');
   });
 
   it('כל נתיבי הדוח מפעילים את אותו activateFinding (כלל 2 — Working_rules)', async () => {
@@ -776,22 +776,29 @@ describe('D-65 — פרוטוקול Worker: single-flight, ביטול, וליד�
     const client = new WorkerEngineClient(inlineTransport.createInlineTransport());
     const j1 = client.requestTypeset({ text: SMALL_DOC, settings: getDefaultSettings() });
     const j2 = client.requestTypeset({ text: CORPUS, settings: getDefaultSettings() });
-    const r1 = await j1.promise;
-    assert(r1 && r1.cancelled === true, 'העבודה הראשונה מבוטלת');
+    // **S5.2:** בקשה חדשה מבטלת את הקודמת — עם terminate ההבטחה הישנה נדחית
+    // ב-RESTART_ERROR (בעבר נפרדה {cancelled:true}); החדשה עובדת על מופע חי.
+    const r1 = await j1.promise.then(
+      () => { throw new Error('העבודה הראשונה היתה אמורה להידחות (worker-restarted)'); },
+      (e) => e.message);
+    assertEq(r1, 'worker-restarted', 'העבודה הראשונה נדחתה — המנוע הופעל מחדש (single-flight)');
     const r2 = await j2.promise;
     assert(r2 && r2.layoutHash, 'העבודה השנייה מסתיימת');
     const direct = typeset(CORPUS, getDefaultSettings());
     assertEq(r2.layoutHash, direct.layoutHash);
   });
 
-  it('ביטול מפורש: ההבטחה נפרדת {cancelled:true}; הלקוח פנוי', async () => {
+  it('ביטול מפורש: ההבטחה נדחית worker-restarted; הלקוח פנוי', async () => {
     const client = new WorkerEngineClient(inlineTransport.createInlineTransport());
     const j = client.requestTypeset({ text: CORPUS, settings: getDefaultSettings() });
     assert(client.busy);
     j.cancel();
     assert(!client.busy, 'הלקוח פנוי מיד אחרי ביטול');
-    const r = await j.promise;
-    assertEq(r, { cancelled: true });
+    // **S5.2:** terminate ⇒ התוצאה לעולם לא תחזור — דחייה מפורשת במקום תלייה/פרדות מזויפת.
+    const r = await j.promise.then(
+      () => { throw new Error('ההבטחה היתה אמורה להידחות (worker-restarted)'); },
+      (e) => e.message);
+    assertEq(r, 'worker-restarted');
   });
 
   it('no-op proof: מזליף ההתקדמות לא משנה פריסה (hash זהה עם ובלי)', () => {

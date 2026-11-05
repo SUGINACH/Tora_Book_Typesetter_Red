@@ -30,7 +30,9 @@ const { assignNumbers } = require('../decoration/folio');
 const { buildHeader } = require('../decoration/headers-builder');
 const { autoQualityPass, applyChapterEndMode } = require('../layout/balancing');
 const { applyHeadingModes } = require('../layout/headings-escort');
-const { markerFor, makeCounter, splitPlaceholder, MARK_TAG } = require('../notes/markers');
+// **S5.2 (תיקון 11):** splitPlaceholder הוסר מ-markers — קוד מת מלכודתי
+// (פיצול על ':' היה מבתק שעות כמו 12:30; ה-placeholder האמיתי משתמש ב-U+E000).
+const { markerFor, makeCounter, MARK_TAG } = require('../notes/markers');
 const Ledger = require('./ledger').Ledger;
 const EventLog = require('./events').EventLog;
 const { computeEditingRecommendations } = require('../audit/editing-recommendations');
@@ -190,6 +192,13 @@ function typeset(rawText, settingsIn, env = {}) {
   function widthFor(text, sizePt, fontName) {
     const base = api.measureTextWidth(text, sizePt);
     if (!fontName || fontName === settings['body-font']) return base;
+    // **S5.2 (תיקון 6 — כותרת בגופן הרשום שלה):** כשמשפחת הכותרת רשומה
+    // במדידה (registerFont) — מודדים במטריקות האמת שלה בגודל הכותרת
+    // (MeasureAPI.forFamily — דפוס apiFor של legacy-projector), כמו שה-DOM
+    // מרנדר בפועל. הקירובים (FONT_WIDTH_PROFILES ×, Math.max(base, len×0.6em))
+    // נשארים כ-fallback למשפחות לא-רשומות בלבד (בדיקות/headless).
+    const hApi = MeasureAPI.forFamily(fontName, settings);
+    if (hApi) return hApi.measureTextWidth(text, sizePt);
     const prof = FONT_WIDTH_PROFILES[fontName];
     if (prof && prof.factor) return Math.round(base * prof.factor * 100) / 100;
     const perChar = 0.6 * sizePt * (96 / 72);
@@ -226,11 +235,32 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- תקציבי גיאומטריה נגזרים לפני ה‑DP (מקור יחיד; ה‑DP והצינור קוראים אותם) ----
   const regTpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
-  const contentW = regTpl.columns.reduce((s, c) => s + c.w, 0) + regTpl.gutter;
-  settings._fnColWidthPx = settings['footnote-columns'] === 2 ? Math.round(contentW / 2) : Math.round(contentW);
+  // **S5.2 (P-4 — גזירה אחידה של רוחב התוכן):** רוחב תיבת התוכן המלא =
+  // max(col.x+col.w) − min(col.x) — זהה לנוסחה שב-page-templates.js:43
+  // (size.w − 2·marginSide − binding; 674.90px בברירת המחדל) ולרוחב שבו
+  // מוקרן מרזב ההערות (geometry-projector: x=colLeftOf, w=colWidthOf).
+  // הערך הישן — "סכום הטורים + המרזב" (2·40%+2% = 555.80px) — לא תאם אף
+  // גיאומטריה מרונדרת: הטורים נצמדים לשולי תיבת התוכן והמרווח ביניהם הוא
+  // contentW−2·cw (134.98px), לא ה-gutter (15.88px).
+  const contentW = regTpl.columns.length
+    ? Math.max(...regTpl.columns.map(c => c.x + c.w)) - Math.min(...regTpl.columns.map(c => c.x))
+    : regTpl.width - 2 * (regTpl.margins.side || 0);
+  // נתיב הערות במרזב התחתון: 1 ⇒ רוחב תיבת התוכן המלא (כמו שמוקרן/מרונדר);
+  // 2 ⇒ שני נתיבים בפריסת תיבת התוכן עם המרזב של התבנית ביניהם.
+  settings._fnColWidthPx = settings['footnote-columns'] === 2
+    ? Math.round((contentW - regTpl.gutter) / 2)
+    : Math.round(contentW);
   settings._outerMarginPx = Math.max(regTpl.margins.outer != null ? regTpl.margins.outer : 0, regTpl.margins.side * 0.8);
   settings._sideNoteColWidthPx = Math.max(60, Math.round(settings._outerMarginPx) - 12);
-  settings._endnoteColWidthPx = Math.round(contentW); // רוחב טור בעמודי הערות
+  // **S5.2 (P-3/P-4):** רוחב **טור בודד** בעמודי ההערות — מתבנית PT-07 עצמה
+  // (עמוד דו-טורי; 269.96px בברירת המחדל). הצרכן (endnote-pages) קורא אותו
+  // ישירות כרוחב טור כשendnote-columns=2; במצב טור-אחד הוא משתמש ברוחב
+  // המלא מהתבנית שלו (רשימה חד-טורית כמו ברינדור). בעבר הוזרם כאן 556px
+  // ("סכום טורים+מרזב") וחולק ב-2 ⇒ 278px — ניחוש שאינו הגיאומטריה.
+  {
+    const enTpl = buildPageTemplate(PAGE_TYPES.ENDNOTES, settings, true);
+    settings._endnoteColWidthPx = Math.round(enTpl.columns[0].w);
+  }
 
   const blocks = [];
   const endnoteTokens = [];        // טוקני הערת־סיום גלויים (endnotes mode)

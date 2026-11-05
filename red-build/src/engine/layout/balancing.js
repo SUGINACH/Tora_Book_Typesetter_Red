@@ -8,6 +8,8 @@
 
 // (moveLineForward אינו נדרש עוד באיזון: optimalSplit מכסה את מרחב המצבים כולו — EXT-8)
 
+const { colCapacityOf } = require('./column-flow'); // **S5.2 (P-2):** קיבולת הטור — מקור יחיד
+
 function usedHeight(col) {
   // **EXT-20:** גובה בפועל — כולל מקדם ה-AQ האנכי (לפני ה-AQ כל המקדמים 1).
   return col.reduce((s, ln) => s + ln.heightPx * (ln.aqStretch || 1), 0);
@@ -95,8 +97,11 @@ function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
   if (before <= maxDelta) return { changed: false, before, after: before, moves: 0 };
   if (!page.columns || page.columns.length < 2) return { changed: false, before, after: before };
-  const cap = page.template.contentBox.height;
-  const best = optimalSplit(page.columns, { cap });
+  // **S5.2 (P-2 — קיבולת מאוחדת):** colCapacityOf (column-flow) — כולל הפס
+  // החוצה־טורים; תקציב ההערות עובר כ-extraLast של הטור האחרון (כמו ב-dp-planner,
+  // P1-8) — בעבר חושב מ-contentBox.height גולמי והתעלם משניהם.
+  const cap = colCapacityOf(page, { fnBudget: false });
+  const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
   if (!best || best.k === page.columns[0].length) {
     // אין פיצול חוקי-קיבולת, או שהנוכחי כבר האופטימלי — לא מדווח שינוי
     return { changed: false, before, after: before, rollback_reason: best ? 'at-optimum' : 'capacity' };
@@ -156,11 +161,13 @@ function autoQualityPass(pages, settings, eventLog) {
   const compressFirst = settings['aq-compress-first'] !== false;
   let applied = 0;
   for (const page of pages) {
-    const cap = page.template.contentBox.height;
     for (let c = 0; c < page.columns.length; c++) {
       const lines = page.columns[c];
       const used = usedHeight(lines);
       if (!lines.length) continue;
+      // **S5.2 (P-2):** קיבולת אפקטיבית פר-טור — כולל הפס החוצה־טורים ותקציב
+      // ההערות (על הטור האחרון). המתיחה עד לתחתית האמיתית של הטור.
+      const cap = colCapacityOf(page, { colIndex: c });
       const deficit = cap - used;
       if (deficit > 4 && mayStretch) {
         const perLine = deficit / lines.length;

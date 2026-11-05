@@ -27,6 +27,19 @@ function parseHebrewNumber(s) {
   return n >= 1 ? n : null;
 }
 
+/** **S5.2 (12):** חילוץ מספר הגיליון מתצוגתו (page.folioDisplay) — תומך בפורמטים
+ * hebrew ("כ״ב"), daf-hebrew ("דף כ״ב"), decimal ("22"/"[22]") ובמסגרות
+ * (סוגריים/מרובעים/פרחוני/מעוין — כללי ה-frame של folio.js). null = אין גיליון. */
+function folioNumberOf(display) {
+  let s = String(display == null ? '' : display).trim();
+  if (!s) return null;
+  s = s.replace(/^\s*דף\s*/, '');            // daf-hebrew: "דף כ״ב"
+  const dec = s.match(/[0-9]+/);               // decimal: "22" / "[22]"
+  if (dec) { const d = Number(dec[0]); return d >= 1 ? d : null; }
+  const letters = s.replace(/[^\u05D0-\u05EA]/g, ''); // הסרת מסגרות/גרשיים — אותיות בלבד
+  return parseHebrewNumber(letters);
+}
+
 function buildPreviewTab(doc, opts) {
   const root = doc.createElement('section');
   root.className = 'tab-panel';
@@ -86,8 +99,15 @@ function buildPreviewTab(doc, opts) {
     b.type = 'button'; b.className = 'btn btn--ghost'; b.textContent = label;
     b.setAttribute('aria-label', aria);
     b.addEventListener('click', () => opts.onExport && opts.onExport(id));
+    exportBtns.push(b);
     return b;
   };
+  // **S5.2 (3):** נעילת כפתורי הייצוא בזמן ייצוג מרוחק (PDF/ZIP ב-Worker) — מנע
+  // לחיצה כפולה ⇒ שני קבצים. app-shell מפעיל/משחרר דרך setExportBusy.
+  const exportBtns = [];
+  function setExportBusy(busy) {
+    for (const b of exportBtns) b.disabled = !!busy;
+  }
   exportBar.appendChild(mkExport('html', '🌐 HTML עצמאי', 'ייצוא HTML עצמאי חד־קובץ'));
   exportBar.appendChild(mkExport('pdf', '📄 PDF', 'ייצוא PDF עם טקסט נבחר, סימניות וקישורי תוכן'));
   exportBar.appendChild(mkExport('zip', '🗜 חבילת פרויקט', 'ייצוא חבילת פרויקט ZIP (מסמך+הגדרות+הרחבות)'));
@@ -217,15 +237,90 @@ function buildPreviewTab(doc, opts) {
   }
 
   /** אומדן הטווח הנראה מהגלילה — יחסי (עמיד לזום/מרווחים): scrollTop/scrollHeight × n.
-   *  הגולל האמיתי הוא root (.tab-panel עם overflow:auto) — לא ה-canvas. */
+   *  הגולל האמיתי הוא root (.tab-panel עם overflow:auto) — לא ה-canvas.
+   * **S5.2 (6):** במצב אופקי הגולל האמיתי הוא ה-canvas (overflow-x) — המיפוי
+   *  האנכי נשאר תמיד על ~0 (אין גלילה אנכית) ⇒ בספרים >60 עמודים העמודים
+   *  שמעבר ~51% לעולם לא רונדרו (תיבות ריקות). במצב אופקי — טווח לפי גאומטריה
+   *  אופקית; המצב האנכי נשאר בדיוק כפי שהיה. */
   function visibleRange() {
     const n = virtual.pages.length;
+    if (!n) return [0, 0];
+    if (horizontal) {
+      const hr = horizontalVisibleRange();
+      if (hr) return hr;
+    }
     const scroller = (root.scrollHeight || root.clientHeight) ? root : canvas;
     const sh = scroller.scrollHeight, st = scroller.scrollTop, ch = scroller.clientHeight;
     if (!n || !sh || !isFinite(sh) || !isFinite(st) || !isFinite(ch)) return [0, 0];
     const first = Math.max(0, Math.floor((st / sh) * n) - 1);
     const last = Math.min(n - 1, Math.ceil(((st + ch) / sh) * n));
     return [first, last];
+  }
+
+  /** **S5.2 (6):** הריווח בין עמודים במצב אופקי — תואם ל-gap של .preview-canvas
+   *  ב-styles.css (24px). נצרך למודל המצטבר בסביבות בלי מנוע פריסה. */
+  const H_GAP = 24;
+
+  /** מיקומי עמודים לאורך ציר הזרימה (0=תחילת הזרימה): [x0,x1] לכל עמוד —
+   *  רוחבי התבניות בפועל + ריווח. משמש את הטווח הנראה במצב אופקי. */
+  function horizontalPageExtents() {
+    const out = [];
+    let x = 0;
+    for (let i = 0; i < virtual.pages.length; i++) {
+      const pg = virtual.pages[i];
+      const w = (pg && pg.template && Number(pg.template.width) > 0) ? Number(pg.template.width) : virtual.phW;
+      out.push([x, x + w]);
+      x += w + H_GAP;
+    }
+    return out;
+  }
+
+  /** **S5.2 (6):** הטווח הנראה במצב אופקי. 1) דפדפן: מלבן הקנבס (הגולל) מול
+   *  מלבני העמודים — פיזי, עמיד ל-RTL (dir=rtl: הזרימה מתחילה מימין), לזום
+   *  (transform נכלל ב-getBoundingClientRect) ולסדר placeholders/חיים.
+   *  2) נפילה (shim/בדיקות, בלי מנוע פריסה): מודל מצטבר + חלון לפי
+   *  scrollLeft/clientWidth/scrollWidth (RTL מודרני: שלילי מהקצה הימני=התחלה).
+   *  null = אין גאומטריה — הקורא ייפול למסלול האנכי המקורי. */
+  function horizontalVisibleRange() {
+    const n = virtual.pages.length;
+    if (!n) return null;
+    if (typeof canvas.getBoundingClientRect === 'function'
+      && canvas.children.length === n
+      && canvas.children[0] && typeof canvas.children[0].getBoundingClientRect === 'function') {
+      try {
+        const cr = canvas.getBoundingClientRect();
+        if (cr && Number.isFinite(cr.width) && cr.width > 0) {
+          let first = -1, last = -1;
+          for (let i = 0; i < n; i++) {
+            const el = canvas.children[i];
+            if (!el || typeof el.getBoundingClientRect !== 'function') continue;
+            const r = el.getBoundingClientRect();
+            if (!r || !Number.isFinite(r.width) || r.width <= 0) continue;
+            if (r.right > cr.left + 1 && r.left < cr.right - 1) {
+              if (first < 0) first = i;
+              last = i;
+            }
+          }
+          if (first >= 0) return [first, last];
+        }
+      } catch (e) { /* נפילה למודל החשבוני */ }
+    }
+    const st = canvas.scrollLeft, cw = canvas.clientWidth, sw = canvas.scrollWidth;
+    if (typeof st !== 'number' || typeof cw !== 'number' || typeof sw !== 'number') return null;
+    if (!isFinite(st) || !isFinite(cw) || !isFinite(sw) || cw <= 0 || sw <= 0) return null;
+    const ext = horizontalPageExtents();
+    // RTL: מודרני — scrollLeft ≤ 0 (0=התחלה, שלילי=התקדמות); מורשת — חיובי הפוך
+    const S = st <= 0 ? -st : Math.max(0, (sw - cw) - st);
+    const viewEnd = S + cw;
+    let first = -1, last = -1;
+    for (let i = 0; i < n; i++) {
+      const [x0, x1] = ext[i];
+      if (x1 > S && x0 < viewEnd) {
+        if (first < 0) first = i;
+        last = i;
+      }
+    }
+    return first >= 0 ? [first, last] : null;
   }
 
   function onVirtualScroll() {
@@ -300,8 +395,40 @@ function buildPreviewTab(doc, opts) {
   });
 
   // ---- ניהול עמודים ----
-  function setResult(serializedResult, settings) {
+  // **S5.2 (12):** מפת גיליון→אינדקס לקפיצה לפי מספר עברי — אל העמוד שמציג
+  // את הגיליון המבוקש, לא אל האינדקס הפיזי (פער מלא כשעמודי שער/תוכן אינם
+  // נספרים). עמוד ללא גיליון נכנס תחת אינדקס+1 (ההתנהגות הקודמת).
+  let folioIndex = new Map();
+  function rebuildFolioIndex() {
+    folioIndex = new Map();
+    const pages = (lastResult && lastResult.pages) || [];
+    for (let i = 0; i < pages.length; i++) { // מעבר ראשון: גיליונות אמיתיים — עדיפות
+      const n = folioNumberOf(pages[i] && pages[i].folioDisplay);
+      if (n != null && !folioIndex.has(n)) folioIndex.set(n, i);
+    }
+    for (let i = 0; i < pages.length; i++) { // מעבר שני: בלי גיליון — מספר פיזי (אם פנוי)
+      if (folioNumberOf(pages[i] && pages[i].folioDisplay) != null) continue;
+      const phys = i + 1;
+      if (!folioIndex.has(phys)) folioIndex.set(phys, i);
+    }
+  }
+
+  /** **S5.2 (7):** עוגן הגלילה הנוכחי — היעד האחרון שהמשתמש קיפץ/לחץ אליו,
+   *  ואם אין — העמוד העליון הנראה (וירטואלי/רגיל). לשחזור אחרי רינדור־קל. */
+  function currentScrollAnchor() {
+    if (lastScrollTarget != null) return lastScrollTarget;
+    const [a] = visibleRange();
+    return a || 0;
+  }
+
+  function setResult(serializedResult, settings, options) {
+    // **S5.2 (7):** keepView — רינדור־קל (רקע/קישוט) שומר זום ויעד גלילה;
+    // מסמך חדש באמת (בלי options) ממשיך לאפס תצוגה כמקודם.
+    const keepView = !!(options && options.keepView);
+    const prevZoom = keepView ? zoom : null;
+    const anchor = keepView ? currentScrollAnchor() : null;
     lastResult = serializedResult;
+    rebuildFolioIndex(); // **S5.2 (12):** המפה נבנית מחדש עם כל תוצאה
     canvas.textContent = '';
     pageEls = new Map();
     virtual.on = Array.isArray(serializedResult.pages) && serializedResult.pages.length > VIRTUAL_THRESHOLD;
@@ -328,7 +455,14 @@ function buildPreviewTab(doc, opts) {
     }
     pageIndicator.textContent = serializedResult.pages.length
       ? `עמוד 1 מתוך ${serializedResult.pages.length}${virtual.on ? ' (תצוגת חלון)' : ''}` : 'אין עמודים';
-    setZoom(100);
+    if (keepView) {
+      // **S5.2 (7):** שחזור הזום והיעד שנשמרו לפני פינוי הקנבס (scrollToPage
+      // מעדכן גם את מחוון העמוד); רק מסמך חדש באמת מאפס ל-100% ולראש.
+      setZoom(prevZoom != null ? prevZoom : 100);
+      if (anchor != null && anchor <= virtual.pages.length - 1) scrollToPage(anchor);
+    } else {
+      setZoom(100);
+    }
   }
 
   function scrollToPage(pageIndex) {
@@ -341,10 +475,17 @@ function buildPreviewTab(doc, opts) {
 
   // קפיצה לפי מספר עברי — שקוף לפורמט המספור שנבחר (hebrew/daf-hebrew)
   function jumpByHebrew(text) {
-    const n = parseHebrewNumber(text);
+    let n = parseHebrewNumber(text);
+    if (n == null) {
+      // **S5.2 (12):** קלט עשרוני נקלט גם — פורמט decimal מציג ספרות בגיליון
+      const dec = String(text == null ? '' : text).trim();
+      if (/^[0-9]+$/.test(dec)) n = Number(dec);
+    }
     if (n == null) { pageIndicator.textContent = 'מספר עברי לא תקין'; return null; }
-    const idx = n - 1;
-    if (!lastResult || idx < 0 || idx >= lastResult.pages.length) {
+    // **S5.2 (12):** גיליון אמיתי (folioDisplay) גובר על האינדקס הפיזי; עמודים
+    // ללא גיליון נכנסו למפה תחת אינדקס+1 — מספר שאינו במפה ⇒ "אין עמוד".
+    const idx = folioIndex.has(n) ? folioIndex.get(n) : null;
+    if (!lastResult || idx == null) {
       pageIndicator.textContent = `אין עמוד ${n}`; return null;
     }
     scrollToPage(idx);
@@ -403,6 +544,7 @@ function buildPreviewTab(doc, opts) {
 
   return {
     root, setResult, scrollToPage, jumpByHebrew, highlightIssue, clearHighlights, setCaretHighlight,
+    setExportBusy, // **S5.2 (3):** נעילת כפתורי הייצוא בזמן ייצוא מרוחק (מנע לחיצה כפולה)
     getZoom: () => zoom, _lastScrollTarget: () => lastScrollTarget,
     // D-84: חשיפה לבדיקות/אבחון של מצב הווירטואליזציה
     isVirtual: () => virtual.on,

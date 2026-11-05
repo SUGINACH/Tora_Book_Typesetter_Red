@@ -6,9 +6,18 @@
 // אינו גורר את המנוע פעמיים (המנוע נטען רק ב־engine-worker.bundle.js — D-65).
 
 let jobSeq = 0;
+
+/** **S5.2:** קוד שגיאה קבוע לעבודות שמתו עם terminate של ה־Worker (ביטול/החלפה).
+ * חוזה יציב: המאזינים (app-shell/imud-library) מזהים אותו במחרוזת ההודעה. */
+const RESTART_ERROR = 'worker-restarted';
+
+/** **S5.2:** קידומת לשגיאות worker.onerror (קריסה/כשל טעינה) — שונה מ-RESTART_ERROR:
+ * הפעלה מחדש ביוזמתנו = שקט; כשל אמיתי של המנוע = מדווח למשתמש. */
+const WORKER_ERROR_PREFIX = 'worker-error: ';
+
 class WorkerEngineClient {
   /**
-   * @param {{post:(m:object)=>void, setHandler:(cb:(m:object)=>void)=>void, terminate?:()=>void}} transport
+   * @param {{post:(m:object)=>void, setHandler:(cb:(m:object)=>void)=>void, terminate?:()=>void, setOnError?:(cb:(e:object)=>void)=>void}} transport
    */
   constructor(transport) {
     if (!transport || typeof transport.post !== 'function' || typeof transport.setHandler !== 'function') {
@@ -17,7 +26,51 @@ class WorkerEngineClient {
     this.transport = transport;
     this.activeJob = null;      // {jobId, resolve, reject, onProgress, cancelled}
     this.pending = new Map();   // **03.11:** עבודות צד (ייצוא/רישום גופן) — מקבילות לעימוד
+    this._errorCbs = [];       // **S5.2:** מאזיני כשל של התעבורה (worker.onerror)
     transport.setHandler((m) => this._onMessage(m));
+    if (typeof transport.setOnError === 'function') transport.setOnError((e) => this._onTransportError(e));
+  }
+
+  /** **S5.2:** רישום מאזין לכשל/קריסה של ה־Worker (למשל דפדפן: הודעת מצב עברית).
+   * @returns {()=>void} ביטול רישום. */
+  onError(cb) {
+    if (typeof cb !== 'function') return () => {};
+    this._errorCbs.push(cb);
+    return () => {
+      const i = this._errorCbs.indexOf(cb);
+      if (i >= 0) this._errorCbs.splice(i, 1);
+    };
+  }
+
+  _notifyError(err) {
+    for (const cb of this._errorCbs.slice()) {
+      try { cb(err); } catch (e) { /* מאזין קולקני — לא חוסם */ }
+    }
+  }
+
+  /** **S5.2:** worker.onerror — המנוע מת/לא נטען: דחיית כל הבטחות בטיסה + הודעה
+   * למאזינים. התעבורה כבר סימנה את עצמה ל-respawn בפוסט הבא — בקשה חדשה
+   * תעבוד על מופע טרי (זה תיקון התלייה: לפני כן הפוסט היה מגיע ל-Worker מת). */
+  _onTransportError(ev) {
+    const detail = (ev && (ev.message || (ev.error && ev.error.message))) || 'worker failed to load';
+    const reason = WORKER_ERROR_PREFIX + detail;
+    const job = this.activeJob;
+    if (job) {
+      this.activeJob = null;
+      const rej = job.reject; job.resolve = null; job.reject = null;
+      if (rej) try { rej(new Error(reason)); } catch (e) { /* נקי כבר */ }
+    }
+    this._rejectPending(reason);
+    this._notifyError(new Error(reason));
+  }
+
+  /** **S5.2:** דחיית כל עבודות הצד הממתינות (ייצוא/רישום גופן) — הן לעולם לא
+   * ייענו על Worker שמת; בלי זה ההבטחות נתלות לנצח ("הייצוא נתקע"). */
+  _rejectPending(reason) {
+    for (const [jid, p] of Array.from(this.pending)) {
+      this.pending.delete(jid);
+      try { p.reject(new Error(reason)); } catch (e) { /* נקי כבר */ }
+    }
   }
 
   _onMessage(m) {
@@ -92,29 +145,78 @@ class WorkerEngineClient {
     return { promise, jobId, cancel: () => this.cancel() };
   }
 
-  /** ביטול העבודה הפעילה: סימון + הודעת cancel (+terminate בזמן ריצה ארוכה). */
+  /** **S5.2:** ביטול העבודה הפעילה: סימון + הודעת cancel + terminate (המנוע סינכרוני —
+   * זו הדרך היחידה לקטוע ריצה ארוכה ב־Worker). ה-respawn ממומש כעת בתעבורה
+   * (workerTransport): הפוסט הבא בונה מופע חדש — בעבר ההערה "respawn בעת הבקשה
+   * הבאה" לא מומשה בשום מקום ⇒ כל בקשה אחרי ביטול נשלחה ל־Worker מת ⇒ האפליקציה
+   * נתקעה לנצח ב"מנוע: עמל…".
+   * כשהתעבורה מסוגלת להרוג (terminate): העבודה הפעילה ועבודות הצד שבטיסה
+   * נדחות ב־RESTART_ERROR — הן לעולם לא ייענו; בלי זה ההבטחות נתלות (bug S5.2).
+   * תעבורה בלי terminate (תיאורטי): המנוע חי — הפרדה {cancelled:true} המקורית. */
   cancel() {
     const job = this.activeJob;
     if (!job) return;
     job.cancelled = true;
     this.transport.post({ type: 'cancel', jobId: job.jobId });
-    if (typeof this.transport.terminate === 'function') this.transport.terminate(); // respawn בעת הבקשה הבאה
+    const killed = typeof this.transport.terminate === 'function';
+    if (killed) this.transport.terminate(); // ה-respawn: בפוסט הבא (workerTransport)
     this.activeJob = null;
-    const resolve = job.resolve;
+    const resolve = job.resolve, reject = job.reject;
     job.resolve = null; job.reject = null;
-    if (resolve) resolve({ cancelled: true }); // ההבטחה נפרדת במפורש — לא נתלית לנצח
+    if (killed) {
+      // **S5.2:** המנוע מת — התוצאה לעולם לא תחזור: דחייה מפורשת, לא הבטחה תלויה.
+      if (reject) reject(new Error(RESTART_ERROR));
+      this._rejectPending(RESTART_ERROR); // עבודות צד (ייצוא/רישום) מתות עמו
+    } else if (resolve) {
+      resolve({ cancelled: true }); // ההבטחה נפרדת במפורש — לא נתלית לנצח
+    }
   }
 
   get busy() { return this.activeJob != null; }
 }
 
-/** מתאם Worker אמיתי (דפדפן). */
-function workerTransport(worker) {
+/** **S5.2:** מתאם Worker אמיתי (דפדפן) — עם respawn.
+ * בעבר קיבל מופע קיים; עכשיו מפעל () => new Worker(url): ה־terminate (ביטול/
+ * קריסה) מסמן דגל terminated, וה-post הבא בונה מופע חדש מאותו URL
+ * (כולל ?v= — אותו cache-busting גם אחרי respawn) ומחדש את המאזינים.
+ * כך בקשה אחרי cancel/קריסה לא נשלחת ל־Worker מת. */
+function workerTransport(factory) {
+  if (typeof factory !== 'function') throw new Error('workerTransport: factory () => Worker required');
+  let worker = null;      // המופע החי (null ⇒ עדיין לא נוצר)
+  let terminated = false; // **S5.2:** דגל מוות — true עד respawn בפוסט הבא
+  let handler = null;     // פונקציית ההודעות של הלקוח
+  let errorSink = null;   // **S5.2:** worker.onerror → הלקוח (דחיית בטיסה + הודעה)
+
+  function attach(w) {
+    w.onmessage = (ev) => { if (handler) handler(ev.data); };
+    w.onerror = (e) => {
+      // המופע שבדק כשל (כולל כשל טעינה) — נסגר ויבוא חדש בפוסט הבא
+      try { w.terminate(); } catch (e2) { /* כבר מת */ }
+      terminated = true;
+      if (errorSink) { try { errorSink(e); } catch (e2) { /* מאזין קולקני */ } }
+    };
+  }
+
+  function ensure() {
+    if (worker && !terminated) return worker;
+    worker = factory();       // respawn — אותו URL (?v=) כמו בעלייה הראשונה
+    terminated = false;
+    attach(worker);
+    return worker;
+  }
+
   return {
-    post: (m) => worker.postMessage(m),
-    setHandler: (cb) => { worker.onmessage = (ev) => cb(ev.data); },
-    terminate: () => worker.terminate()
+    post: (m) => { ensure().postMessage(m); },
+    setHandler: (cb) => {
+      handler = cb;
+      if (worker && !terminated) attach(worker); // רישום חוזר — מחדש גם על מופע קיים
+    },
+    setOnError: (cb) => { errorSink = cb; }, // **S5.2:** אופציונלי — inline אין לו
+    terminate: () => {
+      if (worker && !terminated) { try { worker.terminate(); } catch (e) { /* כבר מת */ } }
+      terminated = true; // הפוסט הבא יבנה מחדש (respawn)
+    }
   };
 }
 
-module.exports = { WorkerEngineClient, workerTransport };
+module.exports = { WorkerEngineClient, workerTransport, RESTART_ERROR, WORKER_ERROR_PREFIX };

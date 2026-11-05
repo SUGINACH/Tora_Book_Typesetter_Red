@@ -30,6 +30,9 @@ on:
 jobs:
   layout-parity:
     runs-on: ubuntu-latest
+    # **S5.2 (P-11):** תקרה מפורשת לכל job — בלי זה ריצה תקועה מחזיקה ראנר
+    # עד חיתוך ברירת המחדל של GitHub (360 דק').
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +79,25 @@ jobs:
             echo "⚠ PARITY gaps remain — score: ${score}% (open calibration: P1/P3b/P4/P6/P7; full report in artifact)"
           fi
 
+      # **S5.2 (P-11 — קובע-רץ לציון הקבילה):** ירידה בציון = נסיגה. הציון נקרא
+      # מ-parity-report.json (summary.score, סקאלה 0-100) ומושווה מול בסיס נעול
+      # ב-red-build/tests/artifacts/parity-baseline.json (score ביחס 0-1).
+      # שלב זה אינו משנה את קודי היציאה של compare.py: HARD נשאר קטלני
+      # בשלב הקודם; פה רק רצפת הציון. העלאת הבסיס — בכוונה ובתיעוד בלבד.
+      - name: Parity ratchet — score floor vs committed baseline
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          run = json.load(open('audits/layout-parity-artifacts/parity-report.json'))['summary']['score']
+          base = json.load(open('red-build/tests/artifacts/parity-baseline.json'))['score']
+          floor = base * 100  # הבסיס ביחס 0–1; compare.py מדווח 0–100
+          print(f'parity score: {run}% | baseline: {base} (= {floor:g}%)')
+          if run < floor:
+              print(f'✗ ציון הקבילה ירד מתחת לבסיס הנעול: {run}% < {floor:g}% — ירידה היא נסיגה; עדכון הבסיס רק בכוונה ובתיעוד')
+              sys.exit(1)
+          print(f'✓ ציון {run}% ≥ בסיס {floor:g}%')
+          EOF
+
       - name: Always upload the full report + our PDF
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,6 +124,8 @@ jobs:
   # הם שומרי הרגרסיה לכל תיקון עתידי.
   very-long-corpus:
     runs-on: ubuntu-latest
+    # **S5.2 (P-11):** תקרה מפורשת — כמו בכל שאר ה-jobs.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 

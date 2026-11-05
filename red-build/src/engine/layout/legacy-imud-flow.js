@@ -84,7 +84,10 @@ function toGematria(num) {
   // בייחוס; מונע undefined ושומר דטרמיניזם — הקורפוס הגדול מגיע ל־~730).
   if (num >= 1000) {
     const th = Math.floor(num / 1000);
-    return toGematria(th) + "'" + toGematria(num % 1000);
+    // **S5.2 (אחידות D-31):** גרש עברי (U+05F3) במקום ASCII ' — כמו
+    // toHebrewNumber של folio.js (ה׳תש״ב); שני מחלקי המספור במאגר חייבים
+    // להסכים על אותו תו.
+    return toGematria(th) + '\u05F3' + toGematria(num % 1000);
   }
   const hundreds = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
   const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
@@ -209,7 +212,10 @@ function readConfig(imud) {
     hdrCType: String(g('hdr-c-type', 'h2_without_siman')),
     hdrLType: String(g('hdr-l-type', 'book_title_split_l')),
     gtocShow: imud && 'gtoc-show' in imud ? imud['gtoc-show'] : [1, 2, 3, 4, 5, 6],
-    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6]
+    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6],
+    // **S5.2 (F2 — הערות סיום):** כותרת עמודי הערות-הסיום מהמקור
+    // (fn-title-text; ממופה ב-legacy-settings-map ל-endnote-title-text).
+    fnTitleText: String(g('fn-title-text', 'הערות'))
   };
 }
 
@@ -282,6 +288,19 @@ function tokenizeDoc(rawText, cfg) {
       });
       pendingSideNote = null; pendingEndNote = null;
     }
+  }
+  // **S5.2 (מיפוי מוקשים F4):** פלוש שאריות בסוף מסמך — הערת-צד (h7) או
+  // הערת-סיום שהמתינו לפסקה שלא באה אבדו בשקט (pendingSideNote/pendingEndNote
+  // מעולם לא נצרכו). כעת: הערת-צד זנבורית נשפכת כפסקה גלויה (התוכן נשמר
+  // ונראה — עדיף על אובדן), והערת-סיום זנבורית נסגרר לפסקה ריקה הנושאת
+  // את ה-endNote (עמודי הערות-הסיום אוספים מהטוקנים ישירות).
+  if (pendingSideNote || pendingEndNote) {
+    tokens.push({
+      id: tokens.length, type: 'p',
+      text: pendingSideNote || '',
+      sideNote: null, endNote: pendingEndNote,
+      syntheticTail: true
+    });
   }
   return { meta, tokens };
 }
@@ -833,7 +852,11 @@ function legacyTypeset(rawText, settings, env) {
       cur.tokens.push(t);
     }
   }
-  if (cur.tokens.length) sections.push(cur);
+  // **S5.2 (מיפוי מוקשים F3):** סעיף שנפתח ב-newPage (h0/h2 פותח עמוד) אך לא
+  // קיבל אף token אחריו — בעבר לא נדחף כלל: הכותרת אבדה (לא נוצר עמוד שער
+  // לפרק) ושורת תוכן-העניינים שלו קיבלה folio ריק. כעת הסעיף נדחף גם ריק —
+  // עמוד הפתיחה נבנה עם הכותרת בלבד.
+  if (cur.tokens.length || cur.newPage) sections.push(cur);
 
   const pages = [];
   const headingFolio = new Map();
@@ -961,7 +984,9 @@ function legacyTypeset(rawText, settings, env) {
     const paraNotes = new Map(); // tokenId -> [{text}] (מופקות בפעם הראשונה)
     const tokPages = new Map();  // tokenId -> Set(pageIndex)
 
-    while (ti < toks.length || pending) {
+    while (ti < toks.length || pending || (sectionFirst && sec.newPage)) {
+      // **S5.2 (F3):** סעיף עם newPage ובלי אף token — עמוד הפתיחה (הכותרת)
+      // עדיין חייב להיווצר; בלי התנאי הזה הלולאה לא רצה כלל והכותרת אבדה.
       const pageIsSectionOpen = sectionFirst && !!sec.newPage; // **S4.19:** להזזת אזור-h2/h0 בסוף העמוד
       const pg = newPage(isH0 ? (sectionFirst ? 'preface' : 'regular')
         : (sectionFirst && isH2 ? 'sign-open' : 'regular'));
@@ -1505,6 +1530,10 @@ function legacyTypeset(rawText, settings, env) {
         }
         const startIdx = pending ? pending.lineIdx : 0;
         const total = lines.length - startIdx;
+        // **S5.2 (F4):** פסקה ריקה (למשל ה-syntheticTail של הערת-סיום זנבורית)
+        // — אין שורות להציב; מדלגים בבטחה (ה-endNote נאסף מהטוקנים ישירות,
+        // ואין תוכן-מקור לאבד). בלי זה — fit מאולץ 1 על מערך ריק ⇒ קריסת ln.words.
+        if (total <= 0) { pending = null; ti++; continue; }
 
         // תקציב מוקדם: כל ההערות של הפסקה (מהשבירה המלאה) נכנסות לתור העמוד
         // כבר בעמוד הראשון שלה — כך התקציב מצטמצם מוקדם כמו במקור.
@@ -2147,10 +2176,27 @@ function legacyTypeset(rawText, settings, env) {
     }
     const pagesRows = [];
     let curRows = [], curH = 0, first = true;
+    // **S5.2 (מיפוי מוקשים F1 — עימוד תוכן-העניינים):** הקיבולת חושבה מ-GEO.FLOW_H
+    // (702px עמוד ראשון / 915px המשך) בעוד שהשורות ממוקמות בפועל בין
+    // TOC_FIRST_TOP/TOC_CONT_TOP לבין TOC_STRETCH_BOTTOM — כלומר 635/892px
+    // בלבד. ה-67/23px העודפים אפשרו דחיסה שדרסה שורות את שורות (מרווח 15.9px
+    // מול תיבת שורה 26px), התנגשות עם אזור הפוליו ואף שורות שירדו מתחת לתחתית
+    // העמוד. בנוסף, אצווה אטומית (h2 + כל תתי-הרשומות) שגדולה מהקיבולת הוצבה
+    // בכל זאת כשהעמוד ריק (ללא חלוקה). תוקן: קיבולת מהקבועים המכוילים בפועל,
+    // ואצווה גדולה מעמוד נחלקת בגבולות שורות בין עמודי ה-TOC.
+    const availOf = (f) => TOC_STRETCH_BOTTOM - (f ? TOC_FIRST_TOP : TOC_CONT_TOP);
     for (const u of units) {
       const uH = u.reduce((a, r) => a + r.h, 0);
-      const avail = first ? GEO.FLOW_H - TOC_TITLE_BLOCK_H : GEO.FLOW_H;
-      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; }
+      let avail = availOf(first);
+      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; avail = availOf(false); }
+      if (uH > avail && !curRows.length) {
+        // אצווה אטומית גדולה מעמוד שלם — פיצול בגבולות שורות (עדיף על דריסה/גלישה)
+        for (const r of u) {
+          if (curH + r.h > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; avail = availOf(false); }
+          curRows.push(r); curH += r.h;
+        }
+        continue;
+      }
       curRows.push(...u); curH += uH;
     }
     if (curRows.length) pagesRows.push({ rows: curRows, first });
@@ -2163,8 +2209,21 @@ function legacyTypeset(rawText, settings, env) {
       const top = pr.first ? TOC_FIRST_TOP : TOC_CONT_TOP;
       const rowYs = [];
       if (!isLast && pr.rows.length > 1) {
-        const gap = (TOC_STRETCH_BOTTOM - top) / (pr.rows.length - 1);
-        pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+        // **S5.2 (F1):** רצפה למרווח המתיחה — לא קטן מגובה השורה המרבי בעמוד;
+        // ואם הרצפה דוחפת את השורה האחרונה מעבר לתחתית אזור המתיחה — מערך טבעי
+        // (מוכרח להיכנס: סכום הגבהים ≤ הקיבולת). בלי הרצפה ה-gap ירד עד ~6px
+        // והשורות נדרסו זו על זו.
+        const maxH = Math.max.apply(null, pr.rows.map(r => r.h));
+        const hLast = pr.rows[pr.rows.length - 1].h;
+        const naturalGap = (TOC_STRETCH_BOTTOM - top) / (pr.rows.length - 1);
+        const gap = Math.max(naturalGap, maxH);
+        const lastTop = top + (pr.rows.length - 1) * gap;
+        if (lastTop <= TOC_STRETCH_BOTTOM - hLast + 0.5) {
+          pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+        } else {
+          let yy = top;
+          for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
+        }
       } else {
         let yy = top;
         for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
@@ -2189,6 +2248,70 @@ function legacyTypeset(rawText, settings, env) {
   for (const p of pages) ((p.type === 'shaar-main' || p.type === 'shaar-back') ? gates : bodies).push(p);
   const genPages = cfg.enableGeneralToc && genEntries.length ? makeTocPages('toc-general', genEntries, 'תוכן עניינים כללי') : [];
   const detPages = cfg.enableDetailedToc && detEntries.length ? makeTocPages('toc-detailed', detEntries, 'תוכן עניינים מפורט') : [];
+
+  // **S5.2 (מיפוי מוקשים F2 — הערות סיום בנתיב המורשת):** שורות "הערת סיום - …"
+  // (en-line-prefix של המקור; המפתח קיים ב-default_settings של כל 8 קובצי
+  // המקור) נצרכו בטוקניזציה ל-token.endNote — אך אף קוד מעולם לא קרא אותו:
+  // התוכן אבד בשקט. כאן נבנים עמודי הערות-הסיום בסוף הספר: כותרת
+  // (fn-title-text) בעמוד הראשון, שני טורים (COL_W), סמן גימטריה רציף
+  // בגודל הרישום + גוף ההערה ב-FRL 8.5pt — אותם כללי עטיפה כמו רשימת
+  // ההערות (wrapText ברוחב טור−סמן, FIT_EPS בכל נקודות השבירה). המשך
+  // חתוך בין עמודים/טורים מסומן '(המשך)' — כמו זרימת ההערות.
+  const endNoteTokens = tokens.filter(t => t.type === 'p' && t.endNote);
+  const endnotePagesBuilt = [];
+  if (endNoteTokens.length) {
+    const EN_TITLE_H = 44;
+    const mkSpaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+    let enPg = null, enCol = 0, enY = 0, enFirst = true;
+    const openEndPage = () => {
+      enPg = newPage('endnotes');
+      setHeader(enPg, cfg.fnTitleText);
+      enPg._enFirst = enFirst;
+      if (enFirst) enPg.bands.push({ kind: 'endnote-title', text: cfg.fnTitleText, sizePt: SZ.h2, y: GEO.FLOW_TOP, h: EN_TITLE_H, tokenId: null });
+      enCol = 0; enY = GEO.FLOW_TOP + (enFirst ? EN_TITLE_H : 0);
+      endnotePagesBuilt.push(enPg);
+    };
+    const nextColOrPage = () => {
+      if (enCol === 0) { enCol = 1; enY = GEO.FLOW_TOP + (enPg._enFirst ? EN_TITLE_H : 0); return true; }
+      enFirst = false; openEndPage(); return true;
+    };
+    openEndPage();
+    endNoteTokens.forEach((tok, ni) => {
+      const marker = LineBreaker.markerWord(ni + 1, cfg.fnNumSeparator);
+      const mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0) + mkSpaceW;
+      const contW = fnApi.measureTextWidth('(המשך)', cfg.fnListingNumSize, 0) + mkSpaceW;
+      const noteLines = wrapText(tok.endNote, fnApi, GEO.COL_W - Math.max(mkW, contW), SZ.fnBody);
+      let li = 0, seg = 0;
+      while (li < noteLines.length) {
+        const room = Math.floor((FLOW_BOTTOM - enY) / GEO.FN_PITCH);
+        if (room <= 0) { nextColOrPage(); continue; }
+        // אטומיות: הערה שלמה בעמוד-טור אחד כשהיא נכנסת; אחרת חלוקה בגבולות שורות
+        const need = noteLines.length - li;
+        if (need > room && need <= Math.floor((FLOW_BOTTOM - (GEO.FLOW_TOP + (enPg._enFirst && enCol === 0 ? EN_TITLE_H : 0))) / GEO.FN_PITCH)) {
+          nextColOrPage(); continue; // מעבר לטור/עמוד פנוי — וההערה תיכנס שלמה
+        }
+        const take = Math.min(room, need);
+        for (let k = 0; k < take; k++, li++) {
+          const words = String(noteLines[li]).split(' ').filter(Boolean);
+          let markerIdx = [];
+          if (k === 0) {
+            const head = seg === 0 ? marker : '(המשך)';
+            words.unshift(head);
+            markerIdx = [0];
+          }
+          enPg.columns[enCol].push({
+            words, markerIdx, parenFlags: null, parenStarts: null, parenEnds: null,
+            sizePt: SZ.fnBody, heightPx: GEO.FN_PITCH, kind: 'paragraph',
+            isLast: li === noteLines.length - 1,
+            tokenId: tok.id, window: false, windowWords: null,
+            y: enY, paraId: null, lineIdx: null, align: null
+          });
+          enY += GEO.FN_PITCH;
+        }
+        if (li < noteLines.length) { seg++; nextColOrPage(); }
+      }
+    });
+  }
   const subIdx = bodies.findIndex(p => p.type === 'shaar-sub');
   const before = subIdx >= 0 ? bodies.slice(0, subIdx + 1) : [];
   const after = subIdx >= 0 ? bodies.slice(subIdx + 1) : bodies;
@@ -2199,7 +2322,7 @@ function legacyTypeset(rawText, settings, env) {
   // אי-זוגי (עמוד זוגי פיזי = גב) — מוכנס עמוד ריק. מחליף את המקרה הפרטי
   // של שער-המשנה (needBlank) בכלל הכללי; ברירות המחדל של המקור:
   // odd-h0=true, odd-h1=true, odd-h2=false.
-  const seq = [...gates, ...genPages, ...before, ...detPages, ...after];
+  const seq = [...gates, ...genPages, ...before, ...detPages, ...after, ...endnotePagesBuilt];
   const final = [];
   for (const p of seq) {
     if (p._secStartLevel != null) {
@@ -2268,6 +2391,80 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
   const ledger = new Ledger();
 
+  // **S5.2 (מיפוי מוקשים S1 — חשבונאות שימור תוכן אמיתית לנתיב החי):** עד כאן
+  // הוחזר contentPreserved: true קבוע-קשה — כל רגרסיה בזרימת ההערות/המשכים/
+  // הטוקנים עברה בשקט (הבדיקות שהחזיקו בדגל היו טאוטולוגיות — המחלק של
+  // D-30 קיים רק בנתיב ה-DP). כעת: מולטיסט מילות מקור (מטא-דאטה + כל
+  // הטוקנים: גוף, כותרות, הערות-צד, הערות-סיום) מול מולטיסט פלט (שורות
+  // העמודים: גוף+כותרות+חלונות+הערות-שוליים+הערות+הערות-סיום+שערים;
+  // בלי תוכן-עניינים ובלי פוליו — הם תוספות/העתקות של המנוע). יעד: כל מילת
+  // מקור מופיעה בפלט לפחות כמספר הופעותיה במקור; סמנים/(המשך)/גימטריה
+  // שהמנוע מוסיף אינם נספרים כחובה. כשל ⇒ ממצא high ב-ledger + דגל שקרי.
+  const contentStats = (() => {
+    const norm = (s) => String(s == null ? '' : s).split(/[\s\u00A0]+/).filter(Boolean);
+    const bump = (m, words) => { for (const w of words) m.set(w, (m.get(w) || 0) + 1); };
+    const src = new Map();
+    // **S5.2:** שדה השנה/מקום (meta.year) אינו מוצג בשער המכויל-ייחוס — כמו
+    // בתוכנת המקור (השדה נקלט למטא ואינו מרונדר באף שער; נבדק ב-snapshot
+    // וב-v20.4). לכן אינו נספר כחובת-תוכן.
+    for (const [mk, mv] of Object.entries(meta)) if (mk !== 'year') bump(src, norm(mv));
+    // **S5.2:** מסיר את תוחמי ההערה ([ ]) מצד המקור — המנוע מחלץ את גוף
+    // ההערה מבלי לכלול את התוחמים בפלט (הם תחביר, לא תוכן).
+    const srcTextOf = (t) => {
+      let s = String(t.text == null ? '' : t.text);
+      if (cfg.fnOpen) s = s.split(cfg.fnOpen).join(' ');
+      if (cfg.fnClose) s = s.split(cfg.fnClose).join(' ');
+      // **S5.2:** כותרת h1 מפוצלת בשער-המשנה לכותרת + משנה (split לפי
+      // המקף; join(' - ') לשאר) — מקף-ההפרדה הראשון הוא תחביר עימוד,
+      // כמו קידומת 'כותרת N -'. משקפים את אותה טרנספורמציה בצד המקור.
+      if (t.type === 'h1') {
+        const parts = s.split(/[-–—]/).map(x => x.trim()).filter(Boolean);
+        if (parts.length >= 2) s = parts[0] + ' ' + parts.slice(1).join(' - ');
+      }
+      return s;
+    };
+    for (const t of tokens) {
+      bump(src, norm(srcTextOf(t)));
+      if (t.sideNote) bump(src, norm(t.sideNote));
+      if (t.endNote) bump(src, norm(t.endNote));
+    }
+    const out = new Map();
+    const addText = (s) => bump(out, norm(s));
+    const addWords = (ws) => { if (!ws) return; for (const w of ws) addText(w && w.t != null ? w.t : w); };
+    for (const p of pages) {
+      for (const col of p.columns || []) for (const ln of col) {
+        addWords(ln.words); addWords(ln.windowWords);
+      }
+      for (const it of p.footnotes || []) {
+        if (it.marker) addText(it.marker);
+        for (const ln of it.lines || []) addWords(ln.words);
+      }
+      for (const mn of p.marginNotes || []) for (const ln of mn.lines || []) addText(ln.text);
+      for (const b of p.bands || []) addText(b.text);
+      for (const g of p.gateLines || []) addText(g.text);
+      // תוכן-העניינים (p.toc) והפוליו לא נספרים — העתקות/מספור של המנוע
+    }
+    const missing = [];
+    let srcTotal = 0, outTotal = 0;
+    for (const [w, c] of src) {
+      srcTotal += c;
+      const oc = out.get(w) || 0;
+      if (oc < c) missing.push(`${w} (${oc}/${c})`);
+    }
+    for (const c of out.values()) outTotal += c;
+    return { sourceWords: srcTotal, outputWords: outTotal, missing };
+  })();
+  const contentPreservedFlag = contentStats.missing.length === 0;
+  if (!contentPreservedFlag) {
+    ledger.create('content-loss', 'legacy-flow', 0,
+      { missing: contentStats.missing.length, sample: contentStats.missing.slice(0, 8).join(', ') },
+      'legacy-flow');
+    events.emit('render', 'legacy-imud: אובדן תוכן — החשבונאות אדומה', {
+      missing: contentStats.missing.length,
+      sample: contentStats.missing.slice(0, 8).join(', ')
+    });
+  }
+
   // **EXT-4 (שארית — S4.21): חיבור ornament-plan לנתיב ה-legacy.** רץ אחרי
   // חישוב ה-hash — overlay בלבד (אינווריאנט T1; דפוס D-47). ברירות המחדל
   // של המקור = 'none' לכל עיטור ⇒ אפס rectים ואפס השפעה; החיבור מוכיח את
@@ -2275,8 +2472,10 @@ function legacyTypeset(rawText, settings, env) {
   // legacy-projector מצייר pg.decorations באותו דיו (ornament-ink) כמו
   // נתיב ה-DP — pdfOps ל-PDF, data-URI ל-DOM.
   const { planLegacyOrnaments } = require('../decoration/legacy-ornaments');
+  // **S5.2 (אחידות מדידה):** tracking=0 מפורש — כמו כל נקודות המדידה של
+  // המורשת (ברירת המחדל של measure-api היא כעת 0, אך מפורש עדיף).
   const ornPass = planLegacyOrnaments(pages, settings,
-    (t, s2) => api.measureTextWidth(t, s2), {
+    (t, s2) => api.measureTextWidth(t, s2, 0), {
     ledger, eventLog: events,
     bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
     flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
@@ -2344,12 +2543,13 @@ function legacyTypeset(rawText, settings, env) {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
     tocPages: [], numberingAudit: null, settings,
-    contentPreserved: true,
+    contentPreserved: contentPreservedFlag,
+    contentStats: { sourceWords: contentStats.sourceWords, outputWords: contentStats.outputWords, missingCount: contentStats.missing.length, missingSample: contentStats.missing.slice(0, 8) },
     layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
     ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
     retreat: null, sideNotes: null, endnotePages: null,
-    endnotePagesInfo: { count: 0, pages: [] },
+    endnotePagesInfo: { count: endNoteTokens.length, pages: endnotePagesBuilt.map(p => p.index) },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true
   };

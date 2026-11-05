@@ -149,7 +149,9 @@ describe('S7.1.5/6 Gate — marker style × reset policy matrix', () => {
           for (const w of (ln.words || [])) {
             const bare = String(w).replace(/[\uE000\uE101\uE102]/g, '').replace(/\u00A0/g, ' ').trim();
             for (const f of bare.split(' ')) {
-              if (/^[\u05D0-\u05EA]{1,2}\u05F3$|^\[\d{1,4}\]$|^\(\d{1,4}\)$|^\d{1,4}$|^\*{1,3}\d*$/.test(f)) bodyMarkers.push(f);
+              // **S5.2 (תיקון 10):** סמן רב-אותיות במוסכמת הגרשיים של הגיליון (כ״ג) לצד
+            // הצורה הישנה (כג׳) והבודדת (א׳) — שלושתן מזוהות כאן.
+            if (/^[\u05D0-\u05EA]{1,2}\u05F3$|^[\u05D0-\u05EA]\u05F4[\u05D0-\u05EA]+$|^\[\d{1,4}\]$|^\(\d{1,4}\)$|^\d{1,4}$|^\*{1,3}\d*$/.test(f)) bodyMarkers.push(f);
             }
           }
         }

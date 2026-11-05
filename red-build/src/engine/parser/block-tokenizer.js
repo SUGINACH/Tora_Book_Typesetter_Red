@@ -7,6 +7,8 @@ const { scanBrackets } = require('./bracket-scanner');
 
 const ATOMIC_SPACE = '\uE000'; // V3/V4 breakthrough: רווח אטומי בתוך הערה — למדידה בלבד
 
+// **S5.2 (תיקון 12 — תיעוד, ללא שינוי התנהגות):** הנרמול שלהלן (״→׳ ו-‘ ’→") הוא
+// **מכוון** — כלל one-way לפי Z.ai fix (ראה protectors.glueNoteMarkers) — אין לשנותו.
 /** נרמול גרשים/מרכאות + ניקוי PUA פנימי (REQ-PAR-05; Z.ai fixes). */
 function normalizeText(s) {
   return s
