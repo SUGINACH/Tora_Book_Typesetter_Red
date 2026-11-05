@@ -185,6 +185,10 @@
       };
       for (const lr of rects) {
         if (/line--last|line--heading/.test(String(lr.el.className))) continue; // מדולגות מטבען (מרוכזות/אחרונות)
+        // **S4.26 (חלון שקוע):** שורה 1 של פסקת-חלון עוטפת את מילת-החלון —
+        // השפה הימנית תפוסה בכוונה (כמו float:right במקור); פטורה מבדיקות
+        // היישור (כמו ב-full-math-audit).
+        if (/line--window-wrap/.test(String(lr.el.className))) continue;
         const ink = inkOf(lr.el);
         if (!ink) continue;
         if (ink.r > cr.r + 2.5 || ink.x < cr.x - 2.5) {

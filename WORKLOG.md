@@ -50,6 +50,11 @@
 parity: HARD ‏4/4, ציון 88.9% (ללא שינוי; ההטיות המכוונות מתועדות ב-D-91).
 פריסה: gh-pages ?v=2026-11-05-s4.26.
 
+**תיקון המשך (אחרי ה-CI הראשון):** האודיט הישן (audit-in-page.js — smoke
+ב-CI) לא הכיר את שורות עטיפת-החלון החדשות ודיווח ‏7×INK_NOT_JUSTIFIED
+(עמ' 8 ב-fixture הקטן) — נוסף פטור line--window-wrap (כמו ב-full-math);
+‏אימות מקומי: ‏0 בעיות, ‏9/9 עמודים, גופנים "Guttman Rashi"+"David Libre".
+
 ## S4.25 (05.11 — המשך S4.24: בודק הקורפוס (verify-corpus.py) הותאם לתיקוני האודיט — C7/C10)
 
 אחרי דחיפת S4.24, וורקפלואו layout-parity נכשל ב-job very-long-corpus
