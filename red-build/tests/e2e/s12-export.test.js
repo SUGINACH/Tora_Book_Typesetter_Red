@@ -390,7 +390,10 @@ describe('S12.2 שערים 1+2 — PDF: טקסט אמיתי, סימניות, ק�
     }
     const engineTxt = drawnWords.filter(Boolean).join(' ');
     // נטרוליזציה: רווחים + תווי כיוונון דופן (bidi) שהמחלץ מזריק בעצמו (ארטיפקט חילוץ, לא תוכן מנוע)
-    const norm = (s) => s.replace(/[\s\u200E\u200F\u202A-\u202E]+/g, '').split('').sort().join('');
+    // **D-89:** סוגריים מכוונים מקופלים לתו אחיד — הכותב משקף אותם לפי UAX#9
+    // (Bidi Mirrored) בציור, והחילוץ מחזיר את הגליף המצויר; כיוון-תצוגה אינו תוכן.
+    const norm = (s) => s.replace(/[\s\u200E\u200F\u202A-\u202E]+/g, '')
+      .replace(/[(){}[\]<>]/g, '|').split('').sort().join('');
     assertEq(norm(txt), norm(engineTxt), 'חילוץ טקסט ה־PDF ≡ כל הטקסט המצויר (מולטיסט תווים — שלמות תוכן)');
   });
 

@@ -727,11 +727,17 @@ describe('EXT-4 (שארית, S4.21) — חיבור ornament-plan לנתיב ה-l
   const base = importImudSettings(IMUD_RAW, regKeys, {}).settings;
   const DOC = 'כותרת 1 - חלק ראשון\nכותרת 2 - סימן ראשון\nפסקה ראשונה של מבחן. טקסט לדוגמה לבדיקת החיבור של עיטורים בנתיב המורשת. עוד כמה מילים כאן למילוי.\nכותרת 3 - תת סימן\nפסקה שנייה עם עוד תוכן למילוי העמוד בשורות גוף תקינות לחלוטין וללא בעיות כלשהן.\n';
 
-  it('ברירות המקור (none) ⇒ אפס עיטורים — אפס התערבות בפרופיל המורשת', () => {
+  it('ברירות המקור (none) ⇒ אפס עיטורי-orn — עיצוב השערים/כלל הכותרת בלבד (D-89)', () => {
     const r = typeset(DOC, base);
     assertEq(r.legacyProfile, true, 'legacy profile active');
     assertEq(r.ornaments, null, 'no ornaments planned (source defaults = none)');
-    assertEq(r.pages.filter(p => p.decorations && p.decorations.length).length, 0, 'zero decoration rects');
+    // **D-89:** ברירת המחדל מייצרת רק את עיצוב השערים וכלל הכותרת (בלי slot);
+    // אפס עיטורי h2/siman (עם slot) — אפס התערבות שם.
+    const ornOnly = r.pages.filter(p => (p.decorations || []).some(d => d.slot));
+    assertEq(ornOnly.length, 0, 'zero ornament rects (slotted)');
+    const kinds = new Set();
+    for (const p of r.pages) for (const d of (p.decorations || [])) kinds.add(d.kind);
+    for (const k of kinds) assert(['shaar-panel', 'shaar-divider', 'shaar-ornament', 'edition-rule', 'frame-v', 'frame-band', 'frame-chain', 'frame-h', 'hdr-rule'].includes(k), `only D-89 design kinds (${k})`);
   });
 
   it('h2-orn-* ⇒ rectים על עמוד פתיחת-הסימן במקומות הנכונים (עליון/תחתון/צדדים)', () => {
@@ -739,7 +745,8 @@ describe('EXT-4 (שארית, S4.21) — חיבור ornament-plan לנתיב ה-l
     const r = typeset(DOC, withOrn);
     const h2pg = r.pages.find(p => (p.bands || []).some(b => b.kind === 'h2-title'));
     assert(h2pg, 'h2 sign page exists');
-    const deco = h2pg.decorations || [];
+    // **D-89:** מסננים לעיטורי ה-orn (עם slot) — כלל הכותרת של D-89 אינו נספר
+    const deco = (h2pg.decorations || []).filter(d => d.slot);
     assertEq(deco.length, 4, 'top + bottom + 2 sides');
     const title = h2pg.bands.find(b => b.kind === 'h2-title');
     const siman = h2pg.bands.find(b => b.kind === 'h2-siman');
@@ -768,9 +775,10 @@ describe('EXT-4 (שארית, S4.21) — חיבור ornament-plan לנתיב ה-l
   it('הקרנה: pdfOps לעיטורי SVG וכלל-rule דרך אותו דיו (ornament-ink) כמו נתיב ה-DP', () => {
     const withOrn = { ...base, 'h2-orn-top': 'pyramid', 'h2-orn-bottom': 'lance', 'h2-orn-side': 'thin' };
     const r = typeset(DOC, withOrn);
-    const h2pg = r.pages.find(p => p.decorations && p.decorations.length);
+    // **D-89:** מחפשים את עמוד ה-orn לפי slot (עמודי השערים מעוצבים תמיד)
+    const h2pg = r.pages.find(p => (p.decorations || []).some(d => d.slot === 'sign-top'));
     const proj = projectLegacyPage(h2pg, r.settings, new MeasureAPI(r.settings));
-    const pd = proj.decorations || [];
+    const pd = (proj.decorations || []).filter(d => d.slot);
     assertEq(pd.length, 4, 'all 4 projected');
     const svgTop = pd.find(d => d.slot === 'sign-top');
     const ruleSide = pd.find(d => d.slot === 'side-r');
@@ -786,7 +794,8 @@ describe('EXT-4 (שארית, S4.21) — חיבור ornament-plan לנתיב ה-l
     registerAssets('ornaments_up_down', lib.map(x => ({ id: x.id, name: x.name, svg: x.svg, box: x.box })));
     const withImud = { ...base, 'h2-orn-top': 'imud:ornaments_up_down:orn_ud_022' };
     const r = typeset(DOC, withImud);
-    const h2pg = r.pages.find(p => p.decorations && p.decorations.length);
+    // **D-89:** לפי slot — לא כל עמוד מעוצב (השערים מעוצבים תמיד)
+    const h2pg = r.pages.find(p => (p.decorations || []).some(d => d.slot === 'sign-top'));
     assert(h2pg, 'ornament planned from the embedded library');
     const d = h2pg.decorations.find(x => x.slot === 'sign-top');
     const { ornamentInk } = require('../../src/engine/decoration/ornament-ink');

@@ -81,17 +81,80 @@ function pdfTitleHex(s) {
   return `<${out.toUpperCase()}>`;
 }
 
+/** **D-89 (דיווח משתמש: "כיוון הסוגריים בכל המופעים הפוך"):** חיקוי ה-bidi
+ * של הדפדפן למילה עברית שמצוירת בסדר ויזואלי:
+ *  - אותיות עברית/ניטרליים מהופכים (התו הלוגי הראשון בצד ימין) — כמו קודם;
+ *  - ריצות ספרות/לטינית נשארות בסדר לוגי (קריאות שמאל→ימין). בלי זה מספר
+ *    הטלפון 052-7666666 הוצג הפוך (6666667-250) — מדגם ה-CUTOVER, עמ' 2.
+ *    פיסוק מספרי קצר (.,-+/:;%) בין שתי ריצות LTR נבלע לתוכן (1.5, 052-7666666);
+ *    פיסוק עוקב/קודם (סוף משפט) נשאר בהקשר RTL — כמו UAX#9 בדפדפן.
+ *  - סוגריים מכוונים בהקשר RTL משוקפים (Bidi Mirrored, UAX#9 §3.1.4):
+ *    '(' לוגי מצויר כגליף ')' בקצה ימין של הרץ — "נפתח" כלפי כיוון הקריאה.
+ *    סוגריים בתוך ריצת LTR (ספרות) אינם משוקפים.
+ * המודול מיוצא לבדיקות (visualOrderRtl) — מקור יחיד לשני הצרכנים העתידיים. */
+const LTR_RE = /[0-9A-Za-z]/;
+const BRACKET_MIRROR = { '(': ')', ')': '(', '[': ']', ']': '[', '{': '}', '}': '{', '<': '>', '>': '<' };
+// פיסוק ביניים (CS/ES — נבלע במספר רק **בין** שתי ריצות LTR: 052-7666666, 1.5)
+const NUM_MID_GLUE = '.,-+/:;';
+// פיסוק עוקב/קודם מסוג ET (W5 — נדבק למספר גם בקצה: 1.5%, $20)
+const NUM_ET_GLUE = '%$#°₪';
+
+function visualOrderRtl(chars) {
+  // חלוקה לריצות LTR/שאר
+  const runs = [];
+  for (const ch of chars) {
+    const l = LTR_RE.test(ch);
+    if (runs.length && runs[runs.length - 1].ltr === l) runs[runs.length - 1].chars.push(ch);
+    else runs.push({ ltr: l, chars: [ch] });
+  }
+  // בליעת פיסוק בין/בקצה ריצות LTR — חלק מהמספר (052-7666666, 1.5, 1.5%).
+  // פיסוק ביניים נבלע רק כשריצת LTR באה אחריו; פיסוק ET נבלע גם בקצה (W5).
+  const merged = [];
+  for (const r of runs) {
+    const prev = merged[merged.length - 1];
+    const isMid = r.chars.length <= 3 && r.chars.every(c => NUM_MID_GLUE.includes(c));
+    const isEt = r.chars.length <= 3 && r.chars.every(c => NUM_ET_GLUE.includes(c));
+    if (!r.ltr && prev && prev.ltr && (isMid || isEt)) {
+      prev._glue = (prev._glue || []).concat(r.chars); // עדיין לא ידוע אם תבוא LTR אחרי
+      continue;
+    }
+    if (r.ltr && prev && prev._glue) { prev.chars.push(...prev._glue, ...r.chars); prev._glue = null; continue; }
+    if (prev && prev._glue) {
+      // לא באה LTR אחרי הפיסוק: ET נדבק למספר שלפניו (1.5%); ביניים — הקשר RTL (סוף משפט)
+      if (prev._glue.every(c => NUM_ET_GLUE.includes(c))) { prev.chars.push(...prev._glue); }
+      else merged.push({ ltr: false, chars: prev._glue });
+      prev._glue = null;
+    }
+    merged.push({ ltr: r.ltr, chars: r.chars.slice() });
+  }
+  const tail = merged[merged.length - 1];
+  if (tail && tail._glue) {
+    if (tail._glue.every(c => NUM_ET_GLUE.includes(c))) { tail.chars.push(...tail._glue); }
+    else merged.push({ ltr: false, chars: tail._glue }); // פיסוק עוקב בלי LTR אחריו — הקשר RTL
+    tail._glue = null;
+  }
+  // סדר ויזואלי: היפוך סדר הריצות; RTL — היפוך פנימי + שיקוף סוגריים; LTR — כמו שהוא
+  const out = [];
+  for (let i = merged.length - 1; i >= 0; i--) {
+    const r = merged[i];
+    if (r.ltr) { out.push(...r.chars); continue; }
+    for (let j = r.chars.length - 1; j >= 0; j--) out.push(BRACKET_MIRROR[r.chars[j]] || r.chars[j]);
+  }
+  return out;
+}
+
 /** מחרוזת CID הקסדצימלית לטקסט (Identity-H: 2 בתים לגליף).
- * **RTL:** PDF מתקדם שמאלה מ־Td; לכן התווים נפלטים בסדר **ויזואלי**
- * (התו הלוגי האחרון ראשון = השמאלי ביותר) — המילה מרונדרת נכון לקורא עברי. */
+ * **RTL:** PDF מתקדם ימינה מ־Td ברוחבים חיוביים; לכן התווים נפלטים בסדר
+ * **ויזואלי** (חילוץ לוגי אחרון ראשון = השמאלי ביותר) — דרך visualOrderRtl
+ * (D-89: ריצות LTR שלמות + שיקוף סוגריים) — המילה מרונדרת נכון לקורא עברי. */
 function cidHex(text, font) {
   const chars = [...String(text)].filter(ch => {
     const cp = ch.codePointAt(0);
     return cp >= 0x20 && cp !== 0x7F;
   });
   let out = '';
-  for (let i = chars.length - 1; i >= 0; i--) {
-    const g = font.cidOf(chars[i]);
+  for (const ch of visualOrderRtl(chars)) {
+    const g = font.cidOf(ch);
     if (g === 0) continue;
     out += g.toString(16).padStart(4, '0');
   }
@@ -192,13 +255,18 @@ function writePdf(opts) {
   // ---- תוכן לכל עמוד (content streams) ----
   const contents = pages.map((pg) => {
     const ops = [];
-    const emitWord = (text, xPx, yPx, sizePt, fontKey) => {
+    // **D-89 (צבע פר-מילה):** rgb 0..1 על המילה (כותרת עליונה בכחול-הייחוס
+    // #0F1749, בלוקי השער האחורי) — ברירת מחדל שחור (0 0 0 rg מרומז ב-PDF).
+    const emitWord = (text, xPx, yPx, sizePt, fontKey, color) => {
       // **S4.15:** מילת-חלון בגופן המשני (FrankReal-Bold) — כמו המקור;
       // בלי font2 (ייצוא כללי) — הכל בגוף הראשי כמו קודם.
       const useF2 = font2 && fontKey === 'window';
       const f = useF2 ? font2 : font;
       const gidHex = cidHex(text, f);
       if (!gidHex) return;
+      if (Array.isArray(color) && color.length === 3) {
+        ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
+      }
       ops.push(`BT ${useF2 ? '/F2' : '/F1'} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${gidHex}> Tj ET`);
     };
     const emitLines = (lines) => {
@@ -206,7 +274,7 @@ function writePdf(opts) {
         // **S12 (parity):** בסיס השורה מהמקרן (מודל תיבת שורה CSS — half-leading+ascent)
         const baselineY = ln.baselineY != null ? ln.baselineY : ln.y + ln.h - ln.sizePt * (96 / 72) * 0.78;
         // **S4.9 (legacy IMUD):** מילים עם גודל/בסיס משלהן (מילת-חלון 1.5×, סמני הערות)
-        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt, w.fontKey);
+        for (const w of ln.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : baselineY, w.sizePt || ln.sizePt, w.fontKey, w.color);
       }
     };
     if (pg.spanning) emitLines(pg.spanning.lines);
@@ -214,8 +282,10 @@ function writePdf(opts) {
     // מרזב הערות — סמן + מילות ההערה (מימין לשמאל); בסיס מהמקרן
     for (const fn of pg.footnotes) {
       if (fn.words && fn.words.length) {
-        // **S4.9 (legacy IMUD):** מילים עם מיקום מפורש מהמקרן
-        for (const w of fn.words) emitWord(w.text, w.x, fn.baselineY, w.sizePt || 8.5);
+        // **D-89 (דיווח משתמש: "בהערות השוליים יש מילים אחת על השניה"):**
+        // בסיס פר-מילה מהמקרן (פר-שורה) — בעבר baselineY אחד לכל ההערה
+        // וכל שורות הערה רבת-שורות נערמו זו על זו.
+        for (const w of fn.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : fn.baselineY, w.sizePt || 8.5, w.fontKey, w.color);
         continue;
       }
       const fs = 11;
@@ -241,7 +311,13 @@ function writePdf(opts) {
         const sw = s.w != null ? s.w : s.text.length * 5.5;
         const x = s.x != null ? s.x : (s.pos === 'right' ? pg.width - 60 - sw : s.pos === 'center' ? (pg.width - sw) / 2 : 60);
         const y = pg.header.baselineY != null ? pg.header.baselineY : pg.header.y + 10;
-        emitWord(s.text, x, y, s.sizePt || 9);
+        // **D-89:** סלוט legacy עם מילים ממוקמות מהמקרן — בסיס/צבע פר-מילה;
+        // נפילה לנוסחה הישנה רק כשאין מילים (נתיב DP).
+        if (s.words && s.words.length) {
+          for (const w of s.words) emitWord(w.text, w.x, w.baselineY != null ? w.baselineY : y, w.sizePt || s.sizePt || 9, w.fontKey, w.color);
+          continue;
+        }
+        emitWord(s.text, x, y, s.sizePt || 9, null, s.color);
       }
     }
     // **EXT-4 (ציור עיטורים):** פעולות הציור מגיעות מוכנות מהפרויקטור
@@ -386,4 +462,4 @@ function writePdf(opts) {
   return pdf.build();
 }
 
-module.exports = { writePdf, PdfBuilder, PX_TO_PT, MM_TO_PT };
+module.exports = { writePdf, PdfBuilder, PX_TO_PT, MM_TO_PT, visualOrderRtl, BRACKET_MIRROR };

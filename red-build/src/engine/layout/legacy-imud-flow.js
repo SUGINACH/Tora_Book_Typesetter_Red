@@ -194,6 +194,13 @@ function readConfig(imud) {
     fnMarkerSize: n('note-marker-size', 8),
     fnListingNumSize: n('note-listing-num-size', 8),
     fnNumSeparator: String(g('note-num-separator', '.')),
+    // **D-89 (כלל הכותרת התחתון):** hdr-divider-style של המקור (black/gray/none).
+    // פרופיל המורשת מכויל לייחוס — שם הכלל נמדד שחור מלא (43,62)-(553,63)pt
+    // בכל עמודי הגוף/התוכן; 'none' מבטל.
+    hdrDivider: String(g('hdr-divider-style', 'black')),
+    // **D-89 (עיצוב שערים):** עיטור שער-המשנה מ-section_dividers.json
+    // (shaar-sub-divider; 'none' = גל המובנה של המקור — כמו renderSubShaar).
+    shaarSubDivider: String(g('shaar-sub-divider', 'none')),
     // **EXT-19 (כותרות מתחלפות):** החלפת החצאים בעמודים זוגיים (ברירת
     // המחדל במקור: כבוי — שני החצאים קבועים; hdr-title-split כבר ממומש
     // בפיצול שם הספר לחצאים ב-setHeader).
@@ -754,27 +761,60 @@ function legacyTypeset(rawText, settings, env) {
   //  shaar-back: זכויות/פרטים; shaar-sub: כותרת ה-h1 ב-36pt + המשך ב-21pt).
   function gateLinesFor(type, h1Token) {
     const pt = (v) => v / 0.75;
-    if (type === 'shaar-main') return [
-      { text: meta.bookTitle || '', sizePt: 46, y: pt(128.1) },
-      { text: meta.subject || '', sizePt: 21, y: pt(225.2) },
-      { text: meta.desc || '', sizePt: 12, y: pt(410.3) },
-      { text: meta.edition || '', sizePt: 11.5, y: pt(558.0), singleOp: true },
-      { text: meta.author || '', sizePt: 15, y: pt(713.5), singleOp: true }
-    ].filter(g => g.text);
+    // **D-89 (עטיפת שורות שער):** במקור תיבות השער הן div-ים ברוחב קבוע —
+    // טקסט ארוך נעטף אוטומטית. כאן השורה נמדדת ונחתכת לשורות במקום לגלוש
+    // מהתיבה (כותרת-המשנה של השער בקורפוס ההשוואה רחבה מהתיבה במדידת
+    // Frank Ruhl ונחתכה בקצה הדף). מפגש שורות: גובה שורה = גודל×1.3.
+    const wrapGate = (text, sizePt, boxWpx) => {
+      const words = String(text || '').split(/\s+/).filter(Boolean);
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const cand = cur ? cur + ' ' + w : w;
+        if (!cur || api.measureTextWidth(cand, sizePt, 0) <= boxWpx) cur = cand;
+        else { lines.push(cur); cur = w; }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+    if (type === 'shaar-main') {
+      // **D-89:** צבעי הייחוס — הכותרת/המהדורה/המחבר ב-#0F172A (נמדד בעמ' 1,
+      // 46pt/11pt/15pt), הנושא והתיאור ב-#0F1749 (מצוירים שם כקטועים).
+      const out = [{ text: meta.bookTitle || '', sizePt: 46, y: pt(128.1), color: [15 / 255, 23 / 255, 42 / 255] }];
+      const mainBoxW = GEO.PAGE_W - 30 * (96 / 25.4);
+      wrapGate(meta.subject, 21, mainBoxW).forEach((l, i) => out.push({
+        text: l, sizePt: 21, y: pt(225.2) + i * 21 * (96 / 72) * 1.3,
+        color: [15 / 255, 23 / 255, 73 / 255]
+      }));
+      wrapGate(meta.desc, 12, mainBoxW).forEach((l, i) => out.push({
+        text: l, sizePt: 12, y: pt(410.3) + i * 12 * (96 / 72) * 1.3,
+        color: [15 / 255, 23 / 255, 73 / 255]
+      }));
+      out.push({ text: meta.edition || '', sizePt: 11.5, y: pt(558.0), singleOp: true, color: [15 / 255, 23 / 255, 42 / 255] });
+      out.push({ text: meta.author || '', sizePt: 15, y: pt(713.5), singleOp: true, color: [15 / 255, 23 / 255, 42 / 255] });
+      return out.filter(g => g.text);
+    }
     if (type === 'shaar-back') return [
-      { text: meta.copyright ? 'כל הזכויות שמורות' : '', sizePt: 13.5, y: pt(191.8) },
-      { text: meta.copyright || '', sizePt: 10, y: pt(216.4) },
-      { text: meta.publisher || '', sizePt: 11, y: pt(357.3) },
-      { text: meta.contact || '', sizePt: 10, y: pt(500.9) },
-      { text: meta.extra || '', sizePt: 9.5, y: pt(644.3) }
+      // **D-89:** צבעי הבלוקים — הקבועים של renderBackShaar במקור (נמדדו
+      // בייחוס עמ' 2: #111/#222/#1e3a8a/#334155/#64748b).
+      { text: meta.copyright ? 'כל הזכויות שמורות' : '', sizePt: 13.5, y: pt(191.8), color: [17 / 255, 17 / 255, 17 / 255] },
+      { text: meta.copyright || '', sizePt: 10, y: pt(216.4), color: [34 / 255, 34 / 255, 34 / 255] },
+      { text: meta.publisher || '', sizePt: 11, y: pt(357.3), color: [30 / 255, 58 / 255, 138 / 255] },
+      { text: meta.contact || '', sizePt: 10, y: pt(500.9), color: [51 / 255, 65 / 255, 85 / 255] },
+      { text: meta.extra || '', sizePt: 9.5, y: pt(644.3), color: [100 / 255, 116 / 255, 139 / 255] }
     ].filter(g => g.text);
     if (type === 'shaar-sub' && h1Token) {
       const parts = h1Token.text.split(/[-–—]/).map(s => s.trim()).filter(Boolean);
       const first = parts[0] || h1Token.text;
       const rest = parts.slice(1).join(' - ');
-      const out = [{ text: first, sizePt: 36, y: pt(345.7) }];
-      if (rest) out.push({ text: rest, sizePt: 21, y: pt(469.7) });
-      return out;
+      // **D-89:** כותרת השער ב-#0F172A — נמדד בייחוס עמ' 7 (36pt); המשנה שחורה
+      // (21pt) ונעטפת לרוחב תיבת השער (378px) כמו ה-div במקור.
+      const subBoxW = GEO.PAGE_W - 110 * (96 / 25.4);
+      const out = [{ text: first, sizePt: 36, y: pt(345.7), color: [15 / 255, 23 / 255, 42 / 255] }];
+      wrapGate(rest, 21, subBoxW).forEach((l, i) => out.push({
+        text: l, sizePt: 21, y: pt(469.7) + i * 21 * (96 / 72) * 1.3
+      }));
+      return out.filter(g => g.text);
     }
     return [];
   }
@@ -1829,6 +1869,64 @@ function legacyTypeset(rawText, settings, env) {
     bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
     flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
   });
+
+  // **D-89 (דיווח משתמש: "אין שערים") — עיצוב השערים וכלל הכותרת.** פורט
+  // ברירות-המחדל של המקור (decorations.js/style.css של IMUD_TORANI), מכויל
+  // מהייחוס — ריצה אחרי חישוב ה-hash, overlay בלבד (אינווריאנט T1, דפוס D-47):
+  //  - שער-משנה: פאנל #F4F4F4 מ-55% עד קצה ימין (.sub-shaar-bg-right:
+  //    right:0;left:55%) — נמדד בייחוס עמ' 7: (328,0)-(595,842)pt — וגל
+  //    העיטור בין הכותרת לכותרת-המשנה (defaultSubShaarOrnament; הדיו נמדד
+  //    (33,33,33)≈#222) ממורכז בתיבת התוכן (15mm..PAGE_W-95mm ⇒ מרכז 245.7px;
+  //    הייחוס: מרכז הדיו 184pt=245.3px ✓, y-דיו 593-603px).
+  //  - שער אחורי: פאנל #F4F4F4 משמאל עד 45% (.back-shaar-bg-left: left:0;
+  //    right:55%) — נמדד (0,0)-(268,842)pt ✓.
+  //  - שער ראשי: שלד המסגרת שנמדד בעמ' 1 — קווים אנכיים #CCCCCC (0.8)
+  //    ב-x=72-73/523-524pt, פסים #FAFAFA (0.98) בפנים, כללים אופקיים #D1D1D1
+  //    (0.82) ב-y=168/674pt. (ערכת הנושא המקורית של הייחוס הוסיפה גרדיאנטים
+  //    ורכיבי כחול — מחוץ להיקף; השלד הגיאומטרי נשמר.)
+  //  - כלל כותרת תחתון בכל עמוד עם כותרת עליונה (חוץ משערים): מלבן שחור
+  //    (43,62)-(553,63)pt — .top-header-grid border-bottom — נמדד בעמ'
+  //    3-5, 8-12 (hdr-divider-style; 'none' מבטל).
+  {
+    const dec = (p, o) => { (p.decorations = Array.isArray(p.decorations) ? p.decorations : []).push(o); };
+    for (const p of pages) {
+      if (p.type === 'shaar-sub') {
+        dec(p, { x: 0.55 * GEO.PAGE_W, y: 0, w: 0.45 * GEO.PAGE_W, h: GEO.PAGE_H, kind: 'shaar-panel', kindStyle: 'rect:#F4F4F4' });
+        if ((p.gateLines || []).length > 1) { // כותרת + כותרת-משנה ⇒ הגל ביניהן (כמו renderSubShaar)
+          const style = cfg.shaarSubDivider && cfg.shaarSubDivider !== 'none'
+            ? (cfg.shaarSubDivider.startsWith('ext_') || cfg.shaarSubDivider.endsWith('.svg')
+              ? 'imud:divider:' + cfg.shaarSubDivider : cfg.shaarSubDivider)
+            : 'shaar-wave';
+          dec(p, { x: 175.7, y: 585.5, w: 140, h: 25, kind: 'shaar-divider', kindStyle: style });
+        }
+      } else if (p.type === 'shaar-back') {
+        dec(p, { x: 0, y: 0, w: 0.45 * GEO.PAGE_W, h: GEO.PAGE_H, kind: 'shaar-panel', kindStyle: 'rect:#F4F4F4' });
+      } else if (p.type === 'shaar-main') {
+        dec(p, { x: 96, y: 0, w: 1.33, h: GEO.PAGE_H, kind: 'frame-v', kindStyle: 'rect:#CCCCCC' });
+        dec(p, { x: 697.33, y: 0, w: 1.33, h: GEO.PAGE_H, kind: 'frame-v', kindStyle: 'rect:#CCCCCC' });
+        dec(p, { x: 97.33, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-band', kindStyle: 'rect:#FAFAFA' });
+        dec(p, { x: 668, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-band', kindStyle: 'rect:#FAFAFA' });
+        // **D-89:** שרשרת העלים — דפוס הנושא של הייחוס בשולי הפאנלים (עלה במרכז
+        // x≈84.5pt ⇒ מרכז הפס 112px; ימין משוקף)
+        dec(p, { x: 97.33, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-chain', kindStyle: 'shaar-frame-chain' });
+        dec(p, { x: 668, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-chain', kindStyle: 'shaar-frame-chain' });
+        dec(p, { x: 0, y: 224, w: GEO.PAGE_W, h: 1.33, kind: 'frame-h', kindStyle: 'rect:#D1D1D1' });
+        dec(p, { x: 0, y: 898.67, w: GEO.PAGE_W, h: 1.33, kind: 'frame-h', kindStyle: 'rect:#D1D1D1' });
+        // **D-89:** עיטור השער הראשי המובנה (עיגול+כנפיים) מתחת לנושא —
+        // נמדד בייחוס עמ' 1: דיו x 231.5-363.3pt, y 265-272pt (מרכז 297.4pt).
+        dec(p, { x: 306.6, y: 346, w: 180, h: 24, kind: 'shaar-ornament', kindStyle: 'shaar-main-orn' });
+        // שני כללים אפורים קטנים סביב שורת המהדורה — נמדדו (231.5,550.5)-(363.5,551.2)
+        // ו-(231.5,577.5)-(363.5,578.2) — כמו עיטור .book-sections-summary במקור.
+        dec(p, { x: 308.7, y: 734, w: 176, h: 0.93, kind: 'edition-rule', kindStyle: 'rect:#CCCCCC' });
+        dec(p, { x: 308.7, y: 770, w: 176, h: 0.93, kind: 'edition-rule', kindStyle: 'rect:#CCCCCC' });
+      }
+      if (p.headerSlots && (p.headerSlots.right || p.headerSlots.center || p.headerSlots.left)
+        && !String(p.type || '').startsWith('shaar') && cfg.hdrDivider !== 'none') {
+        dec(p, { x: 57.33, y: 82.67, w: 680, h: 1.33, kind: 'hdr-rule', kindStyle: 'rect:#000000' });
+      }
+    }
+    events.emit('decorations', 'legacy-imud: gate design + header rule', { pages: pages.length });
+  }
 
   return {
     metadata: meta, tokens: tokensOut, pages, ledger, events,

@@ -8263,6 +8263,7 @@ function renderLegacyPage(pg, settings, doc) {
   };
 
   // ---- כותרת עליונה תלת-סלוטית (פס 42.6–57.6pt ⇒ px) ----
+  // **D-89:** צבע כחול-הייחוס #0F1749 — כמו במקרן ה-legacy (נמדד בייחוס).
   const hs = pg.headerSlots;
   if (hs && (hs.right || hs.center || hs.left)) {
     const hdr = doc.createElement('div');
@@ -8272,6 +8273,7 @@ function renderLegacyPage(pg, settings, doc) {
     hdr.style.display = 'flex';
     hdr.style.justifyContent = 'space-between';
     hdr.style.alignItems = 'baseline';
+    hdr.style.color = 'rgb(15,23,73)';
     const slots = [
       ['rh rh--r', hs.right, SZ.hdrR],
       ['rh rh--c', hs.center, SZ.hdrC],
@@ -8296,11 +8298,26 @@ function renderLegacyPage(pg, settings, doc) {
   }
 
   // ---- תוכן השערים ----
-  for (const g of (pg.gateLines || [])) {
-    const el = mkLine(g.text, g.sizePt, 'center');
-    el.className += ' band band--gate';
-    position(el, BAND_X, g.y, BAND_W, pt2px(g.sizePt) * 1.3);
-    root.appendChild(el);
+  // **D-89:** צבע פר-שורה (בלוקי השער האחורי — הקבועים של renderBackShaar)
+  // ותיבת התוכן של כל שער — כמו במקרן ה-legacy (sub: מרכז 245.7px; back: 548px;
+  // main: 396.85px — מכויל מהייחוס עמ' 1/2/7).
+  {
+    const MMpx = 96 / 25.4;
+    const GATE_BOX = {
+      'shaar-main': { x: 15 * MMpx, w: GEO.PAGE_W - 30 * MMpx },
+      'shaar-back': { x: 95 * MMpx, w: 377.98 },
+      'shaar-sub': { x: 15 * MMpx, w: GEO.PAGE_W - 110 * MMpx }
+    };
+    const gbox = GATE_BOX[pg.type] || { x: BAND_X, w: BAND_W };
+    for (const g of (pg.gateLines || [])) {
+      const el = mkLine(g.text, g.sizePt, 'center');
+      el.className += ' band band--gate';
+      position(el, gbox.x, g.y, gbox.w, pt2px(g.sizePt) * 1.3);
+      if (Array.isArray(g.color)) {
+        el.style.color = `rgb(${Math.round(g.color[0] * 255)},${Math.round(g.color[1] * 255)},${Math.round(g.color[2] * 255)})`;
+      }
+      root.appendChild(el);
+    }
   }
 
   // ---- טורים: ימני ואז שמאלי; preface/shaar/toc = טור רחב יחיד ----
@@ -8348,7 +8365,29 @@ function renderLegacyPage(pg, settings, doc) {
         win.style.fontSize = `${pt2px((ln.sizePt || SZ.body) * 1.5)}px`;
         el.appendChild(win);
       }
-      el.appendChild(doc.createTextNode(scrubPUAText((ln.words || []).join(' '))));
+      // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
+      // סמני ההערות מוקטנים לפי markerIdx של המודל — בדיוק כמו במקרן
+      // ה-legacy/PDF. מספור האיות ("א. ב. ג.") נשאר בגודל הגוף — כמו הייחוס.
+      if (Array.isArray(ln.markerIdx) && ln.markerIdx.length && Array.isArray(ln.words)) {
+        const markerSet = new Set(ln.markerIdx);
+        const imudSet = (settings && settings._imudRaw) || {};
+        const markerSz = Number(imudSet['note-marker-size']) || 8;
+        ln.words.forEach((w, wi) => {
+          if (markerSet.has(wi)) {
+            const m = doc.createElement('span');
+            m.className = 'w w--fnmarker';
+            m.textContent = scrubPUAText(w);
+            m.style.fontSize = `${pt2px(markerSz)}px`;
+            m.style.verticalAlign = 'super';
+            el.appendChild(m);
+          } else {
+            el.appendChild(doc.createTextNode(scrubPUAText(w)));
+          }
+          if (wi < ln.words.length - 1) el.appendChild(doc.createTextNode(' '));
+        });
+      } else {
+        el.appendChild(doc.createTextNode(scrubPUAText((ln.words || []).join(' '))));
+      }
       if (ln.tokenId != null) el.dataset.tokenId = String(ln.tokenId);
       colEl.appendChild(el);
     }
@@ -8425,6 +8464,33 @@ function renderLegacyPage(pg, settings, doc) {
     folio.style.fontSize = `${pt2px(SZ.folio)}px`;
     folio.textContent = pg.folioDisplay;
     root.appendChild(folio);
+  }
+
+  // ---- עיטורים (D-89: פאנלי השערים, גל השער-משנה, מסגרת השער הראשי, כלל הכותרת) ----
+  // אותו דיו כמו ב-PDF (ornament-ink — מקור יחיד): rect ⇒ div צבוע; svg ⇒ רקע
+  // data-URI. הפאנלים נכנסים ראשונים (מאחורי הטקסט) והעיטורים אחרונים (מעל).
+  if (Array.isArray(pg.decorations) && pg.decorations.length) {
+    const inks = pg.decorations.map((d) => ({ d, ink: d.image ? { type: 'image', uri: d.image } : ornamentInk(d.kindStyle) }));
+    for (const { d, ink } of inks) {
+      if (!ink) continue;
+      if (ink.type === 'rect') {
+        const r = doc.createElement('div');
+        r.className = 'deco deco--rect';
+        position(r, d.x, d.y, d.w, d.h);
+        r.style.backgroundColor = `rgb(${Math.round(ink.color[0] * 255)},${Math.round(ink.color[1] * 255)},${Math.round(ink.color[2] * 255)})`;
+        if (d.kind === 'shaar-panel') { r.style.zIndex = '0'; root.insertBefore(r, root.firstChild); }
+        else root.appendChild(r);
+      } else if (ink.type === 'svg' || ink.type === 'image') {
+        const r = doc.createElement('div');
+        r.className = 'deco deco--' + (ink.type === 'svg' ? 'svg' : 'img');
+        position(r, d.x, d.y, d.w, d.h);
+        r.style.backgroundImage = `url("${ink.uri}")`;
+        r.style.backgroundRepeat = 'no-repeat';
+        r.style.backgroundPosition = 'center';
+        r.style.backgroundSize = 'contain';
+        root.appendChild(r);
+      }
+    }
   }
   return root;
 }
@@ -9340,14 +9406,70 @@ const BUILTIN_SVGS = {
   scroll: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 28">
 <path fill="#111" d="M10,14 C60,14 85,4 125,4 C145,4 152,11 160,17 C168,11 175,4 195,4 C235,4 260,14 310,14 C260,14 235,24 195,24 C175,24 168,17 160,11 C152,17 145,24 125,24 C85,24 60,14 10,14 Z M160,7 C157.2,7 155,9.2 155,12 C155,14.8 157.2,17 160,17 C162.8,17 165,14.8 165,12 C165,9.2 162.8,7 160,7 Z"/>
 </svg>`,
+  // **D-89 (עיצוב שערים):** גל השער-משנה המובנה של המקור — פורט מדויק
+  // מ-defaultSubShaarOrnament ב-decorations.js (רוחב 140px, דיו #222;
+  // מדגם הייחוס: מדדנו את הדיו ב-(33,33,33) ≈ #212121 על עמ' 7).
+  'shaar-wave': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 30">
+<path fill="#222" d="M10,15 Q75,5 140,15 Q145,10 150,5 Q155,10 160,15 Q225,5 290,15 Q225,25 160,15 Q155,20 150,25 Q145,20 140,15 Q75,25 10,15 Z"/>
+</svg>`,
+  // **D-89 (עיצוב שערים):** עיטור השער הראשי המובנה — פורט מ-defaultShaarMainOrnament
+  // (עיגול מוקף בשתי כנפיים, 180×24px). העיגול המקורי מוכתם (stroke) — כאן
+  // ממומש כטבעת בשכבות מילוי (שחור→לבן→שחור, סדר ציור = סדר מסמך) — אותו
+  // דיו בדיוק במדגם שלנו (חד-כיווני מילוי). מכויל מהייחוס עמ' 1: הדיו ב-x
+  // 231.5-363.3pt, y 265-272pt (מרכז 297.4pt = מרכז העמוד).
+  'shaar-main-orn': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 40">
+<circle cx="200" cy="20" r="12.25" fill="#000"/>
+<circle cx="200" cy="20" r="7.75" fill="#fff"/>
+<circle cx="200" cy="20" r="4.5" fill="#000"/>
+<path fill="#000" d="M182,20 C182,24 165,27 140,27 C90,27 40,22 5,20 C40,18 90,13 140,13 C165,13 182,16 182,20 Z"/>
+<path fill="#000" d="M218,20 C218,24 235,27 260,27 C310,27 360,22 395,20 C360,18 310,13 260,13 C235,13 218,16 218,20 Z"/>
+</svg>`,
+  // **D-89 (עיצוב שערים):** שרשרת העלים של מסגרת השער הראשי — דפוס הנושא
+  // של הייחוס (עמ' 1: פס העלים החוזר בשולי הפאנלים, x≈81-88pt, עלה ≈6.7pt
+  // רוחב, מחזור ≈7.8pt). נבנה דטרמיניסטית בטעינת המודול: עלי דפה מחודדים
+  // מתחלפים (מעלה/מטה) במפגש בסיס-בבסיס + נקודה בכל צומת, לכל גובה העמוד.
+  'shaar-frame-chain': null,
 };
 
+/** בניית שרשרת העלים (1122.5px גובה) — נקרא פעם אחת בטעינה.
+ * **D-89 (כיול מדוקדק מהייחוס, עמ' 1, רצועה x=73-95pt ב-300dpi):** המוטיב
+ * המדויק — אלמנטים רחבים מעוגלים (רימון/עלה, ~26px רוחב × 40px גובה,
+ * קודקוד-לקודקוד במפגשי הקצוות) באפור בהיר, עם "עין" עגולה בצבע הפס
+ * (#FAFAFA) בכל אלמנט שני. */
+function buildShaarFrameChain() {
+  // **המוטיב (מפוענח ממפת הדיו של הייחוס ב-ASCII):** יחידה בת ~56px — שתי
+  // אונות מעוגלות (שמאל+ימין) שמתמזגות לפס מלא-רוחב, מתחתיו הדיו מתפצל
+  // לשתי רגליים המתכנסות לנקודת מרכז, וממנה יורד מעוין מרכזי לקודקוד
+  // (שרשרת פלר-דה-ליס); "העין" הלבנה = הרווח בין הרגליים למעוין.
+  const W = 30, H = 1122.5, UNIT = 56, cx = W / 2, F = '#D8D8D8';
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">`;
+  for (let y = 0; y + UNIT <= H + 0.01; y += UNIT) {
+    // שתי האונות העליונות
+    s += `<ellipse cx="${cx - 7.5}" cy="${y + 9}" rx="5.8" ry="7.5" fill="${F}"/>`;
+    s += `<ellipse cx="${cx + 7.5}" cy="${y + 9}" rx="5.8" ry="7.5" fill="${F}"/>`;
+    // הפס המלא-רוחב שאליו האונות מתמזגות
+    s += `<rect x="2" y="${y + 12}" width="26" height="11" rx="3.5" fill="${F}"/>`;
+    // שתי רגליים מתכנסות למרכז (שברון)
+    s += `<path fill="${F}" d="M2,${y + 22} L${cx},${y + 37} L28,${y + 22} L28,${y + 27} L${cx},${y + 42} L2,${y + 27} Z"/>`;
+    // המעוין המרכזי היורד לקודקוד
+    s += `<path fill="${F}" d="M${cx},${y + 35} L${cx + 5.5},${y + 43} L${cx},${y + 52} L${cx - 5.5},${y + 43} Z"/>`;
+  }
+  return s + '</svg>';
+}
+BUILTIN_SVGS['shaar-frame-chain'] = buildShaarFrameChain();
+
 /** הדיו של kindStyle — מקור יחיד.
- * @returns {{type:'svg', svg:string, uri:string}|{type:'rule'}|{type:'image', uri:string}|null} */
+ * @returns {{type:'svg', svg:string, uri:string}|{type:'rule'}|{type:'rect', color:number[]}|{type:'image', uri:string}|null} */
 function ornamentInk(kindStyle) {
   const s = String(kindStyle || '');
   if (!s || s === 'none' || s === 'custom_img') return null;
   if (s === 'thin' || s === 'line') return { type: 'rule' };
+  // **D-89 (עיצוב שערים):** מלבן בצבע אחיד — rect:<#hex> — רקעי הפאנלים
+  // (#F4F4F4 של שער המשנה/האחורי, מסגרות השער הראשי, כלל הכותרת).
+  if (s.startsWith('rect:')) {
+    const col = parseColor(s.slice(5).trim());
+    return col ? { type: 'rect', color: col } : null;
+  }
   if (BUILTIN_SVGS[s]) {
     return { type: 'svg', svg: BUILTIN_SVGS[s], uri: svgToDataUri(BUILTIN_SVGS[s]) };
   }
@@ -10073,6 +10195,13 @@ function readConfig(imud) {
     fnMarkerSize: n('note-marker-size', 8),
     fnListingNumSize: n('note-listing-num-size', 8),
     fnNumSeparator: String(g('note-num-separator', '.')),
+    // **D-89 (כלל הכותרת התחתון):** hdr-divider-style של המקור (black/gray/none).
+    // פרופיל המורשת מכויל לייחוס — שם הכלל נמדד שחור מלא (43,62)-(553,63)pt
+    // בכל עמודי הגוף/התוכן; 'none' מבטל.
+    hdrDivider: String(g('hdr-divider-style', 'black')),
+    // **D-89 (עיצוב שערים):** עיטור שער-המשנה מ-section_dividers.json
+    // (shaar-sub-divider; 'none' = גל המובנה של המקור — כמו renderSubShaar).
+    shaarSubDivider: String(g('shaar-sub-divider', 'none')),
     // **EXT-19 (כותרות מתחלפות):** החלפת החצאים בעמודים זוגיים (ברירת
     // המחדל במקור: כבוי — שני החצאים קבועים; hdr-title-split כבר ממומש
     // בפיצול שם הספר לחצאים ב-setHeader).
@@ -10633,27 +10762,60 @@ function legacyTypeset(rawText, settings, env) {
   //  shaar-back: זכויות/פרטים; shaar-sub: כותרת ה-h1 ב-36pt + המשך ב-21pt).
   function gateLinesFor(type, h1Token) {
     const pt = (v) => v / 0.75;
-    if (type === 'shaar-main') return [
-      { text: meta.bookTitle || '', sizePt: 46, y: pt(128.1) },
-      { text: meta.subject || '', sizePt: 21, y: pt(225.2) },
-      { text: meta.desc || '', sizePt: 12, y: pt(410.3) },
-      { text: meta.edition || '', sizePt: 11.5, y: pt(558.0), singleOp: true },
-      { text: meta.author || '', sizePt: 15, y: pt(713.5), singleOp: true }
-    ].filter(g => g.text);
+    // **D-89 (עטיפת שורות שער):** במקור תיבות השער הן div-ים ברוחב קבוע —
+    // טקסט ארוך נעטף אוטומטית. כאן השורה נמדדת ונחתכת לשורות במקום לגלוש
+    // מהתיבה (כותרת-המשנה של השער בקורפוס ההשוואה רחבה מהתיבה במדידת
+    // Frank Ruhl ונחתכה בקצה הדף). מפגש שורות: גובה שורה = גודל×1.3.
+    const wrapGate = (text, sizePt, boxWpx) => {
+      const words = String(text || '').split(/\s+/).filter(Boolean);
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const cand = cur ? cur + ' ' + w : w;
+        if (!cur || api.measureTextWidth(cand, sizePt, 0) <= boxWpx) cur = cand;
+        else { lines.push(cur); cur = w; }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+    if (type === 'shaar-main') {
+      // **D-89:** צבעי הייחוס — הכותרת/המהדורה/המחבר ב-#0F172A (נמדד בעמ' 1,
+      // 46pt/11pt/15pt), הנושא והתיאור ב-#0F1749 (מצוירים שם כקטועים).
+      const out = [{ text: meta.bookTitle || '', sizePt: 46, y: pt(128.1), color: [15 / 255, 23 / 255, 42 / 255] }];
+      const mainBoxW = GEO.PAGE_W - 30 * (96 / 25.4);
+      wrapGate(meta.subject, 21, mainBoxW).forEach((l, i) => out.push({
+        text: l, sizePt: 21, y: pt(225.2) + i * 21 * (96 / 72) * 1.3,
+        color: [15 / 255, 23 / 255, 73 / 255]
+      }));
+      wrapGate(meta.desc, 12, mainBoxW).forEach((l, i) => out.push({
+        text: l, sizePt: 12, y: pt(410.3) + i * 12 * (96 / 72) * 1.3,
+        color: [15 / 255, 23 / 255, 73 / 255]
+      }));
+      out.push({ text: meta.edition || '', sizePt: 11.5, y: pt(558.0), singleOp: true, color: [15 / 255, 23 / 255, 42 / 255] });
+      out.push({ text: meta.author || '', sizePt: 15, y: pt(713.5), singleOp: true, color: [15 / 255, 23 / 255, 42 / 255] });
+      return out.filter(g => g.text);
+    }
     if (type === 'shaar-back') return [
-      { text: meta.copyright ? 'כל הזכויות שמורות' : '', sizePt: 13.5, y: pt(191.8) },
-      { text: meta.copyright || '', sizePt: 10, y: pt(216.4) },
-      { text: meta.publisher || '', sizePt: 11, y: pt(357.3) },
-      { text: meta.contact || '', sizePt: 10, y: pt(500.9) },
-      { text: meta.extra || '', sizePt: 9.5, y: pt(644.3) }
+      // **D-89:** צבעי הבלוקים — הקבועים של renderBackShaar במקור (נמדדו
+      // בייחוס עמ' 2: #111/#222/#1e3a8a/#334155/#64748b).
+      { text: meta.copyright ? 'כל הזכויות שמורות' : '', sizePt: 13.5, y: pt(191.8), color: [17 / 255, 17 / 255, 17 / 255] },
+      { text: meta.copyright || '', sizePt: 10, y: pt(216.4), color: [34 / 255, 34 / 255, 34 / 255] },
+      { text: meta.publisher || '', sizePt: 11, y: pt(357.3), color: [30 / 255, 58 / 255, 138 / 255] },
+      { text: meta.contact || '', sizePt: 10, y: pt(500.9), color: [51 / 255, 65 / 255, 85 / 255] },
+      { text: meta.extra || '', sizePt: 9.5, y: pt(644.3), color: [100 / 255, 116 / 255, 139 / 255] }
     ].filter(g => g.text);
     if (type === 'shaar-sub' && h1Token) {
       const parts = h1Token.text.split(/[-–—]/).map(s => s.trim()).filter(Boolean);
       const first = parts[0] || h1Token.text;
       const rest = parts.slice(1).join(' - ');
-      const out = [{ text: first, sizePt: 36, y: pt(345.7) }];
-      if (rest) out.push({ text: rest, sizePt: 21, y: pt(469.7) });
-      return out;
+      // **D-89:** כותרת השער ב-#0F172A — נמדד בייחוס עמ' 7 (36pt); המשנה שחורה
+      // (21pt) ונעטפת לרוחב תיבת השער (378px) כמו ה-div במקור.
+      const subBoxW = GEO.PAGE_W - 110 * (96 / 25.4);
+      const out = [{ text: first, sizePt: 36, y: pt(345.7), color: [15 / 255, 23 / 255, 42 / 255] }];
+      wrapGate(rest, 21, subBoxW).forEach((l, i) => out.push({
+        text: l, sizePt: 21, y: pt(469.7) + i * 21 * (96 / 72) * 1.3
+      }));
+      return out.filter(g => g.text);
     }
     return [];
   }
@@ -11708,6 +11870,64 @@ function legacyTypeset(rawText, settings, env) {
     bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
     flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
   });
+
+  // **D-89 (דיווח משתמש: "אין שערים") — עיצוב השערים וכלל הכותרת.** פורט
+  // ברירות-המחדל של המקור (decorations.js/style.css של IMUD_TORANI), מכויל
+  // מהייחוס — ריצה אחרי חישוב ה-hash, overlay בלבד (אינווריאנט T1, דפוס D-47):
+  //  - שער-משנה: פאנל #F4F4F4 מ-55% עד קצה ימין (.sub-shaar-bg-right:
+  //    right:0;left:55%) — נמדד בייחוס עמ' 7: (328,0)-(595,842)pt — וגל
+  //    העיטור בין הכותרת לכותרת-המשנה (defaultSubShaarOrnament; הדיו נמדד
+  //    (33,33,33)≈#222) ממורכז בתיבת התוכן (15mm..PAGE_W-95mm ⇒ מרכז 245.7px;
+  //    הייחוס: מרכז הדיו 184pt=245.3px ✓, y-דיו 593-603px).
+  //  - שער אחורי: פאנל #F4F4F4 משמאל עד 45% (.back-shaar-bg-left: left:0;
+  //    right:55%) — נמדד (0,0)-(268,842)pt ✓.
+  //  - שער ראשי: שלד המסגרת שנמדד בעמ' 1 — קווים אנכיים #CCCCCC (0.8)
+  //    ב-x=72-73/523-524pt, פסים #FAFAFA (0.98) בפנים, כללים אופקיים #D1D1D1
+  //    (0.82) ב-y=168/674pt. (ערכת הנושא המקורית של הייחוס הוסיפה גרדיאנטים
+  //    ורכיבי כחול — מחוץ להיקף; השלד הגיאומטרי נשמר.)
+  //  - כלל כותרת תחתון בכל עמוד עם כותרת עליונה (חוץ משערים): מלבן שחור
+  //    (43,62)-(553,63)pt — .top-header-grid border-bottom — נמדד בעמ'
+  //    3-5, 8-12 (hdr-divider-style; 'none' מבטל).
+  {
+    const dec = (p, o) => { (p.decorations = Array.isArray(p.decorations) ? p.decorations : []).push(o); };
+    for (const p of pages) {
+      if (p.type === 'shaar-sub') {
+        dec(p, { x: 0.55 * GEO.PAGE_W, y: 0, w: 0.45 * GEO.PAGE_W, h: GEO.PAGE_H, kind: 'shaar-panel', kindStyle: 'rect:#F4F4F4' });
+        if ((p.gateLines || []).length > 1) { // כותרת + כותרת-משנה ⇒ הגל ביניהן (כמו renderSubShaar)
+          const style = cfg.shaarSubDivider && cfg.shaarSubDivider !== 'none'
+            ? (cfg.shaarSubDivider.startsWith('ext_') || cfg.shaarSubDivider.endsWith('.svg')
+              ? 'imud:divider:' + cfg.shaarSubDivider : cfg.shaarSubDivider)
+            : 'shaar-wave';
+          dec(p, { x: 175.7, y: 585.5, w: 140, h: 25, kind: 'shaar-divider', kindStyle: style });
+        }
+      } else if (p.type === 'shaar-back') {
+        dec(p, { x: 0, y: 0, w: 0.45 * GEO.PAGE_W, h: GEO.PAGE_H, kind: 'shaar-panel', kindStyle: 'rect:#F4F4F4' });
+      } else if (p.type === 'shaar-main') {
+        dec(p, { x: 96, y: 0, w: 1.33, h: GEO.PAGE_H, kind: 'frame-v', kindStyle: 'rect:#CCCCCC' });
+        dec(p, { x: 697.33, y: 0, w: 1.33, h: GEO.PAGE_H, kind: 'frame-v', kindStyle: 'rect:#CCCCCC' });
+        dec(p, { x: 97.33, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-band', kindStyle: 'rect:#FAFAFA' });
+        dec(p, { x: 668, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-band', kindStyle: 'rect:#FAFAFA' });
+        // **D-89:** שרשרת העלים — דפוס הנושא של הייחוס בשולי הפאנלים (עלה במרכז
+        // x≈84.5pt ⇒ מרכז הפס 112px; ימין משוקף)
+        dec(p, { x: 97.33, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-chain', kindStyle: 'shaar-frame-chain' });
+        dec(p, { x: 668, y: 0, w: 29.33, h: GEO.PAGE_H, kind: 'frame-chain', kindStyle: 'shaar-frame-chain' });
+        dec(p, { x: 0, y: 224, w: GEO.PAGE_W, h: 1.33, kind: 'frame-h', kindStyle: 'rect:#D1D1D1' });
+        dec(p, { x: 0, y: 898.67, w: GEO.PAGE_W, h: 1.33, kind: 'frame-h', kindStyle: 'rect:#D1D1D1' });
+        // **D-89:** עיטור השער הראשי המובנה (עיגול+כנפיים) מתחת לנושא —
+        // נמדד בייחוס עמ' 1: דיו x 231.5-363.3pt, y 265-272pt (מרכז 297.4pt).
+        dec(p, { x: 306.6, y: 346, w: 180, h: 24, kind: 'shaar-ornament', kindStyle: 'shaar-main-orn' });
+        // שני כללים אפורים קטנים סביב שורת המהדורה — נמדדו (231.5,550.5)-(363.5,551.2)
+        // ו-(231.5,577.5)-(363.5,578.2) — כמו עיטור .book-sections-summary במקור.
+        dec(p, { x: 308.7, y: 734, w: 176, h: 0.93, kind: 'edition-rule', kindStyle: 'rect:#CCCCCC' });
+        dec(p, { x: 308.7, y: 770, w: 176, h: 0.93, kind: 'edition-rule', kindStyle: 'rect:#CCCCCC' });
+      }
+      if (p.headerSlots && (p.headerSlots.right || p.headerSlots.center || p.headerSlots.left)
+        && !String(p.type || '').startsWith('shaar') && cfg.hdrDivider !== 'none') {
+        dec(p, { x: 57.33, y: 82.67, w: 680, h: 1.33, kind: 'hdr-rule', kindStyle: 'rect:#000000' });
+      }
+    }
+    events.emit('decorations', 'legacy-imud: gate design + header rule', { pages: pages.length });
+  }
 
   return {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
@@ -15766,15 +15986,32 @@ function projectLegacyPage(pg, settings, api, winApi) {
   }
 
   // ---- תוכן השערים (ממורכז; מילים נפרדות — חילוץ לוגי, כמו בייחוס) ----
+  // **D-89 (עיצוב שערים):** תיבת התוכן של כל שער לפי תיבות השער של המקור
+  // (resolveShaarBoxStyle/renderSubShaar/renderBackShaar) — שער-המשנה והשער
+  // האחורי ממורכזים בתיבה שמחוץ לפאנל האפור, לא ברוחב הפס המלא:
+  //  - sub:  left:15mm / right:95mm ⇒ מרכז 245.7px=184.2pt (נמדד בייחוס עמ' 7: 184 ✓)
+  //  - back: מרכז 548px=411pt (נמדד בייחוס עמ' 2: 411 ✓)
+  //  - main: left:15mm / right:15mm ⇒ מרכז 396.85px=297.6pt (נמדד עמ' 1: 298 ✓)
+  const MMpx = 96 / 25.4;
+  const GATE_BOX = {
+    'shaar-main': { x: 15 * MMpx, w: GEO.PAGE_W - 30 * MMpx },
+    'shaar-back': { x: 95 * MMpx, w: 377.98 },
+    'shaar-sub': { x: 15 * MMpx, w: GEO.PAGE_W - 110 * MMpx }
+  };
+  const gbox = GATE_BOX[pg.type] || { x: bandLeft, w: bandW };
   for (const g of (pg.gateLines || [])) {
     const h = g.sizePt * (96 / 72) * 1.3;
     const baseY = baselineOf(g.y, h, g.sizePt, ascent);
     // **S4.9:** שורות המהדורה והמחבר בשער הראשי נכתבות אצל המקור כרצף אחד —
     // החילוץ מחזיר אותן בסדר מילים הפוך. שאר שורות השער מפוצלות למילים (לוגי).
     const singleOp = g.singleOp === true;
-    const words = placeWords(singleOp ? [g.text] : g.text.split(' '), api, bandLeft, bandW, g.sizePt, 'center', baseY);
+    const words = placeWords(singleOp ? [g.text] : g.text.split(' '), api, gbox.x, gbox.w, g.sizePt, 'center', baseY);
+    // **D-89 (עיצוב שערים):** צבע פר-שורה מהמודל — בלוקי השער האחורי
+    // (#111/#222/#1e3a8a/#334155/#64748b — הצבעים הקבועים של renderBackShaar
+    // במקור, שנמדדו בייחוס עמ' 2) וכו'.
+    if (Array.isArray(g.color)) for (const w of words) w.color = g.color;
     out.lines.push({
-      x: bandLeft, y: g.y, w: bandW, h, words, align: 'center',
+      x: gbox.x, y: g.y, w: gbox.w, h, words, align: 'center',
       kind: 'gate', level: null, isLast: false, sizePt: g.sizePt, baselineY: baseY, tokenId: null
     });
   }
@@ -15859,8 +16096,20 @@ function projectLegacyPage(pg, settings, api, winApi) {
             }
           });
         }
+        // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
+        // זיהוי סמני-ההערה מהמודל בלבד (markerIdx — אינדקסים מדויקים של
+        // הסמנים שהוזרקו ב-legacy-imud-flow), עם ולידציית צורה נגד סטיית
+        // אינדקס. הביטוי הקודם /^[א-ת]+\.$/ תפס **כל מילה עברית המסתיימת
+        // בנקודה** (סוף משפט!) והקטין אותה ל-8pt — 744 מילים בקורפוס
+        // ההשוואה. בלי דגל מהמודל — שום מילה לא מוקטנת: מספור האיות
+        // ("א. ב. ג." בגוף המשפט) נשאר בגודל הגוף — כפי שנמדד בייחוס
+        // (עמ' 12: 91 סמני איות ב-12.0pt = גודל הגוף; רק סמני ההערות
+        // האמיתיים — מהסוגריים — ב-6–8pt).
+        const markerIdxSet = Array.isArray(ln.markerIdx) ? new Set(ln.markerIdx) : null;
+        const MARKER_WORD_RE = /^[א-ת]{1,3}[.:]?$/; // א. / בק. — גימטריה קצרה (±מפריד)
+        const isMarkerWord = (w, i) => !!(markerIdxSet && markerIdxSet.has(i) && MARKER_WORD_RE.test(w));
         words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
-          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx,
+          { markers: ln.words.map((w, i) => isMarkerWord(w, i)), parenIdx,
             markerSize: projCfg.markerSize });
       }
       out.lines.push({
@@ -15873,11 +16122,15 @@ function projectLegacyPage(pg, settings, api, winApi) {
   });
 
   // ---- הערות צד בטורי השוליים ----
+  // **D-89:** צבע הערות-הצד — #404040 כמו שנמדד בייחוס (6pt, עמ' 12/31: המחלקה
+  // margin-note במקור מעוצבת באפור כהה).
+  const MARGIN_NOTE_COLOR = [64 / 255, 64 / 255, 64 / 255];
   for (const mn of (pg.marginNotes || [])) {
     const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
     for (const l of mn.lines) {
       const baseY = baselineOf(l.y, GEO.MN_PITCH, SZ.marginNote, ascent);
       const words = placeWords(l.text.split(' '), api, x, GEO.MARGIN_W, SZ.marginNote, 'center', baseY);
+      for (const w of words) w.color = MARGIN_NOTE_COLOR;
       out.lines.push({
         x, y: l.y, w: GEO.MARGIN_W, h: GEO.MN_PITCH, words, align: 'center',
         kind: 'margin-note', level: null, isLast: false, sizePt: SZ.marginNote,
@@ -15891,36 +16144,52 @@ function projectLegacyPage(pg, settings, api, winApi) {
   // (אין גליפי כוכבים) — ההפרדה נשארת דרך ריווח התחתית בלבד.
 
   // ---- הערות שוליים (תחתית) ----
+  // **D-89 (דיווח משתמש: "בהערות השוליים יש מילים אחת על השניה"):**
+  // בעבר כל שורות ההערה שורטטו על בסיס אחד (baselineOf של השורה הראשונה)
+  // וכל שורה התחילה מאותו x — הערה רבת-שורות נערמה כולה על עצמה.
+  // כעת: בסיס פר-שורה (l.y), השורה הראשונה נגרעת מרוחב הסמן ומיושרת
+  // לשני הצדדים עד הסמן, שורות הביניים מיושרות לרוחב מלא, והשורה
+  // האחרונה מיושרת לשפה הימנית — כפי שנמדד בייחוס (עמ' 31: שורה-1
+  // x:91–494 מיושרת; שורה-2 x:383–505 מיושרת-ימין; סמן '.א' ב-x:496–505).
   for (const fn of (pg.footnotes || [])) {
-    let x = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
-    let baseY = null;
+    const rightEdge = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
+    const spaceW = api.measureTextWidth(' ', SZ.fnBody, 0);
     const words = [];
+    let firstBase = null;
+    let firstRight = rightEdge;
     if (fn.marker) {
       // **EXT-17:** סמן הרישום בגודל עצמאי (note-listing-num-size, ברירת מחדל 8).
       const msz = projCfg.listingSize;
       const mw = api.measureTextWidth(fn.marker, msz, 0);
-      x -= mw;
-      words.push({ text: fn.marker, x, w: mw, sizePt: msz });
-      x -= api.measureTextWidth(' ', SZ.fnBody, 0);
+      firstRight -= mw;
+      words.push({ text: fn.marker, x: firstRight, w: mw, sizePt: msz, baselineY: null });
+      firstRight -= spaceW;
     }
-    for (const l of fn.lines) {
-      if (baseY === null) baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
-      const lw = api.measureTextWidth(l.words.join(' '), SZ.fnBody, 0);
-      const x0 = Math.max(GEO.COL_L_X, x - lw);
-      let cursor = x;
-      const ws = [];
-      for (let i = l.words.length - 1; i >= 0; i--) {
-        const w = l.words[i];
-        const ww = api.measureTextWidth(w, SZ.fnBody, 0);
-        cursor -= ww;
-        ws.push({ text: w, x: cursor, w: ww, sizePt: SZ.fnBody });
-        cursor -= api.measureTextWidth(' ', SZ.fnBody, 0);
+    fn.lines.forEach((l, li) => {
+      const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
+      if (firstBase === null) {
+        firstBase = baseY;
+        if (words.length) words[0].baselineY = firstBase; // הסמן על בסיס השורה הראשונה
       }
-      words.push(...ws);
-      void x0; void lw;
-    }
+      const isLast = li === fn.lines.length - 1;
+      const lineRight = li === 0 ? firstRight : rightEdge;
+      const usableW = Math.max(0, lineRight - GEO.COL_L_X);
+      const ws = l.words.map(w => ({ text: w, w: api.measureTextWidth(w, SZ.fnBody, 0) }));
+      const sumW = ws.reduce((a, w) => a + w.w, 0);
+      const gaps = Math.max(0, ws.length - 1);
+      let gapW = spaceW;
+      if (!isLast && gaps > 0 && sumW + gaps * spaceW < usableW) {
+        gapW = (usableW - sumW) / gaps; // יישוב לשני הצדדים (כמו הייחוס)
+      }
+      let cursor = lineRight;
+      for (let i = ws.length - 1; i >= 0; i--) {
+        cursor -= ws[i].w;
+        words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: SZ.fnBody, baselineY: baseY });
+        cursor -= gapW;
+      }
+    });
     if (words.length) {
-      out.footnotes.push({ y: fn.lines[0].y, x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48, marker: fn.marker, text: fn.lines.map(l => l.words.join(' ')).join(' '), words, baselineY: baseY, h: fn.lines.length * GEO.FN_PITCH });
+      out.footnotes.push({ y: fn.lines[0].y, x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48, marker: fn.marker, text: fn.lines.map(l => l.words.join(' ')).join(' '), words, baselineY: firstBase, h: fn.lines.length * GEO.FN_PITCH });
     }
   }
 
@@ -15960,6 +16229,10 @@ function projectLegacyPage(pg, settings, api, winApi) {
   }
 
   // ---- כותרת עליונה תלת-סלוטית ----
+  // **D-89:** צבע הכותרת — כחול-הייחוס #0F1749 (נמדד בייחוס בכל עמודי
+  // הגוף/התוכן: הגליפים מצוירים כקטועים ב-(15,23,73)) — ברירת מחדל
+  // שחורה כשאין (נתיב DP).
+  const HDR_COLOR = [15 / 255, 23 / 255, 73 / 255];
   if (pg.headerSlots && (pg.headerSlots.right || pg.headerSlots.center || pg.headerSlots.left)) {
     const slots = [];
     const mk = (pos, text, sizePt) => {
@@ -15980,6 +16253,8 @@ function projectLegacyPage(pg, settings, api, winApi) {
         const baseY = GEO.HEADER_BASELINE;
         s.words = placeWords(s.text.split(' '), api, s.x, s.w + 40, s.sizePt,
           s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
+        s.color = pg.headerSlots.color || HDR_COLOR;
+        for (const w of s.words) w.color = s.color;
       }
       out.header = { y: GEO.HEADER_BASELINE - 14, baselineY: GEO.HEADER_BASELINE, slots };
     }
@@ -15993,12 +16268,17 @@ function projectLegacyPage(pg, settings, api, winApi) {
     const hPt = out.height * (72 / 96);
     const PX_TO_PT = 72 / 96;
     const r2 = (v) => Math.round(v * 100) / 100;
+    const cssColor = (c) => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
     out.decorations = pg.decorations.map((d) => {
       const ink = d.image ? { type: 'image', uri: d.image } : ornamentInk(d.kindStyle);
       let paint = null, pdfOps = null;
       if (ink && ink.type === 'svg') {
         paint = parseSvgPaint(ink.svg);
         if (paint) pdfOps = svgToPdfOps(paint, d, hPt, PX_TO_PT);
+      } else if (ink && ink.type === 'rect') {
+        // **D-89:** מלבן בצבע אחיד — פאנלי השערים, מסגרות וכלל הכותרת.
+        const yTop = hPt - (d.y + d.h) * PX_TO_PT;
+        pdfOps = [`${r2(ink.color[0])} ${r2(ink.color[1])} ${r2(ink.color[2])} rg ${r2(d.x * PX_TO_PT)} ${r2(yTop)} ${r2(d.w * PX_TO_PT)} ${r2(d.h * PX_TO_PT)} re f`];
       } else if (ink && ink.type === 'rule') {
         const yTop = hPt - (d.y + d.h) * PX_TO_PT;
         pdfOps = [`0 0 0 rg ${r2(d.x * PX_TO_PT)} ${r2(yTop)} ${r2(d.w * PX_TO_PT)} ${Math.max(0.5, r2(d.h * PX_TO_PT))} re f`];
@@ -16006,7 +16286,9 @@ function projectLegacyPage(pg, settings, api, winApi) {
       return {
         x: d.x, y: d.y, w: d.w, h: d.h, kind: d.kind || null, slot: d.slot || null,
         kindStyle: d.kindStyle || null, inkType: ink ? ink.type : null,
-        inkUri: ink && ink.uri ? ink.uri : null, paint, pdfOps
+        inkUri: ink && ink.uri ? ink.uri : null,
+        inkColor: ink && ink.type === 'rect' ? cssColor(ink.color) : null,
+        paint, pdfOps
       };
     });
   }

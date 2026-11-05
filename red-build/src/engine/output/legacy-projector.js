@@ -97,15 +97,32 @@ function projectLegacyPage(pg, settings, api, winApi) {
   }
 
   // ---- תוכן השערים (ממורכז; מילים נפרדות — חילוץ לוגי, כמו בייחוס) ----
+  // **D-89 (עיצוב שערים):** תיבת התוכן של כל שער לפי תיבות השער של המקור
+  // (resolveShaarBoxStyle/renderSubShaar/renderBackShaar) — שער-המשנה והשער
+  // האחורי ממורכזים בתיבה שמחוץ לפאנל האפור, לא ברוחב הפס המלא:
+  //  - sub:  left:15mm / right:95mm ⇒ מרכז 245.7px=184.2pt (נמדד בייחוס עמ' 7: 184 ✓)
+  //  - back: מרכז 548px=411pt (נמדד בייחוס עמ' 2: 411 ✓)
+  //  - main: left:15mm / right:15mm ⇒ מרכז 396.85px=297.6pt (נמדד עמ' 1: 298 ✓)
+  const MMpx = 96 / 25.4;
+  const GATE_BOX = {
+    'shaar-main': { x: 15 * MMpx, w: GEO.PAGE_W - 30 * MMpx },
+    'shaar-back': { x: 95 * MMpx, w: 377.98 },
+    'shaar-sub': { x: 15 * MMpx, w: GEO.PAGE_W - 110 * MMpx }
+  };
+  const gbox = GATE_BOX[pg.type] || { x: bandLeft, w: bandW };
   for (const g of (pg.gateLines || [])) {
     const h = g.sizePt * (96 / 72) * 1.3;
     const baseY = baselineOf(g.y, h, g.sizePt, ascent);
     // **S4.9:** שורות המהדורה והמחבר בשער הראשי נכתבות אצל המקור כרצף אחד —
     // החילוץ מחזיר אותן בסדר מילים הפוך. שאר שורות השער מפוצלות למילים (לוגי).
     const singleOp = g.singleOp === true;
-    const words = placeWords(singleOp ? [g.text] : g.text.split(' '), api, bandLeft, bandW, g.sizePt, 'center', baseY);
+    const words = placeWords(singleOp ? [g.text] : g.text.split(' '), api, gbox.x, gbox.w, g.sizePt, 'center', baseY);
+    // **D-89 (עיצוב שערים):** צבע פר-שורה מהמודל — בלוקי השער האחורי
+    // (#111/#222/#1e3a8a/#334155/#64748b — הצבעים הקבועים של renderBackShaar
+    // במקור, שנמדדו בייחוס עמ' 2) וכו'.
+    if (Array.isArray(g.color)) for (const w of words) w.color = g.color;
     out.lines.push({
-      x: bandLeft, y: g.y, w: bandW, h, words, align: 'center',
+      x: gbox.x, y: g.y, w: gbox.w, h, words, align: 'center',
       kind: 'gate', level: null, isLast: false, sizePt: g.sizePt, baselineY: baseY, tokenId: null
     });
   }
@@ -190,8 +207,20 @@ function projectLegacyPage(pg, settings, api, winApi) {
             }
           });
         }
+        // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
+        // זיהוי סמני-ההערה מהמודל בלבד (markerIdx — אינדקסים מדויקים של
+        // הסמנים שהוזרקו ב-legacy-imud-flow), עם ולידציית צורה נגד סטיית
+        // אינדקס. הביטוי הקודם /^[א-ת]+\.$/ תפס **כל מילה עברית המסתיימת
+        // בנקודה** (סוף משפט!) והקטין אותה ל-8pt — 744 מילים בקורפוס
+        // ההשוואה. בלי דגל מהמודל — שום מילה לא מוקטנת: מספור האיות
+        // ("א. ב. ג." בגוף המשפט) נשאר בגודל הגוף — כפי שנמדד בייחוס
+        // (עמ' 12: 91 סמני איות ב-12.0pt = גודל הגוף; רק סמני ההערות
+        // האמיתיים — מהסוגריים — ב-6–8pt).
+        const markerIdxSet = Array.isArray(ln.markerIdx) ? new Set(ln.markerIdx) : null;
+        const MARKER_WORD_RE = /^[א-ת]{1,3}[.:]?$/; // א. / בק. — גימטריה קצרה (±מפריד)
+        const isMarkerWord = (w, i) => !!(markerIdxSet && markerIdxSet.has(i) && MARKER_WORD_RE.test(w));
         words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
-          { markers: ln.words.map(w => /^[א-ת]+\.$/.test(w)), parenIdx,
+          { markers: ln.words.map((w, i) => isMarkerWord(w, i)), parenIdx,
             markerSize: projCfg.markerSize });
       }
       out.lines.push({
@@ -204,11 +233,15 @@ function projectLegacyPage(pg, settings, api, winApi) {
   });
 
   // ---- הערות צד בטורי השוליים ----
+  // **D-89:** צבע הערות-הצד — #404040 כמו שנמדד בייחוס (6pt, עמ' 12/31: המחלקה
+  // margin-note במקור מעוצבת באפור כהה).
+  const MARGIN_NOTE_COLOR = [64 / 255, 64 / 255, 64 / 255];
   for (const mn of (pg.marginNotes || [])) {
     const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
     for (const l of mn.lines) {
       const baseY = baselineOf(l.y, GEO.MN_PITCH, SZ.marginNote, ascent);
       const words = placeWords(l.text.split(' '), api, x, GEO.MARGIN_W, SZ.marginNote, 'center', baseY);
+      for (const w of words) w.color = MARGIN_NOTE_COLOR;
       out.lines.push({
         x, y: l.y, w: GEO.MARGIN_W, h: GEO.MN_PITCH, words, align: 'center',
         kind: 'margin-note', level: null, isLast: false, sizePt: SZ.marginNote,
@@ -222,36 +255,52 @@ function projectLegacyPage(pg, settings, api, winApi) {
   // (אין גליפי כוכבים) — ההפרדה נשארת דרך ריווח התחתית בלבד.
 
   // ---- הערות שוליים (תחתית) ----
+  // **D-89 (דיווח משתמש: "בהערות השוליים יש מילים אחת על השניה"):**
+  // בעבר כל שורות ההערה שורטטו על בסיס אחד (baselineOf של השורה הראשונה)
+  // וכל שורה התחילה מאותו x — הערה רבת-שורות נערמה כולה על עצמה.
+  // כעת: בסיס פר-שורה (l.y), השורה הראשונה נגרעת מרוחב הסמן ומיושרת
+  // לשני הצדדים עד הסמן, שורות הביניים מיושרות לרוחב מלא, והשורה
+  // האחרונה מיושרת לשפה הימנית — כפי שנמדד בייחוס (עמ' 31: שורה-1
+  // x:91–494 מיושרת; שורה-2 x:383–505 מיושרת-ימין; סמן '.א' ב-x:496–505).
   for (const fn of (pg.footnotes || [])) {
-    let x = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
-    let baseY = null;
+    const rightEdge = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
+    const spaceW = api.measureTextWidth(' ', SZ.fnBody, 0);
     const words = [];
+    let firstBase = null;
+    let firstRight = rightEdge;
     if (fn.marker) {
       // **EXT-17:** סמן הרישום בגודל עצמאי (note-listing-num-size, ברירת מחדל 8).
       const msz = projCfg.listingSize;
       const mw = api.measureTextWidth(fn.marker, msz, 0);
-      x -= mw;
-      words.push({ text: fn.marker, x, w: mw, sizePt: msz });
-      x -= api.measureTextWidth(' ', SZ.fnBody, 0);
+      firstRight -= mw;
+      words.push({ text: fn.marker, x: firstRight, w: mw, sizePt: msz, baselineY: null });
+      firstRight -= spaceW;
     }
-    for (const l of fn.lines) {
-      if (baseY === null) baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
-      const lw = api.measureTextWidth(l.words.join(' '), SZ.fnBody, 0);
-      const x0 = Math.max(GEO.COL_L_X, x - lw);
-      let cursor = x;
-      const ws = [];
-      for (let i = l.words.length - 1; i >= 0; i--) {
-        const w = l.words[i];
-        const ww = api.measureTextWidth(w, SZ.fnBody, 0);
-        cursor -= ww;
-        ws.push({ text: w, x: cursor, w: ww, sizePt: SZ.fnBody });
-        cursor -= api.measureTextWidth(' ', SZ.fnBody, 0);
+    fn.lines.forEach((l, li) => {
+      const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
+      if (firstBase === null) {
+        firstBase = baseY;
+        if (words.length) words[0].baselineY = firstBase; // הסמן על בסיס השורה הראשונה
       }
-      words.push(...ws);
-      void x0; void lw;
-    }
+      const isLast = li === fn.lines.length - 1;
+      const lineRight = li === 0 ? firstRight : rightEdge;
+      const usableW = Math.max(0, lineRight - GEO.COL_L_X);
+      const ws = l.words.map(w => ({ text: w, w: api.measureTextWidth(w, SZ.fnBody, 0) }));
+      const sumW = ws.reduce((a, w) => a + w.w, 0);
+      const gaps = Math.max(0, ws.length - 1);
+      let gapW = spaceW;
+      if (!isLast && gaps > 0 && sumW + gaps * spaceW < usableW) {
+        gapW = (usableW - sumW) / gaps; // יישוב לשני הצדדים (כמו הייחוס)
+      }
+      let cursor = lineRight;
+      for (let i = ws.length - 1; i >= 0; i--) {
+        cursor -= ws[i].w;
+        words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: SZ.fnBody, baselineY: baseY });
+        cursor -= gapW;
+      }
+    });
     if (words.length) {
-      out.footnotes.push({ y: fn.lines[0].y, x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48, marker: fn.marker, text: fn.lines.map(l => l.words.join(' ')).join(' '), words, baselineY: baseY, h: fn.lines.length * GEO.FN_PITCH });
+      out.footnotes.push({ y: fn.lines[0].y, x: GEO.COL_L_X, w: 2 * GEO.COL_W + 13.48, marker: fn.marker, text: fn.lines.map(l => l.words.join(' ')).join(' '), words, baselineY: firstBase, h: fn.lines.length * GEO.FN_PITCH });
     }
   }
 
@@ -291,6 +340,10 @@ function projectLegacyPage(pg, settings, api, winApi) {
   }
 
   // ---- כותרת עליונה תלת-סלוטית ----
+  // **D-89:** צבע הכותרת — כחול-הייחוס #0F1749 (נמדד בייחוס בכל עמודי
+  // הגוף/התוכן: הגליפים מצוירים כקטועים ב-(15,23,73)) — ברירת מחדל
+  // שחורה כשאין (נתיב DP).
+  const HDR_COLOR = [15 / 255, 23 / 255, 73 / 255];
   if (pg.headerSlots && (pg.headerSlots.right || pg.headerSlots.center || pg.headerSlots.left)) {
     const slots = [];
     const mk = (pos, text, sizePt) => {
@@ -311,6 +364,8 @@ function projectLegacyPage(pg, settings, api, winApi) {
         const baseY = GEO.HEADER_BASELINE;
         s.words = placeWords(s.text.split(' '), api, s.x, s.w + 40, s.sizePt,
           s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
+        s.color = pg.headerSlots.color || HDR_COLOR;
+        for (const w of s.words) w.color = s.color;
       }
       out.header = { y: GEO.HEADER_BASELINE - 14, baselineY: GEO.HEADER_BASELINE, slots };
     }
@@ -324,12 +379,17 @@ function projectLegacyPage(pg, settings, api, winApi) {
     const hPt = out.height * (72 / 96);
     const PX_TO_PT = 72 / 96;
     const r2 = (v) => Math.round(v * 100) / 100;
+    const cssColor = (c) => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
     out.decorations = pg.decorations.map((d) => {
       const ink = d.image ? { type: 'image', uri: d.image } : ornamentInk(d.kindStyle);
       let paint = null, pdfOps = null;
       if (ink && ink.type === 'svg') {
         paint = parseSvgPaint(ink.svg);
         if (paint) pdfOps = svgToPdfOps(paint, d, hPt, PX_TO_PT);
+      } else if (ink && ink.type === 'rect') {
+        // **D-89:** מלבן בצבע אחיד — פאנלי השערים, מסגרות וכלל הכותרת.
+        const yTop = hPt - (d.y + d.h) * PX_TO_PT;
+        pdfOps = [`${r2(ink.color[0])} ${r2(ink.color[1])} ${r2(ink.color[2])} rg ${r2(d.x * PX_TO_PT)} ${r2(yTop)} ${r2(d.w * PX_TO_PT)} ${r2(d.h * PX_TO_PT)} re f`];
       } else if (ink && ink.type === 'rule') {
         const yTop = hPt - (d.y + d.h) * PX_TO_PT;
         pdfOps = [`0 0 0 rg ${r2(d.x * PX_TO_PT)} ${r2(yTop)} ${r2(d.w * PX_TO_PT)} ${Math.max(0.5, r2(d.h * PX_TO_PT))} re f`];
@@ -337,7 +397,9 @@ function projectLegacyPage(pg, settings, api, winApi) {
       return {
         x: d.x, y: d.y, w: d.w, h: d.h, kind: d.kind || null, slot: d.slot || null,
         kindStyle: d.kindStyle || null, inkType: ink ? ink.type : null,
-        inkUri: ink && ink.uri ? ink.uri : null, paint, pdfOps
+        inkUri: ink && ink.uri ? ink.uri : null,
+        inkColor: ink && ink.type === 'rect' ? cssColor(ink.color) : null,
+        paint, pdfOps
       };
     });
   }

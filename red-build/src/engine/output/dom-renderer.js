@@ -603,6 +603,7 @@ function renderLegacyPage(pg, settings, doc) {
   };
 
   // ---- כותרת עליונה תלת-סלוטית (פס 42.6–57.6pt ⇒ px) ----
+  // **D-89:** צבע כחול-הייחוס #0F1749 — כמו במקרן ה-legacy (נמדד בייחוס).
   const hs = pg.headerSlots;
   if (hs && (hs.right || hs.center || hs.left)) {
     const hdr = doc.createElement('div');
@@ -612,6 +613,7 @@ function renderLegacyPage(pg, settings, doc) {
     hdr.style.display = 'flex';
     hdr.style.justifyContent = 'space-between';
     hdr.style.alignItems = 'baseline';
+    hdr.style.color = 'rgb(15,23,73)';
     const slots = [
       ['rh rh--r', hs.right, SZ.hdrR],
       ['rh rh--c', hs.center, SZ.hdrC],
@@ -636,11 +638,26 @@ function renderLegacyPage(pg, settings, doc) {
   }
 
   // ---- תוכן השערים ----
-  for (const g of (pg.gateLines || [])) {
-    const el = mkLine(g.text, g.sizePt, 'center');
-    el.className += ' band band--gate';
-    position(el, BAND_X, g.y, BAND_W, pt2px(g.sizePt) * 1.3);
-    root.appendChild(el);
+  // **D-89:** צבע פר-שורה (בלוקי השער האחורי — הקבועים של renderBackShaar)
+  // ותיבת התוכן של כל שער — כמו במקרן ה-legacy (sub: מרכז 245.7px; back: 548px;
+  // main: 396.85px — מכויל מהייחוס עמ' 1/2/7).
+  {
+    const MMpx = 96 / 25.4;
+    const GATE_BOX = {
+      'shaar-main': { x: 15 * MMpx, w: GEO.PAGE_W - 30 * MMpx },
+      'shaar-back': { x: 95 * MMpx, w: 377.98 },
+      'shaar-sub': { x: 15 * MMpx, w: GEO.PAGE_W - 110 * MMpx }
+    };
+    const gbox = GATE_BOX[pg.type] || { x: BAND_X, w: BAND_W };
+    for (const g of (pg.gateLines || [])) {
+      const el = mkLine(g.text, g.sizePt, 'center');
+      el.className += ' band band--gate';
+      position(el, gbox.x, g.y, gbox.w, pt2px(g.sizePt) * 1.3);
+      if (Array.isArray(g.color)) {
+        el.style.color = `rgb(${Math.round(g.color[0] * 255)},${Math.round(g.color[1] * 255)},${Math.round(g.color[2] * 255)})`;
+      }
+      root.appendChild(el);
+    }
   }
 
   // ---- טורים: ימני ואז שמאלי; preface/shaar/toc = טור רחב יחיד ----
@@ -688,7 +705,29 @@ function renderLegacyPage(pg, settings, doc) {
         win.style.fontSize = `${pt2px((ln.sizePt || SZ.body) * 1.5)}px`;
         el.appendChild(win);
       }
-      el.appendChild(doc.createTextNode(scrubPUAText((ln.words || []).join(' '))));
+      // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
+      // סמני ההערות מוקטנים לפי markerIdx של המודל — בדיוק כמו במקרן
+      // ה-legacy/PDF. מספור האיות ("א. ב. ג.") נשאר בגודל הגוף — כמו הייחוס.
+      if (Array.isArray(ln.markerIdx) && ln.markerIdx.length && Array.isArray(ln.words)) {
+        const markerSet = new Set(ln.markerIdx);
+        const imudSet = (settings && settings._imudRaw) || {};
+        const markerSz = Number(imudSet['note-marker-size']) || 8;
+        ln.words.forEach((w, wi) => {
+          if (markerSet.has(wi)) {
+            const m = doc.createElement('span');
+            m.className = 'w w--fnmarker';
+            m.textContent = scrubPUAText(w);
+            m.style.fontSize = `${pt2px(markerSz)}px`;
+            m.style.verticalAlign = 'super';
+            el.appendChild(m);
+          } else {
+            el.appendChild(doc.createTextNode(scrubPUAText(w)));
+          }
+          if (wi < ln.words.length - 1) el.appendChild(doc.createTextNode(' '));
+        });
+      } else {
+        el.appendChild(doc.createTextNode(scrubPUAText((ln.words || []).join(' '))));
+      }
       if (ln.tokenId != null) el.dataset.tokenId = String(ln.tokenId);
       colEl.appendChild(el);
     }
@@ -765,6 +804,33 @@ function renderLegacyPage(pg, settings, doc) {
     folio.style.fontSize = `${pt2px(SZ.folio)}px`;
     folio.textContent = pg.folioDisplay;
     root.appendChild(folio);
+  }
+
+  // ---- עיטורים (D-89: פאנלי השערים, גל השער-משנה, מסגרת השער הראשי, כלל הכותרת) ----
+  // אותו דיו כמו ב-PDF (ornament-ink — מקור יחיד): rect ⇒ div צבוע; svg ⇒ רקע
+  // data-URI. הפאנלים נכנסים ראשונים (מאחורי הטקסט) והעיטורים אחרונים (מעל).
+  if (Array.isArray(pg.decorations) && pg.decorations.length) {
+    const inks = pg.decorations.map((d) => ({ d, ink: d.image ? { type: 'image', uri: d.image } : ornamentInk(d.kindStyle) }));
+    for (const { d, ink } of inks) {
+      if (!ink) continue;
+      if (ink.type === 'rect') {
+        const r = doc.createElement('div');
+        r.className = 'deco deco--rect';
+        position(r, d.x, d.y, d.w, d.h);
+        r.style.backgroundColor = `rgb(${Math.round(ink.color[0] * 255)},${Math.round(ink.color[1] * 255)},${Math.round(ink.color[2] * 255)})`;
+        if (d.kind === 'shaar-panel') { r.style.zIndex = '0'; root.insertBefore(r, root.firstChild); }
+        else root.appendChild(r);
+      } else if (ink.type === 'svg' || ink.type === 'image') {
+        const r = doc.createElement('div');
+        r.className = 'deco deco--' + (ink.type === 'svg' ? 'svg' : 'img');
+        position(r, d.x, d.y, d.w, d.h);
+        r.style.backgroundImage = `url("${ink.uri}")`;
+        r.style.backgroundRepeat = 'no-repeat';
+        r.style.backgroundPosition = 'center';
+        r.style.backgroundSize = 'contain';
+        root.appendChild(r);
+      }
+    }
   }
   return root;
 }
