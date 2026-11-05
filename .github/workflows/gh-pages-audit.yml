@@ -9,12 +9,18 @@
 name: gh-pages-audit
 
 on:
-  push:
-    branches: [ gh-pages ]
+  # **S5.2 (תיקון טריגר):** ענף gh-pages הוא orphan ללא קובצי workflow —
+  # ‏`on: push` אליו לעולם לא יירה (הקובץ לא קיים בענף שנדחף). המנגנון
+  # הנכון: ‏workflow_run מגיב להשלמת בניית ה-Pages ומריץ את הגרסה מענף
+  # ברירת המחדל (main). סינון: רק אם בניית ה-Pages הצליחה.
+  workflow_run:
+    workflows: [ pages build and deployment ]
+    types: [ completed ]
   workflow_dispatch:
 
 jobs:
   live-audit-after-deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     # **S5.2 (P-11):** תקרה מפורשת — המתנה ל-Pages (עד 10 דק') + האודיט החי
     # (עימוד ~700 עמודים דרך הרשת + דטרמיניזם כפול); 45 דק' כמו הלילי.
