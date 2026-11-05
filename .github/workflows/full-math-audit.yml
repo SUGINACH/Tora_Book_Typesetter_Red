@@ -1,0 +1,84 @@
+# .github/workflows/full-math-audit.yml — האודיט המתמטי המלא (S4.24)
+#
+# בקשת המשתמש (05.11): "תהליכי בדיקה מתמשכים צרכים להתבצע דרך אקשנ'ס
+# בוורקפלו של הריפו בגיטהאב, ולא מקומית". האודיט המתמטי המלא (21 משפחות
+# בדיקות דיו-בפועל — זה שגילה את 200 בעיות העימוד שהאודיט הישן פספס)
+# רץ כאן בשני מצבים:
+#   1. local  — על ה-build שבענף (כל push ל-main): האפליקציה מוגשת בשרת
+#      מקומי ברגר, הקובץ הגדול מאוד מוזרם, האודיט המלא + דטרמיניזם.
+#   2. live   — על האתר החי של GitHub Pages (לילית + ידני + אחרי deploy):
+#      אותו אודיט מול https://suginach.github.io/Tora_Book_Typesetter_Red/
+#      עם הזרקת ה-fixture ב-base64 — מאמת גם את הפריסה בפועל, לא רק את
+#      הקוד.
+# יציאה 0 **רק** על 0 בעיות + כיסוי מלא + דטרמיניזם זהה — תוצאה מקובלת
+# אחת: 0 בעיות עימוד.
+name: full-math-audit
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'מטרה: local (ה-build בענף) או live (האתר הפרוס)'
+        required: false
+        default: 'local'
+        type: choice
+        options: [ local, live ]
+  schedule:
+    # 03:10 UTC כל לילה — בדיקת האתר החי הפרוס (מתמשך)
+    - cron: '10 3 * * *'
+
+jobs:
+  # ── מצב מקומי: ה-build שבענף ──
+  local:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'local') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install agent-browser + headless browser
+        run: |
+          npm install -g agent-browser
+          agent-browser install --with-deps
+      - name: Full math audit — the very large corpus (~700 pages, ink-level)
+        run: node tools/layout-audit/run-full-math.js --tag local --fixture audits/very_long_test_text.txt
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-math-audit-local
+          path: red-build/tests/artifacts/full-math-audit/
+          if-no-files-found: ignore
+
+  # ── מצב חי: האתר הפרוס ב-GitHub Pages ──
+  live:
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && inputs.target == 'live' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install agent-browser + headless browser
+        run: |
+          npm install -g agent-browser
+          agent-browser install --with-deps
+      - name: Wait for Pages (nightly may run mid-deploy)
+        run: sleep 30
+      - name: Full math audit — LIVE site (fixture injected via base64)
+        run: |
+          node tools/layout-audit/run-full-math.js --tag live \
+            --url https://suginach.github.io/Tora_Book_Typesetter_Red/ \
+            --fixture audits/very_long_test_text.txt
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-math-audit-live
+          path: red-build/tests/artifacts/full-math-audit/
+          if-no-files-found: ignore

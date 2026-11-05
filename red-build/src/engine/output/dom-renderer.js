@@ -598,6 +598,13 @@ function renderLegacyPage(pg, settings, doc) {
     el.style.whiteSpace = 'nowrap';
     el.style.overflow = 'visible';
     el.style.textAlign = align;
+    // **S4.24 (מרכוז פסים בתצוגה החיה):** כלל ה-text-align-last:justify של
+    // BASE_CSS (.line:not(.line--last):not(.line--heading)) חל גם על קווי
+    // הפס וההערות-צד (class="line …") — שורה בודדת בבלוק נחשבת "אחרונה"
+    // וה-justify דרס את ה-center/right: מילים פזורות מקצה לקצה, מילה
+    // בודדת נדבקת לקצה הימני (נמדד בחי: "הקדמה" אסימטריה 494px). ערך
+    // inline גובר על הכלל.
+    el.style.textAlignLast = 'auto';
     el.textContent = scrubPUAText(text);
     return el;
   };
@@ -731,25 +738,114 @@ function renderLegacyPage(pg, settings, doc) {
       // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
       // סמני ההערות מוקטנים לפי markerIdx של המודל — בדיוק כמו במקרן
       // ה-legacy/PDF. מספור האיות ("א. ב. ג.") נשאר בגודל הגוף — כמו הייחוס.
-      if (Array.isArray(ln.markerIdx) && ln.markerIdx.length && Array.isArray(ln.words)) {
-        const markerSet = new Set(ln.markerIdx);
+      // **S4.24 (אודיט חי מלא על הקובץ הגדול — 154 ממצאי דיו):** מילים בתוך
+      // סוגריים מרונדרות כאן בגודל השורה (12pt) בעוד השובר מודד אותן בגודל
+      // הסוגריים (10pt — parenDelta; הייחוס: פסקאות-הסוגריים כולן ב-10.0pt).
+      // תוצאה: שורה אחרונה/כותרת של פסקת-סוגריים רחבה מהטור ב-×1.2 וגולשת
+      // ממנו שמאלה (נמדד באתר החי: 78 INK_OUTSIDE_COLUMN עד 156px, 73
+      // LAST_NOT_CENTERED, 3 HEAD_NOT_CENTERED — כולן שורות-סוגריים).
+      // התיקון משקף את placeWords של המקרן ל-PDF: מילת-סוגריים ב-span
+      // בגודל 10pt, מוגבהת ב-0.33×גודל-השורה (בסיס משותף כמו baselineY).
+      // בנוסף: (א) כותרות אינן מקבלות כיווץ-סוגריים (השבירה מודדת אותן
+      // בגודל הכותרת); (ב) מילת-RLM בלבד מודבקת לשכנתה — בלי רווח פנטום
+      // שמ�זיז את המרכוז (נמדד: אסימטריה 3.8px); (ג) הרווח בין שתי מילים
+      // בתוך (...) ב-span של 10pt — כמו spaceBetween בשבירה (התצוגה =
+      // הייצוא, כמו S4.23).
+      {
+        const markerSet = new Set(Array.isArray(ln.markerIdx) ? ln.markerIdx : []);
         const imudSet = (settings && settings._imudRaw) || {};
         const markerSz = Number(imudSet['note-marker-size']) || 8;
-        ln.words.forEach((w, wi) => {
-          if (markerSet.has(wi)) {
+        const parenPx = pt2px(SZ.body + SZ.parenDelta);
+        const hostPx = pt2px(ln.sizePt || SZ.body);
+        const parenRaise = (0.33 * hostPx).toFixed(2);
+        const isHeading = ln.kind === 'heading';
+        const srcWords = ln.words || [];
+        const nW = srcWords.length;
+        // **S4.24 (דגלי קצה מהמודל — מקור יחיד):** parenStarts/parenEnds
+        // של השבירה; נפילה — שחזור עומק-תווים (אותו אלגוריתם כמו breakPara).
+        let parenIdx = null, pStarts = null, pEnds = null;
+        if (!isHeading && Array.isArray(ln.parenFlags) && ln.parenFlags.length === nW) {
+          parenIdx = new Set();
+          ln.parenFlags.forEach((p, i) => { if (p) parenIdx.add(i); });
+          if (Array.isArray(ln.parenStarts) && ln.parenStarts.length === nW && Array.isArray(ln.parenEnds) && ln.parenEnds.length === nW) {
+            pStarts = ln.parenStarts; pEnds = ln.parenEnds;
+          }
+        } else if (!isHeading && nW) {
+          parenIdx = new Set();
+          const st = [], en = [];
+          let depth = 0;
+          srcWords.forEach((w, i) => {
+            let any = false, s = false, e = false;
+            for (let c = 0; c < w.length; c++) {
+              const ch = w[c];
+              if (ch === '(') depth++;
+              const inP = depth > 0;
+              if (inP) any = true;
+              if (c === 0) s = inP;
+              e = inP;
+              if (ch === ')' && depth > 0) depth--;
+            }
+            if (any) parenIdx.add(i);
+            st.push(s); en.push(e);
+          });
+          pStarts = st; pEnds = en;
+        }
+        // **S4.24 (מילים של תווי-כיוון בלבד — בלי רווח פנטום):** מילה המורכבת
+        // מתווי כיוון (RLM/LRM וכו') היא ברוחב אפס, אבל הרווח שמפריד אותה
+        // משכנתה נכלל בתיבת השורה ומזיז את המרכוז (נמדד בחי: אסימטריה
+        // 3.8px בשורות אחרונות, עמ' 572). הדבקה לשכן — הכיווניות נשמרת,
+        // הרווח הפנטום נעלם; נמדד-לעולם-גדול מהרינדר ⇒ אין חשש לגלישה.
+        const FORMAT_WORD_RE = /^[\u200e\u200f\u2066-\u2069\u202a-\u202e\u00ad]+$/;
+        const items = [];
+        for (let wi = 0; wi < nW; wi++) {
+          const w = srcWords[wi];
+          if (FORMAT_WORD_RE.test(w)) {
+            if (items.length) { items[items.length - 1].text += w; continue; }
+            items.push({ text: w, wi: -1 }); // מובילה — תודבק למילה הבאה
+            continue;
+          }
+          const it = { text: w, wi };
+          if (items.length === 1 && items[0].wi === -1) { it.text = items[0].text + w; items[0] = it; }
+          else items.push(it);
+        }
+        for (let k = 0; k < items.length; k++) {
+          const it = items[k];
+          const w = it.text;
+          const wi = it.wi;
+          if (wi >= 0 && markerSet.has(wi)) {
             const m = doc.createElement('span');
             m.className = 'w w--fnmarker';
             m.textContent = scrubPUAText(w);
             m.style.fontSize = `${pt2px(markerSz)}px`;
             m.style.verticalAlign = 'super';
             el.appendChild(m);
+          } else if (!isHeading && wi >= 0 && parenIdx && parenIdx.has(wi)) {
+            const s = doc.createElement('span');
+            s.className = 'w w--paren';
+            s.textContent = scrubPUAText(w);
+            s.style.fontSize = `${parenPx}px`;
+            s.style.verticalAlign = `${parenRaise}px`;
+            el.appendChild(s);
           } else {
             el.appendChild(doc.createTextNode(scrubPUAText(w)));
           }
-          if (wi < ln.words.length - 1) el.appendChild(doc.createTextNode(' '));
-        });
-      } else {
-        el.appendChild(doc.createTextNode(scrubPUAText((ln.words || []).join(' '))));
+          if (k < items.length - 1) {
+            // **S4.24 (רווח בגודל הסוגריים בתוך ה-span):** כמו spaceBetween
+            // בשבירה — הרווח בין שתי מילים ששני צדדיהן בתוך (...) ב-10pt.
+            // בלי זאת שורת-סוגריים אחרונה גולשת מהטור (נמדד בחי: 4px, עמ' 403).
+            const a = items[k].wi, b = items[k + 1].wi;
+            const parenSpace = !isHeading && a >= 0 && b === a + 1 && pStarts && pEnds && !!pEnds[a] && !!pStarts[b];
+            if (parenSpace) {
+              const sp = doc.createElement('span');
+              sp.className = 'w w--paren-space';
+              sp.style.fontSize = `${parenPx}px`;
+              sp.textContent = ' ';
+              el.appendChild(sp);
+            } else {
+              el.appendChild(doc.createTextNode(' '));
+            }
+          }
+        }
       }
       if (ln.tokenId != null) el.dataset.tokenId = String(ln.tokenId);
       colEl.appendChild(el);
@@ -772,7 +868,7 @@ function renderLegacyPage(pg, settings, doc) {
   // ---- הערות שוליים (תחתית) ----
   for (const fn of (pg.footnotes || [])) {
     const el = doc.createElement('div');
-    el.className = 'footnote';
+    el.className = 'footnote' + (fn.cont ? ' fn--continuation' : '');
     el.setAttribute('dir', 'rtl');
     const y0 = fn.lines && fn.lines[0] ? fn.lines[0].y : GEO.FLOW_TOP;
     const h = (fn.lines ? fn.lines.length : 1) * GEO.FN_PITCH;
@@ -780,7 +876,9 @@ function renderLegacyPage(pg, settings, doc) {
     el.style.fontSize = `${pt2px(SZ.fnBody)}px`;
     el.style.lineHeight = `${GEO.FN_PITCH}px`;
     el.style.textAlign = 'right';
-    el.textContent = scrubPUAText((fn.marker ? fn.marker + ' ' : '') + (fn.lines || []).map(l => (Array.isArray(l.words) ? l.words : String(l.words).split(' ')).join(' ')).join(' '));
+    // **S4.24:** המשך הערה מקוצצת — '(המשך)' לפני הסמן (כמו renderFootnoteArea
+    // של הנתיב המודרני וכמו ה-PDF)
+    el.textContent = scrubPUAText((fn.cont ? '(המשך) ' : '') + (fn.marker ? fn.marker + ' ' : '') + (fn.lines || []).map(l => (Array.isArray(l.words) ? l.words : String(l.words).split(' ')).join(' ')).join(' '));
     root.appendChild(el);
   }
 

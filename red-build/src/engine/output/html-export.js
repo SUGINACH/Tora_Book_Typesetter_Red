@@ -44,7 +44,14 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
    (נמדד: פערים 2..53px מקצה הטור). רק text-align-last:justify מותח
    אותה בפועל — אותה נוסחה של המקרן ל-PDF. לא על שורות אחרונות/כותרות
    (הן center מטבען, ו-line--last-right/stretch מוגדרות בנפרד). */
-.line:not(.line--last):not(.line--heading){text-align-last:justify}
+.line:not(.line--last):not(.line--heading):not(.band){text-align-last:justify}
+/* **S4.24 (באג מרכוז פסים):** קווי הפס (class="line band …" — כותרות-רוחב,
+   סימנים, שורות שער) נפגעו מהכלל לעיל: שורה בודדת בבלוק נחשבת "אחרונה"
+   ו-text-align-last:justify דרס את ה-center — מילים פזורות מקצה לקצה
+   (נמדד בחי: "כל הזכויות שמורות" מיושרת למלוא 378px; מילה בודדת כמו
+   "הקדמה" נדבקת לקצה הימני — אסימטריה 494px). :not(.band) מחזיר את
+   המרכוז; רינדור ה-DOM גם קובע text-align-last:auto ישירות ב-mkLine. */
+.band{text-align-last:auto}
 .running-head{display:flex;width:100%}
 .head--sep-gray{border-bottom:1px solid #999}
 .head--sep-black{border-bottom:1.5px solid #000}

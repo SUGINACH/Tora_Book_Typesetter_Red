@@ -26,8 +26,51 @@ function baselineOf(yTop, h, sizePt, ascentEm) {
 
 /** מיקום מילים RTL מיושרות ברוחב נתון. מחזיר words:[{text,x,w,sizePt,baselineY,fontKey?}] */
 function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
+  // **S4.24 (מילים של תווי-כיוון בלבד — הדבקה לשכן):** כמו ברינדור ה-DOM —
+  // מילת RLM/LRM בלבד היא ברוחב אפס; הרווח שמפריד אותה משכנתה נכלל
+  // ברוחב השורה ומזיז את המרכוז (זהה לבאג שנמדד ב-DOM החי, עמ' 572).
+  // האינדקסים של markers/parenIdx/קצוות ממופים למילה המארחת.
+  const FORMAT_WORD_RE = /^[\u200e\u200f\u2066-\u2069\u202a-\u202e\u00ad]+$/;
+  let src = words, srcMap = null;
+  if (words.some((w) => typeof w === 'string' && FORMAT_WORD_RE.test(w))) {
+    const items = [];
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (typeof w === 'string' && FORMAT_WORD_RE.test(w)) {
+        if (items.length) { items[items.length - 1].text += w; continue; }
+        items.push({ text: w, srcIdx: -1 });
+        continue;
+      }
+      const it = { text: w, srcIdx: i };
+      if (items.length === 1 && items[0].srcIdx === -1) { it.text = items[0].text + w; items[0] = it; }
+      else items.push(it);
+    }
+    src = items.map((it) => it.text);
+    srcMap = items.map((it) => it.srcIdx);
+    const remapArr = (a) => (Array.isArray(a) ? srcMap.map((oi) => (oi >= 0 ? !!a[oi] : false)) : a);
+    const remapSet = (s) => {
+      if (!s) return s;
+      const ns = new Set();
+      srcMap.forEach((oi, ni) => { if (oi >= 0 && s.has(oi)) ns.add(ni); });
+      return ns;
+    };
+    opts = {
+      ...opts,
+      markers: opts.markers ? remapArr(opts.markers) : opts.markers,
+      parenIdx: remapSet(opts.parenIdx),
+      parenStarts: remapArr(opts.parenStarts),
+      parenEnds: remapArr(opts.parenEnds)
+    };
+  }
   const spaceW = api.measureTextWidth(' ', sizePt, 0);
-  const placed = words.map((w, i) => {
+  // **S4.24 (רווח בגודל הסוגריים):** כמו spaceBetween בשבירה — הרווח בין
+  // שתי מילים ששני צדדיהן בתוך (...) נמדד/מוצג ב-10pt (סוגריים = span
+  // בגודל מוקטן גם לרווחים הפנימיים — הוכחת S4.15 מהייחוס). בלי זאת
+  // שורת-סוגריים רחבה מהטור בדיו וגולשת (נמדד: 4px, עמ' 403). justify
+  // מחלק את העודף בחלקים שווים **מעל** הרווחים הטבעיים — בדיוק כמו
+  // justify של CSS (התצוגה = הייצוא, כמו S4.23).
+  const parenSpaceW = api.measureTextWidth(' ', SZ.body + SZ.parenDelta, 0);
+  const placed = src.map((w, i) => {
     if (typeof w === 'object') return w; // כבר ממוקם (חלון/סמן)
     const isMarker = opts.markers && opts.markers[i];
     const isParen = opts.parenIdx && opts.parenIdx.has(i);
@@ -39,23 +82,34 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
   });
   const sumW = placed.reduce((a, w) => a + w.w, 0);
   const gaps = Math.max(0, placed.length - 1);
-  let gapW = spaceW;
-  if (align === 'justify' && gaps > 0 && sumW + gaps * spaceW < width) {
-    gapW = (width - sumW) / gaps;
+  let gapWs = null;
+  let naturalSum = 0;
+  if (gaps > 0) {
+    gapWs = new Array(gaps);
+    for (let g = 0; g < gaps; g++) {
+      const inParen = !!(opts.parenEnds && opts.parenStarts && opts.parenEnds[g] && opts.parenStarts[g + 1]);
+      gapWs[g] = inParen ? parenSpaceW : spaceW;
+      naturalSum += gapWs[g];
+    }
   }
-  const lineW = sumW + gaps * gapW;
+  if (align === 'justify' && gaps > 0 && sumW + naturalSum < width) {
+    const extra = (width - sumW - naturalSum) / gaps;
+    for (let g = 0; g < gaps; g++) gapWs[g] += extra;
+  }
+  const lineW = sumW + naturalSum;
   let xRight;
   if (align === 'center') xRight = xLeft + (width + lineW) / 2;
   else xRight = xLeft + width;
   const out = [];
   let cursor = xRight;
-  for (const w of placed) {
+  for (let k = 0; k < placed.length; k++) {
+    const w = placed[k];
     cursor -= w.w;
     out.push({
       text: w.text, x: cursor, w: w.w,
       sizePt: w.sizePt, baselineY: w.sizePt < sizePt ? baseY - sizePt * (96 / 72) * 0.33 : baseY
     });
-    cursor -= gapW;
+    if (k < gaps) cursor -= gapWs[k];
   }
   return out;
 }
@@ -183,7 +237,9 @@ function projectLegacyPage(pg, settings, api, winApi) {
           ln.parenFlags.forEach((p, i) => { if (p) winParenIdx.add(i); });
         }
         const textWords = placeWords(ln.words, api, col.x, textW, ln.sizePt,
-          ln.isLast ? 'center' : 'justify', baseY, { parenIdx: winParenIdx });
+          ln.isLast ? 'center' : 'justify', baseY, { parenIdx: winParenIdx,
+            parenStarts: Array.isArray(ln.parenStarts) && ln.parenStarts.length === ln.words.length ? ln.parenStarts : null,
+            parenEnds: Array.isArray(ln.parenEnds) && ln.parenEnds.length === ln.words.length ? ln.parenEnds : null });
         words = [...winWords, ...textWords];
       } else {
         const align = ln.isLast ? 'center' : 'justify';
@@ -221,6 +277,8 @@ function projectLegacyPage(pg, settings, api, winApi) {
         const isMarkerWord = (w, i) => !!(markerIdxSet && markerIdxSet.has(i) && MARKER_WORD_RE.test(w));
         words = placeWords(ln.words, api, col.x, col.w, ln.sizePt, align, baseY,
           { markers: ln.words.map((w, i) => isMarkerWord(w, i)), parenIdx,
+            parenStarts: Array.isArray(ln.parenStarts) && ln.parenStarts.length === ln.words.length ? ln.parenStarts : null,
+            parenEnds: Array.isArray(ln.parenEnds) && ln.parenEnds.length === ln.words.length ? ln.parenEnds : null,
             markerSize: projCfg.markerSize });
       }
       out.lines.push({
@@ -268,6 +326,14 @@ function projectLegacyPage(pg, settings, api, winApi) {
     const words = [];
     let firstBase = null;
     let firstRight = rightEdge;
+    // **S4.24:** המשך הערה מקוצצת — '(המשך)' לפני הסמן (כמו ה-DOM והנתיב המודרני)
+    if (fn.cont) {
+      const pTxt = '(המשך)';
+      const pw = api.measureTextWidth(pTxt, SZ.fnBody, 0);
+      firstRight -= pw;
+      words.push({ text: pTxt, x: firstRight, w: pw, sizePt: SZ.fnBody, baselineY: null });
+      firstRight -= spaceW;
+    }
     if (fn.marker) {
       // **EXT-17:** סמן הרישום בגודל עצמאי (note-listing-num-size, ברירת מחדל 8).
       const msz = projCfg.listingSize;

@@ -129,7 +129,7 @@ describe('s15-view-justify', () => {
 
   it('BASE_CSS (html-export): כלל text-align-last:justify לשורות שאינן אחרונות/כותרות', () => {
     const src = fs.readFileSync(path.join(RB, 'src', 'engine', 'output', 'html-export.js'), 'utf8');
-    assert(src.includes('.line:not(.line--last):not(.line--heading){text-align-last:justify}'),
+    assert(src.includes('.line:not(.line--last):not(.line--heading):not(.band){text-align-last:justify}'),
       'BASE_CSS must contain the single-line-block stretch rule');
     // ולא על שורות אחרונות — אחרת היה מיישר גם שורות שהוגדרו center/right
     // (הכלל עצמו מזכיר line--last רק בתוך :not() — זה מכוון ותקין)
