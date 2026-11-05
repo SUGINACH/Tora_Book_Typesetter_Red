@@ -199,13 +199,28 @@ function renderFootnoteArea(page, settings, doc) {
   if (!settings['footnotes-enabled'] || !page.footnotes.length) return null;
   const area = doc.createElement('div');
   area.className = `footnotes footnotes--${settings['fn-layout-mode']}`;
+  // **S5.4 (P-5 — תצוגה=ייצוא):** מיקום המרזב לפי המודל — הרצועה השמורה מעל
+  // תחתית תיבת התוכן, בדיוק כמו שהפרויקטור מקרין ל-PDF. בעבר: bottom:8px
+  // קבוע מה-CSS — התצוגה הציגה את המרזב בשוליים התחתונים בזמן שה-PDF צייר
+  // אותו ברצועה השמורה (פער תצוגה≠ייצוא בפרופיל DP).
+  const tpl = page.template;
+  if (tpl && tpl.contentBox && page.fnReservedHeightPx > 0) {
+    const colsX = (tpl.columns || []).map(c => c.x);
+    const colsR = (tpl.columns || []).map(c => c.x + c.w);
+    const left = colsX.length ? Math.min(...colsX) : 12;
+    const right = colsR.length ? Math.max(...colsR) : (tpl.width - 12);
+    area.style.bottom = 'auto';
+    area.style.top = `${Math.round(tpl.contentBox.bottom - page.fnReservedHeightPx)}px`;
+    area.style.left = `${Math.round(left)}px`;
+    area.style.right = `${Math.max(0, Math.round(tpl.width - right))}px`;
+  }
   if (settings['footnote-separator-rule'] !== 'none') {
     const rule = doc.createElement('div');
     rule.className = `fn-rule fn-rule--${settings['footnote-separator-rule']}`;
     area.appendChild(rule);
   }
   // סמן אחיד (notes/markers) + סימון המשך למקטעי פיצול (S7.1.3 long-note policy)
-  for (const n of page.footnotes) {
+  const mkNote = (n) => {
     const marker = n.marker || markerFor(Number.isInteger(n.docIndex) ? n.docIndex : (n.markerNum || 1), settings['footnote-marker-style']);
     const el = doc.createElement('div');
     const cont = n.isContinuation || n.mode === 'split-rest';
@@ -213,7 +228,36 @@ function renderFootnoteArea(page, settings, doc) {
     if (n.customStyle) el.dataset.style = n.customStyle;
     el.dir = 'rtl';
     el.textContent = `${cont ? '(המשך) ' : ''}${marker}\u200F ${scrubPUAText(n.text || n)}`;
-    area.appendChild(el);
+    return el;
+  };
+  // **S5.4 (תצוגה=ייצוא):** שני נתיבים לפי footnote-columns — חלוקת הערות
+  // זהה לתקציב/פרויקטור (LPT דטרמיניסטית) — התצוגה וה-PDF מציגים את אותן
+  // הערות באותם נתיבים. הנתיב הראשון מימין (RTL).
+  const twoLanes = settings['footnote-columns'] === 2
+    && tpl && Array.isArray(tpl.columns) && tpl.columns.length >= 2
+    && page.fnReservedHeightPx > 0;
+  if (twoLanes) {
+    const order = page.footnotes.map((n, i) => ({ i, h: n.heightPx || 0 })).sort((a, b) => b.h - a.h || a.i - b.i);
+    const totals = [0, 0];
+    const laneOf = new Map();
+    for (const s of order) { const li = totals[0] <= totals[1] ? 0 : 1; totals[li] += s.h; laneOf.set(s.i, li); }
+    const lanes = [[], []];
+    page.footnotes.forEach((n, i) => lanes[laneOf.get(i)].push(n));
+    const row = doc.createElement('div');
+    row.style.display = 'flex';
+    row.style.flexDirection = 'row-reverse'; // RTL — הנתיב הראשון מימין
+    row.style.gap = `${Math.round(tpl.gutter || 0)}px`;
+    for (const lane of lanes) {
+      const laneEl = doc.createElement('div');
+      laneEl.className = 'footnotes-lane';
+      laneEl.style.flex = '1 1 0';
+      laneEl.style.minWidth = '0';
+      for (const n of lane) laneEl.appendChild(mkNote(n));
+      row.appendChild(laneEl);
+    }
+    area.appendChild(row);
+  } else {
+    for (const n of page.footnotes) area.appendChild(mkNote(n));
   }
   return area;
 }
@@ -1142,6 +1186,10 @@ function renderPage(page, settings, doc, header) {
   else if (Number.isFinite(bgOp) && bgOp < 1) root.style.backgroundColor = bgRgba('#ffffff', bgOp);
 
   // **עמודי הערות (S7.1.1):** כותרת + רשימת הערות; אין כותרת עליונה/טורי גוף
+  // **S5.4 (P-5 — תצוגה=ייצוא):** ההערות ממוקמות לפי המודל (colIdx/heightPx
+  // מ-buildEndnotePages) במיקום מוחלט בטורי התבנית — כמו שהפרויקטור מקרין
+  // ל-PDF. בעבר: רשימת זרימה אחת ברוחב מלא — התצוגה הציגה טור אחד בזמן
+  // שהמודל קבע שניים. ללא נתוני מודל — נפילה לרשימת הזרימה הישנה.
   if (page.type === 'endnotes') {
     if (page.heading) {
       const h = doc.createElement('h2');
@@ -1152,12 +1200,44 @@ function renderPage(page, settings, doc, header) {
     }
     const list = doc.createElement('div');
     list.className = 'endnote-list';
-    for (const n of page.notes || []) {
-      const el = doc.createElement('div');
-      el.className = 'endnote-note';
-      el.dir = 'rtl';
-      el.textContent = `${n.marker || ''}\u200F ${scrubPUAText(n.text || '')}`;
-      list.appendChild(el);
+    const tplEn = page.template;
+    const haveModel = tplEn && Array.isArray(tplEn.columns) && tplEn.columns.length
+      && Array.isArray(page.columns) && page.columns.some(c => c.length)
+      && page.notes && page.notes.every(n => n.colIdx != null);
+    if (haveModel) {
+      list.style.position = 'relative';
+      const topEn = tplEn.contentBox.top + (page.titleBandPx || 0);
+      const colsEn = page.columns;
+      // טור-אחד (endnote-columns=1): רוחב תיבת התוכן המלא — כמו הפרויקטור/PDF
+      const singleColEn = colsEn.length === 1;
+      const fullL = Math.min(...tplEn.columns.map(c => c.x));
+      const fullR = Math.max(...tplEn.columns.map(c => c.x + c.w));
+      for (let ci = 0; ci < colsEn.length; ci++) {
+        let y = topEn;
+        for (const n of colsEn[ci] || []) {
+          const col = singleColEn
+            ? { x: fullL, w: fullR - fullL }
+            : (tplEn.columns[ci] || tplEn.columns[0]);
+          const el = doc.createElement('div');
+          el.className = 'endnote-note';
+          el.dir = 'rtl';
+          el.style.position = 'absolute';
+          el.style.left = `${Math.round(col.x)}px`;
+          el.style.top = `${Math.round(y)}px`;
+          el.style.width = `${Math.round(col.w)}px`;
+          el.textContent = `${n.marker || ''}\u200F ${scrubPUAText(n.text || '')}`;
+          list.appendChild(el);
+          y += (n.heightPx || 0);
+        }
+      }
+    } else {
+      for (const n of page.notes || []) {
+        const el = doc.createElement('div');
+        el.className = 'endnote-note';
+        el.dir = 'rtl';
+        el.textContent = `${n.marker || ''}\u200F ${scrubPUAText(n.text || '')}`;
+        list.appendChild(el);
+      }
     }
     root.appendChild(list);
     const folioEn = renderFolio(page, settings, doc);

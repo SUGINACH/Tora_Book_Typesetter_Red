@@ -703,15 +703,22 @@ function typeset(rawText, settingsIn, env = {}) {
     endnotePagesInfo.count = endnotePagesInfo.pages.length;
   }
 
-  // count-endnote-pages=true ⇒ עמודי ההערות מצטרפים למספור (S7.1.1)
-  if (settings['count-endnote-pages'] === true && endnotePagesInfo.pages.length) {
+  // **S5.4 (P-5 — עמודי endnotes ריקים/חסרים):** עמודי הערות-הסיום מצטרפים
+  // לרצף העמודים תמיד — בעבר הצטרפו רק כש-count-endnote-pages=true, ואז
+  // בברירת המחדל הם לא הופיעו כלל לא בתצוגה ולא בייצוא (אובדן תוכן בפרופיל
+  // DP). המספור/הגיליון נותר מותנה ב-count-endnote-pages — assignNumbers כבר
+  // מטפל בזה ממילא (endnotes לא נספרים כשהדגל כבוי).
+  if (endnotePagesInfo.pages.length) {
     let idx = pages.length ? pages[pages.length - 1].index + 1 : 0;
     for (const ep of endnotePagesInfo.pages) {
       ep.index = idx++;
       ep.template = buildPageTemplate(PAGE_TYPES.ENDNOTES, settings, ep.index % 2 === 0);
       pages.push(ep);
     }
-    eventLog.emit('folio', 'endnote-pages-numbered', { count: endnotePagesInfo.pages.length });
+    eventLog.emit('folio', 'endnote-pages-appended', {
+      count: endnotePagesInfo.pages.length,
+      numbered: settings['count-endnote-pages'] === true
+    });
   }
 
   // **P0-6 (D-47): הוכחת ניטרליות אמיתית** — hash גיאומטריה מחושב מחדש אחרי

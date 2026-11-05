@@ -161,4 +161,4 @@ function verifyH7Conversion(sourceTokens, pages, placement) {
   return mismatches;
 }
 
-module.exports = { placeSideNotes, verifyH7Conversion, estimateSideNoteHeight, CONTAINMENT_PX, STACK_GAP_PX };
+module.exports = { placeSideNotes, verifyH7Conversion, estimateSideNoteHeight, CONTAINMENT_PX, STACK_GAP_PX, SIDE_NOTE_FONT_FACTORS };

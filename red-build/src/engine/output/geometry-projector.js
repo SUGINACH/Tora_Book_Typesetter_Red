@@ -15,6 +15,11 @@
 
 const { scrubPUAText } = require('./dom-renderer');
 const { MeasureAPI } = require('../typography/measure-api');
+// **S5.4 (P-5):** מקורות יחידים להקרנת ההערות — פקטורי רוחב הגופן מהתקציב
+// (אותם מספרים שקבעו את גובה ההערה) וסמן אחיד מ-notes/markers (כמו ה-DOM).
+const { NOTE_FONT_FACTORS } = require('../layout/footnote-budget');
+const { markerFor } = require('../notes/markers');
+const { SIDE_NOTE_FONT_FACTORS } = require('../layout/side-notes');
 const { lineFontSizePt } = require('./line-font'); // **03.11(ג):** מקור יחיד — נצרך גם ע"י dom-renderer (תצוגה חיה + ייצוא); מיוצא הלאה לצרכנים קיימים
 const { buildShaarBlocks } = require('./shaar-content');
 const { ornamentInk, parseSvgPaint, svgToPdfOps, svgInkBBox } = require('../decoration/ornament-ink'); // **EXT-4:** הדיו — מקור יחיד לכל הנתיבים // **03.11(ד):** תוכן השערים — אותו מודל כמו ה-DOM
@@ -137,28 +142,37 @@ function projectPage(page, settings, api) {
     }
   }
 
-  // טורים ושורות הגוף
-  page.columns.forEach((colLines, ci) => {
-    const col = tpl.columns[ci] || { x: 0, w: 0 };
-    let y = tpl.contentBox.top + spanOffset;
-    for (const ln of colLines) {
-      out.lines.push(projectLine(ln, col.x, y, col.w, settings, measure, lastAlignOf(ln, settings)));
-      // **EXT-20:** מקדם ה-AQ מיושם על גובה השורה (אנכי) — השורות שאחריה
-      // זזות בהתאם; התיבה והבסיס מחושבים מהגובה הנמתח (מודל תיבת שורה).
-      y += (ln.heightPx || 0) * (ln.aqStretch || 1);
-    }
-  });
-
-  // מרזב הערות — מגובה שמור מטה (fnReservedHeightPx) בתחתית תיבת התוכן
-  if (page.footnotes && page.footnotes.length) {
-    const fnSize = settings['body-font-size-pt'] * 0.8;
-    const lh = Math.round(fnSize * (96 / 72) * 1.2);
-    let y = tpl.contentBox.bottom - page.fnReservedHeightPx;
-    for (const n of page.footnotes) {
-      out.footnotes.push({ y, x: colLeftOf(tpl), w: colWidthOf(tpl), marker: scrubPUAText(String(n.marker || '')), text: scrubPUAText(String(n.text || '')), h: lh });
-      y += lh;
-    }
+  // **S5.4 (P-5 — עמודי endnotes ריקים):** לעמודי הערות-הסיום יש מודל משלהם —
+  // ה"טורים" שלהם מכילים אובייקטי הערה (marker/text/heightPx/colIdx), לא
+  // שורות. הלולאה הכללית הקרינה אותם כשורות בלי מילים ⇒ עמודים ריקים לחלוטין
+  // ב-PDF. הקרנה ייעודית: כותרת + הערות בטורי המודל.
+  if (page.type === 'endnotes') {
+    projectEndnotePage(page, settings, measure, out);
+  } else {
+    // טורים ושורות הגוף
+    page.columns.forEach((colLines, ci) => {
+      const col = tpl.columns[ci] || { x: 0, w: 0 };
+      let y = tpl.contentBox.top + spanOffset;
+      for (const ln of colLines) {
+        out.lines.push(projectLine(ln, col.x, y, col.w, settings, measure, lastAlignOf(ln, settings)));
+        // **EXT-20:** מקדם ה-AQ מיושם על גובה השורה (אנכי) — השורות שאחריה
+        // זזות בהתאם; התיבה והבסיס מחושבים מהגובה הנמתח (מודל תיבת שורה).
+        y += (ln.heightPx || 0) * (ln.aqStretch || 1);
+      }
+    });
+    // **S5.4 (P-5 — הערות-צד חסרות):** הקרנה לפי ה-placement (x/yTop/colWidth)
+    // — כמו ה-aside המוחלט ב-DOM. fontKey 'margin' ⇒ ‏/F6 (Hadassah) ב-PDF.
+    if (page.sideNotes && page.sideNotes.length) projectSideNotes(page, settings, measure, out);
+    // **S5.4 (P-5 — מפריד טורים חסר):** אותה גיאומטריה כמו renderColumnDivider
+    // ב-DOM (מינימום הטורים −8px; x במרכז המרזב).
+    projectColumnDivider(page, settings, out);
   }
+
+  // **S5.4 (P-5 — הערות מרוסקות):** מרזב הערות — מילים במדידה אמיתית, שבירה
+  // לשורות ברוחב הנתיב, סמן/(המשך), יישור לשני הצדדים, בסיסים פר-שורה ושני
+  // נתיבים לפי footnote-columns. בעבר: רשומת טקסט אחת לכל הערה, וה-pdf-writer
+  // "פיזר" את מילותיה בקידום קבוע 8.2px ⇒ הערות מרוסקות זו על זו.
+  if (page.footnotes && page.footnotes.length) projectFootnoteGutter(page, settings, measure, out);
 
   // גיליון
   if (page.folioDisplay) {
@@ -244,6 +258,303 @@ function colWidthOf(tpl) {
   return right - left;
 }
 
+// ============ S5.4 (P-5) — הקרנת הערות-שוליים / עמודי-הערות / הערות-צד / מפרידים ============
+
+/** גודל גוף הערה — 0.8× הגוף (כמו .footnotes{font-size:.8em} ו-noteHeight בתקציב). */
+function fnNoteSizePt(settings) { return settings['body-font-size-pt'] * 0.8; }
+
+/**
+ * שבירת אסימוני הערה לשורות ממוקמות מילה-במילה (RTL) — אותו חוזה של placeWords
+ * של ה-legacy: הסמן/(המשך) בפינה הימנית של השורה הראשונה, יישור מלא לשורות
+ * שאינן אחרונות (רווחים מעל הרווח הטבעי — כמו justify של CSS), בסיס פר-שורה
+ * לפי מודל תיבת השורה (half-leading + ascent).
+ * @param {Array} tokens — [{text, sizePt?, wFactor?}] (wFactor — פקטור רוחב הגופן)
+ * @returns {{lines:Array, words:Array, lineCount:number, firstTop:number, firstBaseline:number, h:number}|null}
+ */
+function wrapNoteTokens(tokens, x, w, yTop, pitch, sizePt, measure, fontKey) {
+  const live = tokens.filter(t => t.text && String(t.text).trim());
+  if (!live.length) return null;
+  const spaceW = measure.measureTextWidth(' ', sizePt, 0);
+  const toks = live.map(t => {
+    const pt = t.sizePt || sizePt;
+    return { text: String(t.text), sizePt: pt, w: measure.measureTextWidth(String(t.text), pt, 0) * (t.wFactor || 1) };
+  });
+  // שבירה חמדנית ברוחב הנתיב — אותה ספירת שורות כמו noteHeight בתקציב
+  const rows = [];
+  let cur = [], curW = 0;
+  for (const tok of toks) {
+    const add = cur.length ? spaceW + tok.w : tok.w;
+    if (cur.length && curW + add > w) { rows.push(cur); cur = [tok]; curW = tok.w; }
+    else { cur.push(tok); curW += add; }
+  }
+  if (cur.length) rows.push(cur);
+  const ascent = measure.ascentEm(), descent = measure.descentEm();
+  const sizePx = sizePt * (96 / 72);
+  const half = Math.max(0, (pitch - (ascent + descent) * sizePx) / 2);
+  const flat = [];
+  const lineRecs = rows.map((row, li) => {
+    const isLast = li === rows.length - 1;
+    const sumW = row.reduce((s, t) => s + t.w, 0);
+    const gaps = Math.max(0, row.length - 1);
+    let gapW = spaceW;
+    if (!isLast && gaps > 0 && sumW + gaps * spaceW < w) gapW = (w - sumW) / gaps;
+    const y = yTop + li * pitch;
+    const baselineY = y + half + ascent * sizePx;
+    const words = [];
+    let cursor = x + w; // RTL — מימין לשמאל
+    for (const t of row) {
+      cursor -= t.w;
+      const wd = { text: t.text, x: cursor, w: t.w, sizePt: t.sizePt, baselineY, fontKey };
+      words.push(wd);
+      flat.push(wd);
+      cursor -= gapW;
+    }
+    return { y, h: pitch, baselineY, words };
+  });
+  return {
+    lines: lineRecs, words: flat, lineCount: rows.length, firstTop: yTop,
+    firstBaseline: lineRecs.length ? lineRecs[0].baselineY : yTop,
+    h: rows.length * pitch
+  };
+}
+
+/** סמן הערה — מקור אחיד: הסמן שהוקצה, או markerFor לפי המספר (כמו renderFootnoteArea). */
+function noteMarkerOf(n, settings) {
+  if (n.marker != null && String(n.marker) !== '') return String(n.marker);
+  if (Number.isInteger(n.docIndex) || Number.isInteger(n.markerNum)) {
+    return markerFor(Number.isInteger(n.docIndex) ? n.docIndex : (n.markerNum || 1), settings['footnote-marker-style']);
+  }
+  return '';
+}
+
+/**
+ * **S5.4 (P-5 — הערות מרוסקות):** הקרנת מרזב הערות-השוליים של עמוד DP — נתיב
+ * אחד או שניים (footnote-columns), חלוקת הערות זהה לתקציב (LPT דטרמיניסטית
+ * — גובה המרזב לעולם אינו חורג מהשמור), וחוט מפריד (fn-rule) מעל המרזב
+ * כמו ב-DOM. הערות מוקרנות כמילים במדידה אמיתית — החוזה שה-pdf-writer כבר
+ * מצייר (fn.words) — במקום טקסט שפוזר בקידום קבוע.
+ */
+function projectFootnoteGutter(page, settings, measure, out) {
+  const tpl = page.template;
+  const fnSize = fnNoteSizePt(settings);
+  const factor = NOTE_FONT_FACTORS[settings['f-note-body-font']] || 1;
+  const fullX = colLeftOf(tpl), fullW = colWidthOf(tpl);
+  let laneW = settings._fnColWidthPx || Math.round(fullW);
+  if (!(laneW > 0) || laneW > fullW) laneW = Math.round(fullW);
+  const twoLanes = settings['footnote-columns'] === 2 && laneW * 2 + (tpl.gutter || 0) <= fullW + 0.75;
+  const notes = page.footnotes;
+  const lanes = [[], []];
+  if (!twoLanes) {
+    lanes[0] = notes.slice();
+  } else {
+    // LPT — אותו אלגוריתם כמו getFootnotesReservedHeight; הסדר הפנימי בכל נתיב נשמר
+    const order = notes.map((n, i) => ({ i, h: n.heightPx || 0 })).sort((a, b) => b.h - a.h || a.i - b.i);
+    const totals = [0, 0];
+    const laneOf = new Map();
+    for (const s of order) { const li = totals[0] <= totals[1] ? 0 : 1; totals[li] += s.h; laneOf.set(s.i, li); }
+    notes.forEach((n, i) => lanes[laneOf.get(i)].push(n));
+  }
+  const reserved = page.fnReservedHeightPx > 0
+    ? page.fnReservedHeightPx
+    : notes.reduce((s, n) => s + (n.heightPx || 0), 0);
+  const gutterTop = tpl.contentBox.bottom - reserved;
+  const laneX = twoLanes ? [fullX + laneW + (tpl.gutter || 0), fullX] : [fullX, fullX]; // RTL: הנתיב הראשון מימין
+  let inkTop = Infinity;
+  lanes.forEach((laneNotes, li) => {
+    let y = gutterTop;
+    for (const n of laneNotes) {
+      const pitch = n.lineH || Math.round(fnSize * (96 / 72) * 1.25);
+      const cont = n.isContinuation === true || n.mode === 'split-rest';
+      const marker = noteMarkerOf(n, settings);
+      const tokens = [];
+      if (cont) tokens.push({ text: '(המשך)' });
+      if (marker) tokens.push({ text: scrubPUAText(marker) });
+      for (const w of String(n.text || '').replace(/\uE000/g, ' ').split(/\s+/)) {
+        const t = scrubPUAText(w);
+        if (t) tokens.push({ text: t, wFactor: factor });
+      }
+      const rec = wrapNoteTokens(tokens, laneX[li], laneW, y, pitch, fnSize, measure, 'fnbody');
+      if (rec) {
+        out.footnotes.push({
+          y: rec.firstTop, x: laneX[li], w: laneW,
+          marker: scrubPUAText(String(n.marker || '')),
+          text: scrubPUAText(String(n.text || '').replace(/\uE000/g, ' ')),
+          words: rec.words, baselineY: rec.firstBaseline, h: Math.max(n.heightPx || 0, rec.h)
+        });
+        inkTop = Math.min(inkTop, rec.firstTop);
+      }
+      y += (n.heightPx || pitch); // התקדמות לפי התקציב — פריסת העמוד לעולם אינה נפרצת
+    }
+  });
+  // חוט המפריד מעל המרזב — כמו .fn-rule ב-renderFootnoteArea (לא במצב 'none')
+  const ruleStyle = settings['footnote-separator-rule'];
+  if (ruleStyle && ruleStyle !== 'none' && Number.isFinite(inkTop)) {
+    pushRuleDecoration(out, tpl, { kind: 'fn-rule', style: String(ruleStyle), x: fullX, w: fullW, y: inkTop });
+  }
+}
+
+/**
+ * **S5.4 (P-5 — עמודי endnotes ריקים):** הקרנת עמוד הערות-הסיום — כותרת
+ * (h2, 1.2× הגוף) ואז ההערות בטורי המודל (colIdx/heightPx מ-buildEndnotePages),
+ * גוף ההערה ב-0.8× עם פקטור הגופן — אותם מספרים שקבעו את גובה ההערה.
+ * השורות נכנסות ל-out.lines ⇒ מצוירות ב-PDF, נכנסות למלאי הגליפים ולתיבת הדיו.
+ */
+function projectEndnotePage(page, settings, measure, out) {
+  const tpl = page.template;
+  const bodyPt = settings['body-font-size-pt'];
+  const notePt = bodyPt * 0.8;
+  const factor = NOTE_FONT_FACTORS[settings['f-note-body-font']] || 1;
+  if (page.heading) {
+    const sizePt = bodyPt * 1.2;
+    const bandH = (page.titleBandPx && page.titleBandPx > 16) ? page.titleBandPx - 16 : (measure.lineHeightPx ? measure.lineHeightPx(sizePt) : Math.round(sizePt * (96 / 72) * 1.34));
+    out.lines.push(fakeLine(scrubPUAText(String(page.heading)), colLeftOf(tpl), tpl.contentBox.top + 8, colWidthOf(tpl), bandH, settings, measure, sizePt, 'heading', 'endnote-title'));
+  }
+  const top = tpl.contentBox.top + (page.titleBandPx || 0);
+  const cols = Math.max(1, (page.columns || []).length);
+  // טור-אחד (endnote-columns=1): רשימה ברוחב תיבת התוכן המלא (כמו המנוע
+  // שמחשב את גובה ההערה ברוחב המלא) — התבנית עצמה דו-טורית תמיד.
+  const singleColMode = (page.columns || []).length === 1;
+  for (let ci = 0; ci < cols; ci++) {
+    const colNotes = page.columns[ci] || [];
+    if (!colNotes.length) continue;
+    const col = singleColMode
+      ? { x: colLeftOf(tpl), w: colWidthOf(tpl) }
+      : (tpl.columns[ci] || { x: colLeftOf(tpl), w: colWidthOf(tpl) / cols });
+    let y = top;
+    for (const n of colNotes) {
+      const pitch = measure.lineHeightPx ? measure.lineHeightPx(notePt) : Math.round(notePt * (96 / 72) * 1.34);
+      const marker = noteMarkerOf(n, settings);
+      const tokens = [];
+      if (marker) tokens.push({ text: scrubPUAText(marker) });
+      for (const w of String(n.text || '').replace(/\uE000/g, ' ').split(/\s+/)) {
+        const t = scrubPUAText(w);
+        if (t) tokens.push({ text: t, wFactor: factor });
+      }
+      const rec = wrapNoteTokens(tokens, col.x, col.w, y, pitch, notePt, measure, 'fnbody');
+      if (rec) {
+        rec.lines.forEach((line) => {
+          out.lines.push({
+            x: col.x, y: line.y, w: col.w, h: pitch,
+            words: line.words.map(wd => ({ text: wd.text, x: wd.x, w: wd.w, sizePt: wd.sizePt, fontKey: wd.fontKey })),
+            align: 'right', kind: 'endnote-note', level: null, isLast: true, sizePt: notePt,
+            baselineY: null, tokenId: n.tokenId != null ? n.tokenId : null
+          });
+        });
+      }
+      y += (n.heightPx || pitch); // לפי גובה ההערה במודל — כמו הקיבולת שנקבעה
+    }
+  }
+}
+
+/**
+ * **S5.4 (P-5 — הערות-צד חסרות):** הקרנת הערות-הצד לפי ה-placement — אותו מיקום
+ * מוחלט כמו ה-aside ב-DOM (x/yTop/colWidth), גוף 0.75× (כמו
+ * .side-note{font-size:.75em}) עם פקטור s-note-body-font ⇒ ‏/F6 ב-PDF.
+ */
+function projectSideNotes(page, settings, measure, out) {
+  const sizePt = settings['body-font-size-pt'] * 0.75;
+  const fontName = settings['s-note-body-font'];
+  const factor = SIDE_NOTE_FONT_FACTORS[fontName] || (fontName && fontName !== settings['body-font'] ? 1.08 : 1);
+  for (const sn of page.sideNotes) {
+    if (sn.yTop == null) continue; // רק המוקמות בפועל (placeSideNotes)
+    const pitch = Math.round(sizePt * (96 / 72) * 1.15);
+    const tokens = [];
+    if (sn.counterMark) tokens.push({ text: scrubPUAText(String(sn.counterMark)) });
+    for (const w of String(sn.text || '').split(/\s+/)) {
+      const t = scrubPUAText(w);
+      if (t) tokens.push({ text: t, wFactor: factor });
+    }
+    const rec = wrapNoteTokens(tokens, sn.x, sn.colWidth, sn.yTop, pitch, sizePt, measure, 'margin');
+    if (!rec) continue;
+    rec.lines.forEach((line) => {
+      out.lines.push({
+        x: sn.x, y: line.y, w: sn.colWidth, h: pitch,
+        words: line.words.map(wd => ({ text: wd.text, x: wd.x, w: wd.w, sizePt: wd.sizePt, fontKey: wd.fontKey })),
+        align: 'right', kind: 'side-note', level: sn.level != null ? sn.level : null,
+        isLast: true, sizePt, baselineY: null,
+        tokenId: sn.anchorToken != null ? sn.anchorToken : (sn.ownToken != null ? sn.ownToken : null)
+      });
+    });
+  }
+}
+
+/**
+ * **S5.4 (P-5 — מפריד חסר):** חוט מפריד בין הטורים — קו אנכי במרכז המרזב, גובה
+ * Math.min(טורים)−8px (כלל V4) — בדיוק כמו renderColumnDivider ב-DOM. מוקרן
+ * כעיטור rule: מצויר ב-PDF (pdfOps) ונצבר בתיבת הדיו (parity) באותו ערוץ.
+ */
+function projectColumnDivider(page, settings, out) {
+  const style = settings['column-divider-style'];
+  if (!style || style === 'none' || !page.template || (page.columns || []).length < 2) return;
+  const tpl = page.template;
+  const used = page.columns.map(col => col.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0));
+  const h = Math.max(0, Math.min(...used) - 8);
+  if (h <= 0) return;
+  const c1 = tpl.columns[1];
+  if (!c1) return;
+  const x = c1.x + c1.w + (tpl.gutter || 0) / 2;
+  pushRuleDecoration(out, tpl, { kind: 'col-divider', style: String(style), x, y: tpl.contentBox.top, h, vertical: true });
+}
+
+/** הגדרות קו לפי ה-CSS: עובי (pt), צבע RGB 0..1, מקף (px), כפול (px), צמצום רוחב. */
+const RULE_STYLES = {
+  'fn-rule': {
+    regular: { w: 0.75, color: [0, 0, 0] },
+    circles: { w: 1.1, color: [0, 0, 0], dash: [0.75, 1.7] },
+    sparkle: { w: 1.1, color: [0.42, 0.42, 0.42], dash: [2.25, 2.25] },
+    star: { w: 0.75, color: [0.29, 0.29, 0.29], double: 1.5 },
+    diamond: { w: 1.1, color: [0, 0, 0], scaleX: 0.6 }
+  },
+  'col-divider': {
+    thin: { w: 0.75, color: [0.6, 0.6, 0.6] },
+    dashed: { w: 0.75, color: [0.6, 0.6, 0.6], dash: [2.25, 2.25] },
+    double: { w: 0.75, color: [0.6, 0.6, 0.6], double: 1.5 }
+  }
+};
+
+/**
+ * הוספת קו (אופקי/אנכי) כעיטור rule — מצויר ב-PDF דרך pdfOps ונצבר בתיבת הדיו
+ * במלואו (אותו ערוץ כמו עיטורי המנוע). מרכז הדיו על הקו עצמו.
+ */
+function pushRuleDecoration(out, tpl, spec) {
+  const table = RULE_STYLES[spec.kind] || {};
+  const st = table[spec.style] || { w: 0.75, color: [0, 0, 0] };
+  const PX_TO_PT = 72 / 96;
+  const hPt = tpl.height * PX_TO_PT;
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const col = st.color;
+  const ops = [];
+  const emit = (x1, y1, x2, y2) => {
+    ops.push(`${r2(col[0])} ${r2(col[1])} ${r2(col[2])} RG`);
+    if (st.dash) ops.push(`[${st.dash.map(r2).join(' ')}] 0 d`);
+    ops.push(`${r2(st.w)} w`);
+    ops.push(`${r2(x1 * PX_TO_PT)} ${r2(hPt - y1 * PX_TO_PT)} m ${r2(x2 * PX_TO_PT)} ${r2(hPt - y2 * PX_TO_PT)} l S`);
+    if (st.dash) ops.push('[] 0 d');
+  };
+  let inkX = spec.x, inkY = spec.y, inkW = spec.w || 0, inkH = spec.h != null ? spec.h : 1;
+  if (spec.vertical) {
+    emit(spec.x, spec.y, spec.x, spec.y + spec.h);
+    if (st.double) emit(spec.x + st.double, spec.y, spec.x + st.double, spec.y + spec.h);
+    const strokePx = st.w * (96 / 72) + (st.double ? st.double : 0);
+    inkX = spec.x - strokePx / 2;
+    inkW = Math.max(0.75, strokePx);
+  } else {
+    let x1 = spec.x, x2 = spec.x + (spec.w || 0);
+    if (st.scaleX) { const cx = (x1 + x2) / 2; x1 = cx - (spec.w * st.scaleX) / 2; x2 = cx + (spec.w * st.scaleX) / 2; }
+    emit(x1, spec.y, x2, spec.y);
+    if (st.double) emit(x1, spec.y + st.double, x2, spec.y + st.double);
+    inkX = x1;
+    inkW = x2 - x1;
+    inkH = Math.max(0.75, st.w * (96 / 72) + (st.double ? st.double : 0));
+  }
+  if (!out.decorations) out.decorations = [];
+  out.decorations.push({
+    x: inkX, y: inkY, w: inkW, h: Math.max(0.75, inkH),
+    kind: spec.kind, slot: null, kindStyle: null,
+    inkType: 'rule', inkUri: null, paint: null, pdfOps: ops
+  });
+}
+
 /** יישור שורה אחרונה לפי ההגדרה (ברירת מחדל center — תואם BASE_CSS). */
 function lastAlignOf(ln, settings) {
   if (!ln.isLast) return 'justify';
@@ -309,7 +620,9 @@ function attachBaselines(page, settings, measure) {
     ln.descentPx = descent * sizePx;
   }
   if (page.footnotes) {
-    for (const fn of page.footnotes) { fn.baselineY = fn.y + ascent * 11 * (96 / 72); }
+    // **S5.4:** להערה עם מילים יש כבר בסיס פר-מילה מההקרנה; הנוסחה נשארת
+    // כנפילה בלבד להערות בלי מילים.
+    for (const fn of page.footnotes) { if (!fn.words || !fn.words.length) fn.baselineY = fn.y + ascent * 11 * (96 / 72); }
   }
   if (page.folio) page.folio.baselineY = page.folio.y + 10;
   if (page.header) page.header.baselineY = page.header.y + 10;
@@ -317,6 +630,8 @@ function attachBaselines(page, settings, measure) {
 
 /** שורה מלאכותית (TOC/עזר) — מילה אחת מימין לשמאל; מיקום מפורש. */
 /** **03.11(ד):** שורת שער ממורכזת — מילים ממוקמות מהמרכז החוצה (RTL). */
+/* **S5.4 (P-5):** fakeLine הורחבה — sizePt/fontKey/kind נתונים לכותרת עמודי
+   ההערות (1.2× הגוף, /F3) בלי לשנות את הקריאות הקיימות. */
 function centeredLine(text, x, y, w, h, sizePt, measure, cls) {
   const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));
   const widths = words.map(w2 => measure.measureTextWidth(w2, sizePt, 0));
@@ -333,19 +648,19 @@ function centeredLine(text, x, y, w, h, sizePt, measure, cls) {
   return { x, y, w, h, words: wordPos, align: 'center', kind: 'shaar-content', level: null, isLast: false, sizePt, baselineY: null, tokenId: null, cls: cls || '' };
 }
 
-function fakeLine(text, x, y, w, h, settings, measure) {
-  const sizePt = 12;
+function fakeLine(text, x, y, w, h, settings, measure, sizePt, fontKey, kind) {
+  const pt = sizePt || 12;
   const words = String(text || '').split(/\s+/).filter(Boolean).map(w2 => scrubPUAText(w2));
-  const widths = words.map(w2 => measure.measureTextWidth(w2, sizePt, 0));
-  const gapW = measure.measureTextWidth(' ', sizePt, 0);
+  const widths = words.map(w2 => measure.measureTextWidth(w2, pt, 0));
+  const gapW = measure.measureTextWidth(' ', pt, 0);
   let cursor = x + w;
   const wordPos = [];
   for (let i = 0; i < words.length; i++) {
     cursor -= widths[i];
-    wordPos.push({ text: words[i], x: cursor, w: widths[i] });
+    wordPos.push({ text: words[i], x: cursor, w: widths[i], sizePt: pt, fontKey: fontKey || null });
     cursor -= gapW;
   }
-  return { x, y, w, h, words: wordPos, align: 'right', kind: 'toc-row', level: null, isLast: false, sizePt, baselineY: null, tokenId: null };
+  return { x, y, w, h, words: wordPos, align: 'right', kind: kind || 'toc-row', level: null, isLast: false, sizePt: pt, baselineY: null, tokenId: null };
 }
 
 /**
@@ -370,7 +685,17 @@ function projectDocument(result, settings, api) {
         acc(w.x, ln.baselineY - ascent * sizePx * 0.93, w.w, (ascent * 0.93 + descent) * sizePx);
       }
     }
-    for (const fn of pg.footnotes) if ((fn.marker + fn.text).trim()) acc(fn.x, fn.baselineY - 9, fn.w, 14);
+    // **S5.4:** דיו הערה — ממילותיה (רב-שורתית, בסיסים פר-שורה); הנוסחה
+    // הישנה (תיבה 14px) נשארת כנפילה להערות בלי מילים.
+    for (const fn of pg.footnotes) {
+      if (fn.words && fn.words.length) {
+        for (const w of fn.words) {
+          if (!w.text || !w.text.trim()) continue;
+          const sizePx = (w.sizePt || 8.5) * (96 / 72);
+          acc(w.x, w.baselineY - ascent * sizePx * 0.93, w.w, (ascent * 0.93 + descent) * sizePx);
+        }
+      } else if ((String(fn.marker || '') + String(fn.text || '')).trim()) acc(fn.x, fn.baselineY - 9, fn.w, 14);
+    }
     // **D-81:** כל טקסט מצויר נכנס לתיבת הדיו — גם גיליון וגם סלוטי כותרת עליונה,
     // במיקום/רוחב של המקור היחיד (הקרן). בעבר הכותרת לא נצברה כלל ⇒ המודל היה
     // צר מהרסטר בעמודים עם כותרת — פער שנחשף בחיזוק בדיקת הקבלה (S13, 03.11).
