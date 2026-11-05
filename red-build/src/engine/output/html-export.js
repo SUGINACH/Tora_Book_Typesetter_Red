@@ -37,6 +37,14 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .column{position:absolute;top:0;bottom:0}
 .line{white-space:normal;text-align:justify;text-justify:inter-word}
 .line--last{text-align:center}
+/* **S4.23 (דיווח משתמש — יישור שורות בתצוגה/ייצוא):** שורה בודדת בבלוק
+   נחשבת "השורה האחרונה" לפי הוראת CSS — ו-justify לעולם אינו מותח אותה.
+   כל .line הוא בלוק בן-שורה-אחת מתוכנן (השבירה נעשתה במנוע); לכן
+   text-align:justify לבדו היה אפס-פעולה והשורות נשארו מרופטות בצד שמאל
+   (נמדד: פערים 2..53px מקצה הטור). רק text-align-last:justify מותח
+   אותה בפועל — אותה נוסחה של המקרן ל-PDF. לא על שורות אחרונות/כותרות
+   (הן center מטבען, ו-line--last-right/stretch מוגדרות בנפרד). */
+.line:not(.line--last):not(.line--heading){text-align-last:justify}
 .running-head{display:flex;width:100%}
 .head--sep-gray{border-bottom:1px solid #999}
 .head--sep-black{border-bottom:1.5px solid #000}

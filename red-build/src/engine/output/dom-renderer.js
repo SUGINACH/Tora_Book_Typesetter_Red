@@ -692,8 +692,31 @@ function renderLegacyPage(pg, settings, doc) {
       el.style.fontSize = `${pt2px(ln.sizePt || SZ.body)}px`;
       el.style.lineHeight = '1';
       el.style.overflow = 'visible';
-      el.style.whiteSpace = 'nowrap';
-      el.style.textAlign = ln.kind === 'heading' ? 'center' : (ln.isLast ? 'center' : 'justify');
+      // **S4.23 (דיווח משתמש: "יישור שורות לא נכון" בתצוגה החיה):** שורות גוף
+      // מלאות עוברות ל-white-space:normal + text-align:justify
+      // **וגם text-align-last:justify** — בדיוק כמו BASE_CSS של שאר הנתיבים
+      // (03.11(ד): "טורים מיושרים באופן מושלם"). שתי הסיבות שבגללן התצוגה
+      // הייתה קטסטרופה (נמדד בפועל: פערי קצה-שמאל 2..53px, חלקן גלשו מהטור):
+      //   1) inline nowrap דרס את BASE_CSS — ו-justify על שורת nowrap הוא
+      //      אפס-פעולה;
+      //   2) **גם בלי nowrap**: לפי הוראת CSS שורה יחידה בבלוק נחשבת "השורה
+      //      האחרונה" ולעולם אינה נמתחת ע"י justify. כל .line כאן הוא בלוק
+      //      בן-שורה-אחת מתוכנן (השבירה כבר נעשתה במנוע) — ולכן הדבר היחיד
+      //      שמותח אותה הוא text-align-last:justify (נתמך בכרום/פיירפוקס).
+      // הדפדפן מותח רווחים בין-מילים — אותה נוסחה של המקרן ל-PDF
+      // (projectLine: spaceW=(colW-sumW)/gaps) — התצוגה = הייצוא.
+      // שורות אחרונות/כותרות נשארות nowrap+center (חד-שורתיות מטבען;
+      // מסומנות ומדולגות באודיט). סדר ההצהרות חשוב: רק שורות גוף מלאות
+      // מקבלות את text-align-last — אחרת הוא היה מיישר גם שורות אחרונות
+      // (שהגדרתן center/right) ומקורן של הסמנים.
+      if (ln.kind === 'heading' || ln.isLast) {
+        el.style.whiteSpace = 'nowrap';
+        el.style.textAlign = 'center';
+      } else {
+        el.style.whiteSpace = 'normal';
+        el.style.textAlign = 'justify';
+        el.style.textAlignLast = 'justify';
+      }
       if (ln.window && ln.windowWords && ln.windowWords.length) {
         // מילת-חלון (1.5×) בשפה הימנית + הטקסט — תיבה אחת, בסיס משותף
         // **S4.15:** גופן החלון של המקור — FrankReal משקל 900 (הוכח מהייחוס:

@@ -151,6 +151,63 @@
           problems.push({ page: idx, col: ci, type: 'NOT_JUSTIFIED', severity: 'medium', justified: `${justified}/${bodyLines.length}` });
         }
       }
+      // 3.5 **S4.23 (דיווח משתמש: "איך הבדיקות שלך לא עלו עליהם?!"):** הבדיקות
+      //     למעלה רואות **תיבות** — והתיבות תמיד "מושלמות" (right:0, width:colW,
+      //     height:pitch) גם כשהעין רואה קטסטרופה. כאן נמדדת גיאומטריית ה**דיו**
+      //     — איחוד מלבני הצמתים (טקסט דרך Range, אלמנטים דרך getBoundingClientRect)
+      //     — מה שהמשתמש רואה בפועל. שלוש בדיקות חדשות, מתמטיות-מוחלטות:
+      //     (א) INK_OUTSIDE_COLUMN — דיו שחורג מתיבת הטור (בעבר: גלישה שקטה
+      //         של שורות nowrap לתוך הטור השני/השפה);
+      //     (ב) INK_NOT_JUSTIFIED — שורת גוף מלאה (≥2 מילים) שאינה ממלאת את
+      //         רוחב הטור משני הצדדים (סף 3px) — כלומר אינה מיושרת כמו ב-PDF
+      //         (projectLine) וכמו במקור;
+      //     (ג) WINDOW_WRONG_SIDE — מילת-החלון שאינה נצמדת לקצה ה**ימני** של
+      //         הטור (עברית: הפתיחה בראש השורה = ימין), ו-WINDOW_NOT_FIRST —
+      //         חלון שאינו הדיו הראשון בשורה.
+      const inkOf = (lineEl) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cnt = 0;
+        for (const ch of lineEl.childNodes) {
+          let b = null;
+          if (ch.nodeType === 3) {
+            if (!ch.textContent || !ch.textContent.trim()) continue;
+            const rg = document.createRange(); rg.selectNodeContents(ch); b = rg.getBoundingClientRect();
+          } else if (ch.nodeType === 1) {
+            if (!ch.textContent || !ch.textContent.trim()) continue;
+            b = ch.getBoundingClientRect();
+          }
+          if (!b || b.width <= 0) continue;
+          cnt++;
+          x0 = Math.min(x0, b.left); x1 = Math.max(x1, b.right);
+          y0 = Math.min(y0, b.top); y1 = Math.max(y1, b.bottom);
+        }
+        if (!cnt) return null;
+        return { x: x0, r: x1, y: y0, b: y1, n: cnt };
+      };
+      for (const lr of rects) {
+        if (/line--last|line--heading/.test(String(lr.el.className))) continue; // מדולגות מטבען (מרוכזות/אחרונות)
+        const ink = inkOf(lr.el);
+        if (!ink) continue;
+        if (ink.r > cr.r + 2.5 || ink.x < cr.x - 2.5) {
+          problems.push({ page: idx, col: ci, type: 'INK_OUTSIDE_COLUMN', severity: 'high', text: lr.el.textContent.slice(0, 25), dx: Math.round(Math.max(ink.r - cr.r, cr.x - ink.x)) });
+        }
+        if (ink.n >= 2 || ((lr.el.textContent || '').trim().split(/\s+/).filter(Boolean).length >= 2)) {
+          const leftGap = ink.x - cr.x, rightGap = cr.r - ink.r;
+          if (leftGap > 3 || rightGap > 3) {
+            problems.push({ page: idx, col: ci, type: 'INK_NOT_JUSTIFIED', severity: 'high', leftGap: Math.round(leftGap), rightGap: Math.round(rightGap), text: lr.el.textContent.slice(0, 25) });
+          }
+        }
+        const winEl = lr.el.querySelector ? lr.el.querySelector('.w--window') : null;
+        if (winEl) {
+          const wr = winEl.getBoundingClientRect();
+          const distR = cr.r - wr.right;
+          if (distR > 3) {
+            problems.push({ page: idx, col: ci, type: 'WINDOW_WRONG_SIDE', severity: 'high', distFromRight: Math.round(distR), distFromLeft: Math.round(wr.left - cr.x), text: (winEl.textContent || '').slice(0, 20) });
+          }
+          if (wr.right < ink.r - 3) {
+            problems.push({ page: idx, col: ci, type: 'WINDOW_NOT_FIRST', severity: 'medium', text: (winEl.textContent || '').slice(0, 20) });
+          }
+        }
+      }
     });
     info.fonts = [...fonts];
   }
