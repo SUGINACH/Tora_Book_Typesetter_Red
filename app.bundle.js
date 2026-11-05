@@ -462,7 +462,8 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const worker = new Worker('engine-worker.bundle.js');
+  const ASSET_VERSION = '2026-11-05-s4.23'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const worker = new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`);
   // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
   // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.
   const engine = new WorkerEngineClient(workerTransport(worker));
@@ -8352,8 +8353,31 @@ function renderLegacyPage(pg, settings, doc) {
       el.style.fontSize = `${pt2px(ln.sizePt || SZ.body)}px`;
       el.style.lineHeight = '1';
       el.style.overflow = 'visible';
-      el.style.whiteSpace = 'nowrap';
-      el.style.textAlign = ln.kind === 'heading' ? 'center' : (ln.isLast ? 'center' : 'justify');
+      // **S4.23 (דיווח משתמש: "יישור שורות לא נכון" בתצוגה החיה):** שורות גוף
+      // מלאות עוברות ל-white-space:normal + text-align:justify
+      // **וגם text-align-last:justify** — בדיוק כמו BASE_CSS של שאר הנתיבים
+      // (03.11(ד): "טורים מיושרים באופן מושלם"). שתי הסיבות שבגללן התצוגה
+      // הייתה קטסטרופה (נמדד בפועל: פערי קצה-שמאל 2..53px, חלקן גלשו מהטור):
+      //   1) inline nowrap דרס את BASE_CSS — ו-justify על שורת nowrap הוא
+      //      אפס-פעולה;
+      //   2) **גם בלי nowrap**: לפי הוראת CSS שורה יחידה בבלוק נחשבת "השורה
+      //      האחרונה" ולעולם אינה נמתחת ע"י justify. כל .line כאן הוא בלוק
+      //      בן-שורה-אחת מתוכנן (השבירה כבר נעשתה במנוע) — ולכן הדבר היחיד
+      //      שמותח אותה הוא text-align-last:justify (נתמך בכרום/פיירפוקס).
+      // הדפדפן מותח רווחים בין-מילים — אותה נוסחה של המקרן ל-PDF
+      // (projectLine: spaceW=(colW-sumW)/gaps) — התצוגה = הייצוא.
+      // שורות אחרונות/כותרות נשארות nowrap+center (חד-שורתיות מטבען;
+      // מסומנות ומדולגות באודיט). סדר ההצהרות חשוב: רק שורות גוף מלאות
+      // מקבלות את text-align-last — אחרת הוא היה מיישר גם שורות אחרונות
+      // (שהגדרתן center/right) ומקורן של הסמנים.
+      if (ln.kind === 'heading' || ln.isLast) {
+        el.style.whiteSpace = 'nowrap';
+        el.style.textAlign = 'center';
+      } else {
+        el.style.whiteSpace = 'normal';
+        el.style.textAlign = 'justify';
+        el.style.textAlignLast = 'justify';
+      }
       if (ln.window && ln.windowWords && ln.windowWords.length) {
         // מילת-חלון (1.5×) בשפה הימנית + הטקסט — תיבה אחת, בסיס משותף
         // **S4.15:** גופן החלון של המקור — FrankReal משקל 900 (הוכח מהייחוס:
@@ -15769,6 +15793,14 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .column{position:absolute;top:0;bottom:0}
 .line{white-space:normal;text-align:justify;text-justify:inter-word}
 .line--last{text-align:center}
+/* **S4.23 (דיווח משתמש — יישור שורות בתצוגה/ייצוא):** שורה בודדת בבלוק
+   נחשבת "השורה האחרונה" לפי הוראת CSS — ו-justify לעולם אינו מותח אותה.
+   כל .line הוא בלוק בן-שורה-אחת מתוכנן (השבירה נעשתה במנוע); לכן
+   text-align:justify לבדו היה אפס-פעולה והשורות נשארו מרופטות בצד שמאל
+   (נמדד: פערים 2..53px מקצה הטור). רק text-align-last:justify מותח
+   אותה בפועל — אותה נוסחה של המקרן ל-PDF. לא על שורות אחרונות/כותרות
+   (הן center מטבען, ו-line--last-right/stretch מוגדרות בנפרד). */
+.line:not(.line--last):not(.line--heading){text-align-last:justify}
 .running-head{display:flex;width:100%}
 .head--sep-gray{border-bottom:1px solid #999}
 .head--sep-black{border-bottom:1.5px solid #000}
