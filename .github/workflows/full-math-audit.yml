@@ -17,6 +17,10 @@ name: full-math-audit
 on:
   push:
     branches: [ main ]
+  # **S5.1 (W1):** גם על PRs — האודיט המחמיר רץ גם *לפני* המיזוג; בעבר רגרסיה
+  # במשפחות ש-audit-in-page חסר נכנסה ל-main ירוקה והאדימה רק אחרי המיזוג.
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       target:
@@ -32,7 +36,7 @@ on:
 jobs:
   # ── מצב מקומי: ה-build שבענף ──
   local:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'local') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.target == 'local') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

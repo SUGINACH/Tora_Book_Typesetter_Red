@@ -38,6 +38,13 @@ function protectWords(words, measure, colWidthPx) {
   let s = glueNoteMarkers(joined);
   s = glueGershayim(s);
   s = glueAbbreviations(s);
+  // **S5.1 (נפתח והוחזר — ראה ISSUE_REGISTRY #P-1):** \s תופס גם NBSP ולכן
+  // פירק את הדבקות glueNoteMarkers/glueGershayim/glueAbbreviations (הפרת
+  // BRZ-11 — סמן עלול להישאר בסוף השורה). התיקון — פיצול על /[\t\n ]+/
+  // בלבד — אומת בסקירה אך חשף פערי חשבונאות בנתיב ה-DP (marker-mismatch
+  // body/assigned בבדיקות הספר-האמת); הוחזר עד סגירתם (ניתוח מלא
+  // ב-ISSUE_REGISTRY). החשבונאות ב-pipeline (countKnown, נורמות NBSP)
+  // תוקנה בנפרד ונשארת.
   let out = s.split(/\s+/).filter(Boolean);
   // ביטול קשירה אם unit חורג מהטור (Claude §6.2(5))
   out = out.map(w => {

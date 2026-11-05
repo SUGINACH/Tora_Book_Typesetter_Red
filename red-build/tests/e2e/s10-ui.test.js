@@ -811,12 +811,29 @@ describe('חבילות הדפדפן (D-65) — הפרדת מנוע, שימה, of
   const workerSrc = fs.readFileSync(path.join(BUNDLE_DIR, 'engine-worker.bundle.js'), 'utf8');
   const appSrc = fs.readFileSync(path.join(BUNDLE_DIR, 'app.bundle.js'), 'utf8');
 
-  it('ה־bundle קיים, נבנה מחדש ועקבי (מחולל מהמקורות)', () => {
-    // בנייה מחדש והשוואת גודל — הוכחה שה־bundle לא ידני/מיושן
-    const before = fs.statSync(path.join(BUNDLE_DIR, 'engine-worker.bundle.js')).size;
+  it('ה־bundle קיים, נבנה מחדש וזהה ביט-לביט (sha256 — שינוי מקור ללא בנייה ייתפס)', () => {
+    // **S5.1 (A1):** השוואת גודל ±4KB העבירה באנדל מיושן — תיקון מקור קטן שינה
+    // את הבאנדל בעשרות בתים והכל נשאר ירוק, כולל הפריסה לחי (באג ישן חוזר).
+    const crypto = require('crypto');
+    const hash = (p) => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+    const wPath = path.join(BUNDLE_DIR, 'engine-worker.bundle.js');
+    const aPath = path.join(BUNDLE_DIR, 'app.bundle.js');
+    const beforeW = hash(wPath), beforeA = hash(aPath);
     execSync('node tools/build-worker-bundle.js', { cwd: path.join(SRC_ROOT, '..'), stdio: 'ignore' });
-    const after = fs.statSync(path.join(BUNDLE_DIR, 'engine-worker.bundle.js')).size;
-    assert(Math.abs(before - after) < 4096, `ה־bundle עקבי (גודל ${before}→${after}; שינוי מקור ללא בנייה מחדש ייתפס)`);
+    assertEq(hash(wPath), beforeW, 'engine-worker.bundle.js: הבאנדל המחויב אינו תוצר בנייה מחדש (sha256)');
+    assertEq(hash(aPath), beforeA, 'app.bundle.js: הבאנדל המחויב אינו תוצר בנייה מחדש (sha256)');
+  });
+
+  it('ASSET_VERSION עקבי בין browser-entry ל-index.html (W4 — cache-busting)', () => {
+    // **S5.1 (W4):** שלושה מקומות ידניים בלא אימות — חוסר-סנכרון מחזיר את באג
+    // המטמון ("האתר לא מתעדכן").
+    const entry = fs.readFileSync(path.join(SRC_ROOT, 'src', 'ui', 'browser-entry.js'), 'utf8');
+    const m = entry.match(/ASSET_VERSION = '([^']+)'/);
+    assert(!!m, 'ASSET_VERSION נמצא ב-browser-entry');
+    const html = fs.readFileSync(path.join(BUNDLE_DIR, 'index.html'), 'utf8');
+    const vers = [...html.matchAll(/\?v=([^"']+)/g)].map(x => x[1]);
+    assert(vers.length >= 2, `index.html מגדיר ?v= פעמיים (נמצאו ${vers.length})`);
+    for (const v of vers) assertEq(v, m[1], `index.html ?v=${v} תואם ל-ASSET_VERSION`);
   });
 
   it('שימת SHA-256 שקולה ל־Node crypto (כולל עברית/אימוג׳י/ארוך)', () => {

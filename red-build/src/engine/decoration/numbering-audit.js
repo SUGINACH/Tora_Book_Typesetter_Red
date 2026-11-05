@@ -61,8 +61,10 @@ function auditNumbering(pages, numbers, settings, measure, io = {}) {
   pages.forEach((pg, i) => {
     const n = numbers[i];
     if (!n || !n.display) return;
-    const contentW = pg.template && pg.template.contentBox
-      ? (pg.template.contentBox.right - pg.template.contentBox.left) || pg.template.width
+    // **S5.1:** רוחב מהעמודות (כמו ב-toc-builder) — contentBox אין left/right.
+    const colsTplA = (pg.template && pg.template.columns) || [];
+    const contentW = colsTplA.length
+      ? Math.max.apply(null, colsTplA.map(c => c.x + c.w)) - Math.min.apply(null, colsTplA.map(c => c.x))
       : (pg.template ? pg.template.width : 794);
     const budget = Math.max(40, contentW * FOLIO_BUDGET_PCT);
     const w = measure(n.display);

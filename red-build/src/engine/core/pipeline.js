@@ -938,8 +938,11 @@ function typeset(rawText, settingsIn, env = {}) {
       if (sw.includes(ATOMIC)) {
         // placeholder עם E000 (reject-to-body; נוצר אחרי תכנון השורות):
         // הסמן הוא הפרגמנט המוכר שלפני ה‑E000 (עשוי להיות ממוזג לעוגן ב‑NBSP).
+        // **S5.1:** ה-NBSP מנורמל לרווח לפני הפיצול — בעבר protectWords פירק
+        // את ההדבקה בטעות (\s תופס NBSP) והסתיר את העיוורון הזה; כעת
+        // ההדבקה נשמרת (BRZ-11) והחשבונאות חייבת לפצל אותה בעצמה.
         const at = sw.indexOf(ATOMIC);
-        const frags = wordSeq(sw.slice(0, at));
+        const frags = wordSeq(sw.slice(0, at).replace(/\u00A0/g, ' '));
         return frags.slice().reverse().find(f => knownMarkers.has(f)) || null;
       }
       if (!sw.includes(MARK_TAG)) return null;

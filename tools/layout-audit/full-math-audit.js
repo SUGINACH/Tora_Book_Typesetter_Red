@@ -89,6 +89,18 @@
       S.folio.present++;
       if (/^[0-9]+$/.test(info.fo)) S.folio.digits++; else if (/[\u0590-\u05FF]/.test(info.fo)) S.folio.gematria++; else S.folio.other++;
     } else { S.folio.absent++; }
+    // **S5.1 (A5):** מיקום הכותרת-העליונה והגיליון בפיקסלים — בעבר נקרא רק
+    // הטקסט; כותרת שתשב על שורת הגוף הראשונה (טקסט-על-טקסט) היתה בלתי-נראית.
+    // הכותרת מעל ראשית הזרימה (107.2); הגיליון מתחת לתחתית הזרימה (1022.2)
+    // ובתוך העמוד (1122.5) — גיאומטריית הייחוס של המנוע.
+    if (hdr) {
+      const hr = R(hdr);
+      if (hr.b > 107.2 + 0.5 || hr.y < -0.5) cnt('HEADER_POSITION', { type: 'HEADER_POSITION', severity: 'high', page: idx, top: Math.round(hr.y * 10) / 10, bottom: Math.round(hr.b * 10) / 10 });
+    }
+    if (fol && (fol.textContent || '').trim()) {
+      const fr2 = R(fol);
+      if (fr2.y < 1022.2 - 0.5 || fr2.b > 1122.5 + 2) cnt('FOLIO_POSITION', { type: 'FOLIO_POSITION', severity: 'high', page: idx, top: Math.round(fr2.y * 10) / 10, bottom: Math.round(fr2.b * 10) / 10 });
+    }
     info.g = [...pg.querySelectorAll('.band--gate')].filter((b) => (b.textContent || '').trim()).length;
 
     const cols = [...pg.querySelectorAll('.column')];
@@ -154,6 +166,19 @@
             }
           }
           if (wn >= 2 && maxTop - minTop > 3) cnt('WRAPPED_LINE', { type: 'WRAPPED_LINE', severity: 'high', page: idx, col: ci, spread: Math.round((maxTop - minTop) * 10) / 10, text: (l.textContent || '').slice(0, 24) });
+        }
+        // **S5.1 (A2):** עטיפה בתוך ספאנים (סוגריים/סמנים/חלון) — הגלאי לעיל בודק
+        // צמתי טקסט ישירים בלבד; מילת-סוגריים שנעטפה בפנים חופפת את השורה שמתחת
+        // ולא נתפסה (משפחת D-92 לא נסגרה עד הסוף). ספאן בשני גבהים = עטיפה.
+        for (const sp of l.querySelectorAll('span')) {
+          if (!(sp.textContent || '').trim()) continue;
+          const rg2 = document.createRange(); rg2.selectNodeContents(sp);
+          let sMin = Infinity, sMax = -Infinity, sN = 0;
+          for (const rc of rg2.getClientRects()) {
+            if (rc.width <= 0.5) continue;
+            sN++; if (rc.top < sMin) sMin = rc.top; if (rc.top > sMax) sMax = rc.top;
+          }
+          if (sN >= 2 && sMax - sMin > 3) cnt('WRAPPED_LINE', { type: 'WRAPPED_LINE', severity: 'high', page: idx, col: ci, span: String(sp.className).slice(0, 24), spread: Math.round((sMax - sMin) * 10) / 10, text: (sp.textContent || '').slice(0, 24) });
         }
         if (lr.r > cr.r + 2 || lr.x < cr.x - 2) cnt('LINE_OUTSIDE_COLUMN', { type: 'LINE_OUTSIDE_COLUMN', severity: 'high', page: idx, col: ci, dx: Math.round(Math.max(lr.r - cr.r, cr.x - lr.x)), text: (l.textContent || '').slice(0, 20) });
         if (lr.b > cr.b + 2) cnt('LINE_BELOW_COLUMN', { type: 'LINE_BELOW_COLUMN', severity: 'high', page: idx, col: ci, dy: Math.round(lr.b - cr.b), text: (l.textContent || '').slice(0, 20) });
@@ -312,6 +337,8 @@
   report.pages = seq;
   const bySeverity = {};
   for (const p of P) bySeverity[p.severity] = (bySeverity[p.severity] || 0) + 1;
+  // **S5.1 (A4):** dir=rtl נאכף — בעבר נספר בלבד; רגרסיה שתשמיט dir עברה ירוקה.
+  if (S.dirBad > 0) cnt('DIR_RTL_MISSING', { type: 'DIR_RTL_MISSING', severity: 'medium', n: S.dirBad });
   const totalProblems = Object.values(CNT).reduce((s, v) => s + v, 0);
   const fontsUsedSet = Object.keys(S.fontsUsed);
   report.stats = {

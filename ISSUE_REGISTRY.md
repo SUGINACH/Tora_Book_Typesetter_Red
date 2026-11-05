@@ -165,3 +165,20 @@ C10 — הבודק השווה קטעי הערות המפוצלות (S4.24 שור
 - **הערה פתוחה (המשך):** גופני השערים (LiaSgula/Livorna ⇒ Bellefair) דורשים
   מדידת-שער ייעודית לפני הפעלה (נבדקו והוחזרו — BAND_INK_OUTSIDE 4px בלי
   מדידה); מומלץ EXT עתידי.
+
+
+## פתוחים — S5.1 (06.11, סקירת-קוד מלאה; מסודרים לפי סיכון ל"0 בעיות עימוד")
+
+| # | פריט | מיקום מדויק | סיכון | הערה |
+|---|---|---|---|---|
+| P-1 | protectWords מפרק הדבקות NBSP (BRZ-11) | protectors.js:41 split(/\s+/) | בינוני (DP) | התיקון (רווחים רגילים בלבד) אומת אך חשף marker-mismatch body/assigned (סמני ד׳/פ׳/אג׳ — 5 חריגים בקורפוס הגדול, נפתח בביסקט). דורש: נורמות NBSP בכל נקודות החשבונאות + התאמת pushLines ליחידות מודבקות. countKnown תוקן (pipeline.js:941 בערך). הוחזר עד סגירת החשבונאות |
+| P-2 | קיבולת טור בלי פס חוצה-טורים/תקציב הערות — 4 עותקים | balancing.js:98,159; dp-planner.js:564,583-587; protections-matrix.js:211 | גבוה (DP) | גלישת טור שקטה שעוברת rollback+containment. לאחד colCapacityOf ב-column-flow |
+| P-3 | עמודי הערות-סיום: חצי קיבולת + כותרת לא מתוקצבת | endnote-pages.js:41-43,52-53,70,103-112 | בינועי (DP) | cols=2 אך cap של טור אחד |
+| P-4 | שני חישובי רוחב-תוכן סותרים | pipeline.js:229 מול page-templates.js:43 | בינוני (DP) | 674.9 מול 555.8 — רוחב נתיב ההערות צר ב-18% |
+| P-5 | DP ב-PDF: הערות מרוסקות (8.2px), עמודי endnotes ריקים, הערות-צד/מפריד חסרים | geometry-projector.js:152-161,87-137; dom-renderer.js:318,1091,1177 | גבוה (ייצוא DP) | החי=מורשת — לא מורגש באתר; תצוגה≠ייצוא בפרופיל DP |
+| P-6 | כותרות h4-h6: מודל/PDF ב-DavidLibre, DOM בגופן הרמה (Alpha וכו') | legacy-imud-flow hw(); dom-renderer.js:747 | נמוך (חי) | שורת ה-DOM היא ההגדרות (רצון המשתמש); לאיחוד — רישום משפחות הרמה ב-env+כיול מול הייחוס |
+| P-7 | פטור window-wrap רחב ב-audit-in-page (INK_OUTSIDE_COLUMN) | audit-in-page.js:210 מול full-math.js:160 | נמוך | להצר לרמת full-math |
+| P-8 | פיץ'/יישור-בין-טורים נאספים ולא נבדקים; A4 קשיח; EMPTY_PAGE רק regular | full-math-audit.js:134,162,248; compare.py:148 | נמוך | להוסיף אכיפה |
+| P-9 | hdr-r/c/l-type מתים במורשת (5/8 מקורות בקונפיגורציה אחרת) + verso + fn-columns + aq-* + תוכן שערים מהמטא בלבד | legacy-imud-flow.js:208-210,814-871; readConfig | בינוני (הגדרות) | עדכון הגדרה בודדת לא זורם לחי — רשימת חריגים מדויקת בסקירת 1-E; נתיב המורשת מוקשה מכויל-ייחוס |
+| P-10 | parity לא חוסם (אין ratchet לציון); אין workflow על gh-pages | layout-parity.yml:66-77 | נמוך | החי נבדק לילית+ידנית אחרי כל פריסה |
+| P-11 | מינורי: fit-matrix.sh נתיב שגוי; convert_imud_fonts exit 0 בכשל; Number(null)=0 באודיטים; לולאת קישורים מתה ב-pdf-writer; columnDividerGeometry מת; טווח A4 מוקשח | scripts/fit-matrix.sh:4; tools/convert_imud_fonts.py:38; full-math-audit.js:77; pdf-writer.js:539; dividers.js:40 | נמוך | ניקוי |

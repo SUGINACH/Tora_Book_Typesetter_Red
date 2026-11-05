@@ -259,6 +259,10 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
           scan(pg.spanning ? pg.spanning.lines : []);
           scan(pg.lines || []);
           for (const fn of (pg.footnotes || [])) scan([{ words: fn.words || [] }]);
+          // **S5.1 (תיקון C3):** הגיליון וסלוטי הכותרת העליונה לא נסרקו —
+          // תו שחסר בגוף ומופיע רק שם היה נעלם מה-PDF (ה-DOM הציג אותו).
+          if (pg.folio && pg.folio.text) scan([{ words: [{ text: pg.folio.text }] }]);
+          if (pg.header) for (const s of (pg.header.slots || [])) if (s && s.text) scan([{ words: [{ text: s.text }] }]);
         }
         if (missingChars.size) {
           const punctSubset = buildSubset(frlProfile, charInventory([...missingChars].join('')));
@@ -278,6 +282,68 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
         }
       }
     }
+    // **S5.1 (תצוגה=ייצוא בגופנים — תיקון L3):** הגופן החמישי (Frank Ruhl
+    // Libre — גוף ההערה, fontKey 'fnbody') והשישי (Hadassah Friedlaender —
+    // הערות-צד, fontKey 'margin'). עד כאן צוירו בגוף הטקסט (/F1) בזמן שה-DOM
+    // מציג אותם ב-FRL/Hadassah — הייצוא ≠ התצוגה. מילים נאספות גם משורות
+    // הגוף (margin-note) וגם מסמני/גוף ההערה (footnotes.words).
+    let fontForWriter5 = null;
+    {
+      const fnProfile = registeredFontsRef.get('Frank Ruhl Libre');
+      if (fnProfile) {
+        const fnParts = [];
+        for (const pg of projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+            for (const w of ln.words) if (w.fontKey === 'fnbody') fnParts.push(w.text);
+          }
+          for (const fn of (pg.footnotes || [])) for (const w of (fn.words || [])) if (w.fontKey === 'fnbody') fnParts.push(w.text);
+        }
+        if (fnParts.length) {
+          const fnSubset = buildSubset(fnProfile, charInventory(fnParts.join(' ')));
+          if (fnSubset.ok) {
+            const fnC2g = subsetNewCmap(fnSubset);
+            fontForWriter5 = {
+              subsetBytes: fnSubset.bytes,
+              widthsUnits: fnSubset.widthsUnits,
+              unitsPerEm: fnSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = fnC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(fnSubset), ch);
+              },
+              charToGidEntries: () => [...fnC2g.entries()]
+            };
+          }
+        }
+      }
+    }
+    let fontForWriter6 = null;
+    {
+      const mnProfile = registeredFontsRef.get('Hadassah Friedlaender');
+      if (mnProfile) {
+        const mnParts = [];
+        for (const pg of projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+            for (const w of ln.words) if (w.fontKey === 'margin') mnParts.push(w.text);
+          }
+        }
+        if (mnParts.length) {
+          const mnSubset = buildSubset(mnProfile, charInventory(mnParts.join(' ')));
+          if (mnSubset.ok) {
+            const mnC2g = subsetNewCmap(mnSubset);
+            fontForWriter6 = {
+              subsetBytes: mnSubset.bytes,
+              widthsUnits: mnSubset.widthsUnits,
+              unitsPerEm: mnSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = mnC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(mnSubset), ch);
+              },
+              charToGidEntries: () => [...mnC2g.entries()]
+            };
+          }
+        }
+      }
+    }
     const bytes = writePdf({
       pages: projected.pages,
       pageSizeMm,
@@ -285,6 +351,8 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
       font2: fontForWriter2,
       font3: fontForWriter3,
       font4: fontForWriter4,
+      font5: fontForWriter5,
+      font6: fontForWriter6,
       settings,
       outline,
       tocLinks

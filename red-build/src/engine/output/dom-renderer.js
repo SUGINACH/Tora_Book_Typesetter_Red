@@ -146,7 +146,7 @@ function renderLine(ln, doc, settings = {}) {
   // מילים רגילות — span.w אחיד (מיצג גם ב‑DOM אמיתי וגם ב‑shim של הבדיקות).
   // **S11:** טווחי inline מסגנון מותאך — span.w--custom עם data-style (גודל מוחל כבר במדידה).
   const parenScale = Number(settings['paren-style-scale']) || 1;
-  const words = (ln.words || []).map(w => scrubPUAText(w.replace(/\u00A0/g, '\u00A0')));
+  const words = (ln.words || []).map(w => scrubPUAText(w));
   const spans = ln.parenSpans || [];
   const customs = ln.customSpans || [];
   if ((spans.length && parenScale !== 1) || customs.length) {
@@ -596,12 +596,16 @@ function renderLegacyPage(pg, settings, doc) {
     if (w != null) el.style.width = `${w}px`;
     if (h != null) el.style.height = `${h}px`;
   };
-  const mkLine = (text, sizePt, align) => {
+  // **S5.1 (איחוד מודל הבסיס — "תצוגה = ייצוא"):** גובה השורה בתצוגה = גובה
+  // התיבה מהמודל (בדיוק כמו baselineOf של המקרן ל-PDF וכמו line-height:1.34
+  // של המקור). בעבר היה קבוע 1.1 — הטקסט ישב בראש התיבה ולא ממרוז בה,
+  // בזמן שה-PDF מרכז — הפרש אנכי שיטתי בכל שורה (2–4px).
+  const mkLine = (text, sizePt, align, lhPx = 0) => {
     const el = doc.createElement('div');
     el.className = 'line';
     el.setAttribute('dir', 'rtl');
     el.style.fontSize = `${pt2px(sizePt)}px`;
-    el.style.lineHeight = '1.1';
+    el.style.lineHeight = (lhPx && lhPx > 0) ? `${lhPx}px` : '1.1';
     el.style.whiteSpace = 'nowrap';
     el.style.overflow = 'visible';
     el.style.textAlign = align;
@@ -623,7 +627,13 @@ function renderLegacyPage(pg, settings, doc) {
     const hdr = doc.createElement('div');
     hdr.className = 'running-head';
     hdr.setAttribute('dir', 'rtl');
-    position(hdr, 60, 52, GEO.PAGE_W - 120, 22);
+    // **S5.1 (מיקום סלוטי הכותרת מהייחוס):** התיבה הקודמת [60, 733.7] הצמידה
+    // את הסלוטים לקצוות הדף — 94px/97px ממיקום הטקסט בייחוס (עמ' 12:
+    // ימין x1=479.84pt=639.8px, שמאל x0=117.68pt=156.9px, מרכז 297.65pt).
+    // הקבועים משוקפים מ-mk() של המקרן (COL_R_X+COL_W−33 / COL_L_X+33) —
+    // מרכז התיבה = מרכז הדף בדיוק, ו-space-between מנחה את הסלוט האמצעי
+    // למרכז. התצוגה = הייצוא = הייחוס.
+    position(hdr, GEO.COL_L_X + 33, 52, (GEO.COL_R_X + GEO.COL_W - 33) - (GEO.COL_L_X + 33), 22);
     hdr.style.display = 'flex';
     hdr.style.justifyContent = 'space-between';
     hdr.style.alignItems = 'baseline';
@@ -647,7 +657,7 @@ function renderLegacyPage(pg, settings, doc) {
 
   // ---- פסים: סימן/h2/h0/h3 — ממורכזים ברוחב הפס ----
   for (const b of (pg.bands || [])) {
-    const el = mkLine(b.text, b.sizePt, 'center');
+    const el = mkLine(b.text, b.sizePt, 'center', b.h || pt2px(b.sizePt) * 1.1);
     el.className += ` band band--${b.kind || 'title'}`;
     // **S4.26:** גופן הכותרת מההגדרות + הדגשה — כמו הייחוס (DavidLibre-Bold)
     const hLv = HEADING_LEVEL_OF_BAND[b.kind];
@@ -672,7 +682,7 @@ function renderLegacyPage(pg, settings, doc) {
     };
     const gbox = GATE_BOX[pg.type] || { x: BAND_X, w: BAND_W };
     for (const g of (pg.gateLines || [])) {
-      const el = mkLine(g.text, g.sizePt, 'center');
+      const el = mkLine(g.text, g.sizePt, 'center', pt2px(g.sizePt) * 1.3);
       el.className += ' band band--gate';
       position(el, gbox.x, g.y, gbox.w, pt2px(g.sizePt) * 1.3);
       // **S4.26 (הערה):** גופני השערים (LiaSgula/Livorna ⇒ Bellefair/David Libre)
@@ -716,7 +726,12 @@ function renderLegacyPage(pg, settings, doc) {
       // line-height:0.85 של מילת-החלון במקור — אבל התיבה נשארת בגובה הפס.
       el.style.height = `${ln.heightPx || 16}px`;
       el.style.fontSize = `${pt2px(ln.sizePt || SZ.body)}px`;
-      el.style.lineHeight = '1';
+      // **S5.1 (איחוד מודל הבסיס):** שורות גוף/חלון — line-height = גובה
+      // התיבה מהמודל (מרכוז half-leading, כמו baselineOf ב-PDF וכמו
+      // line-height:1.34=21.44px של המקור; בסיס השורה הראשונה ≈122px מול
+      // 107.2+14.8 בייחוס). כותרות inline נשארות בראש התיבה ('1') — כמו
+      // הייחוס (S4.14: גליפי הכותרת בראש השורה) וכמו y+0.6 במקרן.
+      el.style.lineHeight = ln.kind === 'heading' ? '1' : `${ln.heightPx || 16}px`;
       el.style.overflow = 'visible';
       // **S4.23 (דיווח משתמש: "יישור שורות לא נכון" בתצוגה החיה):** שורות גוף
       // מלאות עוברות ל-white-space:normal + text-align:justify
@@ -768,6 +783,10 @@ function renderLegacyPage(pg, settings, doc) {
         win.className = 'w w--window';
         win.textContent = scrubPUAText(ln.windowWords.join(' ')) + ' ';
         win.style.fontSize = `${pt2px((ln.sizePt || SZ.body) * 1.5)}px`;
+        // **S5.1:** בסיס החלון 2px מתחת לבסיס שורת הטקסט — כמו winBase=baseY+2
+        // במקרן (מכויל מהייחוס: חלון 155.25 מול שורה 153.75, ~1.5pt). בלי זה
+        // החלון יושב על בסיס משותף עם הגוף וגבוה ב-2px ב-PDF.
+        win.style.verticalAlign = '-2px';
         el.appendChild(win);
       }
       // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
@@ -901,7 +920,7 @@ function renderLegacyPage(pg, settings, doc) {
     for (const mn of (pg.marginNotes || [])) {
       const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
       for (const l of (mn.lines || [])) {
-        const el = mkLine(l.text, SZ.marginNote, 'right');
+        const el = mkLine(l.text, SZ.marginNote, 'right', GEO.MN_PITCH);
         el.className += ' margin-note';
         if (mnFont) el.style.fontFamily = mnFont;
         position(el, x, l.y, GEO.MARGIN_W, GEO.MN_PITCH);
@@ -980,7 +999,7 @@ function renderLegacyPage(pg, settings, doc) {
   // ---- תוכן-עניינים: כותרת + שורות (כותרת מימין במדרגות, מספר משמאל) ----
   if (pg.toc) {
     if (pg.toc.title) {
-      const el = mkLine(pg.toc.title, SZ.tocTitle, 'center');
+      const el = mkLine(pg.toc.title, SZ.tocTitle, 'center', 30);
       el.className += ' toc-title';
       position(el, BAND_X, GEO.FLOW_TOP + 136, BAND_W, 30);
       root.appendChild(el);
@@ -993,7 +1012,8 @@ function renderLegacyPage(pg, settings, doc) {
       row.style.display = 'flex';
       row.style.justifyContent = 'space-between';
       row.style.fontSize = `${pt2px(r.sizePt || 10.5)}px`;
-      row.style.lineHeight = '1.2';
+      // **S5.1:** גובה שורת TOC = התיבה (26px) — כמו baselineOf(r.y, 26, ...) במקרן
+      row.style.lineHeight = '26px';
       // **S4.26:** גופן שורות ה-TOC מההגדרות + הדגשה — כמו הייחוס
       // (DavidLibre-Bold @10.5/10/9.5 בכל שורות התוכן)
       const tf = headingFontOf(r.level != null ? r.level : 2);
@@ -1022,6 +1042,10 @@ function renderLegacyPage(pg, settings, doc) {
     position(folio, 0, GEO.FOLIO_BASELINE - 14, GEO.PAGE_W, 18);
     folio.style.textAlign = 'center';
     folio.style.fontSize = `${pt2px(SZ.folio)}px`;
+    // **S5.1:** line-height מכויל כך שהבסיס יורד בדיוק ל-FOLIO_BASELINE (1054.5)
+    // תחת מודל תיבת-השורה (A≈0.925, D≈0.388 בגופן הגוף ⇒ lh≈21.4px) — כמו
+    // המקרן, שמצייר את הגיליון בבסיס 1054.5 בדיוק. בעבר ירש normal וישב ~3.5px גבוה.
+    folio.style.lineHeight = '21.4px';
     folio.textContent = pg.folioDisplay;
     root.appendChild(folio);
   }

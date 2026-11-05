@@ -483,7 +483,9 @@ function main() {
 
   // ---------- PDF באותן הגדרות בדיוק ----------
   // **S4.15:** env החלון גם לייצוא — שבירת השורות ב-PDF חייבת להיות זהה למודל
-  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes, headingFontBytes });
+  // **S5.1:** marginFontBytes גם בייצוא — בלעדיו הערות-הצד ב-PDF נמדדו/צוירו
+  // במטריקות גוף הטקסט במקום Hadassah (המודל/ה-DOM ב-Hadassah).
+  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes, headingFontBytes, marginFontBytes });
   if (!pdf.ok) { console.error('exportPdf failed:', pdf.error); process.exit(2); }
   const pdfPath = path.join(outDir, 'ours.pdf');
   fs.writeFileSync(pdfPath, Buffer.from(pdf.bytes));

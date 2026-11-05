@@ -170,7 +170,11 @@ class MeasureAPI {
   /** שורת "גובה" אחידה (baseline grid): fontSize × lineHeight (BRZ-2). */
   lineHeightPx(sizePt = null) {
     const size = this._fontSpec(sizePt);
-    return Math.round(size * (96 / 72) * this.settings['body-line-height']);
+    // **S5.1:** בלי Math.round — 12pt×1.34=21.44px אורגל ל-21 ⇒ +2 שורות לעמוד
+    // (סוג המוקש שתוקן במנוע המורשת ב-S4.13, לא הופץ לנתיב ה-DP).
+    // **S5.1:** בלי Math.round — 12pt×1.34=21.44px אורגל ל-21 ⇒ +2 שורות לעמוד
+    // (סוג המוקש שתוקן במנוע המורשת ב-S4.13, לא הופץ לנתיב ה-DP).
+    return size * (96 / 72) * this.settings['body-line-height'];
   }
 
   /**

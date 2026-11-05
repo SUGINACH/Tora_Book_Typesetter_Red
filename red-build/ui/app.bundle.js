@@ -374,6 +374,7 @@ var __paths = {
   "src/engine/output/export-api.js|../import/zip-reader": "src/engine/import/zip-reader.js",
   "src/engine/output/export-api.js|./legacy-projector": "src/engine/output/legacy-projector.js",
   "src/engine/output/legacy-projector.js|../layout/legacy-imud-flow": "src/engine/layout/legacy-imud-flow.js",
+  "src/engine/output/legacy-projector.js|./line-font": "src/engine/output/line-font.js",
   "src/engine/output/legacy-projector.js|../typography/measure-api": "src/engine/typography/measure-api.js",
   "src/engine/output/legacy-projector.js|../decoration/ornament-ink": "src/engine/decoration/ornament-ink.js",
   "src/ui/imud-library.js|../engine/decoration/asset-registry": "src/engine/decoration/asset-registry.js",
@@ -462,7 +463,7 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-05-s4.27'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-06-s5.1'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   const worker = new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`);
   // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
   // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.
@@ -1186,7 +1187,7 @@ const registry = [
   // **S9 (D-61):** square/circle = מסגרות CSS (badge); parenthesis/squares = סוגריים טקסטואליים —
   // הפרדה נאמנה ל־V1 (page-num-frame-box/circle CSS) ול־Mapping פנייה 2 (parens/squares טקסט).
   K('page-num-frame', 'enum', 'none', P.GRID, 'sel-page-num-frame', ['decoration/folio'], 'fx:folio-frame', { enum: ['none', 'circle', 'square', 'parenthesis', 'squares', 'floral', 'diamond'] }),
-  K('page-num-position', 'enum', 'bottom-center', P.GRID, 'sel-page-num-position', ['decoration/folio'], 'fx:folio-pos', { enum: ['bottom-center', 'outer-left', 'outer-right', 'top', 'in-header', 'none'] }),
+  K('page-num-position', 'enum', 'bottom-center', P.GRID, 'sel-page-num-position', ['decoration/folio'], 'fx:folio-pos', { enum: ['bottom-center', 'outer-left', 'outer-right', 'outer', 'top', 'in-header', 'none'] }),
   K('page-num-initial-value', 'number', 1, P.GRID, 'inp-page-num-initial', ['decoration/folio'], 'fx:folio-initial', { note: 'שוחזר מ‑V1 (REQ-HDR-03)' }),
   // **S9 (D-61):** page-num-start-idx — שחזור V1 מלא (REQ-HDR-03): מספור מוצג רק מסוד ה‑counted
   // הזה ואילך; הערך האפקטיבי = סוד − start‑idx + initial‑value (נוסחת V1 formatPageNumberDisplay).
@@ -7807,7 +7808,7 @@ function renderLine(ln, doc, settings = {}) {
   // מילים רגילות — span.w אחיד (מיצג גם ב‑DOM אמיתי וגם ב‑shim של הבדיקות).
   // **S11:** טווחי inline מסגנון מותאך — span.w--custom עם data-style (גודל מוחל כבר במדידה).
   const parenScale = Number(settings['paren-style-scale']) || 1;
-  const words = (ln.words || []).map(w => scrubPUAText(w.replace(/\u00A0/g, '\u00A0')));
+  const words = (ln.words || []).map(w => scrubPUAText(w));
   const spans = ln.parenSpans || [];
   const customs = ln.customSpans || [];
   if ((spans.length && parenScale !== 1) || customs.length) {
@@ -8257,12 +8258,16 @@ function renderLegacyPage(pg, settings, doc) {
     if (w != null) el.style.width = `${w}px`;
     if (h != null) el.style.height = `${h}px`;
   };
-  const mkLine = (text, sizePt, align) => {
+  // **S5.1 (איחוד מודל הבסיס — "תצוגה = ייצוא"):** גובה השורה בתצוגה = גובה
+  // התיבה מהמודל (בדיוק כמו baselineOf של המקרן ל-PDF וכמו line-height:1.34
+  // של המקור). בעבר היה קבוע 1.1 — הטקסט ישב בראש התיבה ולא ממרוז בה,
+  // בזמן שה-PDF מרכז — הפרש אנכי שיטתי בכל שורה (2–4px).
+  const mkLine = (text, sizePt, align, lhPx = 0) => {
     const el = doc.createElement('div');
     el.className = 'line';
     el.setAttribute('dir', 'rtl');
     el.style.fontSize = `${pt2px(sizePt)}px`;
-    el.style.lineHeight = '1.1';
+    el.style.lineHeight = (lhPx && lhPx > 0) ? `${lhPx}px` : '1.1';
     el.style.whiteSpace = 'nowrap';
     el.style.overflow = 'visible';
     el.style.textAlign = align;
@@ -8284,7 +8289,13 @@ function renderLegacyPage(pg, settings, doc) {
     const hdr = doc.createElement('div');
     hdr.className = 'running-head';
     hdr.setAttribute('dir', 'rtl');
-    position(hdr, 60, 52, GEO.PAGE_W - 120, 22);
+    // **S5.1 (מיקום סלוטי הכותרת מהייחוס):** התיבה הקודמת [60, 733.7] הצמידה
+    // את הסלוטים לקצוות הדף — 94px/97px ממיקום הטקסט בייחוס (עמ' 12:
+    // ימין x1=479.84pt=639.8px, שמאל x0=117.68pt=156.9px, מרכז 297.65pt).
+    // הקבועים משוקפים מ-mk() של המקרן (COL_R_X+COL_W−33 / COL_L_X+33) —
+    // מרכז התיבה = מרכז הדף בדיוק, ו-space-between מנחה את הסלוט האמצעי
+    // למרכז. התצוגה = הייצוא = הייחוס.
+    position(hdr, GEO.COL_L_X + 33, 52, (GEO.COL_R_X + GEO.COL_W - 33) - (GEO.COL_L_X + 33), 22);
     hdr.style.display = 'flex';
     hdr.style.justifyContent = 'space-between';
     hdr.style.alignItems = 'baseline';
@@ -8308,7 +8319,7 @@ function renderLegacyPage(pg, settings, doc) {
 
   // ---- פסים: סימן/h2/h0/h3 — ממורכזים ברוחב הפס ----
   for (const b of (pg.bands || [])) {
-    const el = mkLine(b.text, b.sizePt, 'center');
+    const el = mkLine(b.text, b.sizePt, 'center', b.h || pt2px(b.sizePt) * 1.1);
     el.className += ` band band--${b.kind || 'title'}`;
     // **S4.26:** גופן הכותרת מההגדרות + הדגשה — כמו הייחוס (DavidLibre-Bold)
     const hLv = HEADING_LEVEL_OF_BAND[b.kind];
@@ -8333,7 +8344,7 @@ function renderLegacyPage(pg, settings, doc) {
     };
     const gbox = GATE_BOX[pg.type] || { x: BAND_X, w: BAND_W };
     for (const g of (pg.gateLines || [])) {
-      const el = mkLine(g.text, g.sizePt, 'center');
+      const el = mkLine(g.text, g.sizePt, 'center', pt2px(g.sizePt) * 1.3);
       el.className += ' band band--gate';
       position(el, gbox.x, g.y, gbox.w, pt2px(g.sizePt) * 1.3);
       // **S4.26 (הערה):** גופני השערים (LiaSgula/Livorna ⇒ Bellefair/David Libre)
@@ -8377,7 +8388,12 @@ function renderLegacyPage(pg, settings, doc) {
       // line-height:0.85 של מילת-החלון במקור — אבל התיבה נשארת בגובה הפס.
       el.style.height = `${ln.heightPx || 16}px`;
       el.style.fontSize = `${pt2px(ln.sizePt || SZ.body)}px`;
-      el.style.lineHeight = '1';
+      // **S5.1 (איחוד מודל הבסיס):** שורות גוף/חלון — line-height = גובה
+      // התיבה מהמודל (מרכוז half-leading, כמו baselineOf ב-PDF וכמו
+      // line-height:1.34=21.44px של המקור; בסיס השורה הראשונה ≈122px מול
+      // 107.2+14.8 בייחוס). כותרות inline נשארות בראש התיבה ('1') — כמו
+      // הייחוס (S4.14: גליפי הכותרת בראש השורה) וכמו y+0.6 במקרן.
+      el.style.lineHeight = ln.kind === 'heading' ? '1' : `${ln.heightPx || 16}px`;
       el.style.overflow = 'visible';
       // **S4.23 (דיווח משתמש: "יישור שורות לא נכון" בתצוגה החיה):** שורות גוף
       // מלאות עוברות ל-white-space:normal + text-align:justify
@@ -8429,6 +8445,10 @@ function renderLegacyPage(pg, settings, doc) {
         win.className = 'w w--window';
         win.textContent = scrubPUAText(ln.windowWords.join(' ')) + ' ';
         win.style.fontSize = `${pt2px((ln.sizePt || SZ.body) * 1.5)}px`;
+        // **S5.1:** בסיס החלון 2px מתחת לבסיס שורת הטקסט — כמו winBase=baseY+2
+        // במקרן (מכויל מהייחוס: חלון 155.25 מול שורה 153.75, ~1.5pt). בלי זה
+        // החלון יושב על בסיס משותף עם הגוף וגבוה ב-2px ב-PDF.
+        win.style.verticalAlign = '-2px';
         el.appendChild(win);
       }
       // **D-89 (דיווח משתמש: "כל מילה שצמודה לנקודה מופיעה בגופן קטן"):**
@@ -8562,7 +8582,7 @@ function renderLegacyPage(pg, settings, doc) {
     for (const mn of (pg.marginNotes || [])) {
       const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
       for (const l of (mn.lines || [])) {
-        const el = mkLine(l.text, SZ.marginNote, 'right');
+        const el = mkLine(l.text, SZ.marginNote, 'right', GEO.MN_PITCH);
         el.className += ' margin-note';
         if (mnFont) el.style.fontFamily = mnFont;
         position(el, x, l.y, GEO.MARGIN_W, GEO.MN_PITCH);
@@ -8641,7 +8661,7 @@ function renderLegacyPage(pg, settings, doc) {
   // ---- תוכן-עניינים: כותרת + שורות (כותרת מימין במדרגות, מספר משמאל) ----
   if (pg.toc) {
     if (pg.toc.title) {
-      const el = mkLine(pg.toc.title, SZ.tocTitle, 'center');
+      const el = mkLine(pg.toc.title, SZ.tocTitle, 'center', 30);
       el.className += ' toc-title';
       position(el, BAND_X, GEO.FLOW_TOP + 136, BAND_W, 30);
       root.appendChild(el);
@@ -8654,7 +8674,8 @@ function renderLegacyPage(pg, settings, doc) {
       row.style.display = 'flex';
       row.style.justifyContent = 'space-between';
       row.style.fontSize = `${pt2px(r.sizePt || 10.5)}px`;
-      row.style.lineHeight = '1.2';
+      // **S5.1:** גובה שורת TOC = התיבה (26px) — כמו baselineOf(r.y, 26, ...) במקרן
+      row.style.lineHeight = '26px';
       // **S4.26:** גופן שורות ה-TOC מההגדרות + הדגשה — כמו הייחוס
       // (DavidLibre-Bold @10.5/10/9.5 בכל שורות התוכן)
       const tf = headingFontOf(r.level != null ? r.level : 2);
@@ -8683,6 +8704,10 @@ function renderLegacyPage(pg, settings, doc) {
     position(folio, 0, GEO.FOLIO_BASELINE - 14, GEO.PAGE_W, 18);
     folio.style.textAlign = 'center';
     folio.style.fontSize = `${pt2px(SZ.folio)}px`;
+    // **S5.1:** line-height מכויל כך שהבסיס יורד בדיוק ל-FOLIO_BASELINE (1054.5)
+    // תחת מודל תיבת-השורה (A≈0.925, D≈0.388 בגופן הגוף ⇒ lh≈21.4px) — כמו
+    // המקרן, שמצייר את הגיליון בבסיס 1054.5 בדיוק. בעבר ירש normal וישב ~3.5px גבוה.
+    folio.style.lineHeight = '21.4px';
     folio.textContent = pg.folioDisplay;
     root.appendChild(folio);
   }
@@ -12771,7 +12796,11 @@ class MeasureAPI {
   /** שורת "גובה" אחידה (baseline grid): fontSize × lineHeight (BRZ-2). */
   lineHeightPx(sizePt = null) {
     const size = this._fontSpec(sizePt);
-    return Math.round(size * (96 / 72) * this.settings['body-line-height']);
+    // **S5.1:** בלי Math.round — 12pt×1.34=21.44px אורגל ל-21 ⇒ +2 שורות לעמוד
+    // (סוג המוקש שתוקן במנוע המורשת ב-S4.13, לא הופץ לנתיב ה-DP).
+    // **S5.1:** בלי Math.round — 12pt×1.34=21.44px אורגל ל-21 ⇒ +2 שורות לעמוד
+    // (סוג המוקש שתוקן במנוע המורשת ב-S4.13, לא הופץ לנתיב ה-DP).
+    return size * (96 / 72) * this.settings['body-line-height'];
   }
 
   /**
@@ -13329,7 +13358,11 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
         }
         break;
       }
-      if (w - shrink > maxWidthPx + 0.5) break; // חריגה שאינה ניתנת לתיקון
+      // **S5.1 (D-92-DP):** הדפדפן מרנדר רוחב טבעי (white-space:normal) —
+      // שורה שרוחבה הטבעי חורג מהטור נעטפת בתצוגה (טקסט-על-טקסט) גם אם
+      // היישוב יכול לכווץ רווחים ב-PDF. לכן המבחן ברוחב הטבעי, בלי shrink,
+      // עם רווח-ביטחון 0.75px — כמו FIT_EPS במנוע המורשת (תת-פיקסל LayoutUnit).
+      if (w > maxWidthPx + 0.75) break; // חריגה שאינה ניתנת לתיקון
 
       if (it.kind === 'box') {
         // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
@@ -13414,7 +13447,8 @@ function greedyFallback(items, maxWidthPx, measure, lineHeightPx) {
   const pushTok = () => {
     if (cur === null) return;
     const sp = toks.length ? space : 0;
-    if (toks.length && w + sp + curW > maxWidthPx) flush(); // הטוקן הבא ייפתח שורה חדשה
+    // **S5.1 (D-92-DP):** רווח-ביטחון גם בגיבוי הגרידי — כמו FIT_EPS במורשת.
+    if (toks.length && w + sp + curW > maxWidthPx - 0.75) flush(); // הטוקן הבא ייפתח שורה חדשה
     toks.push(cur); w += sp + curW;
     cur = null; curW = 0; joinNext = false;
   };
@@ -15525,6 +15559,13 @@ function protectWords(words, measure, colWidthPx) {
   let s = glueNoteMarkers(joined);
   s = glueGershayim(s);
   s = glueAbbreviations(s);
+  // **S5.1 (נפתח והוחזר — ראה ISSUE_REGISTRY #P-1):** \s תופס גם NBSP ולכן
+  // פירק את הדבקות glueNoteMarkers/glueGershayim/glueAbbreviations (הפרת
+  // BRZ-11 — סמן עלול להישאר בסוף השורה). התיקון — פיצול על /[\t\n ]+/
+  // בלבד — אומת בסקירה אך חשף פערי חשבונאות בנתיב ה-DP (marker-mismatch
+  // body/assigned בבדיקות הספר-האמת); הוחזר עד סגירתם (ניתוח מלא
+  // ב-ISSUE_REGISTRY). החשבונאות ב-pipeline (countKnown, נורמות NBSP)
+  // תוקנה בנפרד ונשארת.
   let out = s.split(/\s+/).filter(Boolean);
   // ביטול קשירה אם unit חורג מהטור (Claude §6.2(5))
   out = out.map(w => {
@@ -16314,6 +16355,10 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
           scan(pg.spanning ? pg.spanning.lines : []);
           scan(pg.lines || []);
           for (const fn of (pg.footnotes || [])) scan([{ words: fn.words || [] }]);
+          // **S5.1 (תיקון C3):** הגיליון וסלוטי הכותרת העליונה לא נסרקו —
+          // תו שחסר בגוף ומופיע רק שם היה נעלם מה-PDF (ה-DOM הציג אותו).
+          if (pg.folio && pg.folio.text) scan([{ words: [{ text: pg.folio.text }] }]);
+          if (pg.header) for (const s of (pg.header.slots || [])) if (s && s.text) scan([{ words: [{ text: s.text }] }]);
         }
         if (missingChars.size) {
           const punctSubset = buildSubset(frlProfile, charInventory([...missingChars].join('')));
@@ -16333,6 +16378,68 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
         }
       }
     }
+    // **S5.1 (תצוגה=ייצוא בגופנים — תיקון L3):** הגופן החמישי (Frank Ruhl
+    // Libre — גוף ההערה, fontKey 'fnbody') והשישי (Hadassah Friedlaender —
+    // הערות-צד, fontKey 'margin'). עד כאן צוירו בגוף הטקסט (/F1) בזמן שה-DOM
+    // מציג אותם ב-FRL/Hadassah — הייצוא ≠ התצוגה. מילים נאספות גם משורות
+    // הגוף (margin-note) וגם מסמני/גוף ההערה (footnotes.words).
+    let fontForWriter5 = null;
+    {
+      const fnProfile = registeredFontsRef.get('Frank Ruhl Libre');
+      if (fnProfile) {
+        const fnParts = [];
+        for (const pg of projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+            for (const w of ln.words) if (w.fontKey === 'fnbody') fnParts.push(w.text);
+          }
+          for (const fn of (pg.footnotes || [])) for (const w of (fn.words || [])) if (w.fontKey === 'fnbody') fnParts.push(w.text);
+        }
+        if (fnParts.length) {
+          const fnSubset = buildSubset(fnProfile, charInventory(fnParts.join(' ')));
+          if (fnSubset.ok) {
+            const fnC2g = subsetNewCmap(fnSubset);
+            fontForWriter5 = {
+              subsetBytes: fnSubset.bytes,
+              widthsUnits: fnSubset.widthsUnits,
+              unitsPerEm: fnSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = fnC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(fnSubset), ch);
+              },
+              charToGidEntries: () => [...fnC2g.entries()]
+            };
+          }
+        }
+      }
+    }
+    let fontForWriter6 = null;
+    {
+      const mnProfile = registeredFontsRef.get('Hadassah Friedlaender');
+      if (mnProfile) {
+        const mnParts = [];
+        for (const pg of projected.pages) {
+          for (const ln of [...(pg.spanning ? pg.spanning.lines : []), ...pg.lines]) {
+            for (const w of ln.words) if (w.fontKey === 'margin') mnParts.push(w.text);
+          }
+        }
+        if (mnParts.length) {
+          const mnSubset = buildSubset(mnProfile, charInventory(mnParts.join(' ')));
+          if (mnSubset.ok) {
+            const mnC2g = subsetNewCmap(mnSubset);
+            fontForWriter6 = {
+              subsetBytes: mnSubset.bytes,
+              widthsUnits: mnSubset.widthsUnits,
+              unitsPerEm: mnSubset.unitsPerEm,
+              cidOf: (ch) => {
+                const g = mnC2g.get(ch);
+                return g != null ? g : glyphIdOf(parseSubsetCache(mnSubset), ch);
+              },
+              charToGidEntries: () => [...mnC2g.entries()]
+            };
+          }
+        }
+      }
+    }
     const bytes = writePdf({
       pages: projected.pages,
       pageSizeMm,
@@ -16340,6 +16447,8 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
       font2: fontForWriter2,
       font3: fontForWriter3,
       font4: fontForWriter4,
+      font5: fontForWriter5,
+      font6: fontForWriter6,
       settings,
       outline,
       tocLinks
@@ -16541,9 +16650,13 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .fn-rule--star{border-top:3px double #4a4a4a;height:0}
 .fn-rule--diamond{border-top:2px solid #000;height:0;transform:scaleX(.6)}
 .fn--continuation{color:#555;font-style:italic}
-.folio{position:absolute;bottom:4px;width:100%;text-align:center}
+.folio{position:absolute;bottom:4px;width:100%;text-align:center;font-size:10pt}
 .folio--outer-left{left:8px;width:auto;text-align:left}
 .folio--outer-right{right:8px;width:auto;text-align:right}
+.folio--outer{left:8px;width:auto;text-align:left}
+/* **S5.1:** 'outer' מודע-זוגיות כמו pos-outer של המקור (style.css:1369:
+   even=flex-start=ימין ב-RTL; odd=שמאל) — תיקון NUMPOS/bottom_outer. */
+.page:nth-child(even) .folio--outer{left:auto;right:8px;text-align:right}
 .folio--top{bottom:auto;top:4px}
 .folio--in-header{bottom:auto;top:6px}
 .page-num-badge{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;line-height:1}
@@ -16660,16 +16773,25 @@ __modules["src/engine/output/legacy-projector.js"] = function (require, module, 
  */
 
 const { GEO, SZ, parenCenterRaisePx } = require('../layout/legacy-imud-flow');
+// **S5.1:** מקור יחיד לגופן שורה לפי סוגה — כמו ה-DOM (renderLine). (השורה
+// בשדה hFam של הכותרות ה-inline משתמשת בזה — נדרש כאן.)
+const { lineFontFamily } = require('./line-font');
 const { MeasureAPI, registeredFonts, resolveMeasureImpl } = require('../typography/measure-api');
 const { ornamentInk, parseSvgPaint, svgToPdfOps } = require('../decoration/ornament-ink'); // **EXT-4:** הדיו — מקור יחיד
 
 const COL_R = { x: GEO.COL_R_X, w: GEO.COL_W };
 const COL_L = { x: GEO.COL_L_X, w: GEO.COL_W };
 
-/** בסיס שורה לפי מודל תיבת השורה של CSS (half-leading + ascent). */
-function baselineOf(yTop, h, sizePt, ascentEm) {
+/**
+ * בסיס שורה לפי מודל תיבת השורה של CSS (half-leading + ascent).
+ * **S5.1 (תצוגה=ייצוא, תיקון C2):** ה-descent כבר לא מוקשה 0.2 — המטריקה
+ * האמיתית של הגופן (api.descentEm(); במימוש table הערך 0.20 כבריית המחדל,
+ * זהה להתנהגות הקודמת). בגופן הגוף (גוטמן-רש"י, D=0.388) ההקשחה הסיטה את
+ * כל שורות הגוף ב-PDF ב-~1.5px מהמודל של הדפדפן (ומהמקור).
+ */
+function baselineOf(yTop, h, sizePt, ascentEm, descentEm = 0.2) {
   const sizePx = sizePt * (96 / 72);
-  const contentH = (ascentEm + 0.2) * sizePx;
+  const contentH = (ascentEm + descentEm) * sizePx;
   const half = Math.max(0, (h - contentH) / 2);
   return yTop + half + ascentEm * sizePx;
 }
@@ -16748,7 +16870,11 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
   }
   const lineW = sumW + naturalSum;
   let xRight;
+  // **S5.1 (תיקון C1 — align:'left'):** עד כאן לא היה ענף left — כל align
+  // שאינו center נצמד לקצה הימני של התיבה. הסלוט השמאלי של הכותרת העליונה
+  // צויר בצד הלא-נכון של תיבתו (+40px) ולא אצל השפה השמאלית כמו בייחוס.
   if (align === 'center') xRight = xLeft + (width + lineW) / 2;
+  else if (align === 'left') xRight = xLeft + lineW;
   else xRight = xLeft + width;
   // **S4.26 (דיווח משתמש: "טקסט מוסגר ממוקם גבוה"):** סוגריים — מרכוז אנכי
   // מול הטקסט הרגיל (parenCenterRaisePx, אותו מודל תיבת-שורה כמו ה-DOM);
@@ -16771,11 +16897,35 @@ function placeWords(words, api, xLeft, width, sizePt, align, baseY, opts = {}) {
   return out;
 }
 
+/** רמות הפסים (ראי של HEADING_LEVEL_OF_BAND ב-dom-renderer — מקור יחיד סמנטי). */
+const HEADING_LEVEL_OF_BAND_LEGACY = { 'h0-title': 0, 'h2-siman': 2, 'h2-title': 2, 'h3-title': 3 };
+
+/** מפתח גופן לכותב ה-PDF לפי משפחה רשומה (S5.1 — תצוגה=ייצוא בגופנים). */
+function fontKeyOf(fam) {
+  if (fam === 'Frank Ruhl Libre') return 'fnbody';
+  if (fam === 'Hadassah Friedlaender') return 'margin';
+  if (fam === 'FrankReal-Bold' || fam === 'FrankReal') return 'window';
+  return 'heading'; // DavidLibre-Bold (ברירת המחדל של הכותרות) וכל משפחה אחרת
+}
+
 /** הקרנת עמוד legacy בודד. */
-function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
+function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi = null, mnApi = null) {
   // **S4.26:** headingApi — מדידת/ציור כותרות ב-DavidLibre-Bold (כמו הייחוס
   // וכמו ה-DOM); בלי גופן רשום — גופן הגוף (התנהגות קודמת).
   const hApi = headingApi || api;
+  // **S5.1:** גופן גוף-ההערה (FRL) והערות-הצד (Hadassah) — כמו המדידה
+  // במנוע וכמו ה-DOM. נפילה שקופה לגוף הטקסט כשהגופן אינו רשום.
+  if (!fnApi) fnApi = api;
+  if (!mnApi) mnApi = api;
+  // **S5.1:** מטמון API לפי משפחה רשומה — לכותרות פר-רמה ושורות TOC.
+  const famApiCache = new Map();
+  const apiFor = (fam) => {
+    if (!fam || !registeredFonts.has(fam)) return null;
+    if (!famApiCache.has(fam)) {
+      famApiCache.set(fam, new MeasureAPI({ 'body-font': fam, 'body-font-size-pt': SZ.body }, 'font-metrics'));
+    }
+    return famApiCache.get(fam);
+  };
   // **EXT-17:** גדלי סמני ההערות מהגדרות המקור (ברירות המחדל: 8/8). ההגדרות
   // של פרופיל IMUD מגיעות ב-_imudRaw (כמו readConfig של העימוד עצמו).
   const imudSet = (settings && settings._imudRaw) || settings || {};
@@ -16784,6 +16934,7 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
     listingSize: Number(imudSet['note-listing-num-size']) || 8
   };
   const ascent = api.ascentEm();
+  const descent = api.descentEm(); // **S5.1:** המטריקה האמיתית — לא 0.2 מוקשה
   const out = {
     width: GEO.PAGE_W, height: GEO.PAGE_H,
     contentBox: { top: GEO.FLOW_TOP, bottom: GEO.FLOW_BOTTOM },
@@ -16801,10 +16952,16 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
   const bandLeft = GEO.COL_L_X;
   const bandW = 2 * GEO.COL_W + 13.48;
   for (const b of (pg.bands || [])) {
-    const baseY = baselineOf(b.y, b.h, b.sizePt, ascent);
-    // **S4.26:** כותרות בגופן הכותרות (DavidLibre-Bold) — מדידה וציור (/F3)
-    const words = placeWords(b.text.split(' '), hApi, bandLeft, bandW, b.sizePt, 'center', baseY);
-    if (headingApi) for (const w of words) w.fontKey = 'heading';
+    const baseY = baselineOf(b.y, b.h, b.sizePt, ascent, descent);
+    // **S5.1 (תצוגה=ייצוא — גופן פר-רמה כמו ה-DOM):** הפסים מרונדרים ב-DOM
+    // בגופן heading-N-font של הרמה; המקרן צייר הכול ב-DavidLibre קבוע.
+    // נפילה ל-hApi (התנהגות קודמת) כשהמשפחה אינה רשומה.
+    const bLvl = HEADING_LEVEL_OF_BAND_LEGACY[b.kind];
+    const bFam = bLvl != null ? (settings[`heading-${bLvl}-font`] || 'DavidLibre-Bold') : null;
+    const bApi = (bLvl != null && apiFor(bFam)) || hApi;
+    const words = placeWords(b.text.split(' '), bApi, bandLeft, bandW, b.sizePt, 'center', baseY);
+    const bKey = (bLvl != null && apiFor(bFam)) ? fontKeyOf(bFam) : 'heading';
+    for (const w of words) w.fontKey = bKey;
     out.lines.push({
       x: bandLeft, y: b.y, w: bandW, h: b.h, words, align: 'center',
       kind: b.kind, level: null, isLast: false, sizePt: b.sizePt,
@@ -16828,7 +16985,7 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
   const gbox = GATE_BOX[pg.type] || { x: bandLeft, w: bandW };
   for (const g of (pg.gateLines || [])) {
     const h = g.sizePt * (96 / 72) * 1.3;
-    const baseY = baselineOf(g.y, h, g.sizePt, ascent);
+    const baseY = baselineOf(g.y, h, g.sizePt, ascent, descent);
     // **S4.9:** שורות המהדורה והמחבר בשער הראשי נכתבות אצל המקור כרצף אחד —
     // החילוץ מחזיר אותן בסדר מילים הפוך. שאר שורות השער מפוצלות למילים (לוגי).
     const singleOp = g.singleOp === true;
@@ -16853,13 +17010,17 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
       // חדרה למילת-החלון התלויה שמעליה (חפיפה 2.1px × 11 זוגות — H2 נכשל).
       const baseY = ln.kind === 'heading'
         ? ln.y + 0.6 + ascent * ln.sizePt * (96 / 72)
-        : baselineOf(ln.y, ln.heightPx, ln.sizePt, ascent);
+        : baselineOf(ln.y, ln.heightPx, ln.sizePt, ascent, descent);
       let words;
       if (ln.kind === 'heading') {
-        // כותרת inline — מילים נפרדות (חילוץ לוגי, כמו בייחוס); גופן הכותרות
+        // כותרת inline — מילים נפרדות (חילוץ לוגי, כמו בייחוס); **S5.1:**
+        // גופן הרמה מההגדרות (כמו ה-DOM) — לא DavidLibre קבוע לכל הרמות.
         const joined = ln.words.join(' ');
-        words = placeWords(joined.split(' '), hApi, col.x, col.w, ln.sizePt, 'center', baseY);
-        if (headingApi) for (const w of words) w.fontKey = 'heading';
+        const hFam = lineFontFamily(ln, settings) || 'DavidLibre-Bold';
+        const hApiLvl = apiFor(hFam) || hApi;
+        words = placeWords(joined.split(' '), hApiLvl, col.x, col.w, ln.sizePt, 'center', baseY);
+        const hKey = apiFor(hFam) ? fontKeyOf(hFam) : 'heading';
+        for (const w of words) w.fontKey = hKey;
       } else if (ln.window && ln.windowWords) {
         // שורת חלון: מילת החלון (1.5×) בשפה הימנית; הטקסט ברוחב מוקטן
         const winSz = ln.sizePt * 1.5;
@@ -16966,9 +17127,11 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
   for (const mn of (pg.marginNotes || [])) {
     const x = mn.side === 'right' ? GEO.MARGIN_R_X : GEO.MARGIN_L_X;
     for (const l of mn.lines) {
-      const baseY = baselineOf(l.y, GEO.MN_PITCH, SZ.marginNote, ascent);
-      const words = placeWords(l.text.split(' '), api, x, GEO.MARGIN_W, SZ.marginNote, 'center', baseY);
-      for (const w of words) w.color = MARGIN_NOTE_COLOR;
+      const baseY = baselineOf(l.y, GEO.MN_PITCH, SZ.marginNote, ascent, descent);
+      // **S5.1:** הערות-צד בגופן המקור (Hadassah Friedlaender — כמו המדידה
+      // במנוע וכמו ה-DOM); עד כאן צוירו בגוף הטקסט — התצוגה ≠ הייצוא בגופנים.
+      const words = placeWords(l.text.split(' '), mnApi, x, GEO.MARGIN_W, SZ.marginNote, 'center', baseY);
+      for (const w of words) { w.color = MARGIN_NOTE_COLOR; w.fontKey = 'margin'; }
       out.lines.push({
         x, y: l.y, w: GEO.MARGIN_W, h: GEO.MN_PITCH, words, align: 'center',
         kind: 'margin-note', level: null, isLast: false, sizePt: SZ.marginNote,
@@ -16995,17 +17158,19 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
     // בלי אות סימון. שורות הזרימה מהמודל (fnFlowFor) — מקור יחיד.
     if (fn.continuous) {
       const rightEdge = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
-      const spaceW = api.measureTextWidth(' ', SZ.fnBody, 0);
+      const spaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
       const usableW = rightEdge - GEO.COL_L_X;
       const words = [];
       fn.lines.forEach((l, li) => {
-        const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
+        const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent, descent);
         const isLast = li === fn.lines.length - 1;
         const toks = (l.words || []).filter(t => !t.gap);
+        // **S5.1:** גוף ההערה ב-FRL (כמו המדידה במנוע/ה-DOM) — לא בגוף הטקסט;
+        // סמני הרישום בגודלם העצמאי, אטגדים fnbody לכותב ה-PDF (/F5).
         const ws = toks.map(t => ({
           text: t.t,
           sizePt: t.mk ? projCfg.listingSize : SZ.fnBody,
-          w: api.measureTextWidth(t.t, t.mk ? projCfg.listingSize : SZ.fnBody, 0)
+          w: fnApi.measureTextWidth(t.t, t.mk ? projCfg.listingSize : SZ.fnBody, 0)
         }));
         const sumW = ws.reduce((a, w) => a + w.w, 0);
         const gaps = Math.max(0, ws.length - 1);
@@ -17016,7 +17181,7 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
         let cursor = rightEdge;
         for (let i = ws.length - 1; i >= 0; i--) {
           cursor -= ws[i].w;
-          words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: ws[i].sizePt, baselineY: baseY });
+          words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: ws[i].sizePt, baselineY: baseY, fontKey: 'fnbody' });
           cursor -= gapW;
         }
       });
@@ -17030,28 +17195,28 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
       continue;
     }
     const rightEdge = GEO.COL_L_X + 2 * GEO.COL_W + 13.48;
-    const spaceW = api.measureTextWidth(' ', SZ.fnBody, 0);
+    const spaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
     const words = [];
     let firstBase = null;
     let firstRight = rightEdge;
     // **S4.24:** המשך הערה מקוצצת — '(המשך)' לפני הסמן (כמו ה-DOM והנתיב המודרני)
     if (fn.cont) {
       const pTxt = '(המשך)';
-      const pw = api.measureTextWidth(pTxt, SZ.fnBody, 0);
+      const pw = fnApi.measureTextWidth(pTxt, SZ.fnBody, 0);
       firstRight -= pw;
-      words.push({ text: pTxt, x: firstRight, w: pw, sizePt: SZ.fnBody, baselineY: null });
+      words.push({ text: pTxt, x: firstRight, w: pw, sizePt: SZ.fnBody, baselineY: null, fontKey: 'fnbody' });
       firstRight -= spaceW;
     }
     if (fn.marker) {
       // **EXT-17:** סמן הרישום בגודל עצמאי (note-listing-num-size, ברירת מחדל 8).
       const msz = projCfg.listingSize;
-      const mw = api.measureTextWidth(fn.marker, msz, 0);
+      const mw = fnApi.measureTextWidth(fn.marker, msz, 0);
       firstRight -= mw;
-      words.push({ text: fn.marker, x: firstRight, w: mw, sizePt: msz, baselineY: null });
+      words.push({ text: fn.marker, x: firstRight, w: mw, sizePt: msz, baselineY: null, fontKey: 'fnbody' });
       firstRight -= spaceW;
     }
     fn.lines.forEach((l, li) => {
-      const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent);
+      const baseY = baselineOf(l.y, GEO.FN_PITCH, SZ.fnBody, ascent, descent);
       if (firstBase === null) {
         firstBase = baseY;
         if (words.length) words[0].baselineY = firstBase; // הסמן על בסיס השורה הראשונה
@@ -17059,7 +17224,7 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
       const isLast = li === fn.lines.length - 1;
       const lineRight = li === 0 ? firstRight : rightEdge;
       const usableW = Math.max(0, lineRight - GEO.COL_L_X);
-      const ws = l.words.map(w => ({ text: w, w: api.measureTextWidth(w, SZ.fnBody, 0) }));
+      const ws = l.words.map(w => ({ text: w, w: fnApi.measureTextWidth(w, SZ.fnBody, 0) }));
       const sumW = ws.reduce((a, w) => a + w.w, 0);
       const gaps = Math.max(0, ws.length - 1);
       let gapW = spaceW;
@@ -17069,7 +17234,7 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
       let cursor = lineRight;
       for (let i = ws.length - 1; i >= 0; i--) {
         cursor -= ws[i].w;
-        words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: SZ.fnBody, baselineY: baseY });
+        words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: SZ.fnBody, baselineY: baseY, fontKey: 'fnbody' });
         cursor -= gapW;
       }
     });
@@ -17082,7 +17247,7 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
   if (pg.toc) {
     if (pg.toc.title) {
       const y = GEO.FLOW_TOP + TOC_TITLE_Y_OFFSET;
-      const baseY = baselineOf(y, 30, SZ.tocTitle, ascent);
+      const baseY = baselineOf(y, 30, SZ.tocTitle, ascent, descent);
       const words = placeWords([pg.toc.title], api, bandLeft, bandW, SZ.tocTitle, 'center', baseY);
       out.lines.push({
         x: bandLeft, y, w: bandW, h: 30, words, align: 'center', kind: 'toc-title',
@@ -17090,14 +17255,19 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
       });
     }
     for (const r of (pg.toc.rows || [])) {
-      const baseY = baselineOf(r.y, 26, r.sizePt, ascent);
-      // כותרת מימין (במדרגות לפי רמה), מספר משמאל; **S4.26:** בגופן הכותרות
-      // (DavidLibre-Bold — כמו הייחוס: כל שורות ה-TOC ב-DavidLibre-Bold)
-      const tW = hApi.measureTextWidth(r.text, r.sizePt, 0);
-      const textWords = placeWords([r.text], hApi, r.x1 - tW, tW, r.sizePt, 'right', baseY);
-      if (headingApi) for (const w of textWords) w.fontKey = 'heading';
-      const numW = api.measureTextWidth(r.folio, SZ.tocNum, 0);
-      const numWords = r.folio ? placeWords([r.folio], api, GEO.TOC_NUM_X, numW, SZ.tocNum, 'left', baseY) : [];
+      const baseY = baselineOf(r.y, 26, r.sizePt, ascent, descent);
+      // כותרת מימין (במדרגות לפי רמה), מספר משמאל; **S5.1:** גופן הרמה
+      // מההגדרות (כמו ה-DOM — heading-N-font), נפילה ל-hApi כשאינה רשומה.
+      const rLvl = r.level != null ? r.level : 2;
+      const rFam = settings[`heading-${rLvl}-font`] || 'DavidLibre-Bold';
+      const rFamApi = apiFor(rFam);
+      const rApi = rFamApi || hApi;
+      const tW = rApi.measureTextWidth(r.text, r.sizePt, 0);
+      const textWords = placeWords([r.text], rApi, r.x1 - tW, tW, r.sizePt, 'right', baseY);
+      for (const w of textWords) w.fontKey = rFamApi ? fontKeyOf(rFam) : 'heading';
+      const numW = rApi.measureTextWidth(r.folio, SZ.tocNum, 0);
+      const numWords = r.folio ? placeWords([r.folio], rApi, GEO.TOC_NUM_X, numW, SZ.tocNum, 'left', baseY) : [];
+      for (const w of numWords) w.fontKey = rFamApi ? fontKeyOf(rFam) : 'heading';
       out.lines.push({
         x: GEO.TOC_NUM_X, y: r.y, w: r.x1 - GEO.TOC_NUM_X, h: 26,
         words: [...textWords, ...numWords], align: 'right', kind: 'toc-row',
@@ -17138,7 +17308,9 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null) {
       // **S4.9:** כל סלוט מתפצל למילים — חילוץ לוגי כמו בייחוס
       for (const s of slots) {
         const baseY = GEO.HEADER_BASELINE;
-        s.words = placeWords(s.text.split(' '), api, s.x, s.w + 40, s.sizePt,
+        // **S5.1 (תיקון C1/L2):** רוחב התיבה = רוחב הטקסט עצמו (s.w) — לא
+        // s.w+40. ה+40 הסיט כל סלוט 40px מהמקום שמכויל מהייחוס ב-mk() לעיל.
+        s.words = placeWords(s.text.split(' '), api, s.x, s.w, s.sizePt,
           s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
         s.color = pg.headerSlots.color || HDR_COLOR;
         for (const w of s.words) w.color = s.color;
@@ -17208,7 +17380,18 @@ function projectLegacyDocument(result, settings) {
   if (impl === 'font-metrics' && registeredFonts.has('DavidLibre-Bold')) {
     headingApi = new MeasureAPI({ 'body-font': 'DavidLibre-Bold', 'body-font-size-pt': SZ.body }, 'font-metrics');
   }
-  const pages = result.pages.map(p => projectLegacyPage(p, settings, api, winApi, headingApi));
+  // **S5.1 (גופני גוף-הערה והערות-הצד בהקרנה):** FRL לגוף ההערה,
+  // Hadassah להערות-הצד — כמו המדידה במנוע (fnApi/marginApi ב-legacyTypeset)
+  // וכמו ה-DOM. נפילה שקופה לגוף הטקסט כשהגופן אינו רשום.
+  let fnApi = null;
+  if (impl === 'font-metrics' && registeredFonts.has('Frank Ruhl Libre')) {
+    fnApi = new MeasureAPI({ 'body-font': 'Frank Ruhl Libre', 'body-font-size-pt': SZ.fnBody, 'body-line-height': 1.5 }, 'font-metrics');
+  }
+  let mnApi = null;
+  if (impl === 'font-metrics' && registeredFonts.has('Hadassah Friedlaender')) {
+    mnApi = new MeasureAPI({ 'body-font': 'Hadassah Friedlaender', 'body-font-size-pt': SZ.marginNote, 'body-line-height': 1.2 }, 'font-metrics');
+  }
+  const pages = result.pages.map(p => projectLegacyPage(p, settings, api, winApi, headingApi, fnApi, mnApi));
   return { pages, inkBounds: pages.map(() => null), layoutHash: result.layoutHash };
 }
 
@@ -17282,8 +17465,12 @@ const DIVIDER_MAP = { 'none': 'none', 'thin': 'thin', 'dashed': 'dashed', 'doubl
 
 /** מיקומי מספור של המקור ⇒ RED. */
 const NUMPOS_MAP = {
-  'bottom_center': 'bottom-center', 'bottom_outer': 'bottom-outer', 'bottom_left': 'bottom-left', 'bottom_right': 'bottom-right',
-  'top_center': 'top-center', 'top_outer': 'top-outer', 'in_header': 'in-header'
+  // **S5.1:** ערכי האינום של RED בלבד — בעבר יוצרו 'bottom-outer'/'bottom-left'/
+  // 'bottom-right'/'top-center'/'top-outer' שאינם ברישום והוגדרים בשקט לברירת
+  // המחדל. 'outer' חדש: מיקום חיצוני מודע-זוגיות — כמו pos-outer של המקור
+  // (typesetter.js:506 + style.css:1367-1369: odd=flex-end=שמאל, even=ימין).
+  'bottom_center': 'bottom-center', 'bottom_outer': 'outer', 'bottom_left': 'outer-left', 'bottom_right': 'outer-right',
+  'top_center': 'top', 'top_outer': 'top', 'in_header': 'in-header'
 };
 
 /**
@@ -17485,7 +17672,9 @@ const FAMILY_RULES = [
 /** קבלת disposition למפתח — מפורש מהטבלה, או כלל משפחה. @returns {object|null} */
 function dispositionOf(oldKey) {
   if (DISPOSITIONS[oldKey]) return DISPOSITIONS[oldKey];
-  for (const r of FAMILY_RULES) if (r.re.test(oldKey)) return { kind: r.kind, reason: r.reason };
+  // **S5.1:** כלל משפחה מחזיר גם to/transform — בעבר הושמטו ו-heading-divider-h4/h5/h6
+  // (למשל) נספרו כ"מטופלים" בלי ששום דבר הוחל (מיפוי-מת).
+  for (const r of FAMILY_RULES) if (r.re.test(oldKey)) return { kind: r.kind, to: r.to, transform: r.transform, reason: r.reason };
   return null;
 }
 

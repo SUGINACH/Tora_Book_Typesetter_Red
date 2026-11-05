@@ -106,7 +106,11 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
         }
         break;
       }
-      if (w - shrink > maxWidthPx + 0.5) break; // חריגה שאינה ניתנת לתיקון
+      // **S5.1 (D-92-DP):** הדפדפן מרנדר רוחב טבעי (white-space:normal) —
+      // שורה שרוחבה הטבעי חורג מהטור נעטפת בתצוגה (טקסט-על-טקסט) גם אם
+      // היישוב יכול לכווץ רווחים ב-PDF. לכן המבחן ברוחב הטבעי, בלי shrink,
+      // עם רווח-ביטחון 0.75px — כמו FIT_EPS במנוע המורשת (תת-פיקסל LayoutUnit).
+      if (w > maxWidthPx + 0.75) break; // חריגה שאינה ניתנת לתיקון
 
       if (it.kind === 'box') {
         // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
@@ -191,7 +195,8 @@ function greedyFallback(items, maxWidthPx, measure, lineHeightPx) {
   const pushTok = () => {
     if (cur === null) return;
     const sp = toks.length ? space : 0;
-    if (toks.length && w + sp + curW > maxWidthPx) flush(); // הטוקן הבא ייפתח שורה חדשה
+    // **S5.1 (D-92-DP):** רווח-ביטחון גם בגיבוי הגרידי — כמו FIT_EPS במורשת.
+    if (toks.length && w + sp + curW > maxWidthPx - 0.75) flush(); // הטוקן הבא ייפתח שורה חדשה
     toks.push(cur); w += sp + curW;
     cur = null; curW = 0; joinNext = false;
   };

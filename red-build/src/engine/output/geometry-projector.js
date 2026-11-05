@@ -165,7 +165,21 @@ function projectPage(page, settings, api) {
     // **D-81:** מיקום/רוחב מהמקור היחיד (הקרן, מדידה 10pt) — הכותב וה-ink-bbox צורכים אותו.
     const ft = scrubPUAText(String(page.folioDisplay));
     const fw = Math.max(1, Math.round(measure.measureTextWidth(ft, 10)));
-    out.folio = { y: tpl.contentBox.bottom + 2, x: Math.round((tpl.width - fw) / 2), w: fw, sizePt: 10, text: ft };
+    // **S5.1 (תיקון C5):** מיקום לפי page-num-position מההגדרות — בעבר מוקשה
+    // bottom-center וכל ערך אחר הוגדר בשקט. 'outer' מודע-זוגיות כמו המקור
+    // (recto=index זוגי ⇒ שמאל; verso ⇒ ימין) — כמו folio--outer ב-CSS.
+    const pos = String((settings && settings['page-num-position']) || 'bottom-center');
+    if (pos === 'none') { out.folio = null; }
+    else {
+      const recto = (page.index % 2 === 0);
+      let fx = Math.round((tpl.width - fw) / 2);
+      let fy = tpl.contentBox.bottom + 2;
+      if (pos === 'outer-left' || (pos === 'outer' && recto)) fx = 8;
+      else if (pos === 'outer-right' || (pos === 'outer' && !recto)) fx = Math.max(8, Math.round(tpl.width - fw - 8));
+      else if (pos === 'top') fy = 4;
+      else if (pos === 'in-header') fy = 6;
+      out.folio = { y: fy, x: fx, w: fw, sizePt: 10, text: ft };
+    }
   }
 
   // כותרת עליונה — סלוטים חיים (right/center/left) עם טקסט מפורש (D-61)

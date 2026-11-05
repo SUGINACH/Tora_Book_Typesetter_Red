@@ -63,9 +63,13 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
 .fn-rule--star{border-top:3px double #4a4a4a;height:0}
 .fn-rule--diamond{border-top:2px solid #000;height:0;transform:scaleX(.6)}
 .fn--continuation{color:#555;font-style:italic}
-.folio{position:absolute;bottom:4px;width:100%;text-align:center}
+.folio{position:absolute;bottom:4px;width:100%;text-align:center;font-size:10pt}
 .folio--outer-left{left:8px;width:auto;text-align:left}
 .folio--outer-right{right:8px;width:auto;text-align:right}
+.folio--outer{left:8px;width:auto;text-align:left}
+/* **S5.1:** 'outer' מודע-זוגיות כמו pos-outer של המקור (style.css:1369:
+   even=flex-start=ימין ב-RTL; odd=שמאל) — תיקון NUMPOS/bottom_outer. */
+.page:nth-child(even) .folio--outer{left:auto;right:8px;text-align:right}
 .folio--top{bottom:auto;top:4px}
 .folio--in-header{bottom:auto;top:6px}
 .page-num-badge{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;line-height:1}

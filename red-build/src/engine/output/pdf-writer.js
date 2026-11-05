@@ -195,13 +195,17 @@ function buildToUnicode(font) {
  * @param {object} opts.font — {subsetBytes, widthsUnits:Map(gid→units), unitsPerEm, cidOf:(ch)=>gid, charToGidEntries:()=>[ch,gid][]}
  * @param {object} [opts.font2] — **S4.15:** גופן משני (FrankReal-Bold — מילות-חלון):
  *   אותה צורה; מילים עם fontKey==='window' נציירות בו (/F2). בלעדיו — הכל ב-/F1.
+ * @param {object} [opts.font5] — **S5.1:** גוף ההערה (Frank Ruhl Libre — fontKey
+ *   'fnbody'): אותה צורה; /F5. בלעדיו — הערות ב-/F1 (התנהגות קודמת).
+ * @param {object} [opts.font6] — **S5.1:** הערות-צד (Hadassah Friedlaender —
+ *   fontKey 'margin'): אותה צורה; /F6. בלעדיו — הערות-צד ב-/F1.
  * @param {object} opts.settings — pdf-crop-marks, export-bleed-mm
  * @param {Array} [opts.outline] — [{title, page, level}] — סימניות מכותרות
  * @param {Array} [opts.tocLinks] — [{page, x, y, w, h, targetPage}] — קישורי TOC (px מהמקרן)
  * @returns {Buffer}
  */
 function writePdf(opts) {
-  const { pages, pageSizeMm, font, font2, font3, font4, settings, outline, tocLinks } = opts;
+  const { pages, pageSizeMm, font, font2, font3, font4, font5, font6, settings, outline, tocLinks } = opts;
   const pdf = new PdfBuilder();
 
   const wPt = pageSizeMm.w * MM_TO_PT;
@@ -244,6 +248,22 @@ function writePdf(opts) {
     ID.fontFiled = pdf.reserve();
     ID.toUnicoded = pdf.reserve();
   }
+  // **S5.1:** מזהי הגופן החמישי (Frank Ruhl Libre — גוף ההערה, /F5) והשישי
+  // (Hadassah Friedlaender — הערות-צד, /F6) — אותו סדר קבוע (דטרמיניזם).
+  if (font5) {
+    ID.type0e = pdf.reserve();
+    ID.cidFonte = pdf.reserve();
+    ID.fontDescriptore = pdf.reserve();
+    ID.fontFilee = pdf.reserve();
+    ID.toUnicodee = pdf.reserve();
+  }
+  if (font6) {
+    ID.type0f = pdf.reserve();
+    ID.cidFontf = pdf.reserve();
+    ID.fontDescriptorf = pdf.reserve();
+    ID.fontFilef = pdf.reserve();
+    ID.toUnicodef = pdf.reserve();
+  }
   const pageIds = pages.map(() => pdf.reserve());
   const contentIds = pages.map(() => pdf.reserve());
   const linkIds = new Map(); // pageIndex → [ids]
@@ -281,52 +301,66 @@ function writePdf(opts) {
       // **S4.26 (פיצול גליפים):** תווים שחסרים בגוף הראשי (פיסוק בסיסי
       // בגוטמן רש"י: ' . ׳) מצוירים בגופן ה-fallback (/F4) — המשך אותה
       // פעולת טקסט, העט ממשיך מאליו אחרי כל Tj.
+      // **S5.1 (תיקון C4 + הרחבת ה-fallback לכל הגופנים):** הרשת כעת
+      // פר-תו לכל גופן (F1..F6): תו שחסר בגופן המילה נופל לגוף הטקסט (/F1)
+      // ורק אז ל-/F4. בעבר תו חסר ב-/F2 או //F3 הושמט בשקט מה-PDF
+      // (הדפדפן הציג אותו — תצוגה ≠ ייצוא). פורמט ה-bytes של המקרים
+      // הקיימים נשמר בדיוק (מסלול יחיד = המסלול הפשוט הקודם;
+      // מסלול מרובה = פורמט ה-F4 הקודם).
       const useF2 = font2 && fontKey === 'window';
       const useF3 = font3 && fontKey === 'heading';
-      const f = useF2 ? font2 : (useF3 ? font3 : font);
+      const useF5 = font5 && fontKey === 'fnbody';
+      const useF6 = font6 && fontKey === 'margin';
+      const f = useF2 ? font2 : (useF3 ? font3 : (useF5 ? font5 : (useF6 ? font6 : font)));
+      const fName = useF2 ? 'F2' : (useF3 ? 'F3' : (useF5 ? 'F5' : (useF6 ? 'F6' : 'F1')));
       const chars = [...String(text)].filter(ch => {
         const cp = ch.codePointAt(0);
         return cp >= 0x20 && cp !== 0x7F;
       });
       const visual = visualOrderRtl(chars);
       if (!visual.length) return;
-      if (font4 && f !== font2 && f !== font3) {
-        const runs = [];
-        for (const ch of visual) {
-          const useFb = f.cidOf(ch) === 0 && font4.cidOf(ch) !== 0;
-          const key = useFb ? 'fb' : 'main';
-          if (runs.length && runs[runs.length - 1].key === key) runs[runs.length - 1].chars.push(ch);
-          else runs.push({ key, chars: [ch] });
-        }
-        if (runs.length > 1 || (runs[0] && runs[0].key === 'fb')) {
-          if (Array.isArray(color) && color.length === 3) {
-            ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
-          }
-          ops.push(`BT ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td`);
-          for (const run of runs) {
-            const rf = run.key === 'fb' ? font4 : f;
-            let hex = '';
-            for (const ch of run.chars) {
-              const g = rf.cidOf(ch);
-              if (g) hex += g.toString(16).padStart(4, '0');
-            }
-            if (hex) ops.push(`/${run.key === 'fb' ? 'F4' : (useF3 ? 'F3' : 'F1')} ${round2(sizePt)} Tf <${hex}> Tj`);
-          }
-          ops.push('ET');
-          return;
-        }
-      }
-      let out = '';
+      // ריצות פר-תו: הגופן הראשי של המילה; חסר ⇒ /F1 (גוף); חסר גם שם
+      // וקיים ב-/F4 ⇒ /F4. תו שאינו בשום גופן מושמט (כמו קודם — tofu).
+      const runs = [];
       for (const ch of visual) {
-        const g = f.cidOf(ch);
-        if (g === 0) continue;
-        out += g.toString(16).padStart(4, '0');
+        let rn = fName, rf = f;
+        if (f.cidOf(ch) === 0) {
+          if (font.cidOf(ch) !== 0) { rn = 'F1'; rf = font; }
+          else if (font4 && font4.cidOf(ch) !== 0) { rn = 'F4'; rf = font4; }
+          else continue;
+        }
+        if (runs.length && runs[runs.length - 1].name === rn) runs[runs.length - 1].chars.push(ch);
+        else runs.push({ name: rn, font: rf, chars: [ch] });
       }
-      if (!out) return;
+      if (!runs.length) return;
+      if (runs.length === 1) {
+        // מסלוק יחיד — פורמט ה-bytes של המסלול הפשוט הקודם (ללא שינוי)
+        let out = '';
+        for (const ch of runs[0].chars) {
+          const g = runs[0].font.cidOf(ch);
+          if (g) out += g.toString(16).padStart(4, '0');
+        }
+        if (!out) return;
+        if (Array.isArray(color) && color.length === 3) {
+          ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
+        }
+        ops.push(`BT /${runs[0].name} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${out}> Tj ET`);
+        return;
+      }
+      // מסלוק מרובה — פורמט ה-F4 הקודם (BT x y Td; פר-ריצה /Fn sz Tf <hex> Tj; ET)
       if (Array.isArray(color) && color.length === 3) {
         ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
       }
-      ops.push(`BT ${useF2 ? '/F2' : (useF3 ? '/F3' : '/F1')} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${out}> Tj ET`);
+      ops.push(`BT ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td`);
+      for (const run of runs) {
+        let hex = '';
+        for (const ch of run.chars) {
+          const g = run.font.cidOf(ch);
+          if (g) hex += g.toString(16).padStart(4, '0');
+        }
+        if (hex) ops.push(`/${run.name} ${round2(sizePt)} Tf <${hex}> Tj`);
+      }
+      ops.push('ET');
     };
     const emitLines = (lines) => {
       for (const ln of lines) {
@@ -514,19 +548,75 @@ function writePdf(opts) {
     pdf.put(ID.toUnicodec, `<< /Length ${toUni3.length} >>\nstream\n${toUni3}\nendstream`);
   }
 
+  // **S5.1:** הגופן החמישי (Frank Ruhl Libre — גוף ההערה, /F5) — אותם
+  // אובייקטים בשמות שונים. מטריקות: asc 1000/1000, desc −200/1000 (כמו /F4,
+  // אותו גופן קובץ).
+  if (font5) {
+    const wArray5 = [];
+    let run5 = null;
+    let prevGid5 = -10;
+    for (const g of [...font5.widthsUnits.keys()].sort((a, b) => a - b)) {
+      const wv = Math.round((font5.widthsUnits.get(g) / font5.unitsPerEm) * 1000);
+      if (g === prevGid5 + 1 && run5) run5.push(wv);
+      else { if (run5) wArray5.push(run5); run5 = [g, wv]; }
+      prevGid5 = g;
+    }
+    if (run5) wArray5.push(run5);
+    const wStr5 = wArray5.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+    pdf.put(ID.type0e, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraFn /Encoding /Identity-H /DescendantFonts [${ID.cidFonte} 0 R] /ToUnicode ${ID.toUnicodee} 0 R >>`);
+    pdf.put(ID.cidFonte, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraFn /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptore} 0 R /DW 1000 /W [${wStr5}] >>`);
+    pdf.put(ID.fontDescriptore, `<< /Type /FontDescriptor /FontName /ToraFn /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 1000 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 ${ID.fontFilee} 0 R >>`);
+    const ff5 = Buffer.concat([
+      Buffer.from(`<< /Length ${font5.subsetBytes.length} /Length1 ${font5.subsetBytes.length} >>\nstream\n`, 'latin1'),
+      font5.subsetBytes,
+      Buffer.from('\nendstream', 'latin1')
+    ]);
+    pdf.put(ID.fontFilee, ff5);
+    const toUni5 = buildToUnicode(font5);
+    pdf.put(ID.toUnicodee, `<< /Length ${toUni5.length} >>\nstream\n${toUni5}\nendstream`);
+  }
+
+  // **S5.1:** הגופן השישי (Hadassah Friedlaender — הערות-צד, /F6).
+  if (font6) {
+    const wArray6 = [];
+    let run6 = null;
+    let prevGid6 = -10;
+    for (const g of [...font6.widthsUnits.keys()].sort((a, b) => a - b)) {
+      const wv = Math.round((font6.widthsUnits.get(g) / font6.unitsPerEm) * 1000);
+      if (g === prevGid6 + 1 && run6) run6.push(wv);
+      else { if (run6) wArray6.push(run6); run6 = [g, wv]; }
+      prevGid6 = g;
+    }
+    if (run6) wArray6.push(run6);
+    const wStr6 = wArray6.map(r => `${r[0]} [${r.slice(1).join(' ')}]`).join(' ');
+    pdf.put(ID.type0f, `<< /Type /Font /Subtype /Type0 /BaseFont /ToraMargin /Encoding /Identity-H /DescendantFonts [${ID.cidFontf} 0 R] /ToUnicode ${ID.toUnicodef} 0 R >>`);
+    pdf.put(ID.cidFontf, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ToraMargin /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${ID.fontDescriptorf} 0 R /DW 1000 /W [${wStr6}] >>`);
+    pdf.put(ID.fontDescriptorf, `<< /Type /FontDescriptor /FontName /ToraMargin /Flags 4 /FontBBox [-200 -300 1200 1000] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 ${ID.fontFilef} 0 R >>`);
+    const ff6 = Buffer.concat([
+      Buffer.from(`<< /Length ${font6.subsetBytes.length} /Length1 ${font6.subsetBytes.length} >>\nstream\n`, 'latin1'),
+      font6.subsetBytes,
+      Buffer.from('\nendstream', 'latin1')
+    ]);
+    pdf.put(ID.fontFilef, ff6);
+    const toUni6 = buildToUnicode(font6);
+    pdf.put(ID.toUnicodef, `<< /Length ${toUni6.length} >>\nstream\n${toUni6}\nendstream`);
+  }
+
   // ---- עמודים ----
   const mediabox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
   const bleedbox = `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`;
   pages.forEach((pg, i) => {
     const annots = linkIds.get(i) || [];
     const annotsStr = annots.length ? ` /Annots [${annots.map(id => `${id} 0 R`).join(' ')}]` : '';
-    const fontRes = font2 && font3 && font4
-      ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R /F3 ${ID.type0c} 0 R /F4 ${ID.type0d} 0 R >>`
-      : (font2 && font3
-        ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R /F3 ${ID.type0c} 0 R >>`
-        : (font2
-          ? `/Font << /F1 ${ID.type0} 0 R /F2 ${ID.type0b} 0 R ${font4 ? `/F4 ${ID.type0d} 0 R` : ''} >>`
-          : `/Font << /F1 ${ID.type0} 0 R ${font3 ? `/F3 ${ID.type0c} 0 R` : ''} ${font4 ? `/F4 ${ID.type0d} 0 R` : ''} >>`));
+    // **S5.1:** רשימת גופנים דינמית — מחרוזת זהה בדיוק לצירופים הקיימים
+    // (סדר F1,F2,F3,F4), ותוספת טבעית ל-/F5 (גוף הערה) ו-/F6 (הערות-צד).
+    const fontPairs = [['/F1', ID.type0]];
+    if (font2) fontPairs.push(['/F2', ID.type0b]);
+    if (font3) fontPairs.push(['/F3', ID.type0c]);
+    if (font4) fontPairs.push(['/F4', ID.type0d]);
+    if (font5) fontPairs.push(['/F5', ID.type0e]);
+    if (font6) fontPairs.push(['/F6', ID.type0f]);
+    const fontRes = `/Font << ${fontPairs.map(([n, id]) => `${n} ${id} 0 R`).join(' ')} >>`;
     pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << ${fontRes} >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
     pdf.put(contentIds[i], Buffer.concat([
       Buffer.from(`<< /Length ${contents[i].length} >>\nstream\n`, 'latin1'),

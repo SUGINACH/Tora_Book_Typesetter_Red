@@ -111,6 +111,16 @@
 
     const hdr = pg.querySelector('.running-head');
     if (hdr) info.headerText = hdr.textContent.trim().slice(0, 80);
+    // **S5.1 (A5):** מיקום בפיקסלים — כמו ב-full-math-audit.
+    if (hdr) {
+      const hr = R(hdr);
+      if (hr.b > 107.2 + 0.5 || hr.y < -0.5) problems.push({ page: idx, type: 'HEADER_POSITION', severity: 'high', top: Math.round(hr.y * 10) / 10, bottom: Math.round(hr.b * 10) / 10 });
+    }
+    const fol = pg.querySelector('.folio');
+    if (fol && (fol.textContent || '').trim()) {
+      const fr2 = R(fol);
+      if (fr2.y < 1022.2 - 0.5 || fr2.b > 1122.5 + 2) problems.push({ page: idx, type: 'FOLIO_POSITION', severity: 'high', top: Math.round(fr2.y * 10) / 10, bottom: Math.round(fr2.b * 10) / 10 });
+    }
 
     // תוכן שער (מנוע מורשת): שורות השער הן .band--gate
     info.gates = [...pg.querySelectorAll('.band--gate')].map((b) => b.textContent.trim().slice(0, 48)).filter(Boolean);
@@ -149,6 +159,19 @@
         }
         if (wn >= 2 && maxTop - minTop > 3) {
           problems.push({ page: idx, col: ci, type: 'WRAPPED_LINE', severity: 'high', spread: Math.round((maxTop - minTop) * 10) / 10, text: lr.el.textContent.slice(0, 25) });
+        }
+        // **S5.1 (A2):** עטיפה בתוך ספאנים — כמו ב-full-math-audit.
+        for (const sp of lr.el.querySelectorAll('span')) {
+          if (!(sp.textContent || '').trim()) continue;
+          const rg2 = document.createRange(); rg2.selectNodeContents(sp);
+          let sMin = Infinity, sMax = -Infinity, sN = 0;
+          for (const rc of rg2.getClientRects()) {
+            if (rc.width <= 0.5) continue;
+            sN++; if (rc.top < sMin) sMin = rc.top; if (rc.top > sMax) sMax = rc.top;
+          }
+          if (sN >= 2 && sMax - sMin > 3) {
+            problems.push({ page: idx, col: ci, type: 'WRAPPED_LINE', severity: 'high', span: String(sp.className).slice(0, 24), spread: Math.round((sMax - sMin) * 10) / 10, text: sp.textContent.slice(0, 25) });
+          }
         }
       }
       // 2. גלישה מתיבת הטור (רוחב/גובה)

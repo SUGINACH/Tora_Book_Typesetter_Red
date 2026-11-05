@@ -64,8 +64,12 @@ const DIVIDER_MAP = { 'none': 'none', 'thin': 'thin', 'dashed': 'dashed', 'doubl
 
 /** מיקומי מספור של המקור ⇒ RED. */
 const NUMPOS_MAP = {
-  'bottom_center': 'bottom-center', 'bottom_outer': 'bottom-outer', 'bottom_left': 'bottom-left', 'bottom_right': 'bottom-right',
-  'top_center': 'top-center', 'top_outer': 'top-outer', 'in_header': 'in-header'
+  // **S5.1:** ערכי האינום של RED בלבד — בעבר יוצרו 'bottom-outer'/'bottom-left'/
+  // 'bottom-right'/'top-center'/'top-outer' שאינם ברישום והוגדרים בשקט לברירת
+  // המחדל. 'outer' חדש: מיקום חיצוני מודע-זוגיות — כמו pos-outer של המקור
+  // (typesetter.js:506 + style.css:1367-1369: odd=flex-end=שמאל, even=ימין).
+  'bottom_center': 'bottom-center', 'bottom_outer': 'outer', 'bottom_left': 'outer-left', 'bottom_right': 'outer-right',
+  'top_center': 'top', 'top_outer': 'top', 'in_header': 'in-header'
 };
 
 /**
@@ -267,7 +271,9 @@ const FAMILY_RULES = [
 /** קבלת disposition למפתח — מפורש מהטבלה, או כלל משפחה. @returns {object|null} */
 function dispositionOf(oldKey) {
   if (DISPOSITIONS[oldKey]) return DISPOSITIONS[oldKey];
-  for (const r of FAMILY_RULES) if (r.re.test(oldKey)) return { kind: r.kind, reason: r.reason };
+  // **S5.1:** כלל משפחה מחזיר גם to/transform — בעבר הושמטו ו-heading-divider-h4/h5/h6
+  // (למשל) נספרו כ"מטופלים" בלי ששום דבר הוחל (מיפוי-מת).
+  for (const r of FAMILY_RULES) if (r.re.test(oldKey)) return { kind: r.kind, to: r.to, transform: r.transform, reason: r.reason };
   return null;
 }
 

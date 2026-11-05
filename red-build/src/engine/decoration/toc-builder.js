@@ -160,9 +160,17 @@ function buildTocPages(model, pageType, title, settings, measure, lineHeight, io
   if (!model.rows.length) return { pages: [], overflow: overflowFindings, budgetExceeded };
 
   let cur = mkPage(true);
-  tplW = cur.template.contentBox
-    ? (cur.template.contentBox.right - cur.template.contentBox.left) || cur.template.width
-    : cur.template.width;
+  // **S5.1:** רוחב התוכן מהעמודות (min/max) — contentBox מגדיר רק top/bottom,
+  // אז (right-left)||width היה NaN||width=רוחב העמודה המלא (794) — שורות ה-TOC
+  // נמדדו ב-~119px יותר מדי ונעטפו מתחתית תיבת התוכן בפועל.
+  {
+    const colsTpl = (cur.template && cur.template.columns) || [];
+    tplW = colsTpl.length
+      ? Math.max.apply(null, colsTpl.map(c => c.x + c.w)) - Math.min.apply(null, colsTpl.map(c => c.x))
+      : ((cur.template.contentBox && cur.template.contentBox.right != null
+        ? (cur.template.contentBox.right - cur.template.contentBox.left) || cur.template.width
+        : cur.template.width));
+  }
   let availH = cur.template.contentBox.height - (TITLE_SIZE_PT * (96 / 72) + TITLE_MARGIN_PX);
   let usedH = 0;
 

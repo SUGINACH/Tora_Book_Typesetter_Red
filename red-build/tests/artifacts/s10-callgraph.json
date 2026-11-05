@@ -11,6 +11,7 @@
     "editor-tab.js",
     "engine-worker-main.js",
     "extensions-panel.js",
+    "imud-library.js",
     "inline-transport.js",
     "preview-tab.js",
     "retypeset-policy.js",
@@ -25,13 +26,13 @@
       "file": "app-shell.js",
       "fn": "onExplicitRetypeset",
       "callee": "requestTypeset",
-      "line": 171
+      "line": 206
     },
     {
       "file": "engine-worker-main.js",
       "fn": "onMessage",
       "callee": "typeset",
-      "line": 14
+      "line": 68
     },
     {
       "file": "worker-client.js",
