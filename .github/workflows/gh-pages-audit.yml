@@ -26,6 +26,16 @@ on:
     types: [ completed ]
   workflow_dispatch:
 
+# **S5.3-ג (מוקש 6):** ‏/pages/builds/latest דורש אימות (ללא טוקן ⇒ ‏404,
+# גם בריפו פומבי — נבדק) — ה-poll בגרסה הקודמת רץ ללא אימות והיה
+# נכשל בכל ריצה בתום 10 דק' למרות בנייה מוצלחת. כאן: ‏GITHUB_TOKEN
+# המובנה עם הרשאת pages:read; ובתום-זמן — להמשיך לאודיט במקום להיכשל
+# (שומר האמת הוא בדיקת ה-sha256 של הבאנדלים הפרוסים באודיט עצמו;
+# פריסה מיושנת/שבורה נכשלת שם בקול רם).
+permissions:
+  contents: read
+  pages: read
+
 jobs:
   live-audit-after-deploy:
     if: >-
@@ -49,20 +59,26 @@ jobs:
           npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
 
-      # **S5.3:** ‏page_build נורה כבר אחרי השלמת הבנייה — אך ה-poll נשאר
-      # כאימות-על מול ה-API הציבורי (ללא אימות): מוודא ש-status='built'
-      # גלוי גם ב-API לפני האודיט; תקרה 10 דק'. כשל בנייה ⇒ כשל מיידי
-      # (אין טעם לבדוק אתר ישן).
+      # **S5.3-ג (מוקש 6):** ‏/pages/builds/latest דורש אימות — ללא טוקן
+      # מתקבל 404 גם בריפו פומבי (נבדק), וה-poll הקודם (ללא אימות) היה
+      # נכשל בכל ריצה בתום 10 דק' למרות בנייה מוצלחת. כאן: ‏GITHUB_TOKEN
+      # המובנה (הרשאת pages:read — ראה permissions למעלה). ‏page_build נורה
+      # כבר אחרי השלמת הבנייה, ולכן ה-poll הוא אימות-על בלבד: כשל בנייה
+      # (error) ⇒ כשל מיידי; תום-זמן/לא-ידוע ⇒ אזהרה והמשך לאודיט —
+      # שומר האמת הוא בדיקת ה-sha256 של הבאנדלים הפרוסים באודיט עצמו
+      # (פריסה מיושנת/שבורה נכשלת שם בקול רם).
       - name: Wait for GitHub Pages build to be visible as built (poll up to 10 min)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           deadline=$((SECONDS + 600))
           while true; do
-            resp=$(curl -sf "https://api.github.com/repos/SUGINACH/Tora_Book_Typesetter_Red/pages/builds/latest" || true)
+            resp=$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/SUGINACH/Tora_Book_Typesetter_Red/pages/builds/latest" || true)
             status=$(printf '%s' "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || echo "")
             echo "pages build status: ${status:-unknown}"
             if [ "$status" = "built" ]; then echo "✓ Pages build completed"; exit 0; fi
-            if [ "$status" = "error" ]; then echo "✗ בניית ה-Pages נכשלה (status=error) — אין טעם לבדוק אתר מיושן"; exit 1; fi
-            if [ "$SECONDS" -ge "$deadline" ]; then echo "✗ פסק זמן בהמתנה לבניית Pages (10 דק') — status=${status:-unknown}"; exit 1; fi
+            if [ "$status" = "error" ]; then echo "✗ בניית ה-Pages נכשלה (status=error) — אין טען לבדוק אתר מיושן"; exit 1; fi
+            if [ "$SECONDS" -ge "$deadline" ]; then echo "⚠ תום-זמן באימות ה-API (status=${status:-unknown}) — ממשיכים לאודיט; אם הפריסה מיושנת, בדיקת ה-sha256 באודיט תיכשל בקול רם"; exit 0; fi
             sleep 30
           done
 
