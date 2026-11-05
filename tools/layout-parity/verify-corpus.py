@@ -322,10 +322,32 @@ def main():
     # ============ C7: שלמות תוכן-העניינים ============
     # מפתח: טקסט כותרת מנורמל → ערכת עמודים שבהם היא מופיעה כשורת כותרת/שער
     heading_pages = defaultdict(set)
+    # **S4.24 (אודיט מתמטי, תיקוני שורש 3+4):** כותרות inline/band שאורכן
+    # עולה על רוחב הטור/הפס נעטפות לשורות עוקבות — שורה בודדת מכילה קטע
+    # בלבד, והטקסט המלא הוא חיבור רצף השורות. כדי לא להדביק בטעות את שורת
+    # ה"סימן" שלפני הכותרת או את הכותרת הבאה אחריה (שתיהן שורות כותרת
+    # בפני עצמן — למשל עמוד 642 בקורפוס הגדול: "סימן ב" | h2 בשתי שורות |
+    # h3), נרשם כל חלון-רצף רציף (a..b) של שורות כותרת עוקבות כמועמד.
+    # ההשוואה עצמה נשארת זהות-מחרוזת מלאה אחרי norm() — בלי התאמה רופפת:
+    # רק חלון שחיבורו זהה לטקסט ה-TOC נספר, והעמודון עדיין חייב להתאים
+    # לפוליו של אותו עמוד עצמו.
     for i, p in enumerate(pages):
-        for l in p.get("lines", []):
-            if l.get("kind") in ("heading-band", "heading-inline", "gate"):
-                heading_pages[norm(l["text"])].add(i)
+        plines = p.get("lines", [])
+        j = 0
+        while j < len(plines):
+            if plines[j].get("kind") in ("heading-band", "heading-inline", "gate"):
+                k = j
+                while k < len(plines) and plines[k].get("kind") in ("heading-band", "heading-inline", "gate"):
+                    k += 1
+                run = plines[j:k]
+                for a in range(len(run)):
+                    acc = []
+                    for b in range(a, len(run)):
+                        acc.append(str(run[b]["text"]))
+                        heading_pages[norm(" ".join(acc))].add(i)
+                j = k
+            else:
+                j += 1
     toc_bad = []
     checked = 0
     gtoc_lvls = {1, 2, 3, 4, 5, 6}
@@ -426,7 +448,6 @@ def main():
 
     # ============ C10: הערות שוליים ============
     fn_bad = []
-    seen_out_notes = set()
     pages_with_notes = 0
     for p in pages:
         fns = p.get("footnotes") or []
@@ -444,14 +465,54 @@ def main():
                 fn_bad.append({"page": p["index"], "why": "סמנים אינם עוקבים מ-א'",
                                "got": [x.get("marker") for x in fns[:6]]})
                 break
-        for t in texts:
-            seen_out_notes.add(t)
     src_note_set = set()
     for m in re.finditer(r"\[([^\]]*)\]", src_text):
         t = norm(m.group(1))
         if t:
             src_note_set.add(t)
-    invented = [t[:30] for t in seen_out_notes if t not in src_note_set]
+    # **S4.24 (אודיט מתמטי, תיקון שורש 1): פיצול הערות בין עמודים.** תקרת
+    # המרזב של המקור (fn-bar-max-height-px=220 + מדיניות split) מחייבת
+    # חיתוך הערה ארוכה בסוף העמוד והמשכה בראש אזור-ההערות של העמוד הבא;
+    # סמן '(המשך)' נוסף ברינדור בלבד — טקסט המודל נקי (ולכן C1 עובר:
+    # מולטיסט המילים זהה למקור). משחזרים את ההערות הלוגיות לפי זרימת
+    # הספר לפני ההשוואה למקור. אינווריאנטים נשמרים קפדניים:
+    #   (א) הערה לא-שלמה יכולה להופיע רק כהערה האחרונה של עמוד — פיצול
+    #       באמצע אזור-ההערות הוא כשל אמיתי;
+    #   (ב) ההמשך הוא ההערה הראשונה של העמוד הבא (הסמנים מתחילים מחדש
+    #       מ-א' בכל עמוד, כמו במקור);
+    #   (ג) אחרי השחזור — כל הערה משוחזרת חייבת להיות הערת [..] אמיתית
+    #       מהמקור, וכל הערת מקור חייבת להופיע (שקילות דו-כיוונית);
+    #   (ד) קטע חיתוך שלא הושלם עד סוף הספר = המשך אבוד — כשל אמיתי.
+    reconstructed = []
+    carry = None
+    split_cuts = 0
+    for p in pages:
+        fns = p.get("footnotes") or []
+        for fi, f in enumerate(fns):
+            t = norm(f.get("text") or "")
+            if carry is not None:
+                t = norm(carry + " " + t)
+                carry = None
+            if not t:
+                fn_bad.append({"page": p["index"], "why": "הערה ריקה בפלט",
+                               "marker": f.get("marker")})
+                continue
+            if t in src_note_set:
+                reconstructed.append(t)
+            elif fi == len(fns) - 1:
+                carry = t
+                split_cuts += 1
+            else:
+                fn_bad.append({"page": p["index"],
+                               "why": "הערה לא-שלמה באמצע אזור-ההערות (פיצול חייב להיות בסוף העמוד בלבד)",
+                               "sample": t[:40]})
+                reconstructed.append(t)
+    if carry is not None:
+        fn_bad.append({"why": "המשך הערה אבוד — קטע חיתוך בסוף הספר שלא הושלם",
+                       "sample": carry[:40]})
+        reconstructed.append(carry)
+    seen_out_notes = set(reconstructed)
+    invented = [t[:30] for t in sorted(seen_out_notes) if t not in src_note_set]
     if invented:
         fn_bad.append({"why": "הערות בפלט שאינן קיימות במקור", "sample": invented[:4]})
     missing_notes = [t[:30] for t in src_note_set if t not in seen_out_notes]
@@ -459,7 +520,7 @@ def main():
         fn_bad.append({"why": "הערות מקור שאינן מופיעות בפלט", "sample": missing_notes[:4]})
     C.add("C10", "הערות שוליים — בלי כפילויות בעמוד, סמנים עוקבים, מקוריות ושלמות",
           not fn_bad, pagesWithNotes=pages_with_notes, srcNotes=len(src_note_set),
-          count=len(fn_bad), sample=fn_bad[:5])
+          splitCuts=split_cuts, count=len(fn_bad), sample=fn_bad[:5])
 
     # ============ C12: ייצוא HTML (S4.11 — "כל הבדיקות על הקובץ הגדול") ============
     # הייצוא החי בנתיב היישום: אותו dom-renderer כמו התצוגה. כאן נבדק
