@@ -1,18 +1,26 @@
 # .github/workflows/gh-pages-audit.yml — אודיט חי מיד אחרי פריסת Pages (S5.2)
 #
 # **S5.2 (פריסה מיושנת — סגירת החלון העיוור):** הפריסה ל-GitHub Pages רצה
-# בענף gh-pages; עד היום האודיט החי הלילי (full-math-audit.yml) היה יכול
-# לפספס חלון של שעות שבו האתר פרוס אך שבור/מיושן. כאן: כל push ל-gh-pages
-# ממתין שבניית ה-Pages תושלם (polling של ה-API הציבורי, ללא אימות) ומיד
-# מריץ את אותו אודיט מתמטי מלא מול האתר החי — כולל אימות sha256 של
-# הבאנדלים הפרוסים מול הענף (run-full-math.js נכשל אם הפריסה מיושנת).
+# בענף gh-pages; עד S5.2 האודיט החי הלילי (full-math-audit.yml) היה יכול
+# לפספס חלון של שעות שבו האתר פרוס אך שבור/מיושן. כאן: כל בניית Pages
+# ממתינה להשלמתה ומיד מריצה את אותו אודיט מתמטי מלא מול האתר החי — כולל
+# אימות sha256 של הבאנדלים הפרוסים מול הענף (run-full-math.js נכשל אם
+# הפריסה מיושנת).
+#
+# **S5.3 (תיקון טריגר — מוקש שנתפס באימות):** שני הטריגרים הקודמים לא עבדו
+# בפועל: ‏(א) ‏on:push ל-gh-pages לא יירה לעולם (ענף orphan בלי קובצי
+# workflow — תוקן ב-S5.2-ב); ‏(ב) ‏workflow_run על "pages build and
+# deployment" — הוכח אמפירית שלא נורה (0 ריצות 8+ דק' אחרי בניית Pages
+# מוצלחת של ‏?v=s5.3): ‏ה-workflow הדינמי של Pages לא מפיק אירועי
+# workflow_run בתצורת legacy-build. **האירוע המובנה והמתועד לבניית Pages
+# הוא `page_build`** (docs: Events that trigger workflows) — והוא הטריגר
+# הראשי כאן. ‏workflow_run נשאר כגיבוי למקרה שיתממש בעתיד, ויש גם הפעלה
+# ידנית. תנאי ההצלחה מטופל ב-if המשולב (page_build: ‏build.status=='built';
+# ‏workflow_run: ‏conclusion=='success').
 name: gh-pages-audit
 
 on:
-  # **S5.2 (תיקון טריגר):** ענף gh-pages הוא orphan ללא קובצי workflow —
-  # ‏`on: push` אליו לעולם לא יירה (הקובץ לא קיים בענף שנדחף). המנגנון
-  # הנכון: ‏workflow_run מגיב להשלמת בניית ה-Pages ומריץ את הגרסה מענף
-  # ברירת המחדל (main). סינון: רק אם בניית ה-Pages הצליחה.
+  page_build:
   workflow_run:
     workflows: [ pages build and deployment ]
     types: [ completed ]
@@ -20,7 +28,10 @@ on:
 
 jobs:
   live-audit-after-deploy:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'page_build' && github.event.build.status == 'built') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     # **S5.2 (P-11):** תקרה מפורשת — המתנה ל-Pages (עד 10 דק') + האודיט החי
     # (עימוד ~700 עמודים דרך הרשת + דטרמיניזם כפול); 45 דק' כמו הלילי.
@@ -32,17 +43,17 @@ jobs:
         with:
           node-version: 22
 
-      # **S5.2 (P-11):** נעילת גרסה — 0.41.2 היא הגרסה האחרונה ב-npm (אין 1.x);
-      # שדרוג לא מבוקר של ה-CLI יכול לשבור את חוזה ה-eval/פלט של האודיט.
+      # **S5.2 (P-11):** נעילת גרסה — 0.41.2 (אין 1.x ב-npm) — כמו ב-local.
       - name: Install agent-browser + headless browser
         run: |
           npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
 
-      # **S5.2:** המתנה להשלמת בניית ה-Pages — polling ללא אימות של
-      # /pages/builds/latest כל 30 שנ'; תקרה 10 דק'. אם הבנייה נכשלה
-      # ("error") או לא הושלמה בזמן — כשל מיידי (אין טעם לבדוק אתר ישן).
-      - name: Wait for GitHub Pages build to complete (poll up to 10 min)
+      # **S5.3:** ‏page_build נורה כבר אחרי השלמת הבנייה — אך ה-poll נשאר
+      # כאימות-על מול ה-API הציבורי (ללא אימות): מוודא ש-status='built'
+      # גלוי גם ב-API לפני האודיט; תקרה 10 דק'. כשל בנייה ⇒ כשל מיידי
+      # (אין טעם לבדוק אתר ישן).
+      - name: Wait for GitHub Pages build to be visible as built (poll up to 10 min)
         run: |
           deadline=$((SECONDS + 600))
           while true; do
