@@ -346,9 +346,11 @@ var __paths = {
   "src/engine/layout/dp-planner.js|./balancing": "src/engine/layout/balancing.js",
   "src/engine/layout/dp-planner.js|./footnote-budget": "src/engine/layout/footnote-budget.js",
   "src/engine/layout/protections-matrix.js|./balancing": "src/engine/layout/balancing.js",
+  "src/engine/layout/protections-matrix.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/protections-matrix.js|../notes/markers": "src/engine/notes/markers.js",
-  "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
+  "src/engine/layout/balancing.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/layout/column-flow.js|./page-templates": "src/engine/layout/page-templates.js",
+  "src/engine/layout/candidate-generator.js|./column-flow": "src/engine/layout/column-flow.js",
   "src/engine/audit/editing-recommendations.js|../core/pipeline": "src/engine/core/pipeline.js",
   "src/engine/audit/editing-recommendations.js|../parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
   "src/engine/audit/editing-recommendations.js|../parser/block-tokenizer": "src/engine/parser/block-tokenizer.js",
@@ -576,7 +578,9 @@ const { assignNumbers } = require('../decoration/folio');
 const { buildHeader } = require('../decoration/headers-builder');
 const { autoQualityPass, applyChapterEndMode } = require('../layout/balancing');
 const { applyHeadingModes } = require('../layout/headings-escort');
-const { markerFor, makeCounter, splitPlaceholder, MARK_TAG } = require('../notes/markers');
+// **S5.2 (תיקון 11):** splitPlaceholder הוסר מ-markers — קוד מת מלכודתי
+// (פיצול על ':' היה מבתק שעות כמו 12:30; ה-placeholder האמיתי משתמש ב-U+E000).
+const { markerFor, makeCounter, MARK_TAG } = require('../notes/markers');
 const Ledger = require('./ledger').Ledger;
 const EventLog = require('./events').EventLog;
 const { computeEditingRecommendations } = require('../audit/editing-recommendations');
@@ -736,6 +740,13 @@ function typeset(rawText, settingsIn, env = {}) {
   function widthFor(text, sizePt, fontName) {
     const base = api.measureTextWidth(text, sizePt);
     if (!fontName || fontName === settings['body-font']) return base;
+    // **S5.2 (תיקון 6 — כותרת בגופן הרשום שלה):** כשמשפחת הכותרת רשומה
+    // במדידה (registerFont) — מודדים במטריקות האמת שלה בגודל הכותרת
+    // (MeasureAPI.forFamily — דפוס apiFor של legacy-projector), כמו שה-DOM
+    // מרנדר בפועל. הקירובים (FONT_WIDTH_PROFILES ×, Math.max(base, len×0.6em))
+    // נשארים כ-fallback למשפחות לא-רשומות בלבד (בדיקות/headless).
+    const hApi = MeasureAPI.forFamily(fontName, settings);
+    if (hApi) return hApi.measureTextWidth(text, sizePt);
     const prof = FONT_WIDTH_PROFILES[fontName];
     if (prof && prof.factor) return Math.round(base * prof.factor * 100) / 100;
     const perChar = 0.6 * sizePt * (96 / 72);
@@ -772,11 +783,32 @@ function typeset(rawText, settingsIn, env = {}) {
 
   // ---- תקציבי גיאומטריה נגזרים לפני ה‑DP (מקור יחיד; ה‑DP והצינור קוראים אותם) ----
   const regTpl = buildPageTemplate(PAGE_TYPES.REGULAR, settings, true);
-  const contentW = regTpl.columns.reduce((s, c) => s + c.w, 0) + regTpl.gutter;
-  settings._fnColWidthPx = settings['footnote-columns'] === 2 ? Math.round(contentW / 2) : Math.round(contentW);
+  // **S5.2 (P-4 — גזירה אחידה של רוחב התוכן):** רוחב תיבת התוכן המלא =
+  // max(col.x+col.w) − min(col.x) — זהה לנוסחה שב-page-templates.js:43
+  // (size.w − 2·marginSide − binding; 674.90px בברירת המחדל) ולרוחב שבו
+  // מוקרן מרזב ההערות (geometry-projector: x=colLeftOf, w=colWidthOf).
+  // הערך הישן — "סכום הטורים + המרזב" (2·40%+2% = 555.80px) — לא תאם אף
+  // גיאומטריה מרונדרת: הטורים נצמדים לשולי תיבת התוכן והמרווח ביניהם הוא
+  // contentW−2·cw (134.98px), לא ה-gutter (15.88px).
+  const contentW = regTpl.columns.length
+    ? Math.max(...regTpl.columns.map(c => c.x + c.w)) - Math.min(...regTpl.columns.map(c => c.x))
+    : regTpl.width - 2 * (regTpl.margins.side || 0);
+  // נתיב הערות במרזב התחתון: 1 ⇒ רוחב תיבת התוכן המלא (כמו שמוקרן/מרונדר);
+  // 2 ⇒ שני נתיבים בפריסת תיבת התוכן עם המרזב של התבנית ביניהם.
+  settings._fnColWidthPx = settings['footnote-columns'] === 2
+    ? Math.round((contentW - regTpl.gutter) / 2)
+    : Math.round(contentW);
   settings._outerMarginPx = Math.max(regTpl.margins.outer != null ? regTpl.margins.outer : 0, regTpl.margins.side * 0.8);
   settings._sideNoteColWidthPx = Math.max(60, Math.round(settings._outerMarginPx) - 12);
-  settings._endnoteColWidthPx = Math.round(contentW); // רוחב טור בעמודי הערות
+  // **S5.2 (P-3/P-4):** רוחב **טור בודד** בעמודי ההערות — מתבנית PT-07 עצמה
+  // (עמוד דו-טורי; 269.96px בברירת המחדל). הצרכן (endnote-pages) קורא אותו
+  // ישירות כרוחב טור כשendnote-columns=2; במצב טור-אחד הוא משתמש ברוחב
+  // המלא מהתבנית שלו (רשימה חד-טורית כמו ברינדור). בעבר הוזרם כאן 556px
+  // ("סכום טורים+מרזב") וחולק ב-2 ⇒ 278px — ניחוש שאינו הגיאומטריה.
+  {
+    const enTpl = buildPageTemplate(PAGE_TYPES.ENDNOTES, settings, true);
+    settings._endnoteColWidthPx = Math.round(enTpl.columns[0].w);
+  }
 
   const blocks = [];
   const endnoteTokens = [];        // טוקני הערת־סיום גלויים (endnotes mode)
@@ -2056,6 +2088,8 @@ const { scanBrackets } = require('./bracket-scanner');
 
 const ATOMIC_SPACE = '\uE000'; // V3/V4 breakthrough: רווח אטומי בתוך הערה — למדידה בלבד
 
+// **S5.2 (תיקון 12 — תיעוד, ללא שינוי התנהגות):** הנרמול שלהלן (״→׳ ו-‘ ’→") הוא
+// **מכוון** — כלל one-way לפי Z.ai fix (ראה protectors.glueNoteMarkers) — אין לשנותו.
 /** נרמול גרשים/מרכאות + ניקוי PUA פנימי (REQ-PAR-05; Z.ai fixes). */
 function normalizeText(s) {
   return s
@@ -2366,7 +2400,12 @@ __modules["src/engine/typography/measure-api.js"] = function (require, module, e
 const { charWidthEm, FONT_PROFILES } = require('./measure-table');
 const fm = require('./font-metrics');
 
-const DEFAULT_TRACKING = 0.02; // em
+// **S5.2 (תיקון 5 — tracking שאין לאף מרנדר):** ברירת המחדל הייתה 0.02em —
+// המדידה "הרחיבה" כל שורה ב~2% יחסית לדיו: אף מרנדר (DOM/PDF) אינו מצייר
+// letter-spacing, והפרויקטור הגיאומטרי ערבב באותה שורה מדידות עם tracking=0
+// (מפורש) וברירת המחדל. כעת 0 — המודל = הדיו. נתיב המורשת אינו מושפע:
+// כל קריאותיו מעבירות tracking=0 במפורש (אומת בסקירה).
+const DEFAULT_TRACKING = 0; // em
 
 /** גופנים רשומים (פרופיל → פרנסר). ההרשמה מפורשת — אין טעינת רשת (offline). */
 const registeredFonts = new Map();
@@ -2392,8 +2431,9 @@ function registerFont(profileName, bytes) {
 function unregisterFont(profileName) {
   registeredFonts.delete(String(profileName));
   if (String(profileName) === 'Frank Ruhl Libre') fm.setMissingGlyphFallbackFont(null);
+  _familyApiCache.clear(); // **S5.2:** מטמון ה-API-פר-משפחה נגרר אחרי ההרשמה
 }
-function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); }
+function clearRegisteredFonts() { registeredFonts.clear(); fm.setMissingGlyphFallbackFont(null); _familyApiCache.clear(); }
 
 class MeasureAPI {
   constructor(settings, impl = 'table') {
@@ -2546,6 +2586,23 @@ class MeasureAPI {
   cacheStats() { return { ...this.stats, hitRate: this.stats.calls ? this.stats.hits / this.stats.calls : 0 }; }
 }
 
+/** **S5.2 (תיקון 6 — מדידת כותרות בגופן רשום):** API כבול למשפחה שנרשמה ב‑registerFont
+ * (מטריקות אמת hmtx/kern בגודל הכותרת), או null כשהמשפחה אינה רשומה —
+ * דפוס apiFor(family) של legacy-projector, מיוצא כאן כסטטי על המחלקה כדי
+ * שה-pipeline (widthFor) ישתמש בו בלי לרדוף אחרי מפת הגופנים בעצמו.
+ * מטומן לפי משפחה; המטמון מתרוקן בהסרת/איפוס גופנים (unregister/clear). */
+const _familyApiCache = new Map();
+MeasureAPI.forFamily = function forFamily(family, settings) {
+  if (!family || !registeredFonts.has(String(family))) return null;
+  const fam = String(family);
+  const sizeKey = settings && settings['body-font-size-pt'] != null ? String(settings['body-font-size-pt']) : '';
+  const key = `${fam}|${sizeKey}`;
+  if (!_familyApiCache.has(key)) {
+    _familyApiCache.set(key, new MeasureAPI({ ...(settings || {}), 'body-font': fam }, 'font-metrics'));
+  }
+  return _familyApiCache.get(key);
+};
+
 /** **EXT-13 (איחוד מקור המדידה live↔ייצוא):** כשגוף הגוף רשום בפועל
  * (registerFont) — מדידת האמת (font-metrics) מועדפת גם כשההגדרה היא
  * 'table' (ברירת המחדל). בלי זה ה-live מדד בטבלאות המקורבות בזמן שהייצוא
@@ -2580,7 +2637,10 @@ const HEBREW_WIDTHS = {
   'י': 0.32, 'כ': 0.58, 'ך': 0.58, 'ל': 0.52, 'מ': 0.70, 'ם': 0.72, 'נ': 0.60, 'ן': 0.60, 'ס': 0.62,
   'ע': 0.62, 'פ': 0.60, 'ף': 0.62, 'צ': 0.62, 'ץ': 0.64, 'ק': 0.64, 'ר': 0.52, 'ש': 0.66, 'ת': 0.60
 };
-const WIDE_MARKS = { ' ': 0.26, '\uE000': 0.26, '.': 0.24, ',': 0.24, ';': 0.24, ':': 0.24, '-': 0.34, '–': 0.5, '"': 0.28, "'": 0.16, '“': 0.4, '”': 0.4, '״': 0.36, '׳': 0.18, '[': 0.3, ']': 0.3, '(': 0.3, ')': 0.3 };
+// **S5.2 (T7):** NBSP (U+00A0) = רוחב הרווח (0.26) — בעבר נפל לסל 0.4em
+// (+2.24px @12pt לכל NBSP) במימוש A כשנמדד גולמי (יחידות מודבקות לפני
+// רישום הגופנים / טסטים). impl B בטוח כבר היום (הפיצול מבוצע לפני המדידה).
+const WIDE_MARKS = { ' ': 0.26, '\\u00A0': 0.26, '\uE000': 0.26, '.': 0.24, ',': 0.24, ';': 0.24, ':': 0.24, '-': 0.34, '–': 0.5, '"': 0.28, "'": 0.16, '“': 0.4, '”': 0.4, '״': 0.36, '׳': 0.18, '[': 0.3, ']': 0.3, '(': 0.3, ')': 0.3 };
 
 /** פרופילי רוחב לפי שם גופן (fontFactor מתוקן ב־endnote-pages; כאן — רוחב בסיס). */
 const FONT_PROFILES = {
@@ -2869,8 +2929,14 @@ function parsePairPosSubtable(b, off, kernPairs) {
     const pvCount = u16(b, psOff);
     if (pvCount > MAX_GPOS_PAIRSETS) continue;
     for (let k = 0; k < pvCount; k++) {
-      const rec = psOff + 2 + k * 6; // gid2(2) + value1 XAdvance(2) + value2(2 — ריק כי vf2=0)
-      if (rec + 6 > b.length) break;
+      // **S5.2 (תיקון צעד רשומה — T1):** בחוזה vf1===0x0004 && vf2===0 אין
+      // כלל value2 — PairValueRecord = gid2(2) + XAdvance(2) = **4 בתים**,
+      // לא 6. הצעד 6 קרא כל רשומה אחרי הראשונה מוסטת (מפת קרנינג משובשת:
+      // 171 זוגות זבל מ-Hadassah). היום הקרנינג אינו נצרך במדידה (מדיניות
+      // ללא-קרנינג — תצוגה=ייצוא; ראה font-kerning:none ב-BASE_CSS), אך
+      // הפרסר חייב להיות נכון לכל שימוש עתידי.
+      const rec = psOff + 2 + k * 4; // gid2(2) + value1 XAdvance(2) — vf2=0 ⇒ אין value2
+      if (rec + 4 > b.length) break;
       const right = u16(b, rec);
       const xAdv = s16(b, rec + 2);
       if (xAdv !== 0) kernPairs.set(`${left},${right}`, xAdv);
@@ -3014,7 +3080,12 @@ function buildItems(words, measure) {
     const parts = w.split('\u00A0');
     for (let k = 0; k < parts.length; k++) {
       if (k > 0) items.push({ kind: 'penalty', forbidden: true, cost: INF });
-      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(1, measure(parts[k])) });
+      // **S5.2 (תיקון 4 — תיבת פנטום 1px):** חלק ריק (NBSP כפול, פתיחה/סיום
+      // ב-NBSP) נמדד עכשיו ברוחב 0 — בעבר Math.max(1,…) יצר תיבת 1px שאינה
+      // קיימת בדיו והעלתה את רוחב השורה. אין חשש מכניסה לרווח: מנגנוני ה-badness
+      // מוגנים (effStretch>0 / shrink>0 — ראה breakLines) וההתקדמות מובטחת
+      // (תיבה ריקה אינה מקום שבירה; הטוקן שלה משוחזר עם ה-NBSP שלו).
+      items.push({ kind: 'box', text: parts[k].replace(/\uE000/g, '\u00A0'), width: Math.max(0, measure(parts[k])) });
       if (k < parts.length - 1) items.push({ kind: 'glue', width: sp, stretch: sp * STRETCH_RATIO, shrink: sp * SHRINK_RATIO, internal: true });
     }
     if (i < words.length - 1) {
@@ -3089,9 +3160,16 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
       }
       // **S5.1 (D-92-DP):** הדפדפן מרנדר רוחב טבעי (white-space:normal) —
       // שורה שרוחבה הטבעי חורג מהטור נעטפת בתצוגה (טקסט-על-טקסט) גם אם
-      // היישוב יכול לכווץ רווחים ב-PDF. לכן המבחן ברוחב הטבעי, בלי shrink,
-      // עם רווח-ביטחון 0.75px — כמו FIT_EPS במנוע המורשת (תת-פיקסל LayoutUnit).
-      if (w > maxWidthPx + 0.75) break; // חריגה שאינה ניתנת לתיקון
+      // היישוב יכול לכווץ רווחים ב-PDF. לכן המבחן ברוחב הטבעי, בלי shrink.
+      // **S5.2 (תיקון 3 — המבחן היה מרחיב, לא שמרני):** בעבר `w > maxWidth+0.75`
+      // אִפשר קווים ברוחב טבעי עד maxWidth+0.75px (ובכך גם קבלת חיתוכים עם
+      // slack שלילי דרך כיווץ) — בזמן ש-FIT_EPS של המורשת שמרן (limit−eps).
+      // כעת החיתוך נעצר מוקדם: שורה שאינה נכנסת ב-maxWidth−0.75 אינה מוארכת
+      // עוד, וכל קו מקובל הוא ברוחב טבעי ≤ maxWidth−0.75 (גם בסוף פסקה —
+      // הפנלטי הסופי נמדר רק אחרי שכל הפריטים עברו את אותו מבחן). מילה רחבה
+      // מהטור עדיין יוצאת כשורה בפני עצמה דרך הגיבוי הגרידי (greedyFallback —
+      // התקדמות מובטחת, טוקן בודד אינו נחסם: pushTok עם toks ריק אינו מוסף).
+      if (w > maxWidthPx - 0.75) break; // חריגה שאינה ניתנת לתיקון — שמרני כמו FIT_EPS
 
       if (it.kind === 'box') {
         // מקומות שבירה חוקיים נקבעים **מבנית מראש** (static legal-cuts): cut בצומת c חוקי
@@ -3101,6 +3179,10 @@ function breakLines(words, maxWidthPx, measure, lineHeightPx, opts = {}) {
         const cut = j + 1; // נקודת שבירה חוקית: אחרי תיבה, לפני ה‑glue העוקב
         if (!(items[cut].kind === 'glue' && !items[cut].internal && items[cut + 1] && items[cut + 1].kind === 'box')) continue;
         const slack = maxWidthPx - w;
+        // **S5.2 (תיקון 3 — שמרנות בקבלת חיתוך):** קו שאינו נכנס ברוחב הטבעי
+        // (slack < −FIT_EPS) הוא בלתי-אפשרי — badness INF, לא "כיווץ". המבחן
+        // השמרני למעלה אמור למנוע הגעה לכאן; השמירה הכפולה מתעדת את הכוונה.
+        if (slack < -0.75) continue;
         const raggedEnd = opts.raggedEnd !== false;
         const effStretch = stretch + (raggedEnd ? maxWidthPx * RAGGED_END_STRETCH_FACTOR : 0);
         const ratio = slack >= 0 ? (effStretch > 0 ? slack / effStretch : 0) : (shrink > 0 ? slack / shrink : -2);
@@ -3272,17 +3354,46 @@ function protectWords(words, measure, colWidthPx) {
  * fixDropWordInColumns (פורטר מ‑Gold): אם המילה האחרונה בטור "נופלת" לבדה
  * לשורה הבאה באורך <3 אותיות — מושכים אותה חזרה או דוחפים שורה.
  * כאן: החזר true אם בוצע תיקון (הקורא יריץ rerun הגנות).
+ *
+ * **S5.2 (תיקון 2 — מיזוג ללא בדיקת רוחב):** בעבר המילה נדחפה לשורה הראשונה
+ * של הטור הבא (`unshift` + `pop`) ללא מדידה מחדש — השורה המקבלת יכלה לגלוש
+ * מהטור (נמדד +1.95..25px בביקורת) ⇒ הדפדפן עוטף מחדש ⇒ טקסט-על-טקסט
+ * (מחלקת D-92). כעת: המיזוג נשמר רק אם הרוחב הטבעי הממוזג נכנס ב‑colW−FIT_EPS
+ * (אותה מדידה של המתכנן: widthPx הקיים של השורה המקבלת + רווח + מדידת המילה);
+ * לא ממזגים לתוך שורת כותרת/שורה אחרונה (isLast), לא מוציאים מילה מכותרת;
+ * וללא מדידה (opts.measure) — אין מיזוג בכלל (שמרנות: מי שלא מודד לא מוכיח התאמה).
+ * @param {Array<Array<object>>} columnLines
+ * @param {number} minLen - אורך מינימלי של מילה "נופלת"
+ * @param {{measure?:(t:string)=>number, colW?:number, fitEps?:number}} [opts]
  */
-function fixDropWordInColumns(columnLines, minLen = 3) {
+function fixDropWordInColumns(columnLines, minLen = 3, opts = {}) {
+  const measure = typeof opts.measure === 'function' ? opts.measure : null;
+  const colW = Number(opts.colW) || 0;
+  // FIT_EPS שמרני — כמו במנוע המורשת ובשבירת השורות (kp-linebreak, D-92-DP)
+  const fitEps = Number.isFinite(opts.fitEps) ? opts.fitEps : 0.75;
   let fixed = false;
   for (let c = 0; c < columnLines.length - 1; c++) {
     const lines = columnLines[c];
     const nextFirst = columnLines[c + 1][0];
     if (!lines.length || !nextFirst) continue;
     const last = lines[lines.length - 1];
+    // לא ממזגים לתוך כותרת או שורה אחרונה של פסקה (יישור/סופית נשברים),
+    // ולא מוציאים מילה משורת כותרת (הכותרת מאבדת את מילתה).
+    if (nextFirst.kind === 'heading' || nextFirst.isLast === true) continue;
+    if (last.kind === 'heading') continue;
     if (last.words.length === 1 && last.words[0].length < minLen && nextFirst.words.length > 1) {
+      // רוחב טבעי ממוזג = widthPx שנמדד לשורה המקבלת + רווח + המילה הנמשכת.
+      // התג (MARK_TAG, D-53) מוסר מהמדידה — כמו ב-measureWithParen של ה-pipeline;
+      // NBSP נמדד כרווח (כמו internal-glue ב-kp).
+      let mergedW = null;
+      if (measure && colW > 0) {
+        const word = String(last.words[0]).replace(/\uE102/g, '').replace(/\u00A0/g, ' ');
+        mergedW = (nextFirst.widthPx || 0) + measure(' ') + measure(word);
+      }
+      if (mergedW == null || mergedW > colW - fitEps) continue; // לא נכנס — המילה נשארת (status quo)
       // משלבים את המילה הנופלת לתוך השורה הראשונה של הטור הבא (גרירה)
       nextFirst.words.unshift(...last.words);
+      nextFirst.widthPx = mergedW; // רוחב השורה אחרי המיזוג (נצרך ל-runt/balance)
       lines.pop();
       fixed = true;
     }
@@ -3391,7 +3502,7 @@ const { Ledger } = require('../core/ledger');
 const { runProtections } = require('./protections-matrix');
 const { runRetreatLoop } = require('./retreat-loop');
 const { generateCandidates } = require('./candidate-generator');
-const { blockGapPx } = require('./column-flow');
+const { blockGapPx, colCapacityOf } = require('./column-flow');
 const { fixDropWordInColumns } = require('../typography/protectors');
 const { MARK_TAG } = require('../notes/markers');
 const { moveLineForward } = require('./ordering');
@@ -3503,7 +3614,11 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   // מלא מוצבת בפס עליון חוצה־טורים במקום בטור חצי־רוחב (בעבר: נמדדה ברוחב מלא
   // והוצבה בטור רגיל ⇒ גלישה אופקית שקטה). הטורים מתחילים מתחת לפס.
   const spanH = (page) => (page && page.spanning ? page.spanning.heightPx : 0);
-  const colCapacity = (tpl, page) => tpl.contentBox.height - spanH(page);
+  // **S5.2 (P-2 — קיבולת מאוחדת):** כל חישובי הקיבולת עוברים דרך colCapacityOf
+  // (column-flow — מקור יחיד). כאן usedHeight כבר כולל את תקציב ההערות על
+  // הטור האחרון (F-17) — ולכן הקיבולת נלקחת בלי התקציב (fnBudget:false;
+  // שקול מתמטית: used+fn ≤ cap ⟺ used ≤ cap−fn). הפס החוצה־טורים נכלל תמיד.
+  const colCapacity = (tpl, page) => colCapacityOf(page, { fnBudget: false }) || (tpl && tpl.contentBox ? tpl.contentBox.height - spanH(page) : 0);
 
   /**
    * גובה תפוס = שורות + **יתרת תקציב ההערות של העמוד** — כך ה‑probe וה‑reservation
@@ -3555,7 +3670,10 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
         }
       }
       // מילה נופלת בין טורים (פורטר מ‑Gold) — גם שומר סדר (המילה חוצה את הגבול קדימה)
-      if (fixDropWordInColumns(cur.columns) ) {
+      // **S5.2 (תיקון 2):** המיזוג מותר רק אם השורה המקבלת נכנסת ברוחב הטור
+      // (מדידה מחדש + FIT_EPS שמרני) — אותה מדידה של המתכנן; מילה שאינה
+      // נכנסת נשארת בטור המקורי (בלי גלישה אופקית שקטה — מחלקת D-92).
+      if (fixDropWordInColumns(cur.columns, 3, { measure: (t) => measureFn(t), colW: cur.template.columns[0].w })) {
         eventLog.emit('balance', 'fix-drop-word', { page: cur.index }, cur.index);
       }
       const a = usedHeight(cur.columns[0], cur), b = usedHeight(cur.columns[1], cur);
@@ -3847,7 +3965,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
           if (room !== -1) {
             eventLog.emit('page-plan', 'heading-escort-push', { token: blk.tokenId, page: cur.index }, cur.index);
           } else {
-            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template), lineHPx: lineH }, 'protections');
+            const rec = ledger.create('heading-escort', blk.tokenId, cur.index, { linesNeeded: needLines, capacityPx: colCapacity(cur.template, cur), lineHPx: lineH }, 'protections');
             ledger.transition(rec.issue_id, 'correction-blocked', 'protections', 'no column fits heading+escort even on fresh page (oversized block)');
           }
         }
@@ -3890,7 +4008,7 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
   // terminal residual fallback (REQ-BAL-04): אם העמוד האחרון ריק למחצה ויש מצב natural — סמן
   if (settings['allow-terminal-residual-fallback']) {
     const last = pages[pages.length - 1];
-    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template) * 0.5)) {
+    if (last && last.columns.every(c => usedHeight(c, last) < colCapacity(last.template, last) * 0.5)) {
       last.terminalResidual = true; // לא מדווח כ‑underfill (B4)
     }
   }
@@ -3945,7 +4063,10 @@ function balancePageSafe(page, settings, ledger) {
   const maxDelta = settings['imbalance-max-delta-px'];
   if (deltaOf() <= maxDelta) return true; // כבר מאוזן — אין התערבות (יציבות פריסה)
   if (!page.columns || page.columns.length < 2) return false;
-  const cap = page.template.contentBox.height;
+  // **S5.2 (P-2 — קיבולת מאוחדת):** colCapacityOf — כולל הפס החוצה־טורים
+  // (בעבר חושב מ-contentBox.height גולמי ⇒ איזון שגלש מתחת לפס בעמודי H2);
+  // תקציב ההערות עובר כ-extraLast (P1-8) — בלי כפילה.
+  const cap = colCapacityOf(page, { fnBudget: false });
   const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
   if (!best || best.k === page.columns[0].length) {
     // **EXT-8:** אין פיצול חוקי, או שהנוכחי כבר האופטימלי הגלובלי — הפרש שנותר
@@ -3964,10 +4085,10 @@ function balancePageSafe(page, settings, ledger) {
   page.columns[0] = seq.slice(0, best.k);
   page.columns[1] = seq.slice(best.k);
   // hard reject: חריגת קיבולת אחרי ההחלפה (הגנה כפולה — optimalSplit כבר מסנן) → rollback מלא
-  const overflows = (c) => {
-    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0)
-      + (page.columns[page.columns.length - 1] === c ? (page.fnReservedHeightPx || 0) : 0);
-    return hh > cap + 0.5;
+  // **S5.2 (P-2):** קיבולת אפקטיבית פר-טור (פס + תקציב על הטור האחרון) — מקור יחיד.
+  const overflows = (c, ci) => {
+    const hh = c.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0);
+    return hh > colCapacityOf(page, { colIndex: ci }) + 0.5;
   };
   if (page.columns.some(overflows)) {
     page.columns = snapshot.cols; page.footnotes = snapshot.fn; page.sideNotes = snapshot.sn;
@@ -4023,6 +4144,9 @@ const PAGE_TYPES = {
 
 const MM_TO_PX = 96 / 25.4;
 const PAGE_SIZES = {
+  // **S5.2 (O14 — A4 מדויק):** 210×297מ״מ @96dpi = 793.70×1122.52px — הערכים
+  // המעוגלים (794×1123) הזיזו את גוף ה-DP ב-0.3px ויצרו MediaBox שאינו זהה
+  // לגיאומטריית המורשת (793.7×1122.5). כעת זהה ל-GEO של legacy-imud-flow.
   A4: { w: Math.round(210 * MM_TO_PX), h: Math.round(297 * MM_TO_PX) },
   A5: { w: Math.round(148 * MM_TO_PX), h: Math.round(210 * MM_TO_PX) },
   '16x16': { w: Math.round(165 * MM_TO_PX), h: Math.round(165 * MM_TO_PX) }
@@ -4195,6 +4319,7 @@ __modules["src/engine/layout/protections-matrix.js"] = function (require, module
  */
 
 const { usedHeight, pageImbalance } = require('./balancing');
+const { colCapacityOf } = require('./column-flow'); // **S5.2 (P-2):** קיבולת טור — מקור יחיד
 const { MARK_TAG } = require('../notes/markers');
 
 /** עמודים מבניים שאינם זרימת-תוכן — כותרת בודדת בהם היא מכוונת-עיצוב,
@@ -4205,12 +4330,16 @@ function isStructuralPage(page) {
     page.type === 'toc-general' || page.type === 'toc-detail';
 }
 
-/** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **. */
+/** זיהוי מילה־סמן הערה בכל סגנון (P1-3): א׳/ב׳…, [n], (n), n., כוכבית, *, **.
+ *  **S5.2 (תיקון 10):** סמן עברי רב-אותיות הוא כעת במוסכמת הגרשיים של הגיליון —
+ *  כ״ג (גרשיים **לפני** האות האחרונה), לא כג׳ הישן — שני האופנים מזוהים. */
 function isNoteMarkerWord(w) {
   const s = String(w);
   if (!s) return false;
-  // אות עברית (1-2 אותיות) + גרש/גרשיים
+  // אות עברית (1-2 אותיות) + גרש/גרשיים בסוף (הצורה הישנה) — או הצורה החדשה:
+  // אות+גרשיים+אות (כ״ג) / אות בודדת+גרש (א׳)
   if (/^[\u05D0-\u05EA]{1,2}[\u05F3\u05F4]$/.test(s)) return true;
+  if (/^[\u05D0-\u05EA]\u05F4[\u05D0-\u05EA]+$/.test(s)) return true;
   // [n] — סוגריים מרובעים עם מספר
   if (/^\[\d{1,4}\]$/.test(s)) return true;
   // (n)
@@ -4387,8 +4516,12 @@ const CHECKS = {
 
   containment(page, settings, ledger) {
     const out = [];
-    const cap = page.template.contentBox.height;
+    // **S5.2 (P-2 — קיבולת מאוחדת):** קיבולת אפקטיבית פר-טור מ-colCapacityOf
+    // (column-flow) — כולל הפס החוצה־טורים ותקציב ההערות של העמוד (על הטור
+    // האחרון). בעבר נמדד מול contentBox.height גולמי ⇒ גלישה שקטה בעמודים
+    // עם הערות/פס לא זוהתה כלל (הממצא שהביקורת כינתה "silent column overflow").
     for (let c = 0; c < page.columns.length; c++) {
+      const cap = colCapacityOf(page, { colIndex: c });
       const u = usedHeight(page.columns[c]);
       if (u > cap + 0.5) out.push({ kind: 'containment', target: `page#${page.index}c${c}`, page: page.index, evidence: { used: u, cap }, ledgerRef: ledger.create('containment', `p${page.index}c${c}`, page.index, { used: u, cap }, 'protections').issue_id });
     }
@@ -4451,6 +4584,8 @@ __modules["src/engine/layout/balancing.js"] = function (require, module, exports
  */
 
 // (moveLineForward אינו נדרש עוד באיזון: optimalSplit מכסה את מרחב המצבים כולו — EXT-8)
+
+const { colCapacityOf } = require('./column-flow'); // **S5.2 (P-2):** קיבולת הטור — מקור יחיד
 
 function usedHeight(col) {
   // **EXT-20:** גובה בפועל — כולל מקדם ה-AQ האנכי (לפני ה-AQ כל המקדמים 1).
@@ -4539,8 +4674,11 @@ function balancePage(page, maxDelta) {
   const before = pageImbalance(page);
   if (before <= maxDelta) return { changed: false, before, after: before, moves: 0 };
   if (!page.columns || page.columns.length < 2) return { changed: false, before, after: before };
-  const cap = page.template.contentBox.height;
-  const best = optimalSplit(page.columns, { cap });
+  // **S5.2 (P-2 — קיבולת מאוחדת):** colCapacityOf (column-flow) — כולל הפס
+  // החוצה־טורים; תקציב ההערות עובר כ-extraLast של הטור האחרון (כמו ב-dp-planner,
+  // P1-8) — בעבר חושב מ-contentBox.height גולמי והתעלם משניהם.
+  const cap = colCapacityOf(page, { fnBudget: false });
+  const best = optimalSplit(page.columns, { cap, extraLast: page.fnReservedHeightPx || 0 });
   if (!best || best.k === page.columns[0].length) {
     // אין פיצול חוקי-קיבולת, או שהנוכחי כבר האופטימלי — לא מדווח שינוי
     return { changed: false, before, after: before, rollback_reason: best ? 'at-optimum' : 'capacity' };
@@ -4600,11 +4738,13 @@ function autoQualityPass(pages, settings, eventLog) {
   const compressFirst = settings['aq-compress-first'] !== false;
   let applied = 0;
   for (const page of pages) {
-    const cap = page.template.contentBox.height;
     for (let c = 0; c < page.columns.length; c++) {
       const lines = page.columns[c];
       const used = usedHeight(lines);
       if (!lines.length) continue;
+      // **S5.2 (P-2):** קיבולת אפקטיבית פר-טור — כולל הפס החוצה־טורים ותקציב
+      // ההערות (על הטור האחרון). המתיחה עד לתחתית האמיתית של הטור.
+      const cap = colCapacityOf(page, { colIndex: c });
       const deficit = cap - used;
       if (deficit > 4 && mayStretch) {
         const perLine = deficit / lines.length;
@@ -4646,6 +4786,75 @@ function autoQualityPass(pages, settings, eventLog) {
 module.exports = { balancePage, optimalSplit, pageImbalance, applyChapterEndMode, autoQualityPass, usedHeight };
 
 };
+__modules["src/engine/layout/column-flow.js"] = function (require, module, exports) {
+// src/engine/layout/column-flow.js — Column geometry + block→column flow (S4 consumers registration)
+// צרכנים אמיתיים: grid-col-width-pct, grid-gutter-pct, grid-block-gap-pct
+'use strict';
+
+const { buildPageTemplate } = require('./page-templates');
+
+/**
+ * רוחב טור יחיד בפיקסלים מתוך settings (מקור־האמת יחיד שמשמש גם dp-planner וגם pipeline).
+ * grid-col-width-pct: אחוז רוחב טור מתוך שטח התוכן (צמוד ל‑PT-01..PT-10).
+ * grid-gutter-pct: בולטה בין הטורים.
+ */
+function columnWidths(settings, pageWidthPx, contentWidthPx) {
+  const gutter = (contentWidthPx * settings['grid-gutter-pct']) / 100;
+  const cw = (contentWidthPx * settings['grid-col-width-pct']) / 100;
+  return { colW: cw, gutter, totalUsed: cw * 2 + gutter, pageWidthPx };
+}
+
+/**
+ * מרווח אנכי בין בלוקים בתוך טור (פסקה↔פסקה). נצרך ע"י flowing: כל בלוק חדש
+ * בטור פותח ב‑gap הזה אלא אם הוא הראשון בטור.
+ */
+function blockGapPx(settings, lineH) {
+  // grid-block-gap-pct נתון באחוזי גובה־שורת־גוף כדי שיישאר פרופורציונלי לגודל דפוס
+  return Math.round((Number(settings['grid-block-gap-pct']) || 0) / 100 * lineH * 10);
+}
+
+/**
+ * האם בלוק חוסם מעבר טור רגיל (full-width headings H1/H2 לפי mode).
+ */
+function isFullWidthBlock(block, settings) {
+  if (block.kind === 'heading') {
+    const mode = settings[`heading-${block.level}-mode`];
+    return mode === 'full-width' || mode === 'new-page';
+  }
+  return block.fullWidth === true;
+}
+
+/**
+ * **S5.2 (P-2 — איחוד חישוב קיבולת טור):** המקור היחיד לקיבולת האפקטיבית
+ * של טור בעמוד DP: גובה תיבת התוכן מהתבנית, בהפחתת:
+ *  - הפס החוצה־טורים (spanning band, FWD-1) — הטורים מתחילים מתחתיו;
+ *  - תקציב ההערות של העמוד (fnReservedHeightPx, F-17) — נרשם על הטור האחרון.
+ * בעבר חושבו 4 העתקים מקבילים (balancing.balancePage/autoQualityPass,
+ * dp-planner.balancePageSafe, protections-matrix.containment) שהתעלמו מהפס
+ * ו/או מהתקציב ⇒ גלישת טור שקטה בעמודים עם הערות או פס כותרת.
+ *
+ * @param {object} page - עמוד DP: template.contentBox, spanning?, fnReservedHeightPx?, columns
+ * @param {{colIndex?:number, fnBudget?:boolean}} [opts]
+ *  - colIndex: הטור שאליו שייכת הקיבולת (ברירת מחדל: האחרון — המחמיר);
+ *    תקציב ההערות מופחת רק מהטור האחרון (שם הוא נרשם).
+ *  - fnBudget:false — ביטול הפחתת תקציב ההערות (למי שמודד usage כולל
+ *    התקציב בעצמו — כמו usedHeight של dp-planner או extraLast של optimalSplit).
+ */
+function colCapacityOf(page, opts = {}) {
+  if (!page || !page.template || !page.template.contentBox) return 0;
+  let cap = page.template.contentBox.height;
+  if (page.spanning && page.spanning.heightPx) cap -= page.spanning.heightPx;
+  const fn = opts.fnBudget !== false && page.fnReservedHeightPx > 0 ? page.fnReservedHeightPx : 0;
+  if (fn && page.columns && page.columns.length) {
+    const idx = opts.colIndex != null ? opts.colIndex : page.columns.length - 1;
+    if (idx === page.columns.length - 1) cap -= fn;
+  }
+  return cap;
+}
+
+module.exports = { columnWidths, blockGapPx, isFullWidthBlock, colCapacityOf, buildPageTemplate };
+
+};
 __modules["src/engine/notes/markers.js"] = function (require, module, exports) {
 // src/engine/notes/markers.js — Unified note-marker module (S7.1.5/6, REQ-FN-05/06; D-30/D-41)
 'use strict';
@@ -4658,6 +4867,17 @@ __modules["src/engine/notes/markers.js"] = function (require, module, exports) {
  */
 
 const HEB_LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת'];
+
+/** **S5.2 (תיקון 10 — מוסכמת הגרשיים של הגיליון):** סיומת סמן לפי המוסכמה
+ *  שמממש folio.toHebrewNumber/finish: אות בודדת ⇒ אות+גרש (א׳);
+ *  שתי אותיות ומעלה ⇒ גרשיים **לפני האות האחרונה** (כ״ג — לא כג׳ הישן).
+ *  יישום מקומי בעל אותה צורה (shared-shaped) — בלי ייבוא folio.js
+ *  (מניעת תלות decoration↔notes; נבדק — folio.js אינו דורש את markers,
+ *  כך שאין מעגל, אבל ההפרדה מונעת תלות עתידית). */
+function hebrewMarkFinish(letters) {
+  if (letters.length <= 1) return letters + '\u05F3';            // א׳ — גרש
+  return letters.slice(0, -1) + '\u05F4' + letters.slice(-1);   // כ״ג — גרשיים לפני האחרונה
+}
 
 /** סמן בודד לפי סגנון הרישום (footnote-marker-style). */
 function markerFor(index1Based, style) {
@@ -4673,7 +4893,9 @@ function markerFor(index1Based, style) {
       let i = index1Based - 1, s = '';
       if (i < 0) return 'א׳';
       do { s = HEB_LETTERS[i % 22] + s; i = Math.floor(i / 22) - 1; } while (i >= 0);
-      return `${s}\u05F3`; // גרש — סמן (לא מספר עמוד); תמיד אות+גרש
+      // **S5.2 (תיקון 10):** בעבר תמיד גרש בסוף (כג׳) — בניגוד למוסכמת
+      // הגרשיים של הגיליון. כעת hebrewMarkFinish: א׳/כ״ג.
+      return hebrewMarkFinish(s);
     }
   }
 }
@@ -4707,19 +4929,11 @@ function makeCounter(policy, start = 0) {
   };
 }
 
-/**
- * פיצול placeholder `סמן:טקסט` לייצוג מנייה (D-30): הסמן נספר פעם אחת (בגוף,
- * בעוגן), טקסט ההערה נספר פעם אחת ממקום הצגתו. הפורמט בגוף: `${marker}:${text}`
- * עם \uE000 בין המרכיבים — מדידה אטומית, ופיצול בניתוח לשם זהות צדדים.
- */
-function splitPlaceholder(word) {
-  const s = String(word).replace(/\u00A0/g, ' ');
-  const at = s.indexOf(':');
-  if (at > 0 && !s.startsWith('http')) return { marker: s.slice(0, at), text: s.slice(at + 1) };
-  return null;
-}
+// **S5.2 (תיקון 11):** splitPlaceholder הוסר — קוד מת מלכודתי: פיצול על ':'
+// היה מבתק שעות (12:30) אם אי־פעם היה נעשה בו שימוש חוזר; ה-placeholder
+// האמיתי של D-30 משתמש ב-U+E000 (ראה explodePlaceholderWord ב-pipeline).
 
-module.exports = { markerFor, makeCounter, splitPlaceholder, HEB_LETTERS, MARK_TAG: '\uE102' };
+module.exports = { markerFor, makeCounter, hebrewMarkFinish, HEB_LETTERS, MARK_TAG: '\uE102' };
 
 };
 __modules["src/engine/layout/retreat-loop.js"] = function (require, module, exports) {
@@ -4753,6 +4967,11 @@ function runRetreatLoop(ctx) {
   let lastSignature = null;
   /** מפת רישומים מהרצה זו: kind@target → record (למניעת כפילויות בין resolved↔persists). */
   const seen = new Map();
+  // **S5.2 (תיקון 1 — קריסה ביציאת תקרה):** allViolations הוגדר בתוך גוף הלולאה
+  // (const) אך נצרך אחריה בנתיב תקרת־האיטרציות ⇒ ReferenceError שהחליף את רישום
+  // הפשרה בקריסה. הועלה מעל הלולאה — ההפרות של האיטרציה האחרונה הן הנשארות
+  // בפועל ונרשמות במלואן (recordRemaining).
+  let allViolations = [];
 
   /**
    * dry ledger אמיתי: create() מחזיר רשומת דמה ואינו כותב ל‑ledger האמיתי.
@@ -4775,7 +4994,7 @@ function runRetreatLoop(ctx) {
 
   while (iteration < MAX_ITERATIONS) {
     iteration++;
-    const allViolations = [];
+    allViolations = [];
     for (const page of pages) {
       const dry = makeDryLedger();
       const vs = assess(page, settings, dry);
@@ -4917,47 +5136,6 @@ function generateCandidates(blk, cur, colCapacityPx, settings, ledger) {
 module.exports = { generateCandidates };
 
 };
-__modules["src/engine/layout/column-flow.js"] = function (require, module, exports) {
-// src/engine/layout/column-flow.js — Column geometry + block→column flow (S4 consumers registration)
-// צרכנים אמיתיים: grid-col-width-pct, grid-gutter-pct, grid-block-gap-pct
-'use strict';
-
-const { buildPageTemplate } = require('./page-templates');
-
-/**
- * רוחב טור יחיד בפיקסלים מתוך settings (מקור־האמת יחיד שמשמש גם dp-planner וגם pipeline).
- * grid-col-width-pct: אחוז רוחב טור מתוך שטח התוכן (צמוד ל‑PT-01..PT-10).
- * grid-gutter-pct: בולטה בין הטורים.
- */
-function columnWidths(settings, pageWidthPx, contentWidthPx) {
-  const gutter = (contentWidthPx * settings['grid-gutter-pct']) / 100;
-  const cw = (contentWidthPx * settings['grid-col-width-pct']) / 100;
-  return { colW: cw, gutter, totalUsed: cw * 2 + gutter, pageWidthPx };
-}
-
-/**
- * מרווח אנכי בין בלוקים בתוך טור (פסקה↔פסקה). נצרך ע"י flowing: כל בלוק חדש
- * בטור פותח ב‑gap הזה אלא אם הוא הראשון בטור.
- */
-function blockGapPx(settings, lineH) {
-  // grid-block-gap-pct נתון באחוזי גובה־שורת־גוף כדי שיישאר פרופורציונלי לגודל דפוס
-  return Math.round((Number(settings['grid-block-gap-pct']) || 0) / 100 * lineH * 10);
-}
-
-/**
- * האם בלוק חוסם מעבר טור רגיל (full-width headings H1/H2 לפי mode).
- */
-function isFullWidthBlock(block, settings) {
-  if (block.kind === 'heading') {
-    const mode = settings[`heading-${block.level}-mode`];
-    return mode === 'full-width' || mode === 'new-page';
-  }
-  return block.fullWidth === true;
-}
-
-module.exports = { columnWidths, blockGapPx, isFullWidthBlock, buildPageTemplate };
-
-};
 __modules["src/engine/layout/ordering.js"] = function (require, module, exports) {
 // src/engine/layout/ordering.js — Reading-order-preserving column moves (P0-3; D-49)
 'use strict';
@@ -5021,7 +5199,13 @@ function noteHeight(note, settings, measure) {
   return lines * lh;
 }
 
-/** רוחב נתיב אחד במרזב לפי footnote-columns (1 ⇒ רוחב מלא; 2 ⇒ חצי). */
+/**
+ * רוחב נתיב אחד במרזב לפי footnote-columns.
+ * **S5.2 (P-4):** _fnColWidthPx מכוין כעת ב-pipeline מהגיאומטריה —
+ * 1 ⇒ רוחב תיבת התוכן המלא (674.90px בברירת המחדל; כמו שמוקרן בגיאומטריה:
+ * x=colLeftOf, w=colWidthOf); 2 ⇒ (רוחב מלא − מרזב התבנית)/2. הפונקציה
+ * נשארת פשוטה — ההכוונה נעשתה במקור היחיד (pipeline) ולא כאן.
+ */
 function laneWidth(settings) {
   const base = settings._fnColWidthPx || 200;
   return settings['footnote-columns'] === 2 ? base : base;
@@ -5763,7 +5947,10 @@ function toGematria(num) {
   // בייחוס; מונע undefined ושומר דטרמיניזם — הקורפוס הגדול מגיע ל־~730).
   if (num >= 1000) {
     const th = Math.floor(num / 1000);
-    return toGematria(th) + "'" + toGematria(num % 1000);
+    // **S5.2 (אחידות D-31):** גרש עברי (U+05F3) במקום ASCII ' — כמו
+    // toHebrewNumber של folio.js (ה׳תש״ב); שני מחלקי המספור במאגר חייבים
+    // להסכים על אותו תו.
+    return toGematria(th) + '\u05F3' + toGematria(num % 1000);
   }
   const hundreds = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
   const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
@@ -5888,7 +6075,10 @@ function readConfig(imud) {
     hdrCType: String(g('hdr-c-type', 'h2_without_siman')),
     hdrLType: String(g('hdr-l-type', 'book_title_split_l')),
     gtocShow: imud && 'gtoc-show' in imud ? imud['gtoc-show'] : [1, 2, 3, 4, 5, 6],
-    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6]
+    dtocShow: imud && 'dtoc-show' in imud ? imud['dtoc-show'] : [2, 3, 4, 5, 6],
+    // **S5.2 (F2 — הערות סיום):** כותרת עמודי הערות-הסיום מהמקור
+    // (fn-title-text; ממופה ב-legacy-settings-map ל-endnote-title-text).
+    fnTitleText: String(g('fn-title-text', 'הערות'))
   };
 }
 
@@ -5961,6 +6151,19 @@ function tokenizeDoc(rawText, cfg) {
       });
       pendingSideNote = null; pendingEndNote = null;
     }
+  }
+  // **S5.2 (מיפוי מוקשים F4):** פלוש שאריות בסוף מסמך — הערת-צד (h7) או
+  // הערת-סיום שהמתינו לפסקה שלא באה אבדו בשקט (pendingSideNote/pendingEndNote
+  // מעולם לא נצרכו). כעת: הערת-צד זנבורית נשפכת כפסקה גלויה (התוכן נשמר
+  // ונראה — עדיף על אובדן), והערת-סיום זנבורית נסגרר לפסקה ריקה הנושאת
+  // את ה-endNote (עמודי הערות-הסיום אוספים מהטוקנים ישירות).
+  if (pendingSideNote || pendingEndNote) {
+    tokens.push({
+      id: tokens.length, type: 'p',
+      text: pendingSideNote || '',
+      sideNote: null, endNote: pendingEndNote,
+      syntheticTail: true
+    });
   }
   return { meta, tokens };
 }
@@ -6512,7 +6715,11 @@ function legacyTypeset(rawText, settings, env) {
       cur.tokens.push(t);
     }
   }
-  if (cur.tokens.length) sections.push(cur);
+  // **S5.2 (מיפוי מוקשים F3):** סעיף שנפתח ב-newPage (h0/h2 פותח עמוד) אך לא
+  // קיבל אף token אחריו — בעבר לא נדחף כלל: הכותרת אבדה (לא נוצר עמוד שער
+  // לפרק) ושורת תוכן-העניינים שלו קיבלה folio ריק. כעת הסעיף נדחף גם ריק —
+  // עמוד הפתיחה נבנה עם הכותרת בלבד.
+  if (cur.tokens.length || cur.newPage) sections.push(cur);
 
   const pages = [];
   const headingFolio = new Map();
@@ -6640,7 +6847,9 @@ function legacyTypeset(rawText, settings, env) {
     const paraNotes = new Map(); // tokenId -> [{text}] (מופקות בפעם הראשונה)
     const tokPages = new Map();  // tokenId -> Set(pageIndex)
 
-    while (ti < toks.length || pending) {
+    while (ti < toks.length || pending || (sectionFirst && sec.newPage)) {
+      // **S5.2 (F3):** סעיף עם newPage ובלי אף token — עמוד הפתיחה (הכותרת)
+      // עדיין חייב להיווצר; בלי התנאי הזה הלולאה לא רצה כלל והכותרת אבדה.
       const pageIsSectionOpen = sectionFirst && !!sec.newPage; // **S4.19:** להזזת אזור-h2/h0 בסוף העמוד
       const pg = newPage(isH0 ? (sectionFirst ? 'preface' : 'regular')
         : (sectionFirst && isH2 ? 'sign-open' : 'regular'));
@@ -7184,6 +7393,10 @@ function legacyTypeset(rawText, settings, env) {
         }
         const startIdx = pending ? pending.lineIdx : 0;
         const total = lines.length - startIdx;
+        // **S5.2 (F4):** פסקה ריקה (למשל ה-syntheticTail של הערת-סיום זנבורית)
+        // — אין שורות להציב; מדלגים בבטחה (ה-endNote נאסף מהטוקנים ישירות,
+        // ואין תוכן-מקור לאבד). בלי זה — fit מאולץ 1 על מערך ריק ⇒ קריסת ln.words.
+        if (total <= 0) { pending = null; ti++; continue; }
 
         // תקציב מוקדם: כל ההערות של הפסקה (מהשבירה המלאה) נכנסות לתור העמוד
         // כבר בעמוד הראשון שלה — כך התקציב מצטמצם מוקדם כמו במקור.
@@ -7826,10 +8039,27 @@ function legacyTypeset(rawText, settings, env) {
     }
     const pagesRows = [];
     let curRows = [], curH = 0, first = true;
+    // **S5.2 (מיפוי מוקשים F1 — עימוד תוכן-העניינים):** הקיבולת חושבה מ-GEO.FLOW_H
+    // (702px עמוד ראשון / 915px המשך) בעוד שהשורות ממוקמות בפועל בין
+    // TOC_FIRST_TOP/TOC_CONT_TOP לבין TOC_STRETCH_BOTTOM — כלומר 635/892px
+    // בלבד. ה-67/23px העודפים אפשרו דחיסה שדרסה שורות את שורות (מרווח 15.9px
+    // מול תיבת שורה 26px), התנגשות עם אזור הפוליו ואף שורות שירדו מתחת לתחתית
+    // העמוד. בנוסף, אצווה אטומית (h2 + כל תתי-הרשומות) שגדולה מהקיבולת הוצבה
+    // בכל זאת כשהעמוד ריק (ללא חלוקה). תוקן: קיבולת מהקבועים המכוילים בפועל,
+    // ואצווה גדולה מעמוד נחלקת בגבולות שורות בין עמודי ה-TOC.
+    const availOf = (f) => TOC_STRETCH_BOTTOM - (f ? TOC_FIRST_TOP : TOC_CONT_TOP);
     for (const u of units) {
       const uH = u.reduce((a, r) => a + r.h, 0);
-      const avail = first ? GEO.FLOW_H - TOC_TITLE_BLOCK_H : GEO.FLOW_H;
-      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; }
+      let avail = availOf(first);
+      if (curH + uH > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; avail = availOf(false); }
+      if (uH > avail && !curRows.length) {
+        // אצווה אטומית גדולה מעמוד שלם — פיצול בגבולות שורות (עדיף על דריסה/גלישה)
+        for (const r of u) {
+          if (curH + r.h > avail && curRows.length) { pagesRows.push({ rows: curRows, first }); curRows = []; curH = 0; first = false; avail = availOf(false); }
+          curRows.push(r); curH += r.h;
+        }
+        continue;
+      }
       curRows.push(...u); curH += uH;
     }
     if (curRows.length) pagesRows.push({ rows: curRows, first });
@@ -7842,8 +8072,21 @@ function legacyTypeset(rawText, settings, env) {
       const top = pr.first ? TOC_FIRST_TOP : TOC_CONT_TOP;
       const rowYs = [];
       if (!isLast && pr.rows.length > 1) {
-        const gap = (TOC_STRETCH_BOTTOM - top) / (pr.rows.length - 1);
-        pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+        // **S5.2 (F1):** רצפה למרווח המתיחה — לא קטן מגובה השורה המרבי בעמוד;
+        // ואם הרצפה דוחפת את השורה האחרונה מעבר לתחתית אזור המתיחה — מערך טבעי
+        // (מוכרח להיכנס: סכום הגבהים ≤ הקיבולת). בלי הרצפה ה-gap ירד עד ~6px
+        // והשורות נדרסו זו על זו.
+        const maxH = Math.max.apply(null, pr.rows.map(r => r.h));
+        const hLast = pr.rows[pr.rows.length - 1].h;
+        const naturalGap = (TOC_STRETCH_BOTTOM - top) / (pr.rows.length - 1);
+        const gap = Math.max(naturalGap, maxH);
+        const lastTop = top + (pr.rows.length - 1) * gap;
+        if (lastTop <= TOC_STRETCH_BOTTOM - hLast + 0.5) {
+          pr.rows.forEach((r, i) => rowYs.push(top + i * gap));
+        } else {
+          let yy = top;
+          for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
+        }
       } else {
         let yy = top;
         for (const r of pr.rows) { rowYs.push(yy); yy += r.h; }
@@ -7868,6 +8111,70 @@ function legacyTypeset(rawText, settings, env) {
   for (const p of pages) ((p.type === 'shaar-main' || p.type === 'shaar-back') ? gates : bodies).push(p);
   const genPages = cfg.enableGeneralToc && genEntries.length ? makeTocPages('toc-general', genEntries, 'תוכן עניינים כללי') : [];
   const detPages = cfg.enableDetailedToc && detEntries.length ? makeTocPages('toc-detailed', detEntries, 'תוכן עניינים מפורט') : [];
+
+  // **S5.2 (מיפוי מוקשים F2 — הערות סיום בנתיב המורשת):** שורות "הערת סיום - …"
+  // (en-line-prefix של המקור; המפתח קיים ב-default_settings של כל 8 קובצי
+  // המקור) נצרכו בטוקניזציה ל-token.endNote — אך אף קוד מעולם לא קרא אותו:
+  // התוכן אבד בשקט. כאן נבנים עמודי הערות-הסיום בסוף הספר: כותרת
+  // (fn-title-text) בעמוד הראשון, שני טורים (COL_W), סמן גימטריה רציף
+  // בגודל הרישום + גוף ההערה ב-FRL 8.5pt — אותם כללי עטיפה כמו רשימת
+  // ההערות (wrapText ברוחב טור−סמן, FIT_EPS בכל נקודות השבירה). המשך
+  // חתוך בין עמודים/טורים מסומן '(המשך)' — כמו זרימת ההערות.
+  const endNoteTokens = tokens.filter(t => t.type === 'p' && t.endNote);
+  const endnotePagesBuilt = [];
+  if (endNoteTokens.length) {
+    const EN_TITLE_H = 44;
+    const mkSpaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
+    let enPg = null, enCol = 0, enY = 0, enFirst = true;
+    const openEndPage = () => {
+      enPg = newPage('endnotes');
+      setHeader(enPg, cfg.fnTitleText);
+      enPg._enFirst = enFirst;
+      if (enFirst) enPg.bands.push({ kind: 'endnote-title', text: cfg.fnTitleText, sizePt: SZ.h2, y: GEO.FLOW_TOP, h: EN_TITLE_H, tokenId: null });
+      enCol = 0; enY = GEO.FLOW_TOP + (enFirst ? EN_TITLE_H : 0);
+      endnotePagesBuilt.push(enPg);
+    };
+    const nextColOrPage = () => {
+      if (enCol === 0) { enCol = 1; enY = GEO.FLOW_TOP + (enPg._enFirst ? EN_TITLE_H : 0); return true; }
+      enFirst = false; openEndPage(); return true;
+    };
+    openEndPage();
+    endNoteTokens.forEach((tok, ni) => {
+      const marker = LineBreaker.markerWord(ni + 1, cfg.fnNumSeparator);
+      const mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0) + mkSpaceW;
+      const contW = fnApi.measureTextWidth('(המשך)', cfg.fnListingNumSize, 0) + mkSpaceW;
+      const noteLines = wrapText(tok.endNote, fnApi, GEO.COL_W - Math.max(mkW, contW), SZ.fnBody);
+      let li = 0, seg = 0;
+      while (li < noteLines.length) {
+        const room = Math.floor((FLOW_BOTTOM - enY) / GEO.FN_PITCH);
+        if (room <= 0) { nextColOrPage(); continue; }
+        // אטומיות: הערה שלמה בעמוד-טור אחד כשהיא נכנסת; אחרת חלוקה בגבולות שורות
+        const need = noteLines.length - li;
+        if (need > room && need <= Math.floor((FLOW_BOTTOM - (GEO.FLOW_TOP + (enPg._enFirst && enCol === 0 ? EN_TITLE_H : 0))) / GEO.FN_PITCH)) {
+          nextColOrPage(); continue; // מעבר לטור/עמוד פנוי — וההערה תיכנס שלמה
+        }
+        const take = Math.min(room, need);
+        for (let k = 0; k < take; k++, li++) {
+          const words = String(noteLines[li]).split(' ').filter(Boolean);
+          let markerIdx = [];
+          if (k === 0) {
+            const head = seg === 0 ? marker : '(המשך)';
+            words.unshift(head);
+            markerIdx = [0];
+          }
+          enPg.columns[enCol].push({
+            words, markerIdx, parenFlags: null, parenStarts: null, parenEnds: null,
+            sizePt: SZ.fnBody, heightPx: GEO.FN_PITCH, kind: 'paragraph',
+            isLast: li === noteLines.length - 1,
+            tokenId: tok.id, window: false, windowWords: null,
+            y: enY, paraId: null, lineIdx: null, align: null
+          });
+          enY += GEO.FN_PITCH;
+        }
+        if (li < noteLines.length) { seg++; nextColOrPage(); }
+      }
+    });
+  }
   const subIdx = bodies.findIndex(p => p.type === 'shaar-sub');
   const before = subIdx >= 0 ? bodies.slice(0, subIdx + 1) : [];
   const after = subIdx >= 0 ? bodies.slice(subIdx + 1) : bodies;
@@ -7878,7 +8185,7 @@ function legacyTypeset(rawText, settings, env) {
   // אי-זוגי (עמוד זוגי פיזי = גב) — מוכנס עמוד ריק. מחליף את המקרה הפרטי
   // של שער-המשנה (needBlank) בכלל הכללי; ברירות המחדל של המקור:
   // odd-h0=true, odd-h1=true, odd-h2=false.
-  const seq = [...gates, ...genPages, ...before, ...detPages, ...after];
+  const seq = [...gates, ...genPages, ...before, ...detPages, ...after, ...endnotePagesBuilt];
   const final = [];
   for (const p of seq) {
     if (p._secStartLevel != null) {
@@ -7947,6 +8254,80 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
   const ledger = new Ledger();
 
+  // **S5.2 (מיפוי מוקשים S1 — חשבונאות שימור תוכן אמיתית לנתיב החי):** עד כאן
+  // הוחזר contentPreserved: true קבוע-קשה — כל רגרסיה בזרימת ההערות/המשכים/
+  // הטוקנים עברה בשקט (הבדיקות שהחזיקו בדגל היו טאוטולוגיות — המחלק של
+  // D-30 קיים רק בנתיב ה-DP). כעת: מולטיסט מילות מקור (מטא-דאטה + כל
+  // הטוקנים: גוף, כותרות, הערות-צד, הערות-סיום) מול מולטיסט פלט (שורות
+  // העמודים: גוף+כותרות+חלונות+הערות-שוליים+הערות+הערות-סיום+שערים;
+  // בלי תוכן-עניינים ובלי פוליו — הם תוספות/העתקות של המנוע). יעד: כל מילת
+  // מקור מופיעה בפלט לפחות כמספר הופעותיה במקור; סמנים/(המשך)/גימטריה
+  // שהמנוע מוסיף אינם נספרים כחובה. כשל ⇒ ממצא high ב-ledger + דגל שקרי.
+  const contentStats = (() => {
+    const norm = (s) => String(s == null ? '' : s).split(/[\s\u00A0]+/).filter(Boolean);
+    const bump = (m, words) => { for (const w of words) m.set(w, (m.get(w) || 0) + 1); };
+    const src = new Map();
+    // **S5.2:** שדה השנה/מקום (meta.year) אינו מוצג בשער המכויל-ייחוס — כמו
+    // בתוכנת המקור (השדה נקלט למטא ואינו מרונדר באף שער; נבדק ב-snapshot
+    // וב-v20.4). לכן אינו נספר כחובת-תוכן.
+    for (const [mk, mv] of Object.entries(meta)) if (mk !== 'year') bump(src, norm(mv));
+    // **S5.2:** מסיר את תוחמי ההערה ([ ]) מצד המקור — המנוע מחלץ את גוף
+    // ההערה מבלי לכלול את התוחמים בפלט (הם תחביר, לא תוכן).
+    const srcTextOf = (t) => {
+      let s = String(t.text == null ? '' : t.text);
+      if (cfg.fnOpen) s = s.split(cfg.fnOpen).join(' ');
+      if (cfg.fnClose) s = s.split(cfg.fnClose).join(' ');
+      // **S5.2:** כותרת h1 מפוצלת בשער-המשנה לכותרת + משנה (split לפי
+      // המקף; join(' - ') לשאר) — מקף-ההפרדה הראשון הוא תחביר עימוד,
+      // כמו קידומת 'כותרת N -'. משקפים את אותה טרנספורמציה בצד המקור.
+      if (t.type === 'h1') {
+        const parts = s.split(/[-–—]/).map(x => x.trim()).filter(Boolean);
+        if (parts.length >= 2) s = parts[0] + ' ' + parts.slice(1).join(' - ');
+      }
+      return s;
+    };
+    for (const t of tokens) {
+      bump(src, norm(srcTextOf(t)));
+      if (t.sideNote) bump(src, norm(t.sideNote));
+      if (t.endNote) bump(src, norm(t.endNote));
+    }
+    const out = new Map();
+    const addText = (s) => bump(out, norm(s));
+    const addWords = (ws) => { if (!ws) return; for (const w of ws) addText(w && w.t != null ? w.t : w); };
+    for (const p of pages) {
+      for (const col of p.columns || []) for (const ln of col) {
+        addWords(ln.words); addWords(ln.windowWords);
+      }
+      for (const it of p.footnotes || []) {
+        if (it.marker) addText(it.marker);
+        for (const ln of it.lines || []) addWords(ln.words);
+      }
+      for (const mn of p.marginNotes || []) for (const ln of mn.lines || []) addText(ln.text);
+      for (const b of p.bands || []) addText(b.text);
+      for (const g of p.gateLines || []) addText(g.text);
+      // תוכן-העניינים (p.toc) והפוליו לא נספרים — העתקות/מספור של המנוע
+    }
+    const missing = [];
+    let srcTotal = 0, outTotal = 0;
+    for (const [w, c] of src) {
+      srcTotal += c;
+      const oc = out.get(w) || 0;
+      if (oc < c) missing.push(`${w} (${oc}/${c})`);
+    }
+    for (const c of out.values()) outTotal += c;
+    return { sourceWords: srcTotal, outputWords: outTotal, missing };
+  })();
+  const contentPreservedFlag = contentStats.missing.length === 0;
+  if (!contentPreservedFlag) {
+    ledger.create('content-loss', 'legacy-flow', 0,
+      { missing: contentStats.missing.length, sample: contentStats.missing.slice(0, 8).join(', ') },
+      'legacy-flow');
+    events.emit('render', 'legacy-imud: אובדן תוכן — החשבונאות אדומה', {
+      missing: contentStats.missing.length,
+      sample: contentStats.missing.slice(0, 8).join(', ')
+    });
+  }
+
   // **EXT-4 (שארית — S4.21): חיבור ornament-plan לנתיב ה-legacy.** רץ אחרי
   // חישוב ה-hash — overlay בלבד (אינווריאנט T1; דפוס D-47). ברירות המחדל
   // של המקור = 'none' לכל עיטור ⇒ אפס rectים ואפס השפעה; החיבור מוכיח את
@@ -7954,8 +8335,10 @@ function legacyTypeset(rawText, settings, env) {
   // legacy-projector מצייר pg.decorations באותו דיו (ornament-ink) כמו
   // נתיב ה-DP — pdfOps ל-PDF, data-URI ל-DOM.
   const { planLegacyOrnaments } = require('../decoration/legacy-ornaments');
+  // **S5.2 (אחידות מדידה):** tracking=0 מפורש — כמו כל נקודות המדידה של
+  // המורשת (ברירת המחדל של measure-api היא כעת 0, אך מפורש עדיף).
   const ornPass = planLegacyOrnaments(pages, settings,
-    (t, s2) => api.measureTextWidth(t, s2), {
+    (t, s2) => api.measureTextWidth(t, s2, 0), {
     ledger, eventLog: events,
     bandX: GEO.COL_L_X, bandW: 2 * GEO.COL_W + 13.48,
     flowTopOf: (pg, title) => GEO.FLOW_TOP + (pg._h2SpanExempt ? 261.3 : H2_AREA_H)
@@ -8023,12 +8406,13 @@ function legacyTypeset(rawText, settings, env) {
     metadata: meta, tokens: tokensOut, pages, ledger, events,
     toc: { general: genEntries.length, detailed: detEntries.length },
     tocPages: [], numberingAudit: null, settings,
-    contentPreserved: true,
+    contentPreserved: contentPreservedFlag,
+    contentStats: { sourceWords: contentStats.sourceWords, outputWords: contentStats.outputWords, missingCount: contentStats.missing.length, missingSample: contentStats.missing.slice(0, 8) },
     layoutHash: layoutHashValue,
     plannedLayoutHash: null, geometryNeutralVerified: true,
     ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
     retreat: null, sideNotes: null, endnotePages: null,
-    endnotePagesInfo: { count: 0, pages: [] },
+    endnotePagesInfo: { count: endNoteTokens.length, pages: endnotePagesBuilt.map(p => p.index) },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true
   };
@@ -10289,8 +10673,29 @@ const NOTE_FONT_FACTORS = { 'David HB': 1.06, 'David': 1.04, 'Narkisim': 1.10, '
  * - f-note-body-font משפיע על מדידת רוחב מילה בגוף ההערה;
  * - סמן: markerFor לפי footnote-marker-style — **אותו מקור סמכות like the body**
  *   (בעבר היו שלושה ממירים שונים — אי־עקביות מספור, P1-3).
+ *
+ * **S5.2 (תיקון 7 — P-3, חצי קיבולת + כותרת לא-מתקצבת):** בעבר ה-usedY טיפל
+ * בעמוד כולו כטור אחד גם כשendnote-columns=2 — הטור השני לא מולא מעולם
+ * (חצי קיבולת לעמוד), וגובה כותרת העמוד לא נוכה מהתקציב. כעת:
+ *  - הקיבולת נגזרת מתבנית PT-07 עצמה (contentBox.height; אין כותרת עליונה
+ *    בעמודי הערות — הערך שהוזרם בעבר מתבנית REGULAR היה חסר 30px של
+ *    הכותרת העליונה של עמודי גוף);
+ *  - גובה הכותרת מתקצב פעם אחת לעמוד — כפס עליון חוצה־טורים (שני הטורים
+ *    מתחילים מתחתיו), בדיוק כמו ה-spanning band של הגוף (FWD-1);
+ *  - ההערות ממלאות טור 1 ואז טור 2 (מירור של זרימת הטורים ב-DP), ורק אז
+ *    נפתח עמוד המשך. הערה היא יחידה אטומית — לא נחתכת בין טורים (המקביל
+ *    ל-minFirst/minLast=2 של המרזב אינו חל: אין "שורה בודדת" ברמת ההערה);
+ *  - התקדמות מובטחת: הערה גבוהה מהטור נשארת לבדה בטור/עמוד משלה (כמו
+ *    מילה רחבה מהטור בשבירת השורות) — אין לולאה ואין גניזה (BRZ-15).
+ *
+ * **S5.2 (תיקון 8 — רוחב הטור מהגיאומטריה):** _endnoteColWidthPx הוא כעת
+ * רוחב טור בודד מתבנית PT-07 (ה-pipeline מזרים) ונצרך ישירות במצב שני טורים;
+ * במצב טור-אחד הריווח ברוחב תיבת התוכן המלא של התבנית (רשימה חד-טורית
+ * ברוחב מלא — כמו שמרונדר בפועל). בעבר חולק ערך "סכום טורים+מרזב" ב-2.
+ *
  * @param {Array} endnotes - [{text, part, num?, marker?, fromInline?, noteIndex?}]
- * @param {object} settings - כולל _endnoteColCapPx, _endnoteColWidthPx, _endnoteTitleByPart (Map part→title)
+ * @param {object} settings - כולל _endnoteColWidthPx, _endnoteTitleByPart (Map part→title);
+ *   _endnoteColCapPx נשמר כ-fallback בלבד (קיבולת האמת מהתבנית).
  */
 function buildEndnotePages(endnotes, settings, measure, lineHeightPx, hooks = {}) {
   const eventLog = hooks.eventLog || null;
@@ -10313,9 +10718,27 @@ function buildEndnotePages(endnotes, settings, measure, lineHeightPx, hooks = {}
 
   const style = settings['footnote-marker-style'];
   const cols = settings['endnote-columns'] === 2 ? 2 : 1;
-  const cap = settings._endnoteColCapPx || Number.POSITIVE_INFINITY;
-  const colW = (settings._endnoteColWidthPx || 300) / cols;
+
+  // **S5.2 (P-3):** קיבולת ורוחב מתבנית PT-07 — מקור האמת הגיאומטרי של עמודי ההערות.
+  const enTpl = buildPageTemplate(PAGE_TYPES.ENDNOTES, settings, true);
+  const cap = enTpl.contentBox.height > 0
+    ? enTpl.contentBox.height
+    : (settings._endnoteColCapPx || Number.POSITIVE_INFINITY); // fallback הגנתי בלבד
+  const fullW = enTpl.columns.length
+    ? Math.max(...enTpl.columns.map(c => c.x + c.w)) - Math.min(...enTpl.columns.map(c => c.x))
+    : (settings._endnoteColWidthPx || 300);
+  // רוחב הטור לריווח: 2 טורים ⇒ רוחב טור התבנית; טור אחד ⇒ רוחב מלא.
+  const colW = cols === 2
+    ? (settings._endnoteColWidthPx || enTpl.columns[0].w || 300)
+    : fullW;
   const fontFactor = NOTE_FONT_FACTORS[settings['f-note-body-font']] || 1;
+
+  /**
+   * גובה כותרת העמוד (`.endnote-title`: h2 בגודל 1.2em עם שולי 8px) —
+   * פס חוצה־טורים שנצרך פעם אחת בכל עמוד שמציג כותרת (כולל עמודי המשך —
+   * כולם מציגים כותרת: הבסיס או "בסיס (המשך)").
+   */
+  const titleBandPx = estimateTitleHeight(settings, lineHeightPx);
 
   const pages = [];
   for (const part of order) {
@@ -10324,7 +10747,9 @@ function buildEndnotePages(endnotes, settings, measure, lineHeightPx, hooks = {}
       || settings['endnote-title-text'] || 'הערות';
     let pageIndex = 0;
     let page = mkPage(PAGE_TYPES.ENDNOTES, part, pageIndex, title(settings, titleBase, false), cols);
-    let usedY = 0;
+    page.titleBandPx = titleBandPx; // הטורים מתחילים מתחת לפס הכותרת
+    let colIdx = 0;                 // טור נוכחי (0..cols-1) — מילוי 1 ואז 2
+    let usedY = titleBandPx;        // גובה תפוס בטור הנוכחי (מתחת לפס)
     for (let ni = 0; ni < notes.length; ni++) {
       const n = notes[ni];
       // סמן: מהגוף (inline-refs — marker שהוקצה בpipeline) או לפי מספר המקור/מיקום
@@ -10338,19 +10763,31 @@ function buildEndnotePages(endnotes, settings, measure, lineHeightPx, hooks = {}
         }
       }
       const h = estimateNoteHeight(n.text, settings, measure, lineHeightPx, colW, fontFactor);
-      if (usedY > 0 && usedY + h > cap) {
-        pages.push(page);
-        pageIndex++;
-        page = mkPage(PAGE_TYPES.ENDNOTES, part, pageIndex, title(settings, titleBase, true), cols);
-        usedY = 0;
+      // אין מקום בטור הנוכחי (והוא אינו ריק) — התקדמות לטור הבא / לעמוד הבא.
+      // טור "ריק" (usedY === titleBandPx) מקבל את ההערה תמיד — התקדמות מובטחת
+      // גם להערה גבוהה מהקיבולת (נותרת לבדה, לא נגנזת).
+      if (usedY > page.titleBandPx && usedY + h > cap) {
+        if (colIdx < cols - 1) {
+          colIdx++;
+          usedY = page.titleBandPx; // גם הטור השני מתחיל מתחת לפס הכותרת
+        } else {
+          pages.push(page);
+          pageIndex++;
+          page = mkPage(PAGE_TYPES.ENDNOTES, part, pageIndex, title(settings, titleBase, true), cols);
+          page.titleBandPx = titleBandPx;
+          colIdx = 0;
+          usedY = titleBandPx;
+        }
       }
-      page.notes.push({ ...n, marker, heightPx: h });
+      const note = { ...n, marker, heightPx: h, colIdx };
+      page.notes.push(note);          // רשימה שטוחה בסדר קריאה (צרכנים: רנדר/חשבונאות)
+      page.columns[colIdx].push(note); // מיקום מפורש בטור — מודל DP תואם גוף
       usedY += h;
     }
     if (page.notes.length) pages.push(page);
   }
 
-  if (eventLog) eventLog.emit('notes-budget', 'endnote-pages-built', { pages: pages.length, parts: order.length });
+  if (eventLog) eventLog.emit('notes-budget', 'endnote-pages-built', { pages: pages.length, parts: order.length, cols });
   if (ledger && pages.length === 0 && endnotes.length) {
     const rec = ledger.create('endnote-pagination', 'endnotes', null, { notes: endnotes.length, pages: 0 }, 'notes-budget');
     ledger.transition(rec.issue_id, 'persists', 'notes-budget', 'notes exist but no pages built');
@@ -10364,6 +10801,7 @@ function mkPage(type, part, idx, heading, cols) {
     columns: Array.from({ length: cols }, () => []),
     footnotes: [], sideNotes: [], headingsOnPage: [],
     balanceInfo: null, fnReservedHeightPx: 0,
+    titleBandPx: 0,
     chapterOpening: false,
     isEndnotes: true
   };
@@ -10371,6 +10809,12 @@ function mkPage(type, part, idx, heading, cols) {
 
 function title(settings, base, isContinuation) {
   return isContinuation ? `${base} (המשך)` : base;
+}
+
+/** גובה כותרת עמוד ההערות — h2 1.2em + שולי אנכיים 16px (html-export .endnote-title). */
+function estimateTitleHeight(settings, lineHeightPx) {
+  const size = settings['body-font-size-pt'] * 1.2;
+  return lineHeightPx(size) + 16;
 }
 
 /** גובה הערה בעמודי ההערות — כולל פקטור גופן ורוחב טור אפקטיבי. */
@@ -10385,7 +10829,7 @@ function estimateNoteHeight(text, settings, measure, lineHeightPx, colW, fontFac
   return lines * lineHeightPx(size);
 }
 
-module.exports = { buildEndnotePages, estimateNoteHeight, NOTE_FONT_FACTORS };
+module.exports = { buildEndnotePages, estimateNoteHeight, estimateTitleHeight, NOTE_FONT_FACTORS };
 
 };
 __modules["src/engine/decoration/numbering-audit.js"] = function (require, module, exports) {
@@ -11041,7 +11485,14 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
       if (pg.header) for (const s of pg.header.slots) drawnParts.push(s.text);
     }
     const inventory = charInventory(drawnParts.join(' '));
-    const subset = buildSubset(font, inventory);
+    // **S5.2 (O1 — קריסת ייצוא על תו זר):** מלאי ה-F1 כלל גם תווים שחסרים
+    // בגוף הטקסט (כל אות לטינית — "PDF", ® וכו') ו-buildSubset נכשל
+    // (subset:tofu) לפני שרשת ה-fallback הפר-תו הספיקה לפעול: הדפדפן
+    // הציג את המילה דרך המחסנית וה-PDF סירב להיווצר — תצוגה≠ייצוא בכלל
+    // גרוע. כעת: מלאי ה-F1 = תווים שקיימים בו בפועל; השאר נופלים ל-/F4
+    // (הסריקה שלמטה אוספת אותם למלאי ה-F4) או מושמטים אם אינם בשום גופן.
+    const f1Inventory = inventory.filter(ch => glyphIdOf(font, ch) !== 0);
+    const subset = buildSubset(font, f1Inventory);
     if (!subset.ok) return { ok: false, error: `subset:${subset.error}` };
 
     // סימניות: H1 → רמה 1; H2 → רמה 2 (עץ מכותרות המודל)
@@ -11393,8 +11844,14 @@ function round2mm(v) { return Math.round(v * 100) / 100; }
 /** הגדרות נקיות לייצוא: מפתחות פנימיים (מקווקוות) מוסרים — נכסי זמן־ריצה. */
 function cleanSettings(settings) {
   const out = {};
+  // **S5.2 (O16 — תלכיד ZIP מאבד הגדרות מורשת):** בעבר כל מפתח שמתחיל
+  // ב '_' נזרק — כולל _imudRaw (שממנו נתיב המורשת קורא ~12 מפתחות
+  // חיים: hdr-r/c/l-type, note-marker-size, note-num-separator ועוד),
+  // _layout-profile (מפעיל את המנוע) ו-_legacy-ui-state. פרויקט שנשמר
+  // ונטען איבד את ההגדרות והעימוד השתנה בשקט. כעת המפתחות החיים נשמרים.
+  const KEEP = new Set(['_imudRaw', '_layout-profile', '_legacy-ui-state', '_customPages', '_customStyles']);
   for (const [k, v] of Object.entries(settings || {})) {
-    if (k.startsWith('_')) continue;
+    if (k.startsWith('_') && !KEEP.has(k)) continue;
     out[k] = v;
   }
   return out;
@@ -12039,25 +12496,38 @@ function renderLegacyPage(pg, settings, doc) {
     // את הסלוטים לקצוות הדף — 94px/97px ממיקום הטקסט בייחוס (עמ' 12:
     // ימין x1=479.84pt=639.8px, שמאל x0=117.68pt=156.9px, מרכז 297.65pt).
     // הקבועים משוקפים מ-mk() של המקרן (COL_R_X+COL_W−33 / COL_L_X+33) —
-    // מרכז התיבה = מרכז הדף בדיוק, ו-space-between מנחה את הסלוט האמצעי
-    // למרכז. התצוגה = הייצוא = הייחוס.
+    // מרכז התיבה = מרכז הדף בדיוק. התצוגה = הייצוא = הייחוס.
+    // **S5.2 (O3 — ריתוק דטרמיניסטי של הבסיס):** במקום flex baseline
+    // (תלוי-פלטפורמה: 67.6–73.6px מול 71.9 ב-PDF) — סלוטים אבסולוטיים
+    // בתוך אותה תיבה; הבסיס = HEADER_BASELINE (71.9) באמצעות line-height:1
+    // + מטריקות DavidLibre-Bold (asc 0.7461 / desc 0.2192 ⇒ היסט 0.7635·S),
+    // ומשקל 700 מפורש (פנים ה-Bold הרשומים). מרכז = מרכז הדף (כמו ה-PDF),
+    // לא מרכז space-between.
     position(hdr, GEO.COL_L_X + 33, 52, (GEO.COL_R_X + GEO.COL_W - 33) - (GEO.COL_L_X + 33), 22);
-    hdr.style.display = 'flex';
-    hdr.style.justifyContent = 'space-between';
-    hdr.style.alignItems = 'baseline';
     hdr.style.color = 'rgb(15,23,73)';
+    const HDR_BASELINE_Y = 71.9;
+    const DLB_BASELINE_FACTOR = 0.5 + (0.7461 - 0.2192) / 2; // DavidLibre-Bold, line-height:1
     const slots = [
-      ['rh rh--r', hs.right, SZ.hdrR, 'header-recto-right-font'],
-      ['rh rh--c', hs.center, SZ.hdrC, 'header-recto-center-font'],
-      ['rh rh--l', hs.left, SZ.hdrL, 'header-recto-left-font']
+      ['rh rh--r', hs.right, SZ.hdrR, 'header-recto-right-font', 'right'],
+      ['rh rh--c', hs.center, SZ.hdrC, 'header-recto-center-font', 'center'],
+      ['rh rh--l', hs.left, SZ.hdrL, 'header-recto-left-font', 'left']
     ];
-    for (const [cls, txt, sz, fk] of slots) {
+    for (const [cls, txt, sz, fk, posKind] of slots) {
+      if (!txt) continue;
       const s = doc.createElement('span');
       s.className = cls;
-      s.textContent = txt || '';
-      s.style.fontSize = `${pt2px(sz)}px`;
+      s.textContent = txt;
+      const szPx = pt2px(sz);
+      s.style.fontSize = `${szPx}px`;
       const ff = fontOf(fk);
       if (ff) s.style.fontFamily = ff; // **S4.26:** גופן הסלוט מההגדרות (ברירת מחדל: David Libre)
+      s.style.fontWeight = '700';
+      s.style.position = 'absolute';
+      s.style.lineHeight = '1';
+      s.style.top = `${(HDR_BASELINE_Y - 52) - szPx * DLB_BASELINE_FACTOR}px`;
+      if (posKind === 'right') s.style.right = '0';
+      else if (posKind === 'left') s.style.left = '0';
+      else { s.style.left = '50%'; s.style.transform = 'translateX(-50%)'; }
       hdr.appendChild(s);
     }
     root.appendChild(hdr);
@@ -12158,9 +12628,26 @@ function renderLegacyPage(pg, settings, doc) {
       // מסומנות ומדולגות באודיט). סדר ההצהרות חשוב: רק שורות גוף מלאות
       // מקבלות את text-align-last — אחרת הוא היה מיישר גם שורות אחרונות
       // (שהגדרתן center/right) ומקורן של הסמנים.
-      if (ln.kind === 'heading' || ln.isLast) {
+      // **S5.2 (S5 — חיווט body-last-line-align במורשת):** ברירת המחדל 'center'
+      // = ההתנהגות הקיימת בדיוק; 'right' = הצמדה לתחילת השורה (ימין ב-RTL),
+      // 'stretch' = יישור מלא גם לשורה האחרונה. בעבר המפתח סווג 'light' אך
+      // מעולם לא מומש בנתיב החי — שינוי הגדרה לא שינה דבר.
+      const lastAlign = String((settings && settings['body-last-line-align']) || 'center');
+      if (ln.kind === 'heading') {
         el.style.whiteSpace = 'nowrap';
         el.style.textAlign = 'center';
+      } else if (ln.isLast) {
+        if (lastAlign === 'right') {
+          el.style.whiteSpace = 'nowrap';
+          el.style.textAlign = 'right';
+        } else if (lastAlign === 'stretch') {
+          el.style.whiteSpace = 'normal';
+          el.style.textAlign = 'justify';
+          el.style.textAlignLast = 'justify';
+        } else {
+          el.style.whiteSpace = 'nowrap';
+          el.style.textAlign = 'center';
+        }
       } else {
         el.style.whiteSpace = 'normal';
         el.style.textAlign = 'justify';
@@ -13569,6 +14056,11 @@ function assertOfflineSafe(html) {
 
 const BASE_CSS = `
 html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',serif;direction:rtl}
+/* **S5.2 (מדיניות ללא-קרנינג — תצוגה=ייצוא):** המודל מודד ללא קרנינג
+   (kernPairs אינו נצרך במדידה) וה-PDF מצייר לפי רוחבי hmtx בלבד — אבל
+   הדפדפן מקרן גופנים עם טבלאות kern/GPOS כברירת מחדל ⇒ רוחב מילה ב-DOM
+   היה שונה מהמודל ומה-PDF. font-kerning:none משווה את שלושת הנתיבים. */
+html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
 .book{display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 0}
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}
@@ -15019,7 +15511,7 @@ function writePdf(opts) {
       const fw = pg.folio.w != null ? pg.folio.w : pg.folio.text.length * 6;
       const fx = pg.folio.x != null ? pg.folio.x : pg.width / 2 - fw / 2;
       const fy = pg.folio.baselineY != null ? pg.folio.baselineY : pg.folio.y + 10;
-      emitWord(pg.folio.text, fx, fy, 10);
+      emitWord(pg.folio.text, fx, fy, pg.folio.sizePt || 10);
     }
     // כותרת עליונה — סלוטים לפי מיקום פיזי מהקרן (D-81); נפילה מתועדת לנוסחה הישנה
     if (pg.header) {
@@ -15831,7 +16323,10 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
     const slots = [];
     const mk = (pos, text, sizePt) => {
       if (!text) return;
-      const w = api.measureTextWidth(text, sizePt, 0);
+      // **S5.2 (O3):** מדידת/ציור סלוטי הכותרת ב-DavidLibre-Bold (hApi) —
+      // בדיוק כמו ה-DOM (fontOf של ההגדרות + משקל 700). בעבר נמדדו
+      // בגוף הטקסט וצוירו ב-/F1 — תצוגה≠ייצוא בכל עמוד גוף.
+      const w = hApi.measureTextWidth(text, sizePt, 0);
       let x;
       if (pos === 'right') x = GEO.COL_R_X + GEO.COL_W - 33 - w;
       else if (pos === 'left') x = GEO.COL_L_X + 33;
@@ -15847,10 +16342,12 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
         const baseY = GEO.HEADER_BASELINE;
         // **S5.1 (תיקון C1/L2):** רוחב התיבה = רוחב הטקסט עצמו (s.w) — לא
         // s.w+40. ה+40 הסיט כל סלוט 40px מהמקום שמכויל מהייחוס ב-mk() לעיל.
-        s.words = placeWords(s.text.split(' '), api, s.x, s.w, s.sizePt,
+        // **S5.2 (O3):** המדידה והצבה ב-hApi (DavidLibre-Bold — כמו ה-DOM)
+        // + fontKey 'heading' — הסלוטים כבר לא נמדדים/מצוירים ב-/F1 גוף-הטקסט.
+        s.words = placeWords(s.text.split(' '), hApi, s.x, s.w, s.sizePt,
           s.pos === 'center' ? 'center' : (s.pos === 'right' ? 'right' : 'left'), baseY);
         s.color = pg.headerSlots.color || HDR_COLOR;
-        for (const w of s.words) w.color = s.color;
+        for (const w of s.words) { w.color = s.color; w.fontKey = 'heading'; }
       }
       out.header = { y: GEO.HEADER_BASELINE - 14, baselineY: GEO.HEADER_BASELINE, slots };
     }

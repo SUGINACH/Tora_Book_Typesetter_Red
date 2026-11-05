@@ -1,0 +1,285 @@
+{
+ "meta": {
+  "reference": "audits/layout-reference.json",
+  "ours": "audits/layout-parity-artifacts/ours-model.json",
+  "pdf": "audits/layout-parity-artifacts/ours.pdf",
+  "verdict": "PARITY_FAIL"
+ },
+ "summary": {
+  "hard": "4/4",
+  "parity": "12/14",
+  "score": 88.9
+ },
+ "checks": [
+  {
+   "id": "H1",
+   "layer": "HARD",
+   "name": "שימור תוכן — מולטיסט מילים זהה למקור",
+   "pass": true,
+   "srcTotal": 22425,
+   "oursTotal": 22425,
+   "missingWords": 0,
+   "missingSample": [],
+   "extraWords": 0,
+   "extraSample": []
+  },
+  {
+   "id": "H2",
+   "layer": "HARD",
+   "name": "אפס חפיפות שורות ב-PDF",
+   "pass": true,
+   "overlaps": 0,
+   "sample": []
+  },
+  {
+   "id": "H3",
+   "layer": "HARD",
+   "name": "כל הטקסט בתוך גבולות העמוד",
+   "pass": true,
+   "violations": 0,
+   "sample": []
+  },
+  {
+   "id": "H4",
+   "layer": "HARD",
+   "name": "שורות גוף מגיעות לשפות הטור (יישור — כמקור)",
+   "pass": true,
+   "reachPct": 73.3,
+   "refReachPct": 69.1,
+   "twoColPages": 74
+  },
+  {
+   "id": "P1",
+   "layer": "PARITY",
+   "name": "מספר עמודים",
+   "pass": true,
+   "ref": 54,
+   "ours": 54,
+   "delta": 0
+  },
+  {
+   "id": "P2",
+   "layer": "PARITY",
+   "name": "רצף סוגי עמודים",
+   "pass": true,
+   "ratio": 1.0,
+   "refCounts": {
+    "shaar-main": 1,
+    "shaar-back": 1,
+    "toc-general": 3,
+    "blank": 1,
+    "shaar-sub": 1,
+    "toc-detailed": 3,
+    "chapter-open": 1,
+    "body": 43
+   },
+   "oursCounts": {
+    "shaar-main": 1,
+    "shaar-back": 1,
+    "toc-general": 3,
+    "blank": 1,
+    "shaar-sub": 1,
+    "toc-detailed": 3,
+    "chapter-open": 1,
+    "body": 43
+   },
+   "firstDiffs": []
+  },
+  {
+   "id": "P3a",
+   "layer": "PARITY",
+   "name": "פורמט עמודון — גימטריה יחידה בלי גרשיים (כמקור)",
+   "pass": true,
+   "refFormatBare": true,
+   "oursFormatBare": true,
+   "oursSample": [
+    "א",
+    "ב",
+    "ג",
+    "ו",
+    "ז",
+    "ח"
+   ],
+   "refSample": [
+    "א",
+    "ב",
+    "ג",
+    "ו",
+    "ז",
+    "ח"
+   ]
+  },
+  {
+   "id": "P3b",
+   "layer": "PARITY",
+   "name": "רצף ערכי עמודונים (מ־1 ואילך ברצף)",
+   "pass": true,
+   "refCount": 50,
+   "oursCount": 50,
+   "refFirst": [
+    1,
+    2,
+    3,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "oursFirst": [
+    1,
+    2,
+    3,
+    6,
+    7,
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "id": "P4",
+   "layer": "PARITY",
+   "name": "כותרות עליונות בעמודי גוף (ימין/מרכז/שמאל)",
+   "pass": true,
+   "match": "50/50",
+   "expected": {
+    "right": "מקום (מילה ראשונה של שם הספר מהמסמך)",
+    "center": "שם הפרק הנוכחי",
+    "left": "בינה (שאר שם הספר)"
+   },
+   "mismatches": []
+  },
+  {
+   "id": "P5",
+   "layer": "PARITY",
+   "name": "תוכן-עניינים כפול (כללי + מפורט)",
+   "pass": true,
+   "refGeneralPages": 3,
+   "oursGeneralPages": 3,
+   "refDetailedPages": 3,
+   "oursDetailedPages": 3,
+   "refGeneralEntries": 64,
+   "oursGeneralEntries": 64,
+   "refDetailedEntries": 63,
+   "oursDetailedEntries": 63
+  },
+  {
+   "id": "P6",
+   "layer": "PARITY",
+   "name": "רצף פסקאות (מספר/שורות/מילים)",
+   "pass": false,
+   "refCount": 278,
+   "oursCount": 285,
+   "headAligned": 199,
+   "linesMatch": 164,
+   "wordsMatch": 143,
+   "refTotalLines": 3149,
+   "oursTotalLines": 3160,
+   "refTotalWords": 21861,
+   "oursTotalWords": 21650,
+   "firstDiffs": [
+    "replace: ref[['נפש כלל מעשה']] ours[['וכדלעיל שאם לא']]",
+    "replace: ref[['ובהקדם ביאור גדרי']] ours[['וזה יהיה ביאור']]",
+    "replace: ref[['שייך לחלק ולהוסיף', 'מעות לדעת סוף']] ours[['לאחד והשלישי הוא', 'מטרות האחת הספירה']]",
+    "replace: ref[['מונה ששה ומשמר']] ours[['שבעה ימים נמצא']]",
+    "replace: ref[['שבת אמר להם']] ours[['ושמרתם את השבת']]",
+    "replace: ref[['חשובה ואף שתוצאת']] ours[['גרידא וזו מלאכת']]"
+   ]
+  },
+  {
+   "id": "P7",
+   "layer": "PARITY",
+   "name": "שקילות שבירת שורות (טקסט שורה-אחר-שורה)",
+   "pass": false,
+   "ratio": 0.8156,
+   "refLines": 4080,
+   "oursLines": 4108,
+   "firstDivergences": [
+    "ref: 'ביחס המעשה ל למציאות קיימת' ≠ ours: 'ביחס המעשה לא למציאות קיימת'",
+    "ref: 'מג מתעסק' ≠ ours: 'מד מתעסק'",
+    "ref: 'גדרי הוצאה השבת יום מלאכה רשויות' ≠ ours: 'גדרי הוצאה השבת יום מלאכה'",
+    "ref: 'מפורט עניינים תוכן' ≠ ours: 'רשויות'"
+   ]
+  },
+  {
+   "id": "P8a",
+   "layer": "PARITY",
+   "name": "תיבות הטורים (pt)",
+   "pass": true,
+   "refRight": [
+    302.71,
+    504.77
+   ],
+   "oursRight": [
+    302.71,
+    504.77
+   ],
+   "refLeft": [
+    90.54,
+    292.6
+   ],
+   "oursLeft": [
+    90.54,
+    292.6
+   ],
+   "refColWidthPx": 269
+  },
+  {
+   "id": "P8b",
+   "layer": "PARITY",
+   "name": "פס הכותרת העליונה (y)",
+   "pass": true,
+   "ref": [
+    42.6,
+    57.6
+   ],
+   "ours": [
+    42.2,
+    57.2
+   ],
+   "hint": "הכותרת חייבת לשבת בראש העמוד (y≈42-58pt) בכל עמודי התוכן"
+  },
+  {
+   "id": "P8c",
+   "layer": "PARITY",
+   "name": "מיקום העמודון (מרכז תחתון)",
+   "pass": true,
+   "ref": {
+    "text": "א",
+    "x": 297.63,
+    "y": 783.82
+   },
+   "oursX": 297.9,
+   "oursY": 782.47
+  },
+  {
+   "id": "P8d",
+   "layer": "PARITY",
+   "name": "גופן וגודל גוף הטקסט",
+   "pass": true,
+   "ref": "GuttmanRashiNormal@12.0pt",
+   "ours": [
+    "ToraBook",
+    12.0
+   ]
+  },
+  {
+   "id": "P8e",
+   "layer": "PARITY",
+   "name": "פס שורות (מרווח בסיס-בסיס)",
+   "pass": true,
+   "ref": 16.08,
+   "ours": 16.08,
+   "oursMedianAll": 16.08
+  },
+  {
+   "id": "P9",
+   "layer": "PARITY",
+   "name": "כותרות פתיחה קומפקטיות (בלי מתיחת מילים)",
+   "pass": true,
+   "maxWordGapPt": 14.9,
+   "hint": "במקור כותרת h2 יושבת קומפקטית בטור; מתיחה של מילים על רוחב העמוד = באג יישור"
+  }
+ ]
+}
