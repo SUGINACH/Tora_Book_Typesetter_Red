@@ -137,8 +137,8 @@
   "fn-delim-close": "]",
   "en-line-prefix": "הערת סיום -",
   "fn-columns": "1",
-  "fn-layout-mode": "block",
-  "fn-reset-mode": "page",
+  "fn-layout-mode": "continuous",
+  "fn-reset-mode": "siman",
   "fn-title-text": "",
   "f-note-title": "'David Libre', serif",
   "s-note-title": "9",
@@ -262,5 +262,6 @@
   "aq-para-spacing-max": "9",
   "aq-line-height": true,
   "aq-line-height-max": "3",
-  "aq-shared-load": true
+  "aq-shared-load": true,
+  "fn-bar-max-height-px": "0"
 }
