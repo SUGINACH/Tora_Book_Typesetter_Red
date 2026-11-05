@@ -31,7 +31,17 @@
    `layout-parity.yml` (ratchet ‏88.9% מ-S5.3), `gh-pages-audit.yml`.
    מקומית מותר רק כשער קדם-דחיסה (npm test / אודיט מקומי חד-פעמי).
    **אל תמתין לבדיקה שאורכת >5 דק'** — המשך, ובדוק בסשן הבא.
-5. **טוקן GitHub:** נשמר בסנדבוקס בלבד:
+5. **תקלת דחיחה מוכרת (05-06.11.2026):** ‏git push נדחה בצד השרת בשגיאה
+   `fatal error in commit_refs_rules` (תקלת GitHub גלובלית — דווחה בפרויקטים
+   רבים; גם commit טריוויאלי לענף חדש נדחה). **העיקוף שהוכח עובד:** פרסום
+   ה-commit דרך ה-Git Data API — blobs (base64) ← tree (base_tree=ראש
+   הענף המרוחק) ← commit (parents=ראש הענף) ← ‏PATCH /git/refs/heads/<branch>
+   עם force:false. סקריפט מוכן: `/home/z/my-project/scripts/api-push.py`
+   (אם נמחק באיפוס — לשחזר לפי התיאור כאן; שימוש:
+   `python3 api-push.py <branch> <local-sha> <msg-file>`; ניסיונות חוזרים
+   על 5xx). כך נדחפו main ‏(3c09df7) ו-gh-pages ‏(b2335ca) של S5.4. אין
+   השפעה על ה-Actions — הכל ירה כרגיל. אם git push חוזר לעבוד — להעדיף אותו.
+6. **טוקן GitHub:** נשמר בסנדבוקס בלבד:
    `/home/z/my-project/.secrets/github_token.txt` (chmod 600, מחוץ לריפו
    הפומבי!). הרימוט מוגדר עם הטוקן. **אסור בתכלית להדפיסו או להעלותו
    לריפו.** אם נמחק — לבקש טוקן חדש מהמשתמש (93 תווים; 92 = פגום).
