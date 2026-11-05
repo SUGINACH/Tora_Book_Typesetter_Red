@@ -132,6 +132,25 @@
           problems.push({ page: idx, col: ci, type: 'LINE_OVERLAP', severity: 'high', px: Math.round(ov), a: rects[i - 1].el.textContent.slice(0, 25), b: rects[i].el.textContent.slice(0, 25) });
         }
       }
+      // 1ב. **D-92 (עטיפת שורה בדפדפן):** מילות שורה מתוכננת חייבות שורה
+      // ויזואלית אחת — ריצת טקסט בשני גבהים = הדפדפן עטף (מדידה בלי
+      // רווח-ביטחון) והדיו חופף את השורה שמתחת. רק צמתי טקסט (לא ספאנים
+      // מוגבהים: סמן/סוגריים/חלון).
+      for (const lr of rects) {
+        let minTop = Infinity, maxTop = -Infinity, wn = 0;
+        for (const ch of lr.el.childNodes) {
+          if (ch.nodeType !== 3) continue;
+          if (!(ch.textContent || '').trim()) continue;
+          const rg = document.createRange(); rg.selectNodeContents(ch);
+          for (const rc of rg.getClientRects()) {
+            if (rc.width <= 0.5) continue;
+            wn++; if (rc.top < minTop) minTop = rc.top; if (rc.top > maxTop) maxTop = rc.top;
+          }
+        }
+        if (wn >= 2 && maxTop - minTop > 3) {
+          problems.push({ page: idx, col: ci, type: 'WRAPPED_LINE', severity: 'high', spread: Math.round((maxTop - minTop) * 10) / 10, text: lr.el.textContent.slice(0, 25) });
+        }
+      }
       // 2. גלישה מתיבת הטור (רוחב/גובה)
       for (const lr of rects) {
         if (lr.r.r > cr.r + 2 || lr.r.x < cr.x - 2) {

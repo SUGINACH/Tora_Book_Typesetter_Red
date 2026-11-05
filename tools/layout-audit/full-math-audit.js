@@ -137,6 +137,24 @@
         const words = (l.textContent || '').trim().split(/\s+/).filter(Boolean).length;
 
         if (prevBox && prevBox.b - lr.y > 1.5) cnt('LINE_OVERLAP', { type: 'LINE_OVERLAP', severity: 'high', page: idx, col: ci, px: Math.round(prevBox.b - lr.y), a: (prevBox.tx || '').slice(0, 20), b: (l.textContent || '').slice(0, 20) });
+        // **D-92 (עטיפת שורה בדפדפן):** כל מילות הטקסט של שורה מתוכננת חייבות
+        // לשבת על אותה שורה ויזואלית. ריצת טקסט בשני גבהים = הדפדפן עטף
+        // שורה שהמנוע תכנן (מדידה צמודה-לקצה ללא רווח-ביטחון) — ודיו
+        // השורה הוויזואלית השנייה חופף את השורה שמתחתיה. ספאנים מוגבהים
+        // (סמן/סוגריים/חלון) אינם נבדקים — רק צמתי טקסט.
+        {
+          let minTop = Infinity, maxTop = -Infinity, wn = 0;
+          for (const ch of l.childNodes) {
+            if (ch.nodeType !== 3) continue;
+            if (!(ch.textContent || '').trim()) continue;
+            const rg = document.createRange(); rg.selectNodeContents(ch);
+            for (const rc of rg.getClientRects()) {
+              if (rc.width <= 0.5) continue;
+              wn++; if (rc.top < minTop) minTop = rc.top; if (rc.top > maxTop) maxTop = rc.top;
+            }
+          }
+          if (wn >= 2 && maxTop - minTop > 3) cnt('WRAPPED_LINE', { type: 'WRAPPED_LINE', severity: 'high', page: idx, col: ci, spread: Math.round((maxTop - minTop) * 10) / 10, text: (l.textContent || '').slice(0, 24) });
+        }
         if (lr.r > cr.r + 2 || lr.x < cr.x - 2) cnt('LINE_OUTSIDE_COLUMN', { type: 'LINE_OUTSIDE_COLUMN', severity: 'high', page: idx, col: ci, dx: Math.round(Math.max(lr.r - cr.r, cr.x - lr.x)), text: (l.textContent || '').slice(0, 20) });
         if (lr.b > cr.b + 2) cnt('LINE_BELOW_COLUMN', { type: 'LINE_BELOW_COLUMN', severity: 'high', page: idx, col: ci, dy: Math.round(lr.b - cr.b), text: (l.textContent || '').slice(0, 20) });
         if (ink && (ink.r > cr.r + 2.5 || ink.x < cr.x - 2.5)) cnt('INK_OUTSIDE_COLUMN', { type: 'INK_OUTSIDE_COLUMN', severity: 'high', page: idx, col: ci, dx: Math.round(Math.max(ink.r - cr.r, cr.x - ink.x)), text: (l.textContent || '').slice(0, 20) });

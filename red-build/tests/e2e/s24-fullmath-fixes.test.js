@@ -22,7 +22,7 @@ const { importImudSettings } = require('../../src/engine/core/legacy-settings-ma
 const { getSettingDefs } = require('../../src/engine/core/settings-registry');
 const { renderPage } = require('../../src/engine/output/dom-renderer');
 const { MeasureAPI } = require('../../src/engine/typography/measure-api');
-const { GEO, SZ, FLOW_BOTTOM, SINGLE_W, headingItemH } = require('../../src/engine/layout/legacy-imud-flow');
+const { GEO, SZ, FLOW_BOTTOM, SINGLE_W, headingItemH, LineBreaker, wrapText, readConfig } = require('../../src/engine/layout/legacy-imud-flow');
 
 const RB = path.join(__dirname, '..', '..');
 const IMUD_RAW = JSON.parse(fs.readFileSync(path.join(RB, 'ui', 'assets', 'imud', 'default_settings.json'), 'utf8'));
@@ -310,6 +310,57 @@ describe('s24-fullmath-fixes', () => {
     const target = rebuilt.find(t => norm(t).length > 100);
     assert(target, 'long note reconstructed');
     assertEq(norm(target).split(' ').length, norm(NOTE_WORDS).split(' ').length, 'no note line lost (word count preserved)');
+  });
+
+  // ---------- D-92: רווח-ביטחון התאמת-דפדפן (עטיפת שורות מתוכננות) ----------
+  it('D-92: שורה שממלאת את הטור עד סף האפסילון נשברת מוקדם — הדפדפן לעולם לא יעטוף (breakPara)', () => {
+    // מדידה מדומה: מילה=50px, רווח=10px. 'א ב'=110 בדיוק מול טור 110.5:
+    // ללא רווח-ביטחון השורה מתקבלת (110 ≤ 110.5) — ובדפדפן היא גולשת
+    // (נמדד בחי: 269.41 מתוכנן מול 269.4844 מרונדר). עם FIT_EPS — חייבת להישבר.
+    const api = { measureTextWidth: (t) => (t === ' ' ? 10 : 50) };
+    const brk = new LineBreaker(api, readConfig(legacySettings()), null, null);
+    const tight = brk.breakPara('א ב ג ד ה ו', 110.5, 12, false);
+    assertEq(tight.lines[0].words.join(' '), 'א', 'שורה צמודה לקצה (slack < FIT_EPS) נשברת מוקדם');
+    const roomy = brk.breakPara('א ב ג ד ה ו', 130, 12, false);
+    assertEq(roomy.lines[0].words.join(' '), 'א ב', 'שורה עם רווח אמיתי נשארת שלמה');
+    // שרשרת: כל שורה מתוכננת מקיימת רוחב ≤ מגבלה − 0.75 (מוכח במדודה המדומה)
+    for (const ln of tight.lines) {
+      const w = ln.words.reduce((a, x) => a + 50, 0) + 10 * (ln.words.length - 1);
+      assert(w <= 110.5 - 0.75, `slack נשמר: ${w} ≤ ${110.5 - 0.75}`);
+    }
+  });
+
+  it('D-92: wrapText ו-fnFlow משאירים רווח-ביטחון (הערות/כותרות מרונדרות מחדש ב-DOM)', () => {
+    const api = { measureTextWidth: (t) => (t === ' ' ? 10 : 50) };
+    // צמוד לקצה: 'א ב'=110 מול 110.5 — ללא אפסילון היה מתקבל; עם FIT_EPS נשבר
+    const tight = wrapText('א ב ג ד', api, 110.5, 10);
+    assertEq(tight[0], 'א', 'wrapText שובר שורה צמודה לקצה');
+    for (const ln of tight) {
+      const w = ln.split(' ').length * 50 + (ln.split(' ').length - 1) * 10;
+      assert(w <= 110.5 - 0.75, `slack wrapText: ${w} ≤ 109.75`);
+    }
+    // עם רווח אמיתי השורות נשארות מרובות-מילים
+    const roomy = wrapText('א ב ג ד', api, 130, 10);
+    assertEq(roomy[0], 'א ב', 'שורה עם רווח אמיתי נשארת שלמה');
+    assertEq(roomy[1], 'ג ד', 'המשך זורם');
+  });
+
+  it('D-92: רווח מילת-החלון נמדד בגופן החלון 1.5× — לא קבוע 6px', () => {
+    // גופן חלון מדומה: מילה=30, רווח=9 (במקום 6 הקבוע). רוחב החלון כולל את
+    // הרווח האמיתי + אפסילון — שורת הזרימה הראשונה לא תגלוש מהטור המוקטן.
+    const body = { measureTextWidth: (t) => (t === ' ' ? 10 : 50) };
+    const win = { measureTextWidth: (t) => (t === ' ' ? 9 : 30) };
+    const brk = new LineBreaker(body, readConfig(legacySettings({ 'drop-word-mode': 'window', 'drop-word-min-lines': 2 })), win, null);
+    const r = brk.breakPara('התחלה ארוכה מאוד של פסקה עם הרבה מילים נוספות למילוי שתי שורות ויותר בפסקה אחת שלמה', 200, 12, true);
+    assert(r.hasWindow === true, 'window planned');
+    // windowW = 30 (מילה) + 9 (רווח 1.5×) + 0.75 (FIT_EPS) = 39.75 — לא 36 הקבוע
+    assert(Math.abs(r.windowW - 39.75) < 0.01, `windowW כולל רווח נמדד: ${r.windowW}`);
+    // שורות הזרימה 0-1 מוגבלות ברוחב המוקטן — כל שורה עם slack
+    for (let i = 0; i < Math.min(2, r.lines.length); i++) {
+      const ln = r.lines[i];
+      const w = ln.words.reduce((a, x) => a + 50, 0) + 10 * Math.max(0, ln.words.length - 1);
+      assert(w <= 200 - r.windowW - 0.75 + 0.01, `שורת זרימה ${i}: ${w} ≤ ${200 - r.windowW - 0.75}`);
+    }
   });
 
 });

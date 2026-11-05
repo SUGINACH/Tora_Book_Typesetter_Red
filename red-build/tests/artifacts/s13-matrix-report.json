@@ -5,7 +5,7 @@
     {
       "config": "default",
       "pages": 36,
-      "ms": 55,
+      "ms": 54,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
@@ -22,7 +22,7 @@
     {
       "config": "ornaments",
       "pages": 36,
-      "ms": 25,
+      "ms": 27,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
@@ -39,7 +39,7 @@
     {
       "config": "aq-on",
       "pages": 36,
-      "ms": 35,
+      "ms": 21,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
@@ -56,7 +56,7 @@
     {
       "config": "continuous-notes",
       "pages": 36,
-      "ms": 24,
+      "ms": 36,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "53ea73e3277d724f4e0914cf1fa1b49fdc0b9d534721f1fa6ec10cf7110b54b6",
@@ -73,7 +73,7 @@
     {
       "config": "verso-headers",
       "pages": 36,
-      "ms": 19,
+      "ms": 17,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",
@@ -90,7 +90,7 @@
     {
       "config": "custom-styles",
       "pages": 36,
-      "ms": 24,
+      "ms": 25,
       "contentPreserved": true,
       "geometryNeutral": true,
       "layoutHash": "2b88e2c88ae7d994fef98cbdfeb0b5b4344c6d2d98aea6b1dcdb3e8eb9f9377f",

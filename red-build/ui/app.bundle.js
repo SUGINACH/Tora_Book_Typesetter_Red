@@ -462,7 +462,7 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-05-s4.26'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-05-s4.27'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   const worker = new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`);
   // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
   // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.
@@ -10514,6 +10514,19 @@ function tokenizeDoc(rawText, cfg) {
  * כ"א" (הסמן); המילה הראשונה בחלון (1.5×) מכווצת את שתי השורות הראשונות;
  * שתי המילים האחרונות קשורות ברווח בלתי-שביר (מניעת מילה יתומה).
  */
+
+/** **D-92 (רווח-ביטחון התאמת-דפדפן — "0 בעיות עימוד" בעין):** התצוגה החיה
+ * מרנדרת כל שורה מתוכננת כבלוק עם white-space:normal — הדפדפן רשאי
+ * לשבור אותה מחדש. מדידת המנוע (impl B, hmtx אמת) זהה לדפדפן ברמת
+ * הגליף, אבל הדפדפן צובר תת-פיקסל (LayoutUnit 1/64px לגליף): שורה
+ * שנמדדה בדיוק ברוחב הטור (269.41px, אמ' 46 טור 1) רונדרה בפועל
+ * ‏269.4844px — גלישה 0.078px — והדפדפן עטף את מילתה האחרונה לשורה
+ * ויזואלית שנייה שחופפת את השורה שמתחתיה (74 שורות כאלה בקובץ הגדול,
+ * ‏122 עמודים — נמדד בחי). לכן כל תנאי ההתאמה דורשים רווח-ביטחון: שורה
+ * מתקבלת רק אם היא נכנסת ברוחב פחות FIT_EPS. ההצטברות השיטתית
+ * (התוצאה תמיד ≤ רוחב הטור פחות אפסילון) מבטיחה שהדפדפן לעולם לא
+ * יצטרך לשבור — התוכנית = הרינדור (עקרון התצוגה=הייצוא). */
+const FIT_EPS = 0.75; // px — מכסה צבירת תת-פיקסל של עד ~96 גליפים בשורה (96/128)
 class LineBreaker {
   constructor(api, cfg, windowApi = null, headingApi = null) {
     this.api = api;
@@ -10674,7 +10687,10 @@ class LineBreaker {
       // התאים בשגיאה ממוצעת 0.03px ('וזה' 25.1/25.1, 'אך' 22.0/22.0, 'והיפך'
       // 45.2 — מול 39px בגופן הגוף). רוחב שגוי = גלישה שונה של שתי השורות
       // הראשונות של כל פסקת-חלון = הפרש P7/P6 הדומיננטי.
-      windowW = this.wWin(disp.slice(0, cfg.dropWordCount).join(' '), sizePt * 1.5) + 6;
+      // **D-92:** הרווח אחרי מילת-החלון — ברינדור הוא רווח אמיתי בגופן החלון
+      // בגודל 1.5× (חלק מה-span, נמדד — לא קבוע 6px) + רווח-ביטחון התאמת-דפדפן.
+      windowW = this.wWin(disp.slice(0, cfg.dropWordCount).join(' '), sizePt * 1.5)
+        + this.wWin(' ', sizePt * 1.5) + FIT_EPS;
     }
 
     // **S4.15 (ביטול קשיחת-הזוג ברינדור):** קשיחת שתי המילים האחרונות (nbsp)
@@ -10706,7 +10722,9 @@ class LineBreaker {
       const spBefore = cur.length ? spaceBetween(lastIdx, i) : 0;
       const w2 = bindHere ? wordWs[i + 1] + spaceBetween(i, i + 1) : 0;
       const addW = spBefore + w1 + (bindHere ? w2 : 0);
-      if (cur.length && curW + addW > limitOf() + 0.01) {
+      // **D-92:** limitOf() - FIT_EPS — רווח-ביטחון: הדפדפן צובר תת-פיקסל ברינדור
+      // ושורה ללא רווח נעטפת בו לשתי שורות ויזואליות החופפות את השורה שמתחת.
+      if (cur.length && curW + addW > limitOf() - FIT_EPS) {
         lines.push({ words: cur, parenFlags: curPf, parenStarts: curPs, parenEnds: curPe, window: useWindow && lineNo < 2 });
         cur = []; curPf = []; curW = 0; curPs = []; curPe = []; lineNo++;
       }
@@ -10869,7 +10887,8 @@ function wrapText(text, api, widthPx, sizePt) {
   for (const w of words) {
     const ww = api.measureTextWidth(w, sizePt, 0);
     const add = ww + (cur.length ? spaceW : 0);
-    if (cur.length && curW + add > widthPx) { lines.push(cur.join(' ')); cur = [w]; curW = ww; }
+    // **D-92:** רווח-ביטחון התאמת-דפדפן (הערות השוליים מרונדרות מחדש ב-DOM).
+    if (cur.length && curW + add > widthPx - FIT_EPS) { lines.push(cur.join(' ')); cur = [w]; curW = ww; }
     else { cur.push(w); curW += add; }
   }
   if (cur.length) lines.push(cur.join(' '));
@@ -12056,7 +12075,9 @@ function legacyTypeset(rawText, settings, env) {
     for (const tk of tokens) {
       const tw = tk.w != null ? tk.w : 0;
       const add = tw + (cur.length ? spaceW : 0);
-      if (cur.length && curW + add > SINGLE_W) { flowLines.push(cur); cur = [tk]; curW = tw; }
+      // **D-92:** רווח-ביטחון התאמת-דפדפן — זרימת ההערות מרונדרת מחדש כבלוק
+      // אחד (white-space:normal) ושורה ללא רווח גולשת מתיבתה המתוכננת.
+      if (cur.length && curW + add > SINGLE_W - FIT_EPS) { flowLines.push(cur); cur = [tk]; curW = tw; }
       else { cur.push(tk); curW += add; }
     }
     if (cur.length) flowLines.push(cur);
