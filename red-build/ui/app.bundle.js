@@ -462,7 +462,8 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const worker = new Worker('engine-worker.bundle.js');
+  const ASSET_VERSION = '2026-11-05-s4.23'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const worker = new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`);
   // **03.11(ג):** לקוח יחיד על ה-Worker — הן לאפליקציה והן לספריית IMUD.
   // שני לקוחות היו דורסים זה את זה את worker.onmessage והפונטים/הייצוא נתלים.
   const engine = new WorkerEngineClient(workerTransport(worker));
