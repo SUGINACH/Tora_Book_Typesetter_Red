@@ -485,7 +485,13 @@ function main() {
   // **S4.15:** env החלון גם לייצוא — שבירת השורות ב-PDF חייבת להיות זהה למודל
   // **S5.1:** marginFontBytes גם בייצוא — בלעדיו הערות-הצד ב-PDF נמדדו/צוירו
   // במטריקות גוף הטקסט במקום Hadassah (המודל/ה-DOM ב-Hadassah).
-  const pdf = exportPdf(text, settings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes, headingFontBytes, marginFontBytes });
+  // **S6.0 (R5-M6):** בליד מבוטל לייצוא ה-parity — ה-MediaBox מורחב סביב
+  // ה-Trim בגין בליד (ברירת המחדל 3מ״מ) וחילוץ הגיאומטריה (inspect-page)
+  // מודד מפינת המדיה ⇒ כל המיקומים הוסטו ב-8.5pt ו-P8a/b/c נפלו שקרית.
+  // ה-parity משווה גיאומטריית עימוד מול הייחוס — לא תיבות דפוס; בלי בליד
+  // ה-MediaBox = ה-Trim והחילוץ זהה להיסטוריה.
+  const pdfSettings = { ...settings, 'export-bleed-mm': 0, 'pdf-crop-marks': false };
+  const pdf = exportPdf(text, pdfSettings, fontBytes, 'Guttman Rashi', { windowFontBytes, prefaceFontBytes, headingFontBytes, marginFontBytes });
   if (!pdf.ok) { console.error('exportPdf failed:', pdf.error); process.exit(2); }
   const pdfPath = path.join(outDir, 'ours.pdf');
   fs.writeFileSync(pdfPath, Buffer.from(pdf.bytes));
