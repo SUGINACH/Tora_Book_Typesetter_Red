@@ -42,8 +42,15 @@ function buildControl(doc, b, value, onChange) {
     if (b.step != null) el.setAttribute('step', String(b.step));
     el.value = String(value);
     el.addEventListener('change', () => {
-      const n = Number(el.value);
-      onChange(Number.isFinite(n) ? n : value);
+      // **S6.0 (R8-M3):** שדה מרוקן = ביטול (לא 0! — Number('')===0 שלח
+      // 0 למנוע ⇒ גופן-0 = ספר ריק "מוצלח"); ערכים מוצמדים לטווח
+      // min/max של ההגדרה (בעבר -5 עבר כמו שהוא).
+      if (el.value === '') { el.value = String(value); return; }
+      let n = Number(el.value);
+      if (!Number.isFinite(n)) { el.value = String(value); return; }
+      if (b.min != null && n < b.min) { n = b.min; el.value = String(n); }
+      if (b.max != null && n > b.max) { n = b.max; el.value = String(n); }
+      onChange(n);
     });
   } else if (b.type === 'color') {
     el = doc.createElement('input');

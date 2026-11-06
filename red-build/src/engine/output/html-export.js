@@ -10,7 +10,9 @@ const OFFLINE_PATTERNS = [
   /https?:\/\/(?!localhost)/i,
   /@import\s+url\(/i,
   /<link[^>]+href=["']https?:/i,
-  /<script[^>]+src=["']https?:/i
+  /<script[^>]+src=["']https?:/i,
+  /* **S6.0:** גם הפניות יחסיות-פרוטוקול (//host) — בעבר עברו את השומר */
+  /["'(]\/\/(?!localhost)[a-z0-9.-]+/i
 ];
 
 /** בדיקת offline-guard על מחרוזת HTML; זורק עם פירוט אם נמצאה בקשה חיצונית. */
@@ -35,7 +37,9 @@ html,body{margin:0;background:#3a3a3a;font-family:'Frank Ruhl Libre','David',ser
    (kernPairs אינו נצרך במדידה) וה-PDF מצייר לפי רוחבי hmtx בלבד — אבל
    הדפדפן מקרן גופנים עם טבלאות kern/GPOS כברירת מחדל ⇒ רוחב מילה ב-DOM
    היה שונה מהמודל ומה-PDF. font-kerning:none משווה את שלושת הנתיבים. */
-html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
+/* **S6.0:** הכללת גם הערות/endnotes/הערות-צד/TOC — בלי זה הדפדפן עימד
+   אותן עם קרנינג בניגוד למודל/ה-PDF (רוחב שונה ⇒ עטיפה שונה). */
+html,body,.page,.line,.rh,.band,.footnote,.footnotes,.endnote-note,.endnote-list,.side-note,.toc-row,.margin-note,.custom-box{font-kerning:none;font-variant-ligatures:none}
 .book{display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 0}
 .page{background:#fff;color:#000;box-shadow:0 2px 12px rgba(0,0,0,.45);position:relative;overflow:hidden;padding:0}
 .columns{position:absolute;top:0;left:0;right:0;bottom:0}
@@ -68,7 +72,7 @@ html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
 .fn-rule--star{border-top:3px double #4a4a4a;height:0}
 .fn-rule--diamond{border-top:2px solid #000;height:0;transform:scaleX(.6)}
 .fn--continuation{color:#555;font-style:italic}
-.folio{position:absolute;bottom:4px;width:100%;text-align:center;font-size:10pt}
+.folio{position:absolute;bottom:25px;width:100%;text-align:center;font-size:10pt}
 .folio--outer-left{left:8px;width:auto;text-align:left}
 .folio--outer-right{right:8px;width:auto;text-align:right}
 .folio--outer{left:8px;width:auto;text-align:left}
@@ -80,7 +84,10 @@ html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
 .page-num-badge{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;line-height:1}
 .page-num-frame-circle{border:1.2px solid #333;border-radius:50%;min-width:22px;height:22px;padding:1px}
 .page-num-frame-box{border:1.2px solid #333;border-radius:3px;min-width:22px;height:20px;padding:1px 4px}
-.side-note{position:absolute;font-size:.75em;max-height:60%;overflow:hidden}
+.side-note{position:absolute;font-size:.75em;line-height:1.15;max-height:60%;overflow:hidden}
+/* **S6.0 (R5-L4):** גובה בסיסי אחיד עם ההקרנה ל-PDF (1.15 — בלי זה
+   line-height:normal תלוי-גופן והשורות נפרדות בין תצוגה לייצוא). */
+.margin-note{color:#404040}
 .col-divider{position:absolute;width:0;border-left:1px solid #999}
 .col-divider--thin{border-left:1px solid #999}
 .col-divider--dashed{border-left:1px dashed #999}
@@ -93,7 +100,9 @@ html,body,.page,.line,.rh,.band{font-kerning:none;font-variant-ligatures:none}
    line-height:0.85 כמו המקור — תיבת השורה אינה מתנפחת (חפיפה אפס). */
 .w--window{font-family:'FrankReal','Frank Ruhl Libre',serif;font-weight:900;line-height:.85}
 .endnote-title{font-size:1.2em;font-weight:700;margin:8px 12px}
-.endnote-list{font-size:.85em;padding:0 12px}
+/* **S6.0 (R4-M7):** .8em — זהה למודל/PDF (0.8×body; .85em גרם לטקסט
+   גדול ב-6.25% שנעטף ליותר שורות מהתקציב). */
+.endnote-list{font-size:.8em;padding:0 12px}
 .endnote-note{margin:2px 0}
 .toc-page-title{font-size:16pt;font-weight:700;margin:12px 18px 18px;text-align:center}
 .toc-rows{position:absolute;top:70px;left:18px;right:18px;bottom:30px}

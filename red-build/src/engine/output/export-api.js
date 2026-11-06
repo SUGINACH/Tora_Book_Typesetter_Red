@@ -92,14 +92,22 @@ function exportHtml(result, settings, doc, meta = {}) {
 function exportPdf(text, settingsIn, fontBytes, fontName, env) {
   if (typeof Buffer === 'undefined') return { ok: false, error: 'no-buffer' }; // דפדפן — נתיב Node בלבד (מתועד)
   /* node-only */ const { typeset } = require('../core/pipeline');
-  /* node-only */ const { registerFont, unregisterFont, registeredFonts: registeredFontsRef } = require('../typography/measure-api');
+  /* node-only */ const { registerFont, unregisterFont, restoreFontRegistration, registeredFonts: registeredFontsRef } = require('../typography/measure-api');
   /* node-only */ const { parseFont, glyphIdOf } = require('../typography/font-metrics');
   /* node-only */ const { buildSubset, charInventory } = require('../typography/font-subset');
   /* node-only */ const { projectDocument } = require('./geometry-projector');
   /* node-only */ const { writePdf } = require('./pdf-writer');
   const profileName = fontName || settingsIn['body-font'] || 'ToraExport';
+  // **S6.0 (R2-C1 — דליפת רישום גופן):** profileName עלול להיות שם הגופן
+  // של התצוגה החיה (body-font, למשל 'Frank Ruhl Libre' שנרשם ע"י ה-UI).
+  // בעבר: הייצוא דרס את הרישום וב-finally מחק אותו ⇒ אחרי ייצוא PDF אחד
+  // המדידה החיה נפלה בשקט ל'table' (סטיית עימוד 2–17% לפי EXT-13).
+  // כעת: שחזור הרישום הקודם בסוף הייצוא; ובכשל רישום — לא נמחק רישום
+  // קיים תקין (בעבר נמחק גם כשה-parse נכשל).
+  const hadPrevFont = registeredFontsRef.has(profileName);
+  const prevFont = hadPrevFont ? registeredFontsRef.get(profileName) : null;
   const reg = registerFont(profileName, fontBytes);
-  if (!reg.ok) { unregisterFont(profileName); return { ok: false, error: `font:${reg.error}` }; }
+  if (!reg.ok) { if (!hadPrevFont) unregisterFont(profileName); return { ok: false, error: `font:${reg.error}` }; }
   try {
     const font = reg.profile;
     // **סדר הפעולות (תיקון שורש):** עימוד → הקרנה → מלאי מ**כל הטקסט שמצויר
@@ -381,7 +389,8 @@ function exportPdf(text, settingsIn, fontBytes, fontName, env) {
       }
     };
   } finally {
-    unregisterFont(profileName);
+    // **S6.0 (R2-C1):** שחזור הרישום שהיה קיים לפני הייצוא (או הסרה אם לא היה)
+    restoreFontRegistration(profileName, prevFont);
   }
 }
 

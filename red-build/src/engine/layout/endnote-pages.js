@@ -163,10 +163,15 @@ function estimateTitleHeight(settings, lineHeightPx) {
 function estimateNoteHeight(text, settings, measure, lineHeightPx, colW, fontFactor = 1) {
   const size = settings['body-font-size-pt'] * 0.8;
   const words = String(text || '').split(/\s+/).filter(Boolean);
+  // **S6.0 (R3-C3):** רווחים בין מילים נכללים באומדן — כמו wrapNoteTokens
+  // שמצייר את ההערה (בלי זה כל הערה גובלת-שבירה נמדדה שורה פחות וחפפה
+  // את עמודתה בטור/בעמוד — 21.7% מההערות בדגימת 230).
+  const spaceW = measure(' ', size) * fontFactor;
   let lines = 1, w = 0;
   for (const word of words) {
     const ww = measure(word, size) * fontFactor;
-    if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+    const addW = (w > 0 ? spaceW : 0) + ww;
+    if (w + addW > colW && w > 0) { lines++; w = ww; } else w += addW;
   }
   return lines * lineHeightPx(size);
 }

@@ -35,6 +35,10 @@ function headingLevelOf(styleVal) {
 function convert(docXml, fnXml) {
   const docRes = parseXml(docXml);
   if (docRes.error && docRes.error !== 'truncated') return { ok: false, text: '', stats: {}, error: `docxml:${docRes.error}` };
+  // **S6.0 (R9 — קיטוע שקט):** XML קטוע התקבל בעבר כהצלחה עם ספר קצר
+  // יותר בלי אזהרה. כעת הקיטוע מדווח במפורש ב-stats.warnings (הפריטים
+  // שאחרי נקודת הקטיעה אבדו).
+  const warnings = docRes.error === 'truncated' ? ['docxml:truncated'] : [];
 
   // 0) בדיקת מבנה WordML: חייב להיות אלמנט w:body (או לפחות w:p) — אחרת אינו מסמך
   //     וורד תקין (קלט XML לא מסמך ⇒ דחייה «XML פגום», לא טעינה שקטה של מסמך ריק).
@@ -98,7 +102,7 @@ function convert(docXml, fnXml) {
   return {
     ok: true,
     text: lines.join('\n'),
-    stats: { headings, paragraphs, footnotes, skipped, footnoteDefs: fnStats }
+    stats: { headings, paragraphs, footnotes, skipped, footnoteDefs: fnStats, warnings }
   };
 }
 
@@ -201,11 +205,15 @@ function importDocx(bytes, fileName) {
     }
     return { ok: false, text: '', stats: {}, message: `פורמט לא נתמך: XML פגום בתוך «${name}» (${res.error}). הקובץ לא נטען.` };
   }
+  // **S6.0 (R9):** אזהרת קיטוע נראית למשתמש — לא עוד "נטען" חלק בשקט.
+  const truncWarn = (res.stats && res.stats.warnings && res.stats.warnings.length)
+    ? `  ⚠ אזהרה: הקובץ קטוע — ייתכן שתוכן בסופו אבד (${res.stats.warnings.join(', ')}).`
+    : '';
   return {
     ok: true,
     text: res.text,
     stats: res.stats,
-    message: `הקובץ «${name}» נטען: ${res.stats.headings} כותרות, ${res.stats.paragraphs} פסקאות, ${res.stats.footnotes} הערות Word הומרו להערות סוגריים.`
+    message: `הקובץ «${name}» נטען: ${res.stats.headings} כותרות, ${res.stats.paragraphs} פסקאות, ${res.stats.footnotes} הערות Word הומרו להערות סוגריים.${truncWarn}`
   };
 }
 

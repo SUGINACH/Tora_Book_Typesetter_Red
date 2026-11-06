@@ -210,9 +210,12 @@ function greedyFallback(items, maxWidthPx, measure, lineHeightPx) {
   };
   const pushTok = () => {
     if (cur === null) return;
+    // **S6.0 (R7-M2 — רווח רפאים בגיבוי הגרידי):** sp חושב לפי מצב השורה
+    // **לפני** ה-flush ונוסף גם אחריו ⇒ כל שורה שנפתחה ב-flush נשאה רווח
+    // אחד עודף ב-widthPx (מדידה שקרית לצרכי ריצת-שורה/איזון). תוקם:
+    // הבדיקה וההוספה לפי המצב **אחרי** ההחלטה על flush.
+    if (toks.length && w + space + curW > maxWidthPx - 0.75) flush(); // הטוקן הבא ייפתח שורה חדשה
     const sp = toks.length ? space : 0;
-    // **S5.1 (D-92-DP):** רווח-ביטחון גם בגיבוי הגרידי — כמו FIT_EPS במורשת.
-    if (toks.length && w + sp + curW > maxWidthPx - 0.75) flush(); // הטוקן הבא ייפתח שורה חדשה
     toks.push(cur); w += sp + curW;
     cur = null; curW = 0; joinNext = false;
   };

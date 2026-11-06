@@ -56,10 +56,12 @@ function colCapacityOf(page, opts = {}) {
   let cap = page.template.contentBox.height;
   if (page.spanning && page.spanning.heightPx) cap -= page.spanning.heightPx;
   const fn = opts.fnBudget !== false && page.fnReservedHeightPx > 0 ? page.fnReservedHeightPx : 0;
-  if (fn && page.columns && page.columns.length) {
-    const idx = opts.colIndex != null ? opts.colIndex : page.columns.length - 1;
-    if (idx === page.columns.length - 1) cap -= fn;
-  }
+  // **S6.0 (R3-C2 — מרזב חוצה-טורים):** אזור ההערות נמשך לרוחב תיבת
+  // התוכן כולה בשני המרנדרים (DOM ו-PDF) — לכן התקציב מופחת מ**כל**
+  // הטורים. בעבר הופחת רק מהטור האחרון ⇒ טור ימני (RTL) חדר עד 44px
+  // לתוך אזור ההערות בכל עמוד רווי-הערות, והגנת containment הייתה עיוורת
+  // לזה (אותה נוסחה).
+  if (fn) cap -= fn;
   return cap;
 }
 

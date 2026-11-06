@@ -416,7 +416,12 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
           gapW = (usableW - sumW) / gaps; // יישוב לשני הצדדים — כמו הגוף
         }
         let cursor = rightEdge;
-        for (let i = ws.length - 1; i >= 0; i--) {
+        // **S6.0 (R5-C1 — סדר מילים הפוך בהערות):** הלולאה רצה מהסוף להתחלה
+        // והציבה את המילה ה**אחרונה** בלוגי בקצה הימני — כלומר ההערה נקראה
+        // בסדר הפוך בייצוא ה-PDF (המודל וה-DOM מציגים את המילה הראשונה מימין,
+        // כנדרש ב-RTL). תוקם: מעבר קדימה — המילה הראשונה זוכה לסלוט הימני;
+        // מיקומי הסלוטים/הרווחים/היישוב לא השתנו כלל (רק מיפוי מילה→סלוט).
+        for (let i = 0; i < ws.length; i++) {
           cursor -= ws[i].w;
           words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: ws[i].sizePt, baselineY: baseY, fontKey: 'fnbody' });
           cursor -= gapW;
@@ -469,7 +474,9 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
         gapW = (usableW - sumW) / gaps; // יישוב לשני הצדדים (כמו הייחוס)
       }
       let cursor = lineRight;
-      for (let i = ws.length - 1; i >= 0; i--) {
+      // **S6.0 (R5-C1):** מעבר קדימה — המילה הראשונה בלוגי בקצה הימני (RTL);
+      // בעבר האחרונה הוצבה מימין וההערה נקראה הפוך ב-PDF.
+      for (let i = 0; i < ws.length; i++) {
         cursor -= ws[i].w;
         words.push({ text: ws[i].text, x: cursor, w: ws[i].w, sizePt: SZ.fnBody, baselineY: baseY, fontKey: 'fnbody' });
         cursor -= gapW;
@@ -492,23 +499,29 @@ function projectLegacyPage(pg, settings, api, winApi, headingApi = null, fnApi =
       });
     }
     for (const r of (pg.toc.rows || [])) {
-      const baseY = baselineOf(r.y, 26, r.sizePt, ascent, descent);
+      // **S6.0 (F5):** שורת TOC עטופה — כל שורה-בת בפס 26px משלה (כמו ה-DOM);
+      // שורות חד-שורתיות (המקרה הנפוץ) זהות בתכלית לפלט הקודם.
+      const rowLines = (r.lines && r.lines.length ? r.lines : [r.text]).filter(t => String(t || '').trim());
+      rowLines.forEach((rowText, rli) => {
+        const lineY = r.y + rli * 26;
+        const baseY = baselineOf(lineY, 26, r.sizePt, ascent, descent);
       // כותרת מימין (במדרגות לפי רמה), מספר משמאל; **S5.1:** גופן הרמה
       // מההגדרות (כמו ה-DOM — heading-N-font), נפילה ל-hApi כשאינה רשומה.
       const rLvl = r.level != null ? r.level : 2;
       const rFam = settings[`heading-${rLvl}-font`] || 'DavidLibre-Bold';
       const rFamApi = apiFor(rFam);
       const rApi = rFamApi || hApi;
-      const tW = rApi.measureTextWidth(r.text, r.sizePt, 0);
-      const textWords = placeWords([r.text], rApi, r.x1 - tW, tW, r.sizePt, 'right', baseY);
+      const tW = rApi.measureTextWidth(rowText, r.sizePt, 0);
+      const textWords = placeWords([rowText], rApi, r.x1 - tW, tW, r.sizePt, 'right', baseY);
       for (const w of textWords) w.fontKey = rFamApi ? fontKeyOf(rFam) : 'heading';
       const numW = rApi.measureTextWidth(r.folio, SZ.tocNum, 0);
-      const numWords = r.folio ? placeWords([r.folio], rApi, GEO.TOC_NUM_X, numW, SZ.tocNum, 'left', baseY) : [];
+      const numWords = (r.folio && rli === 0) ? placeWords([r.folio], rApi, GEO.TOC_NUM_X, numW, SZ.tocNum, 'left', baseY) : [];
       for (const w of numWords) w.fontKey = rFamApi ? fontKeyOf(rFam) : 'heading';
       out.lines.push({
-        x: GEO.TOC_NUM_X, y: r.y, w: r.x1 - GEO.TOC_NUM_X, h: 26,
+        x: GEO.TOC_NUM_X, y: lineY, w: r.x1 - GEO.TOC_NUM_X, h: 26,
         words: [...textWords, ...numWords], align: 'right', kind: 'toc-row',
         level: r.level, isLast: false, sizePt: r.sizePt, baselineY: baseY, tokenId: null
+      });
       });
     }
   }

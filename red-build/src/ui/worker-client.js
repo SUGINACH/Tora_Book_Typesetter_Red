@@ -80,6 +80,10 @@ class WorkerEngineClient {
       this.pending.delete(m.jobId);
       if (m.type === 'export-error') p.reject(new Error(`export: ${m.message}`));
       else if (m.type === 'export-result' && m.ok === false) p.reject(new Error(`export: ${m.error || 'failed'}`));
+      // **S6.0 (R8-L1):** כשל של עבודת צד (register-font-result וכו') נדחה
+      // כעת — בעבר נפתר בהצלחה עם {ok:false} ואיש לא בדק (רישום גופן
+      // שנכשל נחשב "הצלחה" ⇒ מדידה בפולבק בלי דיווח).
+      else if (m.ok === false) p.reject(new Error(`side-job: ${m.error || m.message || 'failed'}`));
       else p.resolve(m);
       return;
     }

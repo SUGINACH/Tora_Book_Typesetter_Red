@@ -120,8 +120,12 @@ function renderLine(ln, doc, settings = {}) {
   // מיושם כ-line-height מפורש (px) כמו בפרויקטור וב-PDF. בעבר הוחל כאן
   // wordSpacing אופקי (‏(factor−1)×4px) — שלושה נתיבים, שלוש פרשנויות,
   // והגובה מעולם לא השתנה. כעת: שדה אחד, משמעות אחת.
-  if (ln.aqStretch && ln.aqStretch !== 1 && Number.isFinite(ln.heightPx)) {
-    el.style.lineHeight = `${Math.round(ln.heightPx * ln.aqStretch * 100) / 100}px`;
+  // **S6.0 (R4-C1):** line-height מהמודל ל**כל** שורה — לא רק ב-AQ. בלי
+  // זה הדפדפן משתמש ב-normal (~1.15–1.25em) והטור נערם בפיץ שונה מהמודל
+  // ומה-PDF (~4–5px לשורה, עד ~120px בתחתית הטור) — תצוגה≠ייצוא בכל עמוד DP
+  // (תיקון S5.1 הוחל בנתיב המורשת בלבד ולא כאן).
+  if (Number.isFinite(ln.heightPx)) {
+    el.style.lineHeight = `${Math.round(ln.heightPx * (ln.aqStretch || 1) * 100) / 100}px`;
   }
   // **S8 (F-08):** הזמנת עיטורי H2 בתוך תיבת השורה — הטקסט יורד/עולה ב־padding;
   // הגובה כבר תוקצב בפריסה, הרנדור רק מצייר בתוך התיבה (מקור יחיד — F-09).
@@ -362,7 +366,9 @@ function renderTocPageContent(page, doc) {
 function renderColumnDivider(page, settings, doc) {
   const style = settings['column-divider-style'];
   if (!style || style === 'none' || page.columns.length < 2) return null;
-  const used = page.columns.map(col => col.reduce((s, ln) => s + (ln.heightPx || 0), 0));
+  const used = page.columns.map(col => col.reduce((s, ln) => s + (ln.heightPx || 0) * (ln.aqStretch || 1), 0));
+  // **S6.0 (R4-M5):** גובה המפריד כולל aqStretch — כמו הפרויקטור/PDF
+  // (בעבר ה-DOM חישב גובה ללא המתיחה ⇒ מפריד באורך שונה בין תצוגה לייצוא).
   const h = columnDividerHeightPx(used);
   if (h <= 0) return null;
   const el = doc.createElement('div');
@@ -1079,32 +1085,38 @@ function renderLegacyPage(pg, settings, doc) {
       root.appendChild(el);
     }
     for (const r of (pg.toc.rows || [])) {
-      const row = doc.createElement('div');
-      row.className = 'toc-row';
-      row.setAttribute('dir', 'rtl');
-      position(row, GEO.TOC_NUM_X, r.y, (r.x1 || 560) - GEO.TOC_NUM_X, 26);
-      row.style.display = 'flex';
-      row.style.justifyContent = 'space-between';
-      row.style.fontSize = `${pt2px(r.sizePt || 10.5)}px`;
-      // **S5.1:** גובה שורת TOC = התיבה (26px) — כמו baselineOf(r.y, 26, ...) במקרן
-      row.style.lineHeight = '26px';
-      // **S4.26:** גופן שורות ה-TOC מההגדרות + הדגשה — כמו הייחוס
-      // (DavidLibre-Bold @10.5/10/9.5 בכל שורות התוכן)
-      const tf = headingFontOf(r.level != null ? r.level : 2);
-      if (tf) { row.style.fontFamily = tf; row.style.fontWeight = '700'; }
-      const t = doc.createElement('span');
-      t.className = 'toc-text';
-      t.style.marginRight = `${Math.max(0, 560 - (r.x1 || 560))}px`; // מדרגות לפי רמה
-      t.textContent = scrubPUAText(r.text || '');
-      row.appendChild(t);
-      if (r.folio) {
-        const n = doc.createElement('span');
-        n.className = 'toc-num';
-        n.style.fontSize = `${pt2px(SZ.tocNum)}px`;
-        n.textContent = r.folio;
-        row.appendChild(n);
-      }
-      root.appendChild(row);
+      // **S6.0 (F5):** שורת TOC עטופה — כל שורה-בת היא שורת flex בפס 26px
+      // משלה; הגיליון (מספר) רק בשורה הראשונה. שורות חד-שורתיות זהות
+      // לחלוטין לפלט הקודם (אותן מחלקות, אותו מיקום).
+      const rowLines = (r.lines && r.lines.length ? r.lines : [r.text]).filter(t => String(t || '').trim());
+      rowLines.forEach((rowText, rli) => {
+        const row = doc.createElement('div');
+        row.className = 'toc-row';
+        row.setAttribute('dir', 'rtl');
+        position(row, GEO.TOC_NUM_X, r.y + rli * 26, (r.x1 || 560) - GEO.TOC_NUM_X, 26);
+        row.style.display = 'flex';
+        row.style.justifyContent = 'space-between';
+        row.style.fontSize = `${pt2px(r.sizePt || 10.5)}px`;
+        // **S5.1:** גובה שורת TOC = התיבה (26px) — כמו baselineOf(r.y, 26, ...) במקרן
+        row.style.lineHeight = '26px';
+        // **S4.26:** גופן שורות ה-TOC מההגדרות + הדגשה — כמו הייחוס
+        // (DavidLibre-Bold @10.5/10/9.5 בכל שורות התוכן)
+        const tf = headingFontOf(r.level != null ? r.level : 2);
+        if (tf) { row.style.fontFamily = tf; row.style.fontWeight = '700'; }
+        const t = doc.createElement('span');
+        t.className = 'toc-text';
+        t.style.marginRight = `${Math.max(0, 560 - (r.x1 || 560))}px`; // מדרגות לפי רמה
+        t.textContent = scrubPUAText(rowText || '');
+        row.appendChild(t);
+        if (r.folio && rli === 0) {
+          const n = doc.createElement('span');
+          n.className = 'toc-num';
+          n.style.fontSize = `${pt2px(SZ.tocNum)}px`;
+          n.textContent = r.folio;
+          row.appendChild(n);
+        }
+        root.appendChild(row);
+      });
     }
   }
 
@@ -1191,12 +1203,14 @@ function renderPage(page, settings, doc, header) {
   // ל-PDF. בעבר: רשימת זרימה אחת ברוחב מלא — התצוגה הציגה טור אחד בזמן
   // שהמודל קבע שניים. ללא נתוני מודל — נפילה לרשימת הזרימה הישנה.
   if (page.type === 'endnotes') {
+    let titleEl = null;
     if (page.heading) {
       const h = doc.createElement('h2');
       h.className = 'endnote-title';
       h.dir = 'rtl';
       h.textContent = scrubPUAText(page.heading);
       root.appendChild(h);
+      titleEl = h;
     }
     const list = doc.createElement('div');
     list.className = 'endnote-list';
@@ -1205,7 +1219,23 @@ function renderPage(page, settings, doc, header) {
       && Array.isArray(page.columns) && page.columns.some(c => c.length)
       && page.notes && page.notes.every(n => n.colIdx != null);
     if (haveModel) {
-      list.style.position = 'relative';
+      // **S6.0 (R4-M2 — עוגן מיקום שגוי):** הרשימה הייתה position:relative
+      // בזרימה אחרי כותרת ה-h2 ⇒ בלוק ההכלה התחיל ~42px מתחת לראש העמוד
+      // בעוד top-ים של ההערות הם קואורדינטות עמוד ⇒ כל ההערות הוסטו ~42px
+      // מטה מהמודל/PDF (והאחרונות נחתכו). כעת הרשימה absolute בקואורדינטות
+      // העמוד; גם הכותרת ממוקמת מהמודל (ראש תיבת התוכן) ולא בזרימה.
+      list.style.position = 'absolute';
+      list.style.top = '0';
+      list.style.left = '0';
+      list.style.right = '0';
+      const titleAnchor = titleEl;
+      if (titleAnchor) {
+        titleAnchor.style.position = 'absolute';
+        titleAnchor.style.top = `${Math.round(tplEn.contentBox.top)}px`;
+        titleAnchor.style.left = `${Math.round(Math.min(...tplEn.columns.map(c => c.x)))}px`;
+        titleAnchor.style.right = `${Math.round(tplEn.width - Math.max(...tplEn.columns.map(c => c.x + c.w)))}px`;
+        titleAnchor.style.margin = '0';
+      }
       const topEn = tplEn.contentBox.top + (page.titleBandPx || 0);
       const colsEn = page.columns;
       // טור-אחד (endnote-columns=1): רוחב תיבת התוכן המלא — כמו הפרויקטור/PDF

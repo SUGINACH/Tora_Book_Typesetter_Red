@@ -251,7 +251,14 @@ function typeset(rawText, settingsIn, env = {}) {
     ? Math.round((contentW - regTpl.gutter) / 2)
     : Math.round(contentW);
   settings._outerMarginPx = Math.max(regTpl.margins.outer != null ? regTpl.margins.outer : 0, regTpl.margins.side * 0.8);
-  settings._sideNoteColWidthPx = Math.max(60, Math.round(settings._outerMarginPx) - 12);
+  // **S6.0 (R3-M5):** רצפת 60px חרגה מרוחב השוליים החיצוניים בברירת המחדל
+  // (A4: תיבת ההערה [8.93,68.93] חפפה את טור הגוף ב-9.4px). כעת הרוחב
+  // נתפס לשטח הפנוי בפועל בשוליים (side − 15% עוגן − 2px ביטחון).
+  const snSideM = regTpl.margins && regTpl.margins.side != null ? regTpl.margins.side : (settings._outerMarginPx || 120);
+  settings._sideNoteColWidthPx = Math.max(24, Math.min(
+    Math.round(settings._outerMarginPx) - 12,
+    Math.round(snSideM * 0.85) - 2
+  ));
   // **S5.2 (P-3/P-4):** רוחב **טור בודד** בעמודי ההערות — מתבנית PT-07 עצמה
   // (עמוד דו-טורי; 269.96px בברירת המחדל). הצרכן (endnote-pages) קורא אותו
   // ישירות כרוחב טור כשendnote-columns=2; במצב טור-אחד הוא משתמש ברוחב
@@ -1053,7 +1060,13 @@ function typeset(rawText, settingsIn, env = {}) {
       const ranges = [];
       for (const sp of b.parenCharSpans) {
         const startW = b.flatWordOffsets.find(x => x.at > sp.from && x.at < sp.to);
-        const endW = b.flatWordOffsets.find(x => x.at > sp.from && x.at < sp.to && x.at >= (startW ? startW.at : 0));
+        // **S6.0 (R2-M5):** find החזיר את המילה הראשונה בטווח (שהיא startW
+        // עצמו) ⇒ כל טווח סוגריים רב-מילים קרס למילה אחת והגנת
+        // paren-cross-boundary הייתה מתה. כעת נלקחת המילה ה**אחרונה** בטווח.
+        let endW = null;
+        for (const off of b.flatWordOffsets) {
+          if (off.at > sp.from && off.at < sp.to && off.at >= (startW ? startW.at : 0)) endW = off;
+        }
         if (startW && endW) ranges.push({ startWi: b.flatWordOffsets.indexOf(startW), endWi: b.flatWordOffsets.indexOf(endW) });
       }
       for (const r of ranges) {

@@ -293,6 +293,19 @@ function writePdf(opts) {
   // ---- תוכן לכל עמוד (content streams) ----
   const contents = pages.map((pg) => {
     const ops = [];
+    // **S6.0 (R5-M2 — צבע דביק):** מצב מילוי נוכחי לכל אורך מסלול התוכן
+    // של העמוד. בעבר 'rg' נפלט רק למילים צבועות ולא אופס לעולם ⇒ מילה
+    // צבועה (הערת-שוליים אפורה) צבעה את כל הטקסט שאחריה בעמוד — הערות
+    // שוליים, גיליון וכותרות (נמדד: #404040 מדביק עד סוף העמוד).
+    let fillState = '0 0 0';
+    const emitFill = (color) => {
+      if (Array.isArray(color) && color.length === 3) {
+        const cs = `${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`;
+        if (cs !== fillState) { ops.push(cs); fillState = cs; }
+      } else if (fillState !== '0 0 0') {
+        ops.push('0 0 0 rg'); fillState = '0 0 0';
+      }
+    };
     // **D-89 (צבע פר-מילה):** rgb 0..1 על המילה (כותרת עליונה בכחול-הייחוס
     // #0F1749, בלוקי השער האחורי) — ברירת מחדל שחור (0 0 0 rg מרומז ב-PDF).
     const emitWord = (text, xPx, yPx, sizePt, fontKey, color) => {
@@ -316,7 +329,10 @@ function writePdf(opts) {
       const chars = [...String(text)].filter(ch => {
         const cp = ch.codePointAt(0);
         return cp >= 0x20 && cp !== 0x7F;
-      });
+      // **S6.0 (R7-M3 — NBSP נעלם ב-PDF):** גופני Frank אינם ממפים U+00A0
+      // ⇒ התו הושמט בשקט מהייצוא והמילים הודבקו. כעת NBSP ממופה לרווח
+      // רגיל (הדפדפן מציג רווח — עתה גם ה-PDF).
+      }).map(ch => (ch === '\u00A0' ? ' ' : ch));
       const visual = visualOrderRtl(chars);
       if (!visual.length) return;
       // ריצות פר-תו: הגופן הראשי של המילה; חסר ⇒ /F1 (גוף); חסר גם שם
@@ -333,6 +349,9 @@ function writePdf(opts) {
         else runs.push({ name: rn, font: rf, chars: [ch] });
       }
       if (!runs.length) return;
+      // **S6.0 (R5-M2):** הצבע נפלט פעם אחת לפני המסלולים — עם איפוס
+      // מפורש כשהמילה אינה צבועה והקודם היה צבוע (בעבר: הצבע נדבק).
+      emitFill(color);
       if (runs.length === 1) {
         // מסלוק יחיד — פורמט ה-bytes של המסלול הפשוט הקודם (ללא שינוי)
         let out = '';
@@ -341,16 +360,10 @@ function writePdf(opts) {
           if (g) out += g.toString(16).padStart(4, '0');
         }
         if (!out) return;
-        if (Array.isArray(color) && color.length === 3) {
-          ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
-        }
         ops.push(`BT /${runs[0].name} ${round2(sizePt)} Tf ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td <${out}> Tj ET`);
         return;
       }
       // מסלוק מרובה — פורמט ה-F4 הקודם (BT x y Td; פר-ריצה /Fn sz Tf <hex> Tj; ET)
-      if (Array.isArray(color) && color.length === 3) {
-        ops.push(`${round2(color[0])} ${round2(color[1])} ${round2(color[2])} rg`);
-      }
       ops.push(`BT ${round2(xPx * PX_TO_PT)} ${round2(hPt - yPx * PX_TO_PT)} Td`);
       for (const run of runs) {
         let hex = '';
@@ -421,18 +434,22 @@ function writePdf(opts) {
         if (Array.isArray(d.pdfOps)) ops.push(...d.pdfOps);
       }
     }
-    // סימני חיתוך (חוץ ל־TrimBox; אורך 5מ״מ)
+    // סימני חיתוך (**S6.0 R5-M6** — בחוץ ל-TrimBox, כמו המסמך; בעבר צוירו
+    // בפנים על העמוד החתוך עצמו): זוג קווים בכל פינה, מוסטים 0.5מ״מ משפת
+    // החיתוך, באורך 5מ״מ — בתוך טבעת הבליד/ההרחבה של ה-MediaBox.
     if (cropMarks) {
-      const m = 5 * MM_TO_PT;
+      const g = 0.5 * MM_TO_PT, L = 5 * MM_TO_PT;
+      const xl0 = -(g + L), xl1 = -g, xr0 = wPt + g, xr1 = wPt + g + L;
+      const yb0 = -(g + L), yb1 = -g, yt0 = hPt + g, yt1 = hPt + g + L;
       ops.push('0.6 w 0 G');
-      ops.push(`0 ${round2(hPt - m)} m ${round2(m)} ${round2(hPt - m)} l S`);
-      ops.push(`${round2(m)} ${round2(hPt - m)} m ${round2(m)} ${round2(hPt)} l S`);
-      ops.push(`${round2(wPt - m)} ${round2(hPt - m)} m ${round2(wPt)} ${round2(hPt - m)} l S`);
-      ops.push(`${round2(wPt)} ${round2(hPt - m)} m ${round2(wPt)} ${round2(hPt)} l S`);
-      ops.push(`0 ${round2(m)} m ${round2(m)} ${round2(m)} l S`);
-      ops.push(`${round2(m)} ${round2(m)} m ${round2(m)} 0 l S`);
-      ops.push(`${round2(wPt - m)} ${round2(m)} m ${round2(wPt)} ${round2(m)} l S`);
-      ops.push(`${round2(wPt)} ${round2(m)} m ${round2(wPt)} 0 l S`);
+      ops.push(`${round2(xl0)} 0 m ${round2(xl1)} 0 l S`);
+      ops.push(`0 ${round2(yb0)} m 0 ${round2(yb1)} l S`);
+      ops.push(`${round2(xr0)} 0 m ${round2(xr1)} 0 l S`);
+      ops.push(`${round2(wPt)} ${round2(yb0)} m ${round2(wPt)} ${round2(yb1)} l S`);
+      ops.push(`${round2(xl0)} ${round2(hPt)} m ${round2(xl1)} ${round2(hPt)} l S`);
+      ops.push(`0 ${round2(yt0)} m 0 ${round2(yt1)} l S`);
+      ops.push(`${round2(xr0)} ${round2(hPt)} m ${round2(xr1)} ${round2(hPt)} l S`);
+      ops.push(`${round2(wPt)} ${round2(yt0)} m ${round2(wPt)} ${round2(yt1)} l S`);
     }
     return Buffer.from(ops.join('\n'), 'latin1');
   });
@@ -603,8 +620,20 @@ function writePdf(opts) {
   }
 
   // ---- עמודים ----
-  const mediabox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
-  const bleedbox = `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`;
+  // **S6.0 (R5-M6 — תיבות עמוד חוקיות):** TrimBox = גודל העמוד; BleedBox
+  // בתוך ה-MediaBox (בעבר ה-BleedBox חרג **מחוץ** ל-MediaBox — הפרה של
+  // PDF 32000-1 §14.11.2 והבליד לא היה קיים כלל). עם בליד/סימני-חיתוך
+  // ה-MediaBox מתרחב סביב ה-Trim; הקואורדינטות של התוכן לא משתנות
+  // (הן יחסיות לראשית ה-Trim שנותרת 0,0).
+  const markExtPt = cropMarks ? (0.5 + 5) * MM_TO_PT : 0;
+  const extPt = Math.max(bleedPt, markExtPt);
+  const trimbox = `[0 0 ${round2(wPt)} ${round2(hPt)}]`;
+  const mediabox = extPt > 0.01
+    ? `[${round2(-extPt)} ${round2(-extPt)} ${round2(wPt + extPt)} ${round2(hPt + extPt)}]`
+    : trimbox;
+  const bleedbox = bleedPt > 0.01
+    ? `[${round2(-bleedPt)} ${round2(-bleedPt)} ${round2(wPt + bleedPt)} ${round2(hPt + bleedPt)}]`
+    : trimbox;
   pages.forEach((pg, i) => {
     const annots = linkIds.get(i) || [];
     const annotsStr = annots.length ? ` /Annots [${annots.map(id => `${id} 0 R`).join(' ')}]` : '';
@@ -617,7 +646,7 @@ function writePdf(opts) {
     if (font5) fontPairs.push(['/F5', ID.type0e]);
     if (font6) fontPairs.push(['/F6', ID.type0f]);
     const fontRes = `/Font << ${fontPairs.map(([n, id]) => `${n} ${id} 0 R`).join(' ')} >>`;
-    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${mediabox} /BleedBox ${bleedbox} /Resources << ${fontRes} >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
+    pdf.put(pageIds[i], `<< /Type /Page /Parent ${ID.pages} 0 R /MediaBox ${mediabox} /TrimBox ${trimbox} /BleedBox ${bleedbox} /Resources << ${fontRes} >> /Contents ${contentIds[i]} 0 R${annotsStr} >>`);
     pdf.put(contentIds[i], Buffer.concat([
       Buffer.from(`<< /Length ${contents[i].length} >>\nstream\n`, 'latin1'),
       contents[i],

@@ -261,6 +261,11 @@ function readZip(bytes) {
     const lhNameLen = u16le(buf, localOffset + 26);
     const lhExtraLen = u16le(buf, localOffset + 28);
     const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
+    // **S6.0 (R9 — קריאה קטועה בשקט):** compSize עלול לחרוג מהקובץ
+    // (ZIP קטוע/פגום) — subarray קוצץ בשקט והרשומה הוחזרה חלקית כתקינה.
+    if (dataStart + compSize > buf.length) {
+      return { ok: false, entries, denied, error: `truncated-entry:${name}` };
+    }
     const raw = u8sub(buf, dataStart, dataStart + compSize);
     let data;
     try {
@@ -270,7 +275,17 @@ function readZip(bytes) {
     } catch (e) {
       return { ok: false, entries, denied, error: `inflate-failed:${name}` };
     }
-    entries.push({ name, data, method, size: data.length });
+    // **S6.0 (R9 — פצצת ZIP):** תקרת פריסה לרשומה (64MB) — מנע הקפאת
+    // לשונית של 42KB→4GB; ו-CRC מהמדריך המרכזי נשמר לאימות (verifyCrc
+    // היה מת — storedCrc מעולם לא אוכלס).
+    if (data.length > 64 * 1024 * 1024) {
+      return { ok: false, entries, denied, error: `entry-too-large:${name}` };
+    }
+    const entry = { name, data, method, size: data.length, storedCrc: u32le(buf, p + 16) };
+    if (crc32(entry.data) !== entry.storedCrc) {
+      return { ok: false, entries, denied, error: `crc-mismatch:${name}` };
+    }
+    entries.push(entry);
     p += 46 + nameLen + extraLen + commentLen;
   }
   return { ok: true, entries, denied, error: null };

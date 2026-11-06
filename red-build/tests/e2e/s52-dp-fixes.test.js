@@ -217,16 +217,19 @@ describe('S5.2 תיקון 9 — colCapacityOf: פס חוצה־טורים + תק�
     assertEq(colCapacityOf(p, { colIndex: 0 }), 880);
     assertEq(colCapacityOf(p, { colIndex: 1 }), 880);
   });
-  it('תקציב הערות מקטין רק את הטור האחרון (ברירת המחדל — המחמיר); fnBudget:false מבטל', () => {
+  // **S6.0 (R3-C2) — חוזה מתוקן:** אזור ההערות חוצה-טורים בשני המרנדרים
+  // ⇒ התקציב מופחת מ**כל** הטורים (בעבר רק מהאחרון — טור ימני חדר 44px
+  // לתוך אזור ההערות; הגנת containment השתמשה באותה נוסחה והייתה עיוורת).
+  it('תקציב הערות מקטין את כל הטורים (המרזב חוצה-טורים); fnBudget:false מבטל', () => {
     const p = mkPage({ fnReservedHeightPx: 90 });
-    assertEq(colCapacityOf(p, { colIndex: 0 }), 1000, 'טור ראשון — בלי התקציב');
+    assertEq(colCapacityOf(p, { colIndex: 0 }), 910, 'טור ראשון — עם התקציב (חוצה-טורים)');
     assertEq(colCapacityOf(p, { colIndex: 1 }), 910, 'טור אחרון — עם התקציב');
-    assertEq(colCapacityOf(p), 910, 'ברירת מחדל = הטור האחרון');
+    assertEq(colCapacityOf(p), 910, 'ברירת מחדל — כל הטורים');
     assertEq(colCapacityOf(p, { fnBudget: false }), 1000, 'כיבוי מפורש (למי שמודד usage כולל התקציב)');
   });
   it('שילוב: פס + תקציב', () => {
     const p = mkPage({ spanning: { heightPx: 120 }, fnReservedHeightPx: 90 });
-    assertEq(colCapacityOf(p, { colIndex: 0 }), 880);
+    assertEq(colCapacityOf(p, { colIndex: 0 }), 790);
     assertEq(colCapacityOf(p, { colIndex: 1 }), 790);
   });
 });

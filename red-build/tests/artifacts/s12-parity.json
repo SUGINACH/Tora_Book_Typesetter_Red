@@ -6,7 +6,7 @@
     "page": 3,
     "rasterBands": 4,
     "modelLines": 4,
-    "maxOffsetPx": 4
+    "maxOffsetPx": 5
   },
   "worstBboxPx": 0
 }

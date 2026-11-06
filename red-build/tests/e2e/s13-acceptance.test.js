@@ -23,7 +23,7 @@ function hasTool(name) {
 }
 const HAS_PDFTOOLS = hasTool('pdfinfo') && hasTool('pdftotext') && hasTool('pdftoppm');
 
-const CANONICAL_HASH_PREFIX = 'e04adbb1'; // ננעל מחדש 06.11 (S5.2 — המשך הסקירה: נתיב DP — FIT_EPS שמרני ב-kp (בלי +0.75), tracking 0 לאורך כל השרשרת (מדידה=דיו), widthFor בגופן הכותרת הרשום, איחוד קיבולת טור (colCapacityOf), עמודי הערות-סיום בקיבולת מלאה, רוחב תוכן יחיד (674.9). קודם: e04adbb1→ace26c5b 06.11 (S5.1 — סקירת-קוד מלאה: הפצת רווח-הביטחון D-92 לנתיב ה-DP (FIT_EPS 0.75 בטבעי, בלי shrink), פס-שורה מדויק בלי Math.round (21.44 לא 21), protectWords בלי פירוק NBSP, רוחב TOC/גיליון מהעמודות במקום רוחב-עמודה מלא. קודם: ננעל 05.11 (S4.26 — ברירות מחדל חדשות להערות מדיווח המשתמש):
+const CANONICAL_HASH_PREFIX = '80f9ed6c'; // ננעל מחדש 06.11 (S6.0 — הבדיקה המפלצתית: מדידת סמן-הערה אמיתית בגודל הרישום 8pt בגימטריה בפועל [תשובת S4.26 בפיצול מדידה מפורקת], זהות מופע להערות [שם] כפולות, מגן בליעת-חלון, cap ל-carry בפתיחת מקטע, תקרת מרזב גם בלי split, עטיפת שורות TOC + נוסחת המתיחה, עטיפת שער-אחורי, FIT_EPS בשערים, תיקוני חשבונאות). קודם: e04adbb1 — המשך הסקירה: נתיב DP — FIT_EPS שמרני ב-kp (בלי +0.75), tracking 0 לאורך כל השרשרת (מדידה=דיו), widthFor בגופן הכותרת הרשום, איחוד קיבולת טור (colCapacityOf), עמודי הערות-סיום בקיבולת מלאה, רוחב תוכן יחיד (674.9). קודם: e04adbb1→ace26c5b 06.11 (S5.1 — סקירת-קוד מלאה: הפצת רווח-הביטחון D-92 לנתיב ה-DP (FIT_EPS 0.75 בטבעי, בלי shrink), פס-שורה מדויק בלי Math.round (21.44 לא 21), protectWords בלי פירוק NBSP, רוחב TOC/גיליון מהעמודות במקום רוחב-עמודה מלא. קודם: ננעל 05.11 (S4.26 — ברירות מחדל חדשות להערות מדיווח המשתמש):
 // עמודי השער חלק ממבנה הספר כברירת מחדל (show-*-shaar=true של המקור ממופים
 // למתגי shaar-*-enabled; השער האחורי אחרי הראשי — סדר המקור), כותרות עליונות
 // בעמודי פתיחה (תיקון D-36 החלקי — כמקור, top-header-grid בכל עמודי התוכן),
@@ -203,9 +203,14 @@ describe('S13.2 — דטרמיניזם משולש (repeat / inter-commit / cross
           }
         }
         for (const f of files) fs.unlinkSync(path.join(ART, f));
+        // **S6.0 (R5-M6):** החזרת היסט מקור הראסטר — עם בליד (ברירת מחדל
+        // 3מ״מ) ה-MediaBox מורחב סביב ה-Trim ⇒ הדיו מוסט ב-extPt בראסטר.
+        const mbMatch2 = exp.bytes.toString('latin1').match(/\/MediaBox \[([^\]]+)\]/);
+        const mbv2 = mbMatch2 ? mbMatch2[1].trim().split(/\s+/).map(Number) : [0, 0];
+        const mediaOffPx2 = Math.round((Number.isFinite(mbv2[0]) ? -mbv2[0] : 0) * (96 / 72));
         const b = exp.projected.inkBounds[pgIdx];
         if (b) {
-          const worst = Math.max(Math.abs(minX - b.minX), Math.abs(maxX - b.maxX), Math.abs(minY - b.minY), Math.abs(maxY - b.maxY));
+          const worst = Math.max(Math.abs((minX - mediaOffPx2) - b.minX), Math.abs((maxX - mediaOffPx2) - b.maxX), Math.abs((minY - mediaOffPx2) - b.minY), Math.abs((maxY - mediaOffPx2) - b.maxY));
           rows.push({ config: name, pages: exp.result.pages.length, identity: true, worstBboxPx: +worst.toFixed(2) });
           assert(worst <= 6, `${name}: bbox דיו Δ=${worst.toFixed(1)}px ≤ 6px (רסטר מול מודל)`);
         } else {

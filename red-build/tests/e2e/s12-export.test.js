@@ -493,6 +493,13 @@ describe('S12.2 שערים 1+2 — PDF: טקסט אמיתי, סימניות, ק�
       })
       .map(x => x.i);
     const sample = bodyIdx.length >= 5 ? [0, 1, 2, Math.floor(bodyIdx.length / 2), bodyIdx.length - 1].map(k => bodyIdx[k]) : bodyIdx;
+    // **S6.0 (R5-M6):** מקור הראסטר = פינת ה-MediaBox. עם בליד (ברירת המחדל
+    // 3מ״מ) או סימני-חיתוך ה-MediaBox מורחב סביב ה-Trim ⇒ כל הדיו מוסט
+    // ב-extPt — מוחזר ההיסט לפי ה-MediaBox בפועל מהבייטים (חוזה ה-±2/±6px
+    // נשאר ביחס לראשית ה-Trim, כמו המודל).
+    const mbMatch = exp.bytes.toString('latin1').match(/\/MediaBox \[([^\]]+)\]/);
+    const mbv = mbMatch ? mbMatch[1].trim().split(/\s+/).map(Number) : [0, 0];
+    const mediaOffPx = Math.round((Number.isFinite(mbv[0]) ? -mbv[0] : 0) * (96 / 72));
     for (const pgIdx of sample) {
       const p = path.join(ART, 's12-canonical.pdf');
       const prefix = path.join(ART, '_tmp-par');
@@ -518,8 +525,8 @@ describe('S12.2 שערים 1+2 — PDF: טקסט אמיתי, סימניות, ק�
       for (const f of fs.readdirSync(ART).filter(f => f.startsWith('_tmp-par-'))) fs.unlinkSync(path.join(ART, f));
       const b = exp.projected.inkBounds[pgIdx];
       const d = {
-        minX: Math.abs(minX - b.minX), maxX: Math.abs(maxX - b.maxX),
-        minY: Math.abs(minY - b.minY), maxY: Math.abs(maxY - b.maxY)
+        minX: Math.abs((minX - mediaOffPx) - b.minX), maxX: Math.abs((maxX - mediaOffPx) - b.maxX),
+        minY: Math.abs((minY - mediaOffPx) - b.minY), maxY: Math.abs((maxY - mediaOffPx) - b.maxY)
       };
       const pageWorst = Math.max(d.minX, d.maxX, d.minY, d.maxY);
       worst = Math.max(worst, pageWorst);
@@ -548,6 +555,8 @@ describe('S12.2 שערים 1+2 — PDF: טקסט אמיתי, סימניות, ק�
         else if (!inkRows[y] && inBand) { inBand = false; bands.push(start); }
       }
       if (inBand) bands.push(start);
+      // **S6.0:** החזרת פסי הראסטר לראשית ה-Trim (בליד מרחיב את המדיה)
+      for (let i = 0; i < bands.length; i++) bands[i] = Math.round(bands[i] - mediaOffPx);
       const merged = [];
       for (const s of bands) {
         // **03.11(ד):** פס הדיו של הכותרת העליונה (y≈2..16, נכנס לעמודי פתיחה

@@ -497,7 +497,12 @@ function planPages(blocks, settings, eventLog, ledger = new Ledger(), env = {}) 
     if (blk.sideNoteText) cur.sideNotes.push({ text: blk.sideNoteText, anchorToken: blk.tokenId });
   }
 
-  if (cur.columns.some(c => c.length) || cur.footnotes.length || pages.length === 0) flushPage();
+  // **S6.0 (R3-C1 — אובדן תוכן בזנב):** פס חוצה-טורים (H3–H6) או הערת-צד
+  // שנותרו לבד בעמוד האחרון (בלי שורות טור ובלי הערות) לא הופיעו בפלט
+  // — הם נפלטו ב-flushPage אך התנאי לא כלל אותם ⇒ העמוד לא נסגר מעולם.
+  if (cur.columns.some(c => c.length) || cur.footnotes.length
+    || (cur.spanning && cur.spanning.lines && cur.spanning.lines.length)
+    || (cur.sideNotes && cur.sideNotes.length) || pages.length === 0) flushPage();
 
   // המשכים שנותרו בתור בסוף המסמך — לא ראוי לגנוז (BRZ-15): נדחפים לעמוד האחרון
   if (pendingBarNotes.length) {

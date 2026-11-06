@@ -341,7 +341,12 @@ function projectFootnoteGutter(page, settings, measure, out) {
   const fullX = colLeftOf(tpl), fullW = colWidthOf(tpl);
   let laneW = settings._fnColWidthPx || Math.round(fullW);
   if (!(laneW > 0) || laneW > fullW) laneW = Math.round(fullW);
-  const twoLanes = settings['footnote-columns'] === 2 && laneW * 2 + (tpl.gutter || 0) <= fullW + 0.75;
+  // **S6.0 (R4-M6):** התנא מיושר לשער ה-DOM — שני נתיבים רק בתבנית
+  // רב-טורית (בעבר ה-PDF שרטט שני נתיבים גם בתבנית חד-טורית מול נתיב
+  // אחד ב-DOM — תצוגה≠ייצוא).
+  const twoLanes = settings['footnote-columns'] === 2
+    && Array.isArray(tpl.columns) && tpl.columns.length >= 2
+    && laneW * 2 + (tpl.gutter || 0) <= fullW + 0.75;
   const notes = page.footnotes;
   const lanes = [[], []];
   if (!twoLanes) {

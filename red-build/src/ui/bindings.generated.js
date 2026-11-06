@@ -207,6 +207,7 @@ const BINDINGS = [
       "bottom-center",
       "outer-left",
       "outer-right",
+      "outer",
       "top",
       "in-header",
       "none"
@@ -1660,7 +1661,7 @@ const BINDINGS = [
     "panelKey": "NOTES",
     "labelHe": "מדיניות איפוס מונה הערות",
     "type": "enum",
-    "def": "page",
+    "def": "section",
     "enum": [
       "continuous",
       "page",
@@ -1670,7 +1671,7 @@ const BINDINGS = [
     "min": null,
     "max": null,
     "step": null,
-    "note": null
+    "note": "S4.26 (דיווח משתמש 05.11): ברירת המחדל איפוס פר-פרק (section/siman) — לא פר-עמוד"
   },
   {
     "id": "footnote-columns",
@@ -1717,7 +1718,7 @@ const BINDINGS = [
     "panelKey": "NOTES",
     "labelHe": "אופן פריסת הערות (בלוק/רציף)",
     "type": "enum",
-    "def": "block",
+    "def": "continuous",
     "enum": [
       "block",
       "continuous"
@@ -1725,7 +1726,7 @@ const BINDINGS = [
     "min": null,
     "max": null,
     "step": null,
-    "note": "REQ-FN-07 (D-34): block=כל הערה בלוק משלה + תקרת fn-bar; continuous=זרימה רציפה בלי תקרה"
+    "note": "S4.26 (דיווח משתמש 05.11): ברירת המחדל זרימה רציפה — הערה הבאה פותחת באותה שורה שבה הסתיימה קודמתה; block=כל הערה בלוק משלה"
   },
   {
     "id": "endnotes-enabled",
@@ -1807,12 +1808,12 @@ const BINDINGS = [
     "panelKey": "NOTES",
     "labelHe": "תקרת גובה סרגל הערות (px)",
     "type": "number",
-    "def": 220,
+    "def": 0,
     "enum": null,
-    "min": 40,
-    "max": 600,
+    "min": 0,
+    "max": 1000,
     "step": null,
-    "note": "S7.1.3: תקרת מרזב — חריגה מפעילה אסדרה לפי long-footnote-policy (block mode בלבד, D-34)"
+    "note": "S4.26 (דיווח משתמש 05.11): 0=קיבולת העמוד המלאה (ברירת המחדל — הערה ארוכה ממלאת את העמוד לפני חיתוך); ערך חיובי נחתם לקיבולת"
   },
   {
     "id": "long-footnote-policy",

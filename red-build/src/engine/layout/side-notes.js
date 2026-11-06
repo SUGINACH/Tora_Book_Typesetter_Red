@@ -20,19 +20,28 @@ function estimateSideNoteHeight(text, settings, measureFn) {
   const colW = settings._sideNoteColWidthPx || Math.max(60, Math.round(settings._outerMarginPx || 120) - 12);
   const fontName = settings['s-note-body-font'];
   const factor = SIDE_NOTE_FONT_FACTORS[fontName] || (fontName && fontName !== settings['body-font'] ? 1.08 : 1);
+  // **S6.0 (R3-C3):** רווחים בין מילים נכללים — כמו ההקרנה בפועל.
+  const spaceW = (measureFn ? measureFn(' ', size) : size * 0.6) * factor;
   let lines = 1, w = 0;
   for (const word of words) {
     const ww = (measureFn ? measureFn(word, size) : word.length * size * 0.6) * factor;
-    if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+    const addW = (w > 0 ? spaceW : 0) + ww;
+    if (w + addW > colW && w > 0) { lines++; w = ww; } else w += addW;
   }
   return lines * lh;
 }
 
-/** מיקום Y של שורה בטור: גובה מצטבר מראש התוכן. */
+/** מיקום Y של שורה בטור: גובה מצטבר מראש התוכן.
+ * **S6.0 (R3-M1):** מיושר למודל המרנדרים — מתחיל מתחת לפס החוצה-טורים
+ * (spanning) וכולל את מקדם ה-AQ (aqStretch) — בעבר סכם גבהים גולמיים
+ * מראש תיבת התוכן ⇒ עוגן שגוי בעד ~145px בעמודים עם פס/מתיחה. */
 function lineYTop(page, colIdx, lineIdx) {
-  let y = page.template.contentBox.top;
+  let y = page.template.contentBox.top
+    + (page.spanning && page.spanning.heightPx ? page.spanning.heightPx : 0);
   const col = page.columns[colIdx] || [];
-  for (let i = 0; i < lineIdx && i < col.length; i++) y += col[i].heightPx || 0;
+  for (let i = 0; i < lineIdx && i < col.length; i++) {
+    y += (col[i].heightPx || 0) * (col[i].aqStretch || 1);
+  }
   return y;
 }
 

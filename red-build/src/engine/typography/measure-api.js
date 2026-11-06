@@ -29,6 +29,10 @@ function registerFont(profileName, bytes) {
   const res = fm.parseFont(bytes);
   if (!res.ok) return { ok: false, error: res.error };
   registeredFonts.set(String(profileName), res.font);
+  // **S6.0 (R7-L2):** גם רישום מנקה את מטמון ה-API-פר-משפחה — בעבר רק
+  // ההסרה ניקתה ⇒ רישום מחדש של אותה משפחה החזיר מופע ישן מהמטמון
+  // (קשור לגופן הקודם) והמדידה המשיכה במטריקות הישנות.
+  _familyApiCache.clear();
   // **S4.26 (גליפים חסרים):** 'Frank Ruhl Libre' הוא fallback הפיסוק
   // של מחסנית הרינדור (fontStack מוסיף אותו שני) — גם המדידה תשתמש
   // בו לתווים שחסרים בגופן הראשי (בדיוק כמו הדפדפן).
@@ -36,6 +40,16 @@ function registerFont(profileName, bytes) {
     fm.setMissingGlyphFallbackFont(res.font);
   }
   return { ok: true, profile: res.font, glyphCount: res.font.numGlyphs, mappedChars: res.font.charToGlyph.size };
+}
+
+/** **S6.0 (R2-C1):** שחזור רישום קודם אחרי שימוש זמני (exportPdf) —
+ * font=null ⇒ הסרה רגילה. מונע מצב שבו ייצוא מוחק ל-worker את רישום
+ * הגופן של התצוגה החיה (המדידה היתה נופלת בשקט ל'table'). */
+function restoreFontRegistration(profileName, font) {
+  if (!font) { unregisterFont(profileName); return; }
+  registeredFonts.set(String(profileName), font);
+  if (String(profileName) === 'Frank Ruhl Libre') fm.setMissingGlyphFallbackFont(font);
+  _familyApiCache.clear();
 }
 
 /** הסרת גופן רשום (בדיקות). */
@@ -228,6 +242,6 @@ function resolveMeasureImpl(settings) {
 }
 
 module.exports = {
-  MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts,
+  MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts, restoreFontRegistration,
   charWidthEm, registeredFonts, resolveMeasureImpl
 };

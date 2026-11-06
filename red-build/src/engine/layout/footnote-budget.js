@@ -20,10 +20,19 @@ function noteHeight(note, settings, measure) {
   const words = String(note.text).replace(/\uE000/g, ' ').split(/\s+/).filter(Boolean);
   const colW = laneWidth(settings);
   const factor = NOTE_FONT_FACTORS[settings['f-note-body-font']] || 1;
-  let lines = 1, w = 0;
+  // **S6.0 (R3-C3 — אומדן ללא רווחים):** ההקרנה (wrapNoteTokens) שוברת
+  // את ההערה **עם** רוחבי רווח בין מילים — האומדן כאן סכם מילים בלבד
+  // ⇒ כל הערה הגובלת בשבירת-שורה נמדדה שורה אחת פחות (19–21px) וההערה
+  // שאחריה חפפה אותה (32% מ-230 הערות בדגימה). נכללים גם הסמן ורווח
+  // ההמשך בשורה הראשונה — כמו שמצויר בפועל.
+  const spaceW = measure(' ', size) * factor;
+  const mkTxt = note && note.marker != null ? String(note.marker) : '';
+  const mkW = mkTxt ? measure(mkTxt, size) * factor + spaceW : 0;
+  let lines = 1, w = Math.min(mkW, colW);
   for (const word of words) {
     const ww = measure(word, size) * factor;
-    if (w + ww > colW && w > 0) { lines++; w = ww; } else w += ww;
+    const addW = (w > 0 ? spaceW : 0) + ww;
+    if (w + addW > colW && w > 0) { lines++; w = ww; } else w += addW;
   }
   return lines * lh;
 }

@@ -256,6 +256,10 @@ function createApp(doc, opts = {}) {
   /** פעולות מסמך מפורשות — הדבקה / ייבוא TXT / פתיחה. פעולה שלמה ⇒ עימוד מיידי. */
   function onDocumentAction(action, payload) {
     if (action === 'clear') {
+      // **S6.0 (R8-M1 — ספר רפאים):** ביטול עימוד ממריץ לפני הניקוי —
+      // בעבר תוצאה שהגיעה אחרי הניקוי "החייתה" את המסמך שנמחק (עמודים
+      // מוצגים מול עורך ריק; ייצוא רץ על טקסט ריק).
+      try { if (engine && typeof engine.cancel === 'function') engine.cancel(); } catch (e) { /* best-effort */ }
       text = '';
       editor.setText('');
       result = null;
