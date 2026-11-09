@@ -22,7 +22,7 @@ name: gh-pages-audit
 on:
   page_build:
   workflow_run:
-    workflows: [ pages build and deployment ]
+    workflows: [ pages build and deployment, deploy-pages ]
     types: [ completed ]
   workflow_dispatch:
 

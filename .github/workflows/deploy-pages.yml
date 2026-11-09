@@ -1,0 +1,57 @@
+# .github/workflows/deploy-pages.yml — פריסת Pages בבניית Actions (S6.3)
+#
+# **S6.3 (מעבר מ-legacy ל-workflow):** הפריסה מהענף (build_type=legacy)
+# נכשלה שוב ושוב ב-timeout — סנכרון ה-CDN של 150MB הנכסים (1,315 קובצי
+# WOFF2 שיובאו מהמקור + 452 TTF-ים) לא הספיק ל-10 הדקות הקשיחות של
+# actions/deploy-pages בברירת המחדל (נמדע: "syncing_files" → "Timeout
+# reached, aborting!"). כאן: אותו תוכן, פס-זמן מוגדל — timeout: 3600000
+# (60 דק'). הענף gh-pages הוא orphan — קובץ ה-workflow מועתק אליו במפורש
+# בכל פריסה (בלי קובצי workflow בענף, on:push לא יירה לעולם — מתועד
+# ב-gh-pages-audit).
+name: deploy-pages
+
+on:
+  push:
+    branches: [ gh-pages ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# פריסה אחת בכל רגע — ביטול פריסה קודמת שעוד רצה
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # **S5.2 (P-11):** תקרה מפורשת — checkout של ענף כבד (170MB+) + העלאת
+    # artifact + סנכרון CDN ארוך; 75 דק' גג.
+    timeout-minutes: 75
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages (timeout 60m — 150MB of fonts)
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          # ברירת המחדל 600,000ms (10 דק') לא הספיקה ל-150MB — הוכח
+          # בשתי פריסות legacy שנכשלו ב-syncing_files. 60 דק' גג.
+          timeout: 3600000
