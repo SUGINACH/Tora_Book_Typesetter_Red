@@ -664,7 +664,7 @@ function createApp(doc, opts = {}) {
     return res;
   }
 
-  /** שחזור ההפרש השמור מעל ברירות-האתחדל (נקרא מה-boot אחרי applyLegacyDefaults).
+  /** שחזור ההפרש השמור מעל ברירות-המחדל (נקרא מה-boot אחרי applyLegacyDefaults).
    * מפתחות לא מוכרים ברישום נדלגים; מפתחות _ פנימיים (הרחבות) עוברים כמו שהם. */
   function restorePersistedSettings() {
     if (!persist) return { restored: 0, skipped: [] };
