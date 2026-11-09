@@ -16,7 +16,9 @@
     "preview-tab.js",
     "retypeset-policy.js",
     "settings-panel.js",
+    "settings-persistence.js",
     "status-strip.js",
+    "test-doc-generator.js",
     "testing-tab.js",
     "worker-client.js",
     "worker-protocol.js"
@@ -26,7 +28,7 @@
       "file": "app-shell.js",
       "fn": "onExplicitRetypeset",
       "callee": "requestTypeset",
-      "line": 215
+      "line": 280
     },
     {
       "file": "engine-worker-main.js",

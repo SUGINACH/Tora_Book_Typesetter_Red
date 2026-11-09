@@ -18,6 +18,28 @@ function buildEditorTab(doc, opts) {
   root.setAttribute('role', 'tabpanel');
   root.dataset.tab = 'editor';
 
+  // ---- סרגל מסמכי בדיקה (פער 1 — נושא 16 ב"סיכום בקשות מAI": "לחצן בחלק
+  // העליון של אזור הדבקת הטקסט מעל לחצני העידכון ועימוד ולחצן הייבוא";
+  // פוצל לשניים: "מסמך בדיקה קבוע" + "מסמך בדיקה רנדומלי") ----
+  // F-06: הכפתורים קוראים ל-callback בלבד — ההזרקה והעימוד ב-app-shell
+  // (onGenerateTestDocument → onDocumentAction('open') — נתיב מפורש).
+  const genBar = doc.createElement('div');
+  genBar.className = 'editor-bar editor-genbar';
+  genBar.setAttribute('role', 'group');
+  genBar.setAttribute('aria-label', 'מסמכי בדיקה');
+  const btnGenFixed = doc.createElement('button');
+  btnGenFixed.type = 'button'; btnGenFixed.className = 'btn'; btnGenFixed.textContent = '🧪 מסמך בדיקה קבוע';
+  btnGenFixed.title = 'הזרקת מסמך בדיקה דטרמיניסטי מלא (~300+ עמודים, חמשת צירי העקה) — אותו מסמך בדיוק בכל לחיצה';
+  btnGenFixed.setAttribute('aria-label', 'הזרקת מסמך בדיקה קבוע (דטרמיניסטי)');
+  btnGenFixed.addEventListener('click', () => opts.onGenerateTestDocument && opts.onGenerateTestDocument('fixed'));
+  const btnGenRandom = doc.createElement('button');
+  btnGenRandom.type = 'button'; btnGenRandom.className = 'btn'; btnGenRandom.textContent = '🎲 מסמך בדיקה רנדומלי';
+  btnGenRandom.title = 'הזרקת מסמך בדיקה חדש (~300+ עמודים) — טקסט שונה בכל לחיצה';
+  btnGenRandom.setAttribute('aria-label', 'הזרקת מסמך בדיקה רנדומלי');
+  btnGenRandom.addEventListener('click', () => opts.onGenerateTestDocument && opts.onGenerateTestDocument('random'));
+  genBar.appendChild(btnGenFixed); genBar.appendChild(btnGenRandom);
+  root.appendChild(genBar);
+
   // ---- אזור ההדבקה ----
   const area = doc.createElement('textarea');
   area.className = 'editor-area';
@@ -125,7 +147,8 @@ function buildEditorTab(doc, opts) {
   function getText() { return area.value; } // מקור נקי — סמנים אינם חלק ממנו (F-01)
 
   setText('');
-  return { root, setText, getText, setPageBreaks, updateCounters, setCaret, textarea: area, docxButton: btnDocx };
+  return { root, setText, getText, setPageBreaks, updateCounters, setCaret, textarea: area, docxButton: btnDocx,
+    generateFixedButton: btnGenFixed, generateRandomButton: btnGenRandom };
 }
 
 module.exports = { buildEditorTab };

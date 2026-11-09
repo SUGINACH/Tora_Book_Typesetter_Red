@@ -14,6 +14,8 @@
 const { getDefaultSettings, findKey } = require('../engine/core/settings-registry');
 const { migrate, mergeWithDefaults } = require('../engine/output/project-io');
 const { buildStatusStrip } = require('./status-strip');
+const { generateTestDocument } = require('./test-doc-generator'); // **פער 1 (S6.1):** מסמכי בדיקה קבוע/רנדומלי — נושא 16 + SRS §16.1/§20.1
+const { diffSettings } = require('./settings-persistence'); // **פער 2 (S6.1):** השתמרות הגדרות — SRS §17.1
 const { buildEditorTab } = require('./editor-tab');
 const { buildSettingsTab } = require('./settings-panel');
 const { buildExtensionsPanel } = require('./extensions-panel');
@@ -43,6 +45,59 @@ function createApp(doc, opts = {}) {
   let lastLightRefreshMs = null;
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
 
+  // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
+  // בסיס = מצב ברירות-המחדל אחרי האתחול (applyLegacyDefaults source:'boot').
+  // נשמר רק ההפרש של המשתמש מהבסיס — עדכון ברירות מחדל בגרסה חדשה לא נחסם.
+  // בלי opts.settingsPersistence (Node/בדיקות ישנות) — כל המנגנון לא-פעיל.
+  const persist = opts.settingsPersistence || null;
+  let settingsBaseline = null; // null ⇒ עדיין לא הוחלו ברירות האתחול — אין שמירה
+  let persistTimer = null;
+
+  function captureSettingsBaseline() { settingsBaseline = { ...settings }; }
+
+  function schedulePersistSettings() {
+    if (!persist || !settingsBaseline) return;
+    if (persistTimer != null) clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => { persistTimer = null; persistSettingsNow(); }, 250);
+  }
+
+  function persistSettingsNow() {
+    if (!persist || !settingsBaseline) return { ok: false, reason: 'inactive' };
+    const diff = diffSettings(settingsBaseline, settings);
+    const res = persist.save(diff);
+    if (!res.ok) {
+      status.setNotice('שמירת ההגדרות בדפדפן נכשלה — ההגדרות לא ישוחזרו לאחר ריענון.');
+    }
+    return res;
+  }
+
+  /** שחזור ההפרש השמור מעל ברירות-המחדל (נקרא מה-boot אחרי applyLegacyDefaults).
+   * מפתחות לא מוכרים ברישום נדלגים; מפתחות _ פנימיים (הרחבות) עוברים כמו שהם. */
+  function restorePersistedSettings() {
+    if (!persist) return { restored: 0, skipped: [] };
+    const diff = persist.load();
+    if (!diff) return { restored: 0, skipped: [] };
+    const { getSettingDefs } = require('../engine/core/settings-registry');
+    const regKeys = new Set(getSettingDefs().map(r => r.id));
+    let applied = 0;
+    const skipped = [];
+    for (const [k, v] of Object.entries(diff)) {
+      if (k.startsWith('_')) { settings[k] = v; applied++; continue; } // הרחבות/מצב פנימי
+      if (k === 'settings_version' || !regKeys.has(k)) { skipped.push(k); continue; }
+      settings[k] = v;
+      applied++;
+    }
+    if (applied) {
+      settingsPanel.refreshValues();
+      // **פער 2 (S6.1):** הגדרה ששוחזרה עשויה לדרוש גופן שטרם נטען (למשל החלפת
+      // גוף הספר) — טעינה ברקע; כישלון אינו חוסם (fallback מערכת, מתועד).
+      loadFontsForCurrentSettings().catch(() => { /* fallback מערכת — מתועד */ });
+      if (result) markHeavyDirty('הגדרות שמורות הוחלו — נדרש עימוד (⚡)');
+    }
+    return { restored: applied, skipped };
+  }
+  // ================= סוף פער 2 =================
+
   // בדיקות/Node: תעבורה inline (אותו פרוטוקול) — נטענת בעצלתיים כדי ש־bundle
   // הדפדפן לא יגרור את המנוע (שם רץ Worker אמיתי — ראו inline-transport.js).
   function makeDefaultTransport() {
@@ -65,7 +120,9 @@ function createApp(doc, opts = {}) {
     onImportDocx: () => opts.onRequestDocxImport && opts.onRequestDocxImport(),
     onClearDocument: () => onDocumentAction('clear', ''),
     onCaretMove: (charIndex) => onCaretMove(charIndex),
-    onJumpToPage: (pageIndex) => { switchTab('preview'); preview.scrollToPage(pageIndex); }
+    onJumpToPage: (pageIndex) => { switchTab('preview'); preview.scrollToPage(pageIndex); },
+    // **פער 1 (S6.1):** מסמכי בדיקה — הזרקה דרך פעולת מסמך מפורשת (F-06)
+    onGenerateTestDocument: (mode) => onGenerateTestDocument(mode)
   });
 
   const settingsPanel = buildSettingsTab(doc, {
@@ -82,6 +139,29 @@ function createApp(doc, opts = {}) {
     onApplyLegacyDefaults: (imported) => applyLegacyDefaults(imported, { source: 'panel' })
   });
 
+  /** טעינת כל הגופנים שההגדרות הנוכחיות דורשות — גם מחסניות (loadFontStack פותר
+   * מול הקטלוג). מקור יחיד לשני הצרכנים: applyLegacyDefaults ושחזור ההגדרות
+   * השמורות (פער 2 — הגדרה ששוחזרה עשויה לדרוש גופן שטרם נטען). */
+  const FONT_SETTING_KEYS = [
+    'body-font', 'first-word-font', 'dh-font', 'f-note-body-font',
+    ...Array.from({ length: 8 }, (_, i) => `heading-${i}-font`),
+    'shaar-title-font', 'shaar-subtitle-font', 'shaar-desc-font', 'shaar-sections-font',
+    'shaar-author-font', 'shaar-year-font', 'shaar-back-text-font'
+  ];
+  for (const side of ['recto', 'verso']) {
+    for (const pos of ['right', 'center', 'left']) FONT_SETTING_KEYS.push(`header-${side}-${pos}-font`);
+  }
+  async function loadFontsForCurrentSettings() {
+    if (!opts.imudLibrary || typeof opts.imudLibrary.loadFontStack !== 'function') return;
+    const seen = new Set();
+    for (const k of FONT_SETTING_KEYS) {
+      const v = settings[k];
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      try { await opts.imudLibrary.loadFontStack(v); } catch (e) { /* גופן חיצוני — fallback מערכת, מתועד */ }
+    }
+  }
+
   /** **03.11(ד):** החלת ברירות המחדל המקוריות — נתיב יחיד לשני הקוראים:
    * כפתור הפאנל והאתחול בעלייה (boot). אחרי ההחלה נטענים כל הגופנים
    * שההגדרות החדשות דורשות (גוף/כותרות/כותרות-עליונות/שערים) — בלי זה
@@ -92,31 +172,18 @@ function createApp(doc, opts = {}) {
   async function applyLegacyDefaults(imported, opts2 = {}) {
     Object.assign(settings, imported);
     settingsPanel.refreshValues();
-    // טעינת כל הגופנים שההגדרות דורשות — גם מחסניות (loadFontStack פותר מול הקטלוג)
-    if (opts.imudLibrary && typeof opts.imudLibrary.loadFontStack === 'function') {
-      const fontKeys = [
-        'body-font', 'first-word-font', 'dh-font', 'f-note-body-font',
-        ...Array.from({ length: 8 }, (_, i) => `heading-${i}-font`),
-        'shaar-title-font', 'shaar-subtitle-font', 'shaar-desc-font', 'shaar-sections-font',
-        'shaar-author-font', 'shaar-year-font', 'shaar-back-text-font'
-      ];
-      for (const side of ['recto', 'verso']) {
-        for (const pos of ['right', 'center', 'left']) fontKeys.push(`header-${side}-${pos}-font`);
-      }
-      const seen = new Set();
-      for (const k of fontKeys) {
-        const v = settings[k];
-        if (!v || seen.has(v)) continue;
-        seen.add(v);
-        try { await opts.imudLibrary.loadFontStack(v); } catch (e) { /* גופן חיצוני — fallback מערכת, מתועד */ }
-      }
-    }
+    await loadFontsForCurrentSettings();
     const wantRetypeset = opts2.retypeset !== undefined ? opts2.retypeset : true;
     if (wantRetypeset) onExplicitRetypeset();
     // **S5.2 (4):** מרוץ אתחול: החלה עם {retypeset:false} כשכבר קיימת תוצאה
     // (המשתמש הדביק במהלך האתחול) — ההגדרות השתנו אך שום דגל לא סומן ⇒
     // פער שקט בין התצוגה לבין מה שייצא. סימון כבד: ⚡ מהבהב עד עימוד.
     else if (result) markHeavyDirty('ברירות המחדל הוחלו — נדרש עימוד (⚡)');
+    // **פער 2 (S6.1):** boot ⇒ בסיס ההפרש (ברירות המחדל הן נקודת האפס);
+    // panel ⇒ בחירת ערכת/ברירות היא פעולה מפורשת — שמירה מיידית (SRS §17.1
+    // "preset toggles"; בלי debounce — המשתמש לחץ והלך).
+    if (opts2.source === 'boot') { if (settingsBaseline == null) captureSettingsBaseline(); }
+    else persistSettingsNow();
   }
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
@@ -138,6 +205,7 @@ function createApp(doc, opts = {}) {
       } else delete settings._customPages;
       if (bundle) { extensionsHadBundle = true; markHeavyDirty('הרחבות השתנו'); }
       else if (extensionsHadBundle) { extensionsHadBundle = false; markHeavyDirty('הרחבות הוסרו'); }
+      schedulePersistSettings(); // **פער 2 (S6.1):** הרחבות הן חלק מההגדרות — נשמרות גם כן
     },
     onRequestImport: () => opts.onRequestExtensionsImport && opts.onRequestExtensionsImport(),
     onExport: () => opts.onSaveExtensions && opts.onSaveExtensions(extensions.exportText()),
@@ -279,6 +347,19 @@ function createApp(doc, opts = {}) {
     }
   }
 
+  // ================= פער 1 (S6.1): מסמכי בדיקה — נושא 16 + SRS §16.1 =================
+  /** הזרקת מסמך בדיקה (קבוע/רנדומלי) — דרך פעולת מסמך מפורשת ('open') כדי לעבור
+   * בנתיב המיידי המוכח (F-06). המחולל ניתן להחלפה מבחוץ (opts.generateTestDocument)
+   * לבדיקות — בדפדפן זה המחולל האמיתי (test-doc-generator.js). */
+  const genDoc = opts.generateTestDocument || generateTestDocument;
+  function onGenerateTestDocument(mode) {
+    const doc2 = genDoc({ mode: mode === 'random' ? 'random' : 'fixed', scale: 'full' });
+    onDocumentAction('open', doc2);
+    const words = String(doc2).split(/\s+/).filter(Boolean).length;
+    status.setNotice(`הוזרק מסמך בדיקה ${mode === 'random' ? 'רנדומלי (טקסט חדש)' : 'קבוע (דטרמיניסטי)'} — ${words.toLocaleString('he-IL')} מילים. מתבצע עימוד…`);
+  }
+  // ================= סוף פער 1 =================
+
   // ================= מדיניות שינויי הגדרות (D-64) =================
 
   function onSettingChanged(key, value) {
@@ -301,6 +382,7 @@ function createApp(doc, opts = {}) {
     }
     if (classifyChange(key) === 'light') scheduleLightRefresh();
     else markHeavyDirty();
+    schedulePersistSettings(); // **פער 2 (S6.1):** כל שינוי הגדרה נשמר (SRS §17.1)
   }
 
   /** רינדור־מחדש קל: מרוכז לפי debounce-light-change-ms (D-44) — בלי מנוע. */
@@ -562,6 +644,7 @@ function createApp(doc, opts = {}) {
     for (const [k, v] of Object.entries(merged)) settings[k] = v;
     settingsPanel.refreshValues();
     markHeavyDirty(); // הגדרות השתנו — המשתמש יחליט מתי לעמד (⚡)
+    schedulePersistSettings(); // **פער 2 (S6.1):** טעינת תבנית = שינוי הגדרות — נשמר (SRS §17.1)
     return { unknownKeys, issues };
   }
 
@@ -621,7 +704,12 @@ function createApp(doc, opts = {}) {
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null, gen: typesetGen }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
-    getSettings: () => settings
+    getSettings: () => settings,
+    // **S6.1 — פער 1:** הזרקת מסמכי בדיקה (קבוע/רנדומלי) — נתיב מסמך מפורש
+    onGenerateTestDocument,
+    // **S6.1 — פער 2:** השתמרות הגדרות (SRS §17.1) — נקודות כניסה ל-boot ולבדיקות
+    captureSettingsBaseline, restorePersistedSettings, persistSettingsNow,
+    clearPersistedSettings: () => (persist ? persist.clear() : false)
   };
 }
 

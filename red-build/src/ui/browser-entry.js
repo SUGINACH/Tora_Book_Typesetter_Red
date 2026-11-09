@@ -11,6 +11,7 @@ const { createApp } = require('./app-shell');
 const { workerTransport } = require('./worker-client');
 const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
+const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -79,15 +80,21 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-06-s6.0'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-10-s6.1'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   // **S5.2:** התעבורה מקבלת מפעל () => new Worker(url) במקום מופע קיים —
   // cancel/קריסה (terminate) נטרלו בעבר את המנוע לצמיתות; עכשיו הפוסט הבא
   // בונה מופע חדש מאותו URL (כולל ?v=). בלי זה כל בקשה אחרי ביטול הוחברה
   // ל-Worker מת והאפליקציה נתקעה ב"מנוע: עמל…".
   const engine = new WorkerEngineClient(workerTransport(() => new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`)));
   const imud = createImudLibrary(engine);
+  // **S6.1 (פער 2 — SRS §17.1):** השתמרות הגדרות ב-localStorage — מוגש רק כשיש
+  // אחסון אמיתי (בדפדפן). בסביבות בלי אחסון המנגנון כבוי לגמרי (null).
+  const settingsPersistence = (typeof window !== 'undefined' && window.localStorage)
+    ? createSettingsPersistence(window.localStorage)
+    : null;
   const app = createApp(document, {
     engineClient: engine,
+    settingsPersistence, // **S6.1 (פער 2):** השתמרות הגדרות (SRS §17.1)
     fontStatus: (typeof document !== 'undefined' && document.fonts) ? 'loading' : 'ready',
     // **03.11:** ייצוא PDF/ZIP במנוע ה־Worker + הורדה בפועל בדפדפן
     remoteExport: true,
@@ -158,6 +165,14 @@ function boot() {
   // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
   imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(({ settings: imported }) => {
     return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
+  }).then(() => {
+    // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
+    // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל
+    // מוחלות תמיד (כלל הברזל) ובחירות המשתמש שורדות ריענון (SRS §17.1).
+    const restored = app.restorePersistedSettings();
+    if (restored && restored.restored > 0) {
+      app.status.setNotice(`הוחלו ${restored.restored} הגדרות שמורות מהסשן הקודם.`);
+    }
   }).then(() => {
     // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
     if (app.getText && app.getText().trim()) retypesetWhenIdle();

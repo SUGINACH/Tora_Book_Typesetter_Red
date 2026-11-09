@@ -214,3 +214,14 @@ R9 — טביעת דטרמיניזם ציר-י בלבד; רצפת מילים כ�
 SVG polygon/polyline/matrix בעיטורים; R7-M4 — פקטורי גופן ב-impl B.
 שאריות S5.4 (רוחב סמן בתקציב noteHeight של DP נסגר חלקית — הסמן נכלל
 כעת; fn-layout-mode=continuous ב-DP מוצג כבלוקים — נותר).
+
+## S6.1 (10.11 — סגירת שני הפערים מול המפרט) — עדכון רישום
+
+**נסגרו:** פער 1 — כפתורי "מסמך בדיקה קבוע/רנדומלי" + מחולל דטרמיניסטי
+(נושא 16 ב"סיכום בקשות מAI" + SRS §16.1/§20.1; ~180K מילים ≈ ‏350+ עמודים,
+חמשת צירי העקה מובטחים מבנית; src/ui/test-doc-generator.js + editor-tab +
+app-shell; D-93). פער 2 — השתמרות הגדרות משתמש ב-localStorage (SRS §17.1
+"across page refreshes, text imports, and preset toggles" + נושא 18; diff
+מול בסיס boot, אימות קפדני, כשל עדין בחריגת נפח; src/ui/settings-persistence.js
++ app-shell + browser-entry; D-94). שניהם נעולים ב-s61-gap-fixes (27 בדיקות)
+⇒ ‏657 בדידות ב-32 קבצים; הקנוני 80f9ed6c ללא שינוי (UI בלבד).
