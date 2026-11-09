@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 58 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 60 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -296,10 +296,13 @@ var __paths = {
   "src/ui/browser-entry.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/browser-entry.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/browser-entry.js|./imud-library": "src/ui/imud-library.js",
+  "src/ui/browser-entry.js|./settings-persistence": "src/ui/settings-persistence.js",
   "src/ui/browser-entry.js|../engine/output/html-export": "src/engine/output/html-export.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|../engine/output/project-io": "src/engine/output/project-io.js",
   "src/ui/app-shell.js|./status-strip": "src/ui/status-strip.js",
+  "src/ui/app-shell.js|./test-doc-generator": "src/ui/test-doc-generator.js",
+  "src/ui/app-shell.js|./settings-persistence": "src/ui/settings-persistence.js",
   "src/ui/app-shell.js|./editor-tab": "src/ui/editor-tab.js",
   "src/ui/app-shell.js|./settings-panel": "src/ui/settings-panel.js",
   "src/ui/app-shell.js|./extensions-panel": "src/ui/extensions-panel.js",
@@ -310,6 +313,7 @@ var __paths = {
   "src/ui/app-shell.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/app-shell.js|./retypeset-policy": "src/ui/retypeset-policy.js",
   "src/ui/app-shell.js|./caret-map": "src/ui/caret-map.js",
+  "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|./inline-transport": "src/ui/inline-transport.js",
   "src/ui/app-shell.js|../engine/output/export-api": "src/engine/output/export-api.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
@@ -397,6 +401,7 @@ const { createApp } = require('./app-shell');
 const { workerTransport } = require('./worker-client');
 const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
+const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -465,15 +470,21 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-06-s6.0'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-10-s6.1'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   // **S5.2:** התעבורה מקבלת מפעל () => new Worker(url) במקום מופע קיים —
   // cancel/קריסה (terminate) נטרלו בעבר את המנוע לצמיתות; עכשיו הפוסט הבא
   // בונה מופע חדש מאותו URL (כולל ?v=). בלי זה כל בקשה אחרי ביטול הוחברה
   // ל-Worker מת והאפליקציה נתקעה ב"מנוע: עמל…".
   const engine = new WorkerEngineClient(workerTransport(() => new Worker(`engine-worker.bundle.js?v=${ASSET_VERSION}`)));
   const imud = createImudLibrary(engine);
+  // **S6.1 (פער 2 — SRS §17.1):** השתמרות הגדרות ב-localStorage — מוגש רק כשיש
+  // אחסון אמיתי (בדפדפן). בסביבות בלי אחסון המנגנון כבוי לגמרי (null).
+  const settingsPersistence = (typeof window !== 'undefined' && window.localStorage)
+    ? createSettingsPersistence(window.localStorage)
+    : null;
   const app = createApp(document, {
     engineClient: engine,
+    settingsPersistence, // **S6.1 (פער 2):** השתמרות הגדרות (SRS §17.1)
     fontStatus: (typeof document !== 'undefined' && document.fonts) ? 'loading' : 'ready',
     // **03.11:** ייצוא PDF/ZIP במנוע ה־Worker + הורדה בפועל בדפדפן
     remoteExport: true,
@@ -545,6 +556,14 @@ function boot() {
   imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(({ settings: imported }) => {
     return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
   }).then(() => {
+    // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
+    // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל
+    // מוחלות תמיד (כלל הברזל) ובחירות המשתמש שורדות ריענון (SRS §17.1).
+    const restored = app.restorePersistedSettings();
+    if (restored && restored.restored > 0) {
+      app.status.setNotice(`הוחלו ${restored.restored} הגדרות שמורות מהסשן הקודם.`);
+    }
+  }).then(() => {
     // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
     if (app.getText && app.getText().trim()) retypesetWhenIdle();
   }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
@@ -588,6 +607,8 @@ __modules["src/ui/app-shell.js"] = function (require, module, exports) {
 const { getDefaultSettings, findKey } = require('../engine/core/settings-registry');
 const { migrate, mergeWithDefaults } = require('../engine/output/project-io');
 const { buildStatusStrip } = require('./status-strip');
+const { generateTestDocument } = require('./test-doc-generator'); // **פער 1 (S6.1):** מסמכי בדיקה קבוע/רנדומלי — נושא 16 + SRS §16.1/§20.1
+const { diffSettings } = require('./settings-persistence'); // **פער 2 (S6.1):** השתמרות הגדרות — SRS §17.1
 const { buildEditorTab } = require('./editor-tab');
 const { buildSettingsTab } = require('./settings-panel');
 const { buildExtensionsPanel } = require('./extensions-panel');
@@ -617,6 +638,59 @@ function createApp(doc, opts = {}) {
   let lastLightRefreshMs = null;
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
 
+  // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
+  // בסיס = מצב ברירות-המחדל אחרי האתחול (applyLegacyDefaults source:'boot').
+  // נשמר רק ההפרש של המשתמש מהבסיס — עדכון ברירות מחדל בגרסה חדשה לא נחסם.
+  // בלי opts.settingsPersistence (Node/בדיקות ישנות) — כל המנגנון לא-פעיל.
+  const persist = opts.settingsPersistence || null;
+  let settingsBaseline = null; // null ⇒ עדיין לא הוחלו ברירות האתחול — אין שמירה
+  let persistTimer = null;
+
+  function captureSettingsBaseline() { settingsBaseline = { ...settings }; }
+
+  function schedulePersistSettings() {
+    if (!persist || !settingsBaseline) return;
+    if (persistTimer != null) clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => { persistTimer = null; persistSettingsNow(); }, 250);
+  }
+
+  function persistSettingsNow() {
+    if (!persist || !settingsBaseline) return { ok: false, reason: 'inactive' };
+    const diff = diffSettings(settingsBaseline, settings);
+    const res = persist.save(diff);
+    if (!res.ok) {
+      status.setNotice('שמירת ההגדרות בדפדפן נכשלה — ההגדרות לא ישוחזרו לאחר ריענון.');
+    }
+    return res;
+  }
+
+  /** שחזור ההפרש השמור מעל ברירות-האתחדל (נקרא מה-boot אחרי applyLegacyDefaults).
+   * מפתחות לא מוכרים ברישום נדלגים; מפתחות _ פנימיים (הרחבות) עוברים כמו שהם. */
+  function restorePersistedSettings() {
+    if (!persist) return { restored: 0, skipped: [] };
+    const diff = persist.load();
+    if (!diff) return { restored: 0, skipped: [] };
+    const { getSettingDefs } = require('../engine/core/settings-registry');
+    const regKeys = new Set(getSettingDefs().map(r => r.id));
+    let applied = 0;
+    const skipped = [];
+    for (const [k, v] of Object.entries(diff)) {
+      if (k.startsWith('_')) { settings[k] = v; applied++; continue; } // הרחבות/מצב פנימי
+      if (k === 'settings_version' || !regKeys.has(k)) { skipped.push(k); continue; }
+      settings[k] = v;
+      applied++;
+    }
+    if (applied) {
+      settingsPanel.refreshValues();
+      // **פער 2 (S6.1):** הגדרה ששוחזרה עשויה לדרוש גופן שטרם נטען (למשל החלפת
+      // גוף הספר) — טעינה ברקע; כישלון אינו חוסם (fallback מערכת, מתועד).
+      loadFontsForCurrentSettings().catch(() => { /* fallback מערכת — מתועד */ });
+      if (result) markHeavyDirty('הגדרות שמורות הוחלו — נדרש עימוד (⚡)');
+    }
+    return { restored: applied, skipped };
+  }
+  // ================= סוף פער 2 =================
+
   // בדיקות/Node: תעבורה inline (אותו פרוטוקול) — נטענת בעצלתיים כדי ש־bundle
   // הדפדפן לא יגרור את המנוע (שם רץ Worker אמיתי — ראו inline-transport.js).
   function makeDefaultTransport() {
@@ -639,7 +713,9 @@ function createApp(doc, opts = {}) {
     onImportDocx: () => opts.onRequestDocxImport && opts.onRequestDocxImport(),
     onClearDocument: () => onDocumentAction('clear', ''),
     onCaretMove: (charIndex) => onCaretMove(charIndex),
-    onJumpToPage: (pageIndex) => { switchTab('preview'); preview.scrollToPage(pageIndex); }
+    onJumpToPage: (pageIndex) => { switchTab('preview'); preview.scrollToPage(pageIndex); },
+    // **פער 1 (S6.1):** מסמכי בדיקה — הזרקה דרך פעולת מסמך מפורשת (F-06)
+    onGenerateTestDocument: (mode) => onGenerateTestDocument(mode)
   });
 
   const settingsPanel = buildSettingsTab(doc, {
@@ -656,6 +732,29 @@ function createApp(doc, opts = {}) {
     onApplyLegacyDefaults: (imported) => applyLegacyDefaults(imported, { source: 'panel' })
   });
 
+  /** טעינת כל הגופנים שההגדרות הנוכחיות דורשות — גם מחסניות (loadFontStack פותר
+   * מול הקטלוג). מקור יחיד לשני הצרכנים: applyLegacyDefaults ושחזור ההגדרות
+   * השמורות (פער 2 — הגדרה ששוחזרה עשויה לדרוש גופן שטרם נטען). */
+  const FONT_SETTING_KEYS = [
+    'body-font', 'first-word-font', 'dh-font', 'f-note-body-font',
+    ...Array.from({ length: 8 }, (_, i) => `heading-${i}-font`),
+    'shaar-title-font', 'shaar-subtitle-font', 'shaar-desc-font', 'shaar-sections-font',
+    'shaar-author-font', 'shaar-year-font', 'shaar-back-text-font'
+  ];
+  for (const side of ['recto', 'verso']) {
+    for (const pos of ['right', 'center', 'left']) FONT_SETTING_KEYS.push(`header-${side}-${pos}-font`);
+  }
+  async function loadFontsForCurrentSettings() {
+    if (!opts.imudLibrary || typeof opts.imudLibrary.loadFontStack !== 'function') return;
+    const seen = new Set();
+    for (const k of FONT_SETTING_KEYS) {
+      const v = settings[k];
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      try { await opts.imudLibrary.loadFontStack(v); } catch (e) { /* גופן חיצוני — fallback מערכת, מתועד */ }
+    }
+  }
+
   /** **03.11(ד):** החלת ברירות המחדל המקוריות — נתיב יחיד לשני הקוראים:
    * כפתור הפאנל והאתחול בעלייה (boot). אחרי ההחלה נטענים כל הגופנים
    * שההגדרות החדשות דורשות (גוף/כותרות/כותרות-עליונות/שערים) — בלי זה
@@ -666,31 +765,18 @@ function createApp(doc, opts = {}) {
   async function applyLegacyDefaults(imported, opts2 = {}) {
     Object.assign(settings, imported);
     settingsPanel.refreshValues();
-    // טעינת כל הגופנים שההגדרות דורשות — גם מחסניות (loadFontStack פותר מול הקטלוג)
-    if (opts.imudLibrary && typeof opts.imudLibrary.loadFontStack === 'function') {
-      const fontKeys = [
-        'body-font', 'first-word-font', 'dh-font', 'f-note-body-font',
-        ...Array.from({ length: 8 }, (_, i) => `heading-${i}-font`),
-        'shaar-title-font', 'shaar-subtitle-font', 'shaar-desc-font', 'shaar-sections-font',
-        'shaar-author-font', 'shaar-year-font', 'shaar-back-text-font'
-      ];
-      for (const side of ['recto', 'verso']) {
-        for (const pos of ['right', 'center', 'left']) fontKeys.push(`header-${side}-${pos}-font`);
-      }
-      const seen = new Set();
-      for (const k of fontKeys) {
-        const v = settings[k];
-        if (!v || seen.has(v)) continue;
-        seen.add(v);
-        try { await opts.imudLibrary.loadFontStack(v); } catch (e) { /* גופן חיצוני — fallback מערכת, מתועד */ }
-      }
-    }
+    await loadFontsForCurrentSettings();
     const wantRetypeset = opts2.retypeset !== undefined ? opts2.retypeset : true;
     if (wantRetypeset) onExplicitRetypeset();
     // **S5.2 (4):** מרוץ אתחול: החלה עם {retypeset:false} כשכבר קיימת תוצאה
     // (המשתמש הדביק במהלך האתחול) — ההגדרות השתנו אך שום דגל לא סומן ⇒
     // פער שקט בין התצוגה לבין מה שייצא. סימון כבד: ⚡ מהבהב עד עימוד.
     else if (result) markHeavyDirty('ברירות המחדל הוחלו — נדרש עימוד (⚡)');
+    // **פער 2 (S6.1):** boot ⇒ בסיס ההפרש (ברירות המחדל הן נקודת האפס);
+    // panel ⇒ בחירת ערכת/ברירות היא פעולה מפורשת — שמירה מיידית (SRS §17.1
+    // "preset toggles"; בלי debounce — המשתמש לחץ והלך).
+    if (opts2.source === 'boot') { if (settingsBaseline == null) captureSettingsBaseline(); }
+    else persistSettingsNow();
   }
 
   // **S11:** סקציית הרחבות מסמך — בתחתית לשונית ההגדרות (מנותק מ־12 פאנלי הרישום).
@@ -712,6 +798,7 @@ function createApp(doc, opts = {}) {
       } else delete settings._customPages;
       if (bundle) { extensionsHadBundle = true; markHeavyDirty('הרחבות השתנו'); }
       else if (extensionsHadBundle) { extensionsHadBundle = false; markHeavyDirty('הרחבות הוסרו'); }
+      schedulePersistSettings(); // **פער 2 (S6.1):** הרחבות הן חלק מההגדרות — נשמרות גם כן
     },
     onRequestImport: () => opts.onRequestExtensionsImport && opts.onRequestExtensionsImport(),
     onExport: () => opts.onSaveExtensions && opts.onSaveExtensions(extensions.exportText()),
@@ -853,6 +940,19 @@ function createApp(doc, opts = {}) {
     }
   }
 
+  // ================= פער 1 (S6.1): מסמכי בדיקה — נושא 16 + SRS §16.1 =================
+  /** הזרקת מסמך בדיקה (קבוע/רנדומלי) — דרך פעולת מסמך מפורשת ('open') כדי לעבור
+   * בנתיב המיידי המוכח (F-06). המחולל ניתן להחלפה מבחוץ (opts.generateTestDocument)
+   * לבדיקות — בדפדפן זה המחולל האמיתי (test-doc-generator.js). */
+  const genDoc = opts.generateTestDocument || generateTestDocument;
+  function onGenerateTestDocument(mode) {
+    const doc2 = genDoc({ mode: mode === 'random' ? 'random' : 'fixed', scale: 'full' });
+    onDocumentAction('open', doc2);
+    const words = String(doc2).split(/\s+/).filter(Boolean).length;
+    status.setNotice(`הוזרק מסמך בדיקה ${mode === 'random' ? 'רנדומלי (טקסט חדש)' : 'קבוע (דטרמיניסטי)'} — ${words.toLocaleString('he-IL')} מילים. מתבצע עימוד…`);
+  }
+  // ================= סוף פער 1 =================
+
   // ================= מדיניות שינויי הגדרות (D-64) =================
 
   function onSettingChanged(key, value) {
@@ -875,6 +975,7 @@ function createApp(doc, opts = {}) {
     }
     if (classifyChange(key) === 'light') scheduleLightRefresh();
     else markHeavyDirty();
+    schedulePersistSettings(); // **פער 2 (S6.1):** כל שינוי הגדרה נשמר (SRS §17.1)
   }
 
   /** רינדור־מחדש קל: מרוכז לפי debounce-light-change-ms (D-44) — בלי מנוע. */
@@ -1136,6 +1237,7 @@ function createApp(doc, opts = {}) {
     for (const [k, v] of Object.entries(merged)) settings[k] = v;
     settingsPanel.refreshValues();
     markHeavyDirty(); // הגדרות השתנו — המשתמש יחליט מתי לעמד (⚡)
+    schedulePersistSettings(); // **פער 2 (S6.1):** טעינת תבנית = שינוי הגדרות — נשמר (SRS §17.1)
     return { unknownKeys, issues };
   }
 
@@ -1195,7 +1297,12 @@ function createApp(doc, opts = {}) {
     getState: () => ({ lightDirty, heavyDirty, lastLightRefreshMs, hasResult: !!result, pages: result ? result.pages.length : 0, layoutHash: result ? result.layoutHash : null, gen: typesetGen }),
     setText: (t) => { text = String(t != null ? t : ''); editor.setText(text); },
     getText: () => editor.getText(),
-    getSettings: () => settings
+    getSettings: () => settings,
+    // **S6.1 — פער 1:** הזרקת מסמכי בדיקה (קבוע/רנדומלי) — נתיב מסמך מפורש
+    onGenerateTestDocument,
+    // **S6.1 — פער 2:** השתמרות הגדרות (SRS §17.1) — נקודות כניסה ל-boot ולבדיקות
+    captureSettingsBaseline, restorePersistedSettings, persistSettingsNow,
+    clearPersistedSettings: () => (persist ? persist.clear() : false)
   };
 }
 
@@ -1702,6 +1809,429 @@ function buildStatusStrip(doc, opts) {
 module.exports = { buildStatusStrip };
 
 };
+__modules["src/ui/test-doc-generator.js"] = function (require, module, exports) {
+// src/ui/test-doc-generator.js — מחולל מסמכי בדיקה (פער 1: נושא 16 ב"סיכום בקשות מAI" + SRS §16.1/§20.1)
+'use strict';
+
+/**
+ * **רקע (בקשת המשתמש המקורית):** "ופצל את לחצן 'מסמך בדיקה' לשני לחצנים
+ * 1. 'מסמך בדיקה קבוע' שיזריק את אותו מסמך בכל פעם. 2. 'מסמך בדידה רנדומלי'
+ * שיזריק בכל פעם טקסט רנדומלי." — וכן "המסמך הסופי צריך להכיל לפחות 300 דפים
+ * מסוגים שונים" לפי חמשת צירי העקה.
+ *
+ * **עקרונות:**
+ * - **קבוע = דטרמיניסטי מלא:** זרע (seed) קבוע ⇒ אותם בתים בדיוק בכל לחיצה
+ *   (מדיניות האפס-אקראיות של הפרויקט נשמרת — אין Math.random/Date.now בנתיב הקבוע).
+ * - **רנדומלי = זרע טרי בכל קריאה:** (Date.now ^ Math.random) — מסמך חדש בכל לחיצה.
+ * - **חמשת צירי העקה (SRS §20.1):** (1) טיפולוגיות עמוד — פרקים (H2), H3 חוצה
+ *   בראש פרק ובאמצעו, גוף רגיל; (2) מדדי פסקה — שורה אחת, שתי שורות, ארוכות
+ *   20+ שורות; (3) שילובי כותרות — H4/H5/H6 בראש/אמצע/סוף פרק, כולל רצפי
+ *   כותרות; (4) צפיפויות הערות — 0, 1–5 קצרות, ענק חוצה-עמודים, ורצף
+ *   [א][ב] (מקרה האינטגרציה ההיסטורי); (5) סוגריים עגולים — שורה אחת,
+ *   רב-שורות וחוצה-טורים.
+ * - **בלי הפרות מעוצבות:** אין מילים בלתי-ניתנות-לשבירה מלאכותיות (המסמך אמור
+ *   להיות שקוף להגדרות ההגנות — "0 בעיות עימוד" נשמר גם עליו; העקה היא בהצטברות
+ *   ובשילובים, לא בהפרות מכוונות).
+ * - **טהור:** מודול ללא כל גישה למנוע/DOM (כלל F-06) — מחרוזות בלבד.
+ */
+
+/** mulberry32 — PRNG דטרמיניסטי קטן ומהיר (32 ביט, איכות מספקת לטקסט). */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** הזרע הקבוע של מצב "קבוע" — אף פעם לא משתנה (נעילת הדטרמיניזם בין גרסאות פריסה). */
+const FIXED_SEED = 0x54F2A17;
+
+/** מאגרי מילים — עברית אמיתית באורכים מגוונים (2–11 תווים) לריאליזם טיפוגרפי. */
+const WORDS = [
+  'תורה', 'הלכה', 'סוגיה', 'שיעור', 'דין', 'טעם', 'פשט', 'דרש', 'רמז', 'סוד',
+  'גמרא', 'משנה', 'ברייתא', 'תוספות', 'ראשונים', 'אחרונים', 'פוסקים', 'שולחן', 'ערוך', 'רמב"ם',
+  'פרשה', 'פסוק', 'פסוקים', 'מפרשים', 'מדרש', 'זוהר', 'קבלה', 'מוסר', 'חסידות', 'אמונה',
+  'ברכה', 'תפילה', 'שבת', 'מועד', 'כשרות', 'טהרה', 'נישואין', 'קידושין', 'גיטין', 'נזיקין',
+  'לימוד', 'שיעורים', 'עיון', 'בקיאות', 'חברותא', 'בית', 'מדרש', 'ישיבה', 'כולל', 'שיחה',
+  'מחבר', 'עורך', 'מהדורה', 'דפוס', 'נוסח', 'מקור', 'עדות', 'כתב', 'יד', 'ספר',
+  'אור', 'חכמה', 'דעת', 'בינה', 'חסד', 'גבורה', 'תפארת', 'נצח', 'הוד', 'יסוד',
+  'מלכות', 'שמים', 'ארץ', 'ים', 'הר', 'מדבר', 'נהר', 'עיר', 'כפר', 'שדה',
+  'יום', 'לילה', 'בוקר', 'ערב', 'שנה', 'חודש', 'שבוע', 'שעה', 'רגע', 'עת',
+  'אדם', 'איש', 'אשה', 'בן', 'בת', 'אב', 'אם', 'אח', 'אחות', 'רע',
+  'דבר', 'מילה', 'מחשבה', 'הבנה', 'שאלה', 'תשובה', 'ספק', 'ודאות', 'מחלוקת', 'הסכמה',
+  'גדול', 'קטן', 'קדוש', 'טהור', 'חי', 'טוב', 'ישר', 'אמת', 'שלום', 'אמת'
+];
+/** מילים ארוכות יותר — לעקת רוחב שורה גבוהה (בלי חריגה מלאכותית). */
+const LONG_WORDS = [
+  'להתבוננות', 'התבארותו', 'מתורגמים', 'התחייבות', 'להשגחה', 'בהתאחדות', 'להתקדשות',
+  'התעמקות', 'להידמות', 'התכוונות', 'להבחנות', 'התאמצות', 'להתייחסות', 'השתלשלות',
+  'להתחברות', 'התעוררות', 'להתקרבות', 'התנדבות', 'להשתלמות', 'התמדה'
+];
+/** מילים מוטמעות-מקף — עקת יחידת-מילה מורכבת. */
+const HYPHEN_WORDS = ['על-פי', 'אין-סוף', 'כל-שכן', 'צריך-עיון', 'שלא-כדין', 'יש-אומרים', 'קושיה-ראשונה'];
+/** זוגות NBSP (צמדים) — עקת יחידה מודבקת (BRZ-11). */
+const NBSP_PAIRS = ['מסכת\u00A0שבת', 'רבי\u00A0עקיבא', 'בבא\u00A0קמא', 'רבי\u00A0יוחנן', 'שולחן\u00A0ערוך', 'יורה\u00A0דעה'];
+
+const SENTENCE_ENDS = ['.', '.', '.', '.', '.', ':', ';', '?', '!'];
+const CONNECTORS = ['שכן', 'אולם', 'אך', 'כי', 'אף', 'גם', 'עוד', 'הרי', 'הן', 'אמנם'];
+
+function pick(rng, arr) { return arr[Math.floor(rng() * arr.length) % arr.length]; }
+function randInt(rng, min, max) { return min + Math.floor(rng() * (max - min + 1)); }
+function chance(rng, p) { return rng() < p; }
+
+/** מילה בודדת מהמאגרים (לפעמים ארוכה/מוטמעת/מודבקת). */
+function word(rng) {
+  const r = rng();
+  if (r < 0.04) return pick(rng, LONG_WORDS);
+  if (r < 0.07) return pick(rng, HYPHEN_WORDS);
+  if (r < 0.09) return pick(rng, NBSP_PAIRS);
+  return pick(rng, WORDS);
+}
+
+/** משפט אחד: 5–12 מילים, מסתיים בפיסוק. */
+function sentence(rng) {
+  const n = randInt(rng, 5, 12);
+  const parts = [];
+  if (chance(rng, 0.25)) parts.push(pick(rng, CONNECTORS));
+  while (parts.length < n) parts.push(word(rng));
+  return parts.join(' ') + pick(rng, SENTENCE_ENDS);
+}
+
+/** פסקה בת ~targetWords מילים. */
+function paragraphText(rng, targetWords) {
+  const parts = [];
+  let count = 0;
+  while (count < targetWords) {
+    const s = sentence(rng);
+    parts.push(s);
+    count += s.split(/\s+/).length;
+  }
+  return parts.join(' ');
+}
+
+/** הערת שוליים קצרה (4–10 מילים). */
+function shortNote(rng) { return paragraphText(rng, randInt(rng, 4, 10)).replace(/[.?:;!]$/, ''); }
+
+/** הערת-ענק — חוצה מרזבים ועמודים (120–200 מילים). */
+function massiveNote(rng) { return paragraphText(rng, randInt(rng, 120, 200)).replace(/[.?:;!]$/, ''); }
+
+/** סוגריים עגולים — kind: 'short' | 'multi' | 'cross'. */
+function paren(rng, kind) {
+  const n = kind === 'short' ? randInt(rng, 3, 8) : (kind === 'multi' ? randInt(rng, 15, 40) : randInt(rng, 50, 120));
+  return '(' + paragraphText(rng, n).replace(/[.?:;!]$/, '') + ')';
+}
+
+/**
+ * פסקת גוף אחת עם עטיפת הערות/סוגריים לפי הגרלת הצירים.
+ * @returns {string} שורת פסקה אחת (בלי כותרת)
+ */
+function bodyParagraph(rng, kind) {
+  const target = kind === 'tiny' ? randInt(rng, 3, 6)
+    : kind === 'short' ? randInt(rng, 10, 18)
+    : kind === 'long' ? randInt(rng, 150, 260)
+    : randInt(rng, 30, 80);
+  const chunks = [];
+  const words = paragraphText(rng, target).split(' ');
+  // פיצול לשני חצאים לצורך הזרקת סוגריים/הערות באמצע טבעי
+  const half = Math.max(1, Math.floor(words.length / 2));
+  const firstHalf = words.slice(0, half).join(' ');
+  const secondHalf = words.slice(half).join(' ');
+
+  chunks.push(firstHalf);
+
+  // ציר 5 — סוגריים עגולים
+  const pr = rng();
+  if (pr < 0.16) chunks.push(paren(rng, 'short'));
+  else if (pr < 0.26) chunks.push(paren(rng, 'multi'));
+  else if (pr < 0.31) chunks.push(paren(rng, 'cross'));
+
+  // ציר 4 — הערות שוליים
+  const fr = rng();
+  if (fr < 0.30) {
+    // אין הערה
+  } else if (fr < 0.55) {
+    chunks.push('[' + shortNote(rng) + ']');
+  } else if (fr < 0.75) {
+    const n = randInt(rng, 2, 5);
+    for (let i = 0; i < n; i++) chunks.push('[' + shortNote(rng) + ']');
+  } else if (fr < 0.88) {
+    // רצף מוכר מההיסטוריה: [טקסט][טקסט] בלי רווח ביניהם
+    chunks.push('[' + shortNote(rng) + '][' + shortNote(rng) + ']');
+  } else {
+    chunks.push('[' + massiveNote(rng) + ']');
+  }
+
+  chunks.push(secondHalf);
+  return chunks.filter(Boolean).join(' ');
+}
+
+/** כותרת פרק ממוספרת. */
+function chapterTitle(rng, idx) {
+  const topics = ['עקרונות הלימוד', 'דיני שבת', 'הלכות תפילה', 'דיני כשרות', 'ענייני מועדים',
+    'הלכות ברכות', 'דיני ממונות', 'ענייני טהרה', 'הלכות אישות', 'דיני נזיקין',
+    'עקרונות הפסיקה', 'מנהגי ישראל', 'תיקוני חצות', 'ענייני חינוך', 'הלכות צדקה',
+    'דיני עדות', 'ענייני תשובה', 'הלכות אבלות', 'דיני סעודה', 'ענייני קידוש החודש'];
+  const gematria = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט', 'י', 'יא', 'יב', 'יג', 'יד', 'טו', 'טז',
+    'יז', 'יח', 'יט', 'כ', 'כא', 'כב', 'כג', 'כד', 'כה', 'כו', 'כז', 'כח', 'כט', 'ל', 'לא', 'לב', 'לג', 'לד', 'לה', 'לו'];
+  return `פרק ${gematria[(idx - 1) % gematria.length]} — ${pick(rng, topics)}`;
+}
+
+/**
+ * בלוק כותרת-משנה (ציר 3) — טקסט כותרת מגוון.
+ * @param {number} level 3..7
+ */
+function subHeadingText(rng, level) {
+  const h3 = ['כללים והגדרות', 'מחלוקת הראשונים', 'שיטת הרמב"ם', 'דעת השולחן ערוך', 'ביאור הסוגיה', 'השלכות מעשיות'];
+  const h456 = ['טעם הדין', 'גדרי הדין', 'מקור הדין', 'חילוקי דינים', 'דין נוסף', 'לשון הפוסקים', 'שאלה נפרדת', 'ראיה מהגמרא'];
+  const h7 = ['מהות המצווה', 'טעם המנהג', 'יסוד העניין', 'מקור ההלכה', 'גדר הדין', 'שורש העניין'];
+  return pick(rng, level === 3 ? h3 : level === 7 ? h7 : h456);
+}
+
+/**
+ * פרק אחד שלם — רצף בלוקים מעורבב לפי הצירים.
+ * @param {number} chapterIdx מספר הפרק (1-based) — להבטחת כיסוי רמות הכותרות ברוטציה
+ * @returns {string[]} שורות הפרק (בלי שורת ה-כותרת 2)
+ */
+function chapterLines(rng, opts, chapterIdx) {
+  const lines = [];
+  const nBlocks = opts.compact ? randInt(rng, 6, 9) : randInt(rng, 28, 42);
+  let blocksSinceHeading = 0;
+
+  // ציר 1 — H3 חוצה בראש הפרק (אחרי פסקת פתיחה קצרה) או באמצע
+  const h3AtTop = chance(rng, 0.5);
+  // ציר 3 — הבטחת כיסוי: כל פרק מקבל כותרת-משנה מובטחת ברמה מתחלפת (4/5/6)
+  // בעמדה אמצעית; פרק 1 מקבל גם כותרת-צד (H7) מובטחת — שום רמה לא חסרה לעולם.
+  const guaranteedLvl = 4 + ((chapterIdx - 1) % 3);
+  const guaranteedAt = Math.floor(nBlocks / 2);
+  const docFirst = chapterIdx === 1;
+
+  for (let i = 0; i < nBlocks; i++) {
+    const r = rng();
+    const isTop = i < 2;
+    const isBottom = i >= nBlocks - 2;
+
+    // פסקת-עקה מובטחת בפרק הראשון של המצומצם (לפני כל ענף אחר — אף ענף
+    // אחר לא יכול לבלוע את האינדקס הזה): רצף [א][ב] + סוגריים חוצי-טורים
+    if (docFirst && opts.compact && i === 3) {
+      lines.push(`${paragraphText(rng, 12)} ${paren(rng, 'cross')} [${shortNote(rng)}][${shortNote(rng)}] ${paragraphText(rng, 10)}`);
+      blocksSinceHeading++;
+      continue;
+    }
+
+    // ציר 1 — כותרת צד (H7) מובטחת בפרק הראשון (i=0 — לפני כל ענף כותרת אחר)
+    if (docFirst && i === 0) {
+      lines.push(`כותרת 7 - ${subHeadingText(rng, 7)}`);
+      // נופל להמשך — H7 תמיד לפני פסקה
+    }
+
+    if (h3AtTop && i === 1) {
+      lines.push(`כותרת 3 - ${subHeadingText(rng, 3)}`);
+      blocksSinceHeading = 0;
+      continue;
+    }
+    if (!h3AtTop && i === Math.floor(nBlocks / 4)) {
+      lines.push(`כותרת 3 - ${subHeadingText(rng, 3)}`);
+      blocksSinceHeading = 0;
+      continue;
+    }
+
+    // ציר 3 — כותרת משנה מובטחת בעמדה האמצעית (רוטציה 4/5/6 בין פרקים)
+    if (i === guaranteedAt) {
+      lines.push(`כותרת ${guaranteedLvl} - ${subHeadingText(rng, guaranteedLvl)}`);
+      if (chance(rng, 0.25)) { // רצף כותרות — עקת escort
+        lines.push(`כותרת ${Math.min(6, guaranteedLvl + 1)} - ${subHeadingText(rng, Math.min(6, guaranteedLvl + 1))}`);
+      }
+      blocksSinceHeading = 0;
+      continue;
+    }
+
+    // ציר 3 — כותרות משנה מוגרלות בעמדות מגוונות
+    if (blocksSinceHeading >= 2 && r < 0.22) {
+      const lvl = isTop ? randInt(rng, 4, 5) : isBottom ? randInt(rng, 5, 6) : randInt(rng, 4, 6);
+      lines.push(`כותרת ${lvl} - ${subHeadingText(rng, lvl)}`);
+      if (chance(rng, 0.25)) { // רצף כותרות — עקת escort
+        lines.push(`כותרת ${Math.min(6, lvl + 1)} - ${subHeadingText(rng, lvl + 1)}`);
+      }
+      blocksSinceHeading = 0;
+      continue;
+    }
+
+    // ציר 1 — כותרות צד (H7) מוגרלות בהמשך
+    if (blocksSinceHeading >= 1 && r < 0.27) {
+      lines.push(`כותרת 7 - ${subHeadingText(rng, 7)}`);
+    }
+
+    // ציר 2 — מדדי פסקה מגוונים
+    const pr = rng();
+    const kind = opts.compact
+      ? (pr < 0.14 ? 'tiny' : pr < 0.30 ? 'short' : pr < 0.44 ? 'long' : 'medium')
+      : (pr < 0.08 ? 'tiny' : pr < 0.20 ? 'short' : pr < 0.50 ? 'long' : 'medium');
+    lines.push(bodyParagraph(rng, kind));
+    blocksSinceHeading++;
+  }
+
+  // הערות סיום בחלק מהפרקים
+  if (chance(rng, opts.compact ? 0.5 : 0.33)) {
+    const n = randInt(rng, 2, 6);
+    for (let i = 0; i < n; i++) {
+      lines.push(`הערת סיום - ${paragraphText(rng, randInt(rng, 8, 25))}`);
+    }
+  }
+  return lines;
+}
+
+/**
+ * מחולל מסמך הבדיקה.
+ * @param {{mode?:'fixed'|'random', seed?:number, scale?:'full'|'small'}} [opts]
+ *   mode fixed (ברירת מחדל) — דטרמיניסטי מלא; random — זרע טרי בכל קריאה.
+ *   seed מפורש עוקף את שניהם (לבדיקות).
+ *   scale full (ברירת מחדל) — ~35 פרקים, מאות עמודים; small — 3 פרקים לבדיקות.
+ * @returns {string} המסמך המלא בפורמט הקלט של המנוע (כותרת N - …, [הערות], (סוגריים), הערת סיום - …)
+ */
+function generateTestDocument(opts = {}) {
+  const mode = opts.mode === 'random' ? 'random' : 'fixed';
+  const scale = opts.scale === 'small' ? 'small' : 'full';
+  const seed = Number.isFinite(opts.seed)
+    ? (opts.seed >>> 0)
+    : (mode === 'random'
+      ? (((Date.now() >>> 0) ^ (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0)) >>> 0) || 1
+      : FIXED_SEED);
+  const rng = mulberry32(seed);
+
+  const out = [];
+  // ---- פתיח (מטא-נתונים — נסגר בשורה ריקה) ----
+  // הערה: הכותרת אינה כוללת את המצב (קבוע/רנדומלי) — המצב נקבע מהזרע בלבד,
+  // כך ש-seed זהה ⇒ מסמך זהה בתים-בתים (ההבחנה מדווחת בהודעת ההזרקה ב-UI).
+  out.push(`שם הספר - מסמך בדיקה (${scale === 'small' ? 'מצומצם' : 'מלא'} — חמשת צירי העקה)`);
+  out.push('נושא - העמדת מנוע העימוד בכל מקרי הקצה');
+  out.push(`נושא מפורט - ${paragraphText(rng, randInt(rng, 8, 16))}`);
+  out.push('שם המחבר - מחולל מסמכי הבדיקה');
+  out.push('מקום ושנת הוצאה - ירושלים תשפ"ו');
+  out.push('');
+
+  // ---- גוף: פרקים ----
+  const nChapters = scale === 'small' ? 3 : randInt(rng, 48, 56);
+  for (let c = 1; c <= nChapters; c++) {
+    out.push(`כותרת 2 - ${chapterTitle(rng, c)}`);
+    for (const line of chapterLines(rng, { compact: scale === 'small' }, c)) out.push(line);
+    if (c < nChapters) out.push('');
+  }
+
+  // ---- הוראת כותרת עמודי הערות-הסיום (צורת הרבים בלבד — D-40) ----
+  out.push('');
+  out.push('הערות סיום - הערות המחבר');
+  out.push(paragraphText(rng, randInt(rng, 10, 20)));
+
+  return out.join('\n');
+}
+
+module.exports = { generateTestDocument, FIXED_SEED, mulberry32 };
+
+};
+__modules["src/ui/settings-persistence.js"] = function (require, module, exports) {
+// src/ui/settings-persistence.js — השתמרות הגדרות משתמש ב-localStorage (פער 2: SRS §17.1)
+'use strict';
+
+/**
+ * **הדרישה (SRS §17.1):** "User settings MUST persist in localStorage across
+ * page refreshes, text imports, and preset toggles." — וב"סיכום בקשות מAI"
+ * (נושא 18): "דרישה לוודא שבחירת סט הגדרות אינה נדרסת בפעולות שוטפות או בריענון".
+ *
+ * **עקרונות המימוש:**
+ * - **הפרש מול בסיס (diff), לא צילום מלא:** נשמרות רק ההגדרות שהמשתמש שינה מברירות
+ *   המחדל שהוחלו באתחול. כך שדרוג גרסה שמשנה ברירת מחדל אינו נחסם ע"י ערך ישן
+ *   שנשמר במפתח הזה (רק בחירות המשתמש המפורשות גוברות).
+ * - **ברירות המחדל מוחלות תמיד קודם** (כלל הברזל של המשתמש: בלי החלת ברירות
+ *   המחדל אין ודאות הצלחה) — ורק אחריהן מוחל ההפרש השמור.
+ * - **עמידות:** JSON שבור / פורמט לא מוכר / גרסה עתידית ⇒ אין שחזור (בלי מיגרציה
+ *   שקטה); חריגת נפח (מצב פרטי) ⇒ כשל עדין עם דיווח, בלי קריסה.
+ * - **טהור:** אין גישה למנוע/DOM (כלל F-06) — אחסון בלבד.
+ */
+
+const STORAGE_KEY = 'tora-red-user-settings';
+const FORMAT = 'tora-red-user-settings';
+const VERSION = 1;
+
+/**
+ * @param {Storage|null} storage אובייקט דמוי-localStorage ({getItem,setItem,removeItem})
+ *   או null ⇒ אחסון בזיכרון בלבד (בדיקות/סביבות בלי אחסון).
+ */
+function createSettingsPersistence(storage) {
+  const mem = new Map();
+  const store = storage || {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => { mem.set(k, String(v)); },
+    removeItem: (k) => { mem.delete(k); }
+  };
+  let lastError = null;
+
+  /** שמירת ההפרש. הפרש ריק ⇒ מחיקת המפתח (חזרה נקייה לברירות המחדל). */
+  function save(diff) {
+    try {
+      const keys = Object.keys(diff || {});
+      if (!keys.length) { store.removeItem(STORAGE_KEY); return { ok: true, cleared: true, keys: 0 }; }
+      const payload = JSON.stringify({ format: FORMAT, version: VERSION, savedAt: new Date().toISOString(), settings: diff });
+      store.setItem(STORAGE_KEY, payload);
+      return { ok: true, keys: keys.length };
+    } catch (e) {
+      lastError = e;
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  }
+
+  /** טעינה עם אימות קפדני — כל סטייה ⇒ null (אין נתונים שמורים). */
+  function load() {
+    try {
+      const raw = store.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      if (obj.format !== FORMAT) return null;
+      if (Number(obj.version) !== VERSION) return null;
+      if (!obj.settings || typeof obj.settings !== 'object' || Array.isArray(obj.settings)) return null;
+      return obj.settings;
+    } catch (e) {
+      lastError = e;
+      return null;
+    }
+  }
+
+  function clear() {
+    try { store.removeItem(STORAGE_KEY); return true; } catch (e) { lastError = e; return false; }
+  }
+
+  function lastWriteError() { return lastError; }
+
+  return { save, load, clear, lastWriteError };
+}
+
+/**
+ * הפרש current מול baseline — מפתחות שערכם שונה (השוואת JSON יציבת-סוגים).
+ * מפתח שהוסר מ-current לא נכלל (השוואה מול בסיס שלם).
+ * @returns {object} הפרש לשמירה: {key: value}
+ */
+function diffSettings(baseline, current) {
+  const out = {};
+  const base = baseline || {};
+  const cur = current || {};
+  for (const k of Object.keys(cur)) {
+    // ערך undefined שאינו בבסיס = מפתח שנמחק בפועל — לא הפרש (הגנה מסדר-undefined)
+    if (cur[k] === undefined && !(k in base)) continue;
+    if (k in base) {
+      if (JSON.stringify(base[k]) !== JSON.stringify(cur[k])) out[k] = cur[k];
+    } else {
+      out[k] = cur[k]; // מפתח חדש שנוסף ל-current אחרי הבסיס — שינוי משתמש
+    }
+  }
+  return out;
+}
+
+module.exports = { createSettingsPersistence, diffSettings, STORAGE_KEY, FORMAT, VERSION };
+
+};
 __modules["src/ui/editor-tab.js"] = function (require, module, exports) {
 // src/ui/editor-tab.js — לשונית העורך (REQ-UI-04: הדבקה, מונים, ⏎ לא מיוצא, ייבוא, ניקוי)
 'use strict';
@@ -1722,6 +2252,28 @@ function buildEditorTab(doc, opts) {
   root.className = 'tab-panel';
   root.setAttribute('role', 'tabpanel');
   root.dataset.tab = 'editor';
+
+  // ---- סרגל מסמכי בדיקה (פער 1 — נושא 16 ב"סיכום בקשות מAI": "לחצן בחלק
+  // העליון של אזור הדבקת הטקסט מעל לחצני העידכון ועימוד ולחצן הייבוא";
+  // פוצל לשניים: "מסמך בדיקה קבוע" + "מסמך בדיקה רנדומלי") ----
+  // F-06: הכפתורים קוראים ל-callback בלבד — ההזרקה והעימוד ב-app-shell
+  // (onGenerateTestDocument → onDocumentAction('open') — נתיב מפורש).
+  const genBar = doc.createElement('div');
+  genBar.className = 'editor-bar editor-genbar';
+  genBar.setAttribute('role', 'group');
+  genBar.setAttribute('aria-label', 'מסמכי בדיקה');
+  const btnGenFixed = doc.createElement('button');
+  btnGenFixed.type = 'button'; btnGenFixed.className = 'btn'; btnGenFixed.textContent = '🧪 מסמך בדיקה קבוע';
+  btnGenFixed.title = 'הזרקת מסמך בדיקה דטרמיניסטי מלא (~300+ עמודים, חמשת צירי העקה) — אותו מסמך בדיוק בכל לחיצה';
+  btnGenFixed.setAttribute('aria-label', 'הזרקת מסמך בדיקה קבוע (דטרמיניסטי)');
+  btnGenFixed.addEventListener('click', () => opts.onGenerateTestDocument && opts.onGenerateTestDocument('fixed'));
+  const btnGenRandom = doc.createElement('button');
+  btnGenRandom.type = 'button'; btnGenRandom.className = 'btn'; btnGenRandom.textContent = '🎲 מסמך בדיקה רנדומלי';
+  btnGenRandom.title = 'הזרקת מסמך בדיקה חדש (~300+ עמודים) — טקסט שונה בכל לחיצה';
+  btnGenRandom.setAttribute('aria-label', 'הזרקת מסמך בדיקה רנדומלי');
+  btnGenRandom.addEventListener('click', () => opts.onGenerateTestDocument && opts.onGenerateTestDocument('random'));
+  genBar.appendChild(btnGenFixed); genBar.appendChild(btnGenRandom);
+  root.appendChild(genBar);
 
   // ---- אזור ההדבקה ----
   const area = doc.createElement('textarea');
@@ -1830,7 +2382,8 @@ function buildEditorTab(doc, opts) {
   function getText() { return area.value; } // מקור נקי — סמנים אינם חלק ממנו (F-01)
 
   setText('');
-  return { root, setText, getText, setPageBreaks, updateCounters, setCaret, textarea: area, docxButton: btnDocx };
+  return { root, setText, getText, setPageBreaks, updateCounters, setCaret, textarea: area, docxButton: btnDocx,
+    generateFixedButton: btnGenFixed, generateRandomButton: btnGenRandom };
 }
 
 module.exports = { buildEditorTab };
