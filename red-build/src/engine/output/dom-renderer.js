@@ -722,12 +722,11 @@ function renderLegacyPage(pg, settings, doc) {
   for (const b of (pg.bands || [])) {
     const el = mkLine(b.text, b.sizePt, 'center', b.h || pt2px(b.sizePt) * 1.1);
     el.className += ` band band--${b.kind || 'title'}`;
-    // **S4.26:** גופן הכותרת מההגדרות + הדגשה — כמו הייחוס (DavidLibre-Bold)
+    // **S4.26 + S6.3:** גופן הפס — מהשורה עצמה (b.font — כותרת ההערות
+    // ⇒ David Libre) או מההגדרות לפי הרמה + הדגשה (כמו הייחוס).
     const hLv = HEADING_LEVEL_OF_BAND[b.kind];
-    if (hLv != null) {
-      const hf = headingFontOf(hLv);
-      if (hf) { el.style.fontFamily = hf; el.style.fontWeight = '700'; }
-    }
+    const bf = b.font ? fontStack(b.font) : (hLv != null ? headingFontOf(hLv) : null);
+    if (bf) { el.style.fontFamily = bf; if (hLv != null) el.style.fontWeight = '700'; }
     position(el, BAND_X, b.y, BAND_W, b.h);
     root.appendChild(el);
   }
@@ -748,10 +747,13 @@ function renderLegacyPage(pg, settings, doc) {
       const el = mkLine(g.text, g.sizePt, 'center', pt2px(g.sizePt) * 1.3);
       el.className += ' band band--gate';
       position(el, gbox.x, g.y, gbox.w, pt2px(g.sizePt) * 1.3);
-      // **S4.26 (הערה):** גופני השערים (LiaSgula/Livorna ⇒ Bellefair/David Libre)
-      // נבדקו והוחזרו — wrapGate מודד את שורות השער בגופן הגוף, ורינדור בגופן
-      // אחר גרם לגלישת 4px מהתיבה (BAND_INK_OUTSIDE, עמ' 20 בקורפוס הגדול).
-      // עד למדידת-שער ייעודית — השערים בגופן הגוף (כמו כיול D-89).
+      // **S6.3 (גופני השערים — חוברו):** כל שורת שער נושאת את הגופן שהוגדר
+      // לה (f-sh-title ⇒ Lia Sgula לכותרת, f-sh-sub ⇒ Livorna לכותרת-המשנה,
+      // …) והמודל מודד אותה באותו גופן (wrapGate ב-legacy-imud-flow) —
+      // אין עוד סחף מדידה↔רינדור; ההסתייגות ההיסטורית של S4.26 בטלה.
+      if (g.font) {
+        el.style.fontFamily = fontStack(g.font);
+      }
       if (Array.isArray(g.color)) {
         el.style.color = `rgb(${Math.round(g.color[0] * 255)},${Math.round(g.color[1] * 255)},${Math.round(g.color[2] * 255)})`;
       }
@@ -1099,9 +1101,10 @@ function renderLegacyPage(pg, settings, doc) {
         row.style.fontSize = `${pt2px(r.sizePt || 10.5)}px`;
         // **S5.1:** גובה שורת TOC = התיבה (26px) — כמו baselineOf(r.y, 26, ...) במקרן
         row.style.lineHeight = '26px';
-        // **S4.26:** גופן שורות ה-TOC מההגדרות + הדגשה — כמו הייחוס
-        // (DavidLibre-Bold @10.5/10/9.5 בכל שורות התוכן)
-        const tf = headingFontOf(r.level != null ? r.level : 2);
+        // **S4.26 + S6.3:** גופן שורות ה-TOC — מההגדרות המקוריות
+        // (f-gtoc-*/f-dtoc-* ⇒ David Libre; שדה r.font מהמודל, שנמדד
+        // באותו גופן) + הדגשה — כמו הייחוס (DavidLibre-Bold).
+        const tf = r.font ? fontStack(r.font) : headingFontOf(r.level != null ? r.level : 2);
         if (tf) { row.style.fontFamily = tf; row.style.fontWeight = '700'; }
         const t = doc.createElement('span');
         t.className = 'toc-text';

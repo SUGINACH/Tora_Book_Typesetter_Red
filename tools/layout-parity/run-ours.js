@@ -131,6 +131,30 @@ function main() {
   // (כמו הייחוס: כל הכותרות ב-DavidLibre-Bold) וכמו ה-DOM באתר החי.
   const headingFontPath = path.join(RB, 'ui/assets/imud/fonts/DavidLibre-Bold.ttf');
   const headingFontBytes = fs.existsSync(headingFontPath) ? fs.readFileSync(headingFontPath) : null;
+  // **S6.3 (גופני ברירת המחדל האמיתיים):** רישום הגופנים ש default_settings
+  // דורש — AlphaBlack (h0/h2/סימן), Alpha (h3/h4), AlphaLight (h5), Lia Sgula
+  // (כותרת השער + h1), Livorna (כותרות עליונות + כותרת-משנה), FrankReal
+  // (מילת-החלון), Frank Ruhl Libre (גוף ההקדמה + ההערות) — כמו הנתיב החי
+  // (app-shell ensureFonts → loadFontStack → registerFont). המדידה והרינדור
+  // באותם גופנים; DavidLibre-Bold נשאר כ-fallback היסטורי.
+  const S63_FONTS = [
+    ['AlphaBlack', 'Alpha-Black.ttf'], ['Alpha', 'Alpha-Regular.ttf'], ['AlphaLight', 'Alpha-Light.ttf'],
+    ['Lia Sgula', 'Sgula-Regular.ttf'], ['Livorna', 'Livorna-Regular.ttf'], ['FrankReal', 'FrankReal-Regular.ttf'],
+    ['Frank Ruhl Libre', 'FrankRuhlLibre-VF.ttf'], ['David Libre', 'DavidLibre-Regular.ttf'],
+    ['Hadassah Friedlaender', 'Hadassah-Friedlaender-Regular.ttf'], ['Guttman Rashi', 'Guttman-Rashi-Normal.ttf']
+  ];
+  const s63FontBytes = {};
+  for (const [fam, file] of S63_FONTS) {
+    const fp = path.join(RB, 'ui/assets/imud/fonts', file);
+    if (!fs.existsSync(fp)) continue;
+    const bytes = fs.readFileSync(fp);
+    const regFam = fam === 'FrankReal' ? 'FrankReal' : fam;
+    const r = registerFont(regFam, bytes);
+    if (!r.ok) console.error(`registerFont(${fam}) failed: ${r.error}`);
+    s63FontBytes[fam] = bytes;
+  }
+  // גוף ההקדמה נמדד ב-FRL (prefaceApi) — כמו בחי; ההערות כנ"ל (fnApi)
+  if (s63FontBytes['Frank Ruhl Libre']) registerFont('Frank Ruhl Libre', s63FontBytes['Frank Ruhl Libre']);
 
   const settings = {
     ...getDefaultSettings(),

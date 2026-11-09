@@ -250,6 +250,36 @@ const DISPOSITIONS = {
   'style-set-select': { kind: 'ui-state', reason: 'בורר סגנון כללי בפאנל הישן; ב-RED: תבניות/ערכות נושא' },
   'active-theme-select': { kind: 'ui-state', reason: 'ערכת נושא פעילה — ב-RED: theme-set-id / imud-shaar-*' },
 
+  // ============ **S6.3 (חיבור הגדרות — "וכמויות של הגדרות שלא מחוברות")** ============
+  // מפתחות שהיו נופלים לכללי המשפחה (^aq-, ^inp-…) ואינם ממופים למפתח
+  // רישום — עתה ממופים במפורש (aq-*) או מתועדים כנצרכים דרך ה-raw.
+  'aq-enabled': { kind: 'mapped', to: 'aq-enabled', transform: (v) => v === true || v === 'true', reason: 'S6.3: מתג AutoQuality של המקור ⇒ מפתח הרישום (ברירת מחדל במקור true)' },
+  'aq-word-spacing': { kind: 'mapped', to: 'aq-enabled', transform: (v) => v !== false && v !== 'false', reason: 'S6.3: שכבת מרווחי-מילים (דלוקה במקור) — משורטטת למתג הכולל של ה-AQ' },
+  'aq-word-spacing-min': { kind: 'mapped', to: 'aq-word-spacing-min', transform: parseFloat, reason: 'S6.3: גבול תחתון (0.95 במקור וברישום כאחד)' },
+  'aq-word-spacing-max': { kind: 'mapped', to: 'aq-word-spacing-max', transform: parseFloat, reason: 'S6.3: גבול עליון (1.05)' },
+  'aq-word-spacing-threshold': { kind: 'ui-state', reason: 'S6.3: סף הפעלת מרווחי-מילים במקור — מנגנון ה-AQ של RED מופעל מתמטית (מדידת הפרש); נשמר כנתון', issue: 'S6.3-AQ' },
+  'aq-word-spacing-max-diff': { kind: 'ui-state', reason: 'S6.3: הפרש מקסימלי בין שורות במקור — ב-RED ה-clamp המרכזי aq-overshoot-clamp-px; נשמר כנתון', issue: 'S6.3-AQ' },
+  'aq-para-spacing': { kind: 'ui-state', reason: 'S6.3: מתיחת מרווחי-פסקה במקור — נצרכת דרך ה-raw בפרופיל המורשת כשתמומש; נשמרת כנתון', issue: 'S6.3-AQ' },
+  'aq-para-spacing-max': { kind: 'ui-state', reason: 'S6.3: תקרת מרווחי-פסקה — כנ"ל', issue: 'S6.3-AQ' },
+  'aq-line-height': { kind: 'ui-state', reason: 'S6.3: מתיחת גובה-שורה במקור — מנגנון EXT-20 של RED (aqStretch) פועל מההפרש הנמדד; נשמר כנתון', issue: 'S6.3-AQ' },
+  'aq-line-height-max': { kind: 'ui-state', reason: 'S6.3: תקרת מתיחת שורה (3% במקור) — ב-RED נקלטת דרך aq-letter-spacing-max המרכזי; נשמר כנתון', issue: 'S6.3-AQ' },
+  'aq-shared-load': { kind: 'mapped', to: 'aq-shared-load', transform: (v) => v !== false && v !== 'false', reason: 'S6.3: עומס משותף בין השכבות (true במקור וברישום)' },
+  'inp-book-back-copyright': { kind: 'ui-state', reason: 'S6.3: טקסט זכויות השער האחורי — נקרא בפועל מה-raw בפרופיל המורשת (readConfig ⇒ gateLinesFor, גובר על המטא של המסמך)' },
+  'inp-book-back-publishing': { kind: 'ui-state', reason: 'S6.3: פרטי הוצאה — נקרא מה-raw (כמו קודם)' },
+  'inp-book-back-contact': { kind: 'ui-state', reason: 'S6.3: פרטי קשר — נקרא מה-raw' },
+  'inp-book-back-extra': { kind: 'ui-state', reason: 'S6.3: פרטים נוספים — נקרא מה-raw' },
+  's-note-body': { kind: 'ui-state', reason: 'S6.3: גודל גוף ההערה — נקרא מה-raw (readConfig ⇒ SZ.fnBody; ברירת המחדל של המקור 9)' },
+  's-h0': { kind: 'mapped', to: 'heading-0-size-pt', transform: parseFloat, reason: 'S6.3: גודל H0 — גם נקרא מה-raw בפרופיל המורשת (SZ.h0Title; במקור 26pt)' },
+  's-h1': { kind: 'mapped', to: 'heading-1-size-pt', transform: parseFloat, reason: 'S6.3: גודל H1 — נקרא מה-raw לשער-המשנה (cfg.h1Size; במקור 50pt)' },
+  's-sh-title': { kind: 'mapped', to: 'shaar-title-size-pt', transform: parseFloat, reason: 'S6.3: גם נקרא מה-raw (cfg.shTitle)' },
+  's-sh-sub': { kind: 'mapped', to: 'shaar-subtitle-size-pt', transform: parseFloat, reason: 'S6.3: גם נקרא מה-raw (cfg.shSub)' },
+  's-sh-desc': { kind: 'mapped', to: 'shaar-desc-size-pt', transform: parseFloat, reason: 'S6.3: גם נקרא מה-raw (cfg.shDesc)' },
+  's-sh-sec': { kind: 'mapped', to: 'shaar-sections-size-pt', transform: parseFloat, reason: 'S6.3: גם נקרא מה-raw (cfg.shSec)' },
+  's-sh-author': { kind: 'mapped', to: 'shaar-author-size-pt', transform: parseFloat, reason: 'S6.3: גם נקרא מה-raw (cfg.shAuthor)' },
+  's-sh-year': { kind: 'mapped', to: 'shaar-year-size-pt', transform: parseFloat, reason: 'S6.3: גם נקרא מה-raw (cfg.shYear)' },
+  'f-note-title': { kind: 'mapped', to: 'endnote-title-font', transform: resolveStack, reason: 'S6.3: גופן כותרת ההערות' },
+  'f-h0-body': { kind: 'mapped', to: 'heading-0-body-font', transform: resolveStack, reason: 'S6.3: גופן גוף ההקדמה (Frank Ruhl Libre במקור)' },
+
   // ============ כותרות עליונות (25 מפתחות hdr-*) ============
   'hdr-title-split': { kind: 'ui-state', reason: 'פיצול שם הספר לחצאים בכותרת העליונה — מיושם תמידית ב-legacy (hdrR/hdrL) כמו בייחוס — S4.20/EXT-19' },
   'hdr-alternating': { kind: 'ui-state', reason: 'החלפת החצאים בעמודים זוגיים-פיזיים — מיושם בהרכבת ה-legacy (S4.20/EXT-19)', issue: 'EXT-19' },

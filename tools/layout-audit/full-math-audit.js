@@ -31,6 +31,10 @@
 //     הצגה חוזרת של הערה של פסקה חוצת-עמודים — חוקית כמו במקור, נספרת
 //     בסטטיסטיקה בלבד). נתפסים: הערה אבודה, הערה יתומה, פתיחות חסרות.
 // 28. TYPE_UNKNOWN — מסווג סוג העמוד החזיר 'unknown' = בעיה (בעבר שקט).
+// 46. COLUMN_BOTTOMS_BALANCE — איזון תחתיות הטורים בסגירת בלוק (S6.3, בקשת
+//     משתמש מפורשת: "אי איזון = שני טורים מאותו בלוק שאינם מסתיימים בגובה
+//     זהה סימטרי"): שני טורים שנסגרים לפני תחתית הזרימה (או פס ההערות)
+//     חייבים תחתיות זהות ±(2×פיץ'+4px) — גרנולריות שורות שלמות.
 // 29. COLUMN_TOPS_ALIGN — עמוד דו-טורי ששני טוריו נפתחים בשורות גוף רגילות:
 //     ראשי הטורים זהים ±2px (פטור כשפס/כותרת בין הראשים — הוכח מהמודל: 12 עמודים
 //     עם פס h3 בין הטורים).
@@ -153,6 +157,32 @@
           const lo = Math.min(a.y, b.y), hi = Math.max(a.y, b.y);
           const bandBetween = (pg.bands || []).some((bb) => bb.y + bb.h > lo + 1 && bb.y < hi - 1);
           if (!bandBetween && hi - lo > 2) cnt('COLUMN_TOPS_ALIGN', { type: 'COLUMN_TOPS_ALIGN', severity: 'medium', page: idx, topR: Math.round(a.y * 10) / 10, topL: Math.round(b.y * 10) / 10, d: Math.round((hi - lo) * 10) / 10, detail: 'שני הטורים נפתחים בשורות גוף — הראשים חייבים להיות מיושרים (±2px)' });
+        }
+      }
+
+      // **S6.3 (46 — בקשת משתמש מפורשת: "אי איזון = שני טורים מאותו בלוק
+      // שאינם מסתיימים בגובה זהה סימטרי!!!"):** תחתיות הטורים בעמוד גוף
+      // דו-טורי. כשהבלוק האחרון נסגר באמצע העמוד (שני הטורים מסתיימים לפני
+      // תחתית הזרימה — או לפני פס ההערות בעמוד עם הערות), שני הטורים חייבים
+      // להסתיים בגובה זהה סימטרי. הסבילות: שני פיצ'ים (32.2px) + 4px —
+      // איזון בגבולות שורות שלמות מגיע לפיץ' אחד (16.08px) במקרה של ספירת
+      // שורות אי-זוגית; מעבר לשני פיצ'ים = אי-איזון אמיתי שנראה לעין.
+      // (טור שמאלי ריק לחלוטין מדווח במודל — ledger column-imbalance —
+      // ואינו באוכלוסייה כאן: אין שורה אחרונה למדוד בטור הריק.)
+      if (cols.length === 2 && colContent[0] > 0 && colContent[1] > 0 && CONTENT_TYPES.has(pg.t)) {
+        const PITCH_TOL = 16.1;
+        const lastR = cols[0].lines[cols[0].lines.length - 1];
+        const lastL = cols[1].lines[cols[1].lines.length - 1];
+        const bR = lastR.y + lastR.h, bL = lastL.y + lastL.h;
+        const flowBottom = (pg.fnTopY != null && isFinite(pg.fnTopY)) ? pg.fnTopY : (cols[0].y + cols[0].h);
+        const slackR = flowBottom - bR, slackL = flowBottom - bL;
+        const d = Math.abs(bR - bL);
+        // פטור פס (כמו ב-COLUMN_TOPS_ALIGN): פס חוצה-טורים שיושב בין שתי
+        // התחתיות מסביר את ההפרש — הטור שמתחתיו נמשך חוקית (הוכח מהמבחנות:
+        // מרווח-פסקה + פס h3 בין השורות).
+        const bandBetweenBottoms = (pg.bands || []).some((bb) => bb.y + bb.h > Math.min(bR, bL) + 1 && bb.y < Math.max(bR, bL) - 1);
+        if (!bandBetweenBottoms && Math.min(slackR, slackL) > PITCH_TOL + 2 && d > 2 * PITCH_TOL + 4) {
+          cnt('COLUMN_BOTTOMS_BALANCE', { type: 'COLUMN_BOTTOMS_BALANCE', severity: 'medium', page: idx, bottomR: Math.round(bR * 10) / 10, bottomL: Math.round(bL * 10) / 10, d: Math.round(d * 10) / 10, slackR: Math.round(slackR), slackL: Math.round(slackL), detail: 'שני הטורים נסגרים באמצע העמוד ואינם מסתיימים בגובה זהה סימטרי (איזון טורים)' });
         }
       }
 
@@ -523,7 +553,7 @@ if (typeof document !== 'undefined') {
 
   const report = { url: location.href, started: new Date().toISOString(), ua: navigator.userAgent, dpr: devicePixelRatio, vp: [innerWidth, innerHeight], assets: null, fonts: null, virtualized: null, sweep: null, problems: [], pages: [], stats: null, summary: null };
   // **S5.2:** רשימת משפחות הבדיקה — מופיעה בדוח עצמו (machine-readable) ולא רק בהערת הקובץ
-  report.checkFamilies = ['LINE_OVERLAP', 'INK_NOT_JUSTIFIED', 'LINE_OUTSIDE_COLUMN', 'LINE_BELOW_COLUMN', 'LINE_ABOVE_COLUMN', 'GUTTER_OVERLAP', 'LINE_OUT_OF_ORDER', 'WINDOW_WRONG_SIDE', 'WINDOW_NOT_FIRST', 'LAST_LINE_JUSTIFIED', 'LAST_NOT_CENTERED', 'LAST_RIGHT_GAP', 'HEAD_JUSTIFIED', 'HEAD_NOT_CENTERED', 'HEADER_POSITION', 'FOLIO_POSITION', 'FOLIO_MISSING', 'FOLIO_SEQUENCE', 'FN_OVERLAP', 'FN_OVERLAPS_BODY', 'FN_BELOW_PAGE', 'FN_RULE_PRESENT', 'EMPTY_PAGE', 'BAND_BOX_OUTSIDE_PAGE', 'BAND_INK_OUTSIDE', 'BAND_NOT_CENTERED', 'TOC_ROWS', 'PITCH_UNIFORMITY', 'BODY_FONT_UNIFORMITY', 'MARKER_NOTE_MATCH', 'TYPE_UNKNOWN', 'COLUMN_TOPS_ALIGN', 'COLUMN_ORDER_RTL', 'COLUMN_WIDTH_MISMATCH', 'COLUMN_OUTSIDE_PAGE', 'SINGLE_TYPE_TWO_CONTENT_COLS', 'NOWRAP_BODY_LINE', 'STYLE_NOT_JUSTIFIED', 'WRAPPED_LINE', 'DIR_RTL_MISSING', 'PLACEHOLDER_GEOMETRY', 'PAGE_INDEX_MISSING', 'NO_SCROLLER', 'COVERAGE', 'NO_PAGES', 'SHAAR_ORDER', 'NO_SHAAR_SUB', 'SHAAR_EMPTY', 'BODY_PAGES_WITHOUT_HEADER'];
+  report.checkFamilies = ['LINE_OVERLAP', 'INK_NOT_JUSTIFIED', 'LINE_OUTSIDE_COLUMN', 'LINE_BELOW_COLUMN', 'LINE_ABOVE_COLUMN', 'GUTTER_OVERLAP', 'LINE_OUT_OF_ORDER', 'WINDOW_WRONG_SIDE', 'WINDOW_NOT_FIRST', 'LAST_LINE_JUSTIFIED', 'LAST_NOT_CENTERED', 'LAST_RIGHT_GAP', 'HEAD_JUSTIFIED', 'HEAD_NOT_CENTERED', 'HEADER_POSITION', 'FOLIO_POSITION', 'FOLIO_MISSING', 'FOLIO_SEQUENCE', 'FN_OVERLAP', 'FN_OVERLAPS_BODY', 'FN_BELOW_PAGE', 'FN_RULE_PRESENT', 'EMPTY_PAGE', 'BAND_BOX_OUTSIDE_PAGE', 'BAND_INK_OUTSIDE', 'BAND_NOT_CENTERED', 'TOC_ROWS', 'PITCH_UNIFORMITY', 'BODY_FONT_UNIFORMITY', 'MARKER_NOTE_MATCH', 'TYPE_UNKNOWN', 'COLUMN_TOPS_ALIGN', 'COLUMN_ORDER_RTL', 'COLUMN_WIDTH_MISMATCH', 'COLUMN_OUTSIDE_PAGE', 'SINGLE_TYPE_TWO_CONTENT_COLS', 'NOWRAP_BODY_LINE', 'STYLE_NOT_JUSTIFIED', 'WRAPPED_LINE', 'DIR_RTL_MISSING', 'PLACEHOLDER_GEOMETRY', 'PAGE_INDEX_MISSING', 'NO_SCROLLER', 'COVERAGE', 'NO_PAGES', 'SHAAR_ORDER', 'NO_SHAAR_SUB', 'SHAAR_EMPTY', 'BODY_PAGES_WITHOUT_HEADER', 'COLUMN_BOTTOMS_BALANCE'];
   const collectionProblems = [];
 
   try { await document.fonts.ready; } catch (e) {}
@@ -699,6 +729,10 @@ if (typeof document !== 'undefined') {
     const fns = [...pg.querySelectorAll('.footnote')];
     info.fn = fns.length;
     info.fnMk = ''; info.fnMkList = [];
+    // **S6.3 (46):** ראשית פס ההערות — התחתית האפקטיבית של הזרימה בעמודי הערות
+    let fnTopY = Infinity;
+    for (const f of fns) { const fr0 = rel(R(f), origin); if (fr0.y < fnTopY) fnTopY = fr0.y; }
+    if (fns.length && isFinite(fnTopY)) info.fnTopY = Math.round(fnTopY * 10) / 10;
     for (const f of fns) {
       const fr = rel(R(f), origin);
       const fcs = getComputedStyle(f);

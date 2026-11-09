@@ -209,12 +209,15 @@ function describe_s14() {
     ok(plain.settings['shaar-sub-enabled'] === true, 'show-sub-shaar=true ⇒ shaar-sub-enabled');
     ok(plain.settings['shaar-back-enabled'] === true, 'show-back-shaar=true ⇒ shaar-back-enabled');
     ok(plain.settings['imud-book-desc'] === legacy['inp-book-desc'], 'inp-book-desc ⇒ imud-book-desc');
-    // עם קטלוג — מחסניות נפתרות למשפחה הזמינה (כפי שהדפדפן היה נופל)
+    // עם קטלוג — מחסניות נפתרות למשפחה הזמינה (כפי שהדפדפן היה נופל).
+    // **S6.3:** הכינויים האנגליים (AlphaBlack/Lia Sgula/Livorna…) נוספו
+    // לקטלוג — בקשת משתמש מפורשת; המחסניות נפתרות כעת לגופן האמיתי
+    // של המקור, לא לפולבאק.
     const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'ui', 'assets', 'imud', 'imud-fonts.json'), 'utf8'));
     const available = new Set(catalog.map(e => e.family));
     const resolved = importImudSettings(legacy, RED_KEYS, { availableFonts: available });
-    ok(resolved.settings['heading-0-font'] === 'David Libre', `f-h0="AlphaBlack, David Libre" ⇒ David Libre (קיבל ${resolved.settings['heading-0-font']})`);
-    ok(resolved.settings['shaar-title-font'] === 'Bellefair', `f-sh-title="Lia Sgula, Bellefair" ⇒ Bellefair (קיבל ${resolved.settings['shaar-title-font']})`);
+    ok(resolved.settings['heading-0-font'] === 'AlphaBlack', `f-h0="AlphaBlack, David Libre" ⇒ AlphaBlack (קיבל ${resolved.settings['heading-0-font']})`);
+    ok(resolved.settings['shaar-title-font'] === 'Lia Sgula', `f-sh-title="Lia Sgula, Bellefair" ⇒ Lia Sgula (קיבל ${resolved.settings['shaar-title-font']})`);
     ok(resolved.settings['shaar-title-size-pt'] === 46, 's-sh-title=46');
   });
 

@@ -211,7 +211,9 @@ it('D-89/4: תיבות השערים — כותרת-משנה ממורכזת ב-18
   const subIdx = r.pages.findIndex(p => p.type === 'shaar-sub');
   const backIdx = r.pages.findIndex(p => p.type === 'shaar-back');
   const gates = proj.pages[subIdx].lines.filter(l => l.kind === 'gate');
-  const title = gates.find(l => l.sizePt === 36);
+  // **S6.3:** גודל הכותרת מההגדרות (s-h1=50 בברירות המחדל של המקור; היה
+  // 36 מכויל-ייחוס) — בקשת משתמש מפורשת לחבר את ההגדרות.
+  const title = gates.find(l => l.sizePt === 50);
   assert(title && title.words.length, 'כותרת השער הוקרנה');
   const x0 = Math.min(...title.words.map(w => w.x));
   const x1 = Math.max(...title.words.map(w => (w.x || 0) + (w.w || 0)));

@@ -40,10 +40,11 @@ function createImudLibrary(engine) {
   }
 
   /** קטלוג הפונטים (443 משפחות מוטמעות + 1,315 משפחות הקטלוג המורחב).
-   * **EXT-14 (05.11):** fonts-extended.json של המקור מוטמע כקטלוג-שמות בלבד —
-   * קובצי ה-WOFF2 (115MB) אינם מוטמעים (החלטת גודל מתועדת ב-PROVENANCE).
-   * הפיקרים מציגים את מלוא הקטלוג ההיסטורי עם סיווג אמת: משפחה מוטמעת
-   * (עם קובץ) או קטלוג-בלבד (בחירתה ⇒ הודעה מפורשת + נפילה לגופן מערכת).
+   * **S6.3 (בקשת משתמש מפורשת: "האם כל הגופנים יובאו מהגרסאות הקודמות?"):**
+   * קובצי ה-WOFF2 של הקטלוג המורחב (1,315 משפחות, 98MB) יובאו בפועל
+   * מהמקור (Green/V23) ל-fonts/ — כל משפחה נטענת ובת בחירה. TTF-ים
+   * נרשמים גם ב-Worker (מדידת אמת + ייצוא PDF); WOFF2-ים ב-FontFace
+   * לתצוגה בלבד (המדידה נופלת בשקיפות לטבלה — מנגנון _bindProfile).
    * @returns {Promise<Array<{value:string,label:string,embedded:boolean}>>} */
   async function loadFontCatalog() {
     if (fontCatalog.loaded) return catalogEntries();
@@ -57,12 +58,16 @@ function createImudLibrary(engine) {
       fontCatalog.families = list.map(e => e.family);
       for (const e of list) fontCatalog.byFamily.set(e.family, e.file);
       fontCatalog.loaded = true;
-      // הקטלוג המורחב — קטלוג-שמות בלבד (הכשלון אינו חוסם: הפיקרים יציגו את
-      // המוטמעות בלבד, כמו קודם)
+      // **S6.3:** הקטלוג המורחב — קובצי ה-WOFF2 יובאו ומוטמעים כעת בפועל;
+      // נטענים ל-byFamily כמו ה-TTF-ים (הכשלון אינו חוסם: הפיקרים יציגו
+      // את המוטמעות הבסיסיות בלבד, כמו קודם)
       try {
         const ext = await fetchJson(`${BASE}/fonts-extended.json`);
         fontCatalog.extended = ext.map(e => e.family);
         fontCatalog.extendedByFamily = new Map(ext.map(e => [e.family, e]));
+        for (const e of ext) {
+          if (!fontCatalog.byFamily.has(e.family)) fontCatalog.byFamily.set(e.family, e.file);
+        }
       } catch (e) { fontCatalog.extended = []; fontCatalog.extendedByFamily = new Map(); }
       return catalogEntries();
     })();
@@ -74,22 +79,22 @@ function createImudLibrary(engine) {
     }
   }
 
-  /** רשימת הפיקרים: מוטמעות ראשונות, אחר-כך הקטלוג המורחב עם סימון ברור. */
+  /** רשימת הפיקרים: מוטמעות ראשונות, אחר-כך הקטלוג המורחב — **S6.3:** קובצי
+   * ה-WOFF2 יובאו, ולכן כל המשפחות מוטמעות ונטענות; embedded=true לכולן. */
   function catalogEntries() {
     const entries = fontCatalog.families.map(f => ({ value: f, label: f, embedded: true }));
     for (const f of fontCatalog.extended) {
-      entries.push({ value: f, label: `${f} (קטלוג — לא מוטמע)`, embedded: false });
+      entries.push({ value: f, label: f, embedded: true });
     }
     return entries;
   }
 
-  /** **EXT-14: סיווג אמת למשפחה** — 'embedded' | 'extended-catalog' | 'unknown'.
-   * משפחה מוטמעת ⇒ נטענת (מדידה+תצוגה+ייצוא); מהקטלוג המורחב ⇒ הודעה
-   * מפורשת ונפילה לגופן מערכת; לא ידועה ⇒ כמו קודם. */
+  /** **EXT-14 + S6.3: סיווג אמת למשפחה** — 'embedded' | 'unknown'. הקטלוג
+   * המורחב אינו "קטלוג-בלבד" עוד — קובציו יובאו והוא נטען כמו ה-TTF-ים;
+   * ההבחנה TTF(מדידה+ייצוא)/WOFF2(תצוגה) פנימית ל-loadFont לפי הסיומת. */
   function fontStatus(family) {
     const f = String(family || '').trim();
     if (fontCatalog.byFamily.has(f)) return 'embedded';
-    if (fontCatalog.extendedByFamily && fontCatalog.extendedByFamily.has(f)) return 'extended-catalog';
     return 'unknown';
   }
 
@@ -111,15 +116,22 @@ function createImudLibrary(engine) {
         for (let i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
         fontCatalog.bytesB64.set(family, btoa(bin));
       } catch (e) { /* אין btoa (סביבה חריגה) — הייצוא ידלג על ההטמעה */ }
-      // 1) Worker: מדידת גופן אמיתי (measure-impl=font-metrics) + ייצוא PDF
+      // 1) Worker: מדידת גופן אמיתי (measure-impl=font-metrics) + ייצוא PDF.
+      // **S6.3:** קובצי WOFF2 אינם ניתנים לפרסור ב-Worker (parseFont תומך
+      // sfnt בלבד) — דילוג מפורש על הרישום: תצוגה ב-FontFace (הדפדפן תומך
+      // WOFF2 מלידה), המדידה נופלת בשקיפות לטבלה (_bindProfile), והייצוא
+      // מדווח. TTF-ים נרשמים כרגיל.
       // **S5.2:** רישום שמת עם ה-Worker (terminate/ביטול single-flight) — עדכון
       // במפורש: הגופן לא נרשם במנוע. בלי זה ההבטחה היתה נפתרת ב"הכל בסדר"
       // והמטמון (appliedFontsReady) היה מחזיר אותה לנצח ⇒ ייצוא תלוי/מדידה שגויה.
-      try {
-        await engine.registerFont({ name: family, bytes: buf.slice(0) });
-      } catch (e) {
-        if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
-        /* רישום נכשל (סיבה אחרת) — נמשיך ל-FontFace; הייצוא ידווח בבירור */
+      const isWoff2 = /\.woff2$/i.test(String(file || ''));
+      if (!isWoff2) {
+        try {
+          await engine.registerFont({ name: family, bytes: buf.slice(0) });
+        } catch (e) {
+          if (e && /worker-restarted|worker-error/.test(String(e.message))) throw e;
+          /* רישום נכשל (סיבה אחרת) — נמשיך ל-FontFace; הייצוא ידווח בבירור */
+        }
       }
       // 2) תצוגה: @font-face חי
       if (!fontCatalog.faces.has(family) && typeof FontFace !== 'undefined') {
@@ -344,7 +356,8 @@ function createImudLibrary(engine) {
   function exportFontCss() {
     let css = '';
     for (const [family, b64] of fontCatalog.bytesB64) {
-      css += `@font-face{font-family:'${family}';src:url(data:font/ttf;base64,${b64}) format('truetype');font-display:swap}\n`;
+      const fmt = /\.woff2$/i.test(String(fontCatalog.byFamily.get(family) || '')) ? 'woff2' : 'ttf';
+      css += `@font-face{font-family:'${family}';src:url(data:font/${fmt};base64,${b64}) format('${fmt === 'woff2' ? 'woff2' : 'truetype'}');font-display:swap}\n`;
     }
     return css;
   }

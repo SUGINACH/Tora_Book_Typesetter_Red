@@ -464,6 +464,34 @@ const BINDINGS = [
     "note": null
   },
   {
+    "id": "heading-0-body-font",
+    "control": "sel-h0-body-font",
+    "panel": "טיפוגרפיה וגוף הטקסט",
+    "panelKey": "TYPO",
+    "labelHe": "גופן גוף ההקדמה (f-h0-body)",
+    "type": "font",
+    "def": "Frank Ruhl Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "S6.3: גוף ההקדמה — מדידה (prefaceApi) ורינדור באותו גופן"
+  },
+  {
+    "id": "endnote-title-font",
+    "control": "sel-endnote-title-font",
+    "panel": "הערות שוליים וסיום",
+    "panelKey": "NOTES",
+    "labelHe": "גופן כותרת עמודי ההערות (f-note-title)",
+    "type": "font",
+    "def": "David Libre",
+    "enum": null,
+    "min": null,
+    "max": null,
+    "step": null,
+    "note": "S6.3: גופן כותרת עמודי הערות"
+  },
+  {
     "id": "body-last-line-align",
     "control": "sel-last-line-align",
     "panel": "טיפוגרפיה וגוף הטקסט",

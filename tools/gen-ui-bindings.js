@@ -30,6 +30,8 @@ const L = {
   'first-word-font': 'גופן מילה ראשונה',
   'first-word-threshold-lines': 'סף שורות למילה ראשונה', 'first-word-align-cap-top': 'יישור מילה ראשונה לקו בסיס גוף',
   'dh-auto-detect': 'זיהוי אוטומטי של דיבור־המתחיל', 'dh-font': 'גופן דיבור־המתחיל',
+  'heading-0-body-font': 'גופן גוף ההקדמה (f-h0-body)',
+  'endnote-title-font': 'גופן כותרת עמודי ההערות (f-note-title)',
   'body-last-line-align': 'יישור שורה אחרונה בפסקה',
   // HEADINGS (משפחות מיוצרות להלן) + hdr-h1-title-mode
   'hdr-h1-title-mode': 'אופן כותרת H1 בכותרת עליונה',

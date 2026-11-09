@@ -266,6 +266,25 @@ describe('audit-sensitivity — הוכחת רגישות הגלאים (S5.2)', ()
     assert(codes.includes('TYPE_UNKNOWN'), 'TYPE_UNKNOWN must fire, got: ' + codes.join(','));
   });
 
+  it('(**S6.3**) תחתיות טורים א-סימטריות בסגירת בלוק ⇒ COLUMN_BOTTOMS_BALANCE יורה; פס ביניהן — פטוט', () => {
+    // **S6.3 (בקשת משתמש: "אי איזון = שני טורים מאותו בלוק שאינם מסתיימים
+    // בגובה זהה סימטרי"):** הטור השמאלי נגרר 70px מעל הימני (יותר מ-2×פיץ'+4)
+    // — שניהם נסגרים הרבה לפני תחתית הזרימה (915px) ⇒ הגלאי יורה.
+    // הטור הימני מקבל 3 שורות עודפות (בפיץ' תקין, ראשית מיושרת) — התחתית
+    // שלו נמשכת 3×פיץ' מתחת לשמאלי: א-סימטריה ברורה בסגירת בלוק.
+    const mk = (k) => mkLine({ y: FLOW_TOP + k * LINE_H, x: COL_R_X });
+    const book = cleanBook();
+    book[4].cols[0].lines.push(mk(3), mk(4), mk(5));
+    const { codes } = runBook(book);
+    assert(codes.includes('COLUMN_BOTTOMS_BALANCE'), 'COLUMN_BOTTOMS_BALANCE must fire, got: ' + codes.join(','));
+    assertEq(codes.length, 1, 'בדיוק הבעיה הזו: ' + codes.join(','));
+    // שורה עודפת אחת (פיץ' אחד) — גרנולריות שורות חוקית, לא מדווח
+    const book2 = cleanBook();
+    book2[4].cols[0].lines.push(mk(3));
+    const r2 = runBook(book2);
+    assert(!r2.codes.includes('COLUMN_BOTTOMS_BALANCE'), 'pitch-1 legit granularity, got: ' + r2.codes.join(','));
+  });
+
   it('(יא) טורים לא מיושרים בראשיתם ⇒ COLUMN_TOPS_ALIGN יורה; פס ביניהם — פטור', () => {
     const book = cleanBook();
     book[4].cols[1].lines.forEach((l, k) => { const dy = 9; l.y += dy; l.ink.y += dy; l.ink.b += dy; });

@@ -77,11 +77,20 @@ describe('EXT-9 א — שלמות ספריית הגופנים התורניים �
     // כינויים אנגליים נוספו — הגופנים שהותקנו אצל המשתמש המקורי (מוכח מהייחוס:
     // ‏GuttmanRashiNormal ×3,182 שורות גוף, HadassahFriedlaender ×677 הערות-צד,
     // ‏FrankReal למילות-החלון). בלעדיהם המחסניות נפלו ל-Frank Ruhl Libre.
+    // **S6.3 (בקשת משתמש — "יש שם שמות של גופנים שלא ייבאת בכלל"):** כינויים
+    // אנגליים לגופני ברירת-המחדל של המקור (AlphaBlack/Alpha/AlphaLight/Livorna
+    // + Lia Sgula מהקטלוג המורחב, שהומר ל-TTF למדידה) — כמו @font-face של
+    // המקור (style.css שורות 37-48); בלעדיהם המחסניות של default_settings
+    // נפלו שקט ל-David Libre.
     const DUAL_NAMED = new Map([
       ['DavidLibre-Regular.ttf', new Set(['דוד ליברה רגיל', 'David Libre'])],
       ['Guttman-Rashi-Normal.ttf', new Set(['גוטמן רש"י רגיל', 'Guttman Rashi'])],
       ['Hadassah-Friedlaender-Regular.ttf', new Set(['הדסה פרידלנדר רגיל', 'Hadassah Friedlaender'])],
-      ['FrankReal-Bold.ttf', new Set(['פרנק ריל מודגש', 'FrankReal'])]
+      ['FrankReal-Bold.ttf', new Set(['פרנק ריל מודגש', 'FrankReal'])],
+      ['Alpha-Black.ttf', new Set(['אלפא שחור', 'AlphaBlack'])],
+      ['Alpha-Regular.ttf', new Set(['אלפא רגיל', 'Alpha'])],
+      ['Alpha-Light.ttf', new Set(['אלפא קל', 'AlphaLight'])],
+      ['Livorna-Regular.ttf', new Set(['ליבורנה רגיל', 'Livorna'])]
     ]);
     const byFile = new Map();
     for (const e of CATALOG) {
@@ -139,19 +148,24 @@ describe('EXT-9 א — שלמות ספריית הגופנים התורניים �
     for (const e of ext) {
       assertEq(e.format, 'woff2', `פורמט המקור: ${e.family}`);
       assert(!priorityFams.has(e.family), `אין כפילות משפחה מול המוטמעות: ${e.family}`);
-      assert(!fs.existsSync(path.join(FONT_DIR, e.file)),
-        `קובץ המורחב אינו מוטמע בטעות (החלטת גודל מתועדת): ${e.file}`);
+      // **S6.3 (בקשת משתמש מפורשת — "האם כל הגופנים יובאו מהגרסאות
+      // הקודמות? למה אני לא רואה אפשרות לבחור בהם?"):** קובצי ה-WOFF2 של
+      // הקטלוג המורחב יובאו בפועל מהמקור (Green/V23) ומוטמעים כעת —
+      // ההחלטה ההפוכה של EXT-14 (קטלוג-שמות-בלבד) בוטלה במפורש.
+      assert(fs.existsSync(path.join(FONT_DIR, e.file)),
+        `קובץ המורחב מוטמע (ייבוא S6.3 מהמקור): ${e.file}`);
       extFams.add(e.family);
     }
     // נתון מקור מתועד: 26 משפחות כפולות בקטלוג המורחב (אותו גופן בשני איותים
     // של שם הקובץ — Oscar/Oskar, Bona Nova Italic/Bona-Nova-Italic). המפה
     // דטרמיניסטית: הראשון זוכה (Map constructor), כמו בספרייה.
     assertEq(extFams.size, 1289, '1,289 משפחות ייחודיות (26 כפילויות-מקור מתועדות — מפה דטרמיניסטית)');
-    // סיווג האמת (כמו fontStatus בספרייה): מוטמע / קטלוג-בלבד / לא-ידוע
-    const statusOf = (fam) => priorityFams.has(fam) ? 'embedded' : (extFams.has(fam) ? 'extended-catalog' : 'unknown');
+    // **S6.3:** סיווג האמת (כמו fontStatus בספרייה): מוטמע (כולל הקטלוג
+    // המורחב — קובציו יובאו) / לא-ידוע.
+    const statusOf = (fam) => (priorityFams.has(fam) || extFams.has(fam)) ? 'embedded' : 'unknown';
     assertEq(statusOf('Frank Ruhl Libre'), 'embedded', 'גוף המקור — מוטמע');
     assertEq(statusOf('גוטמן רש"י רגיל'), 'embedded', 'גוטמן רש"י — מוטמע');
-    assertEq(statusOf(ext[0].family), 'extended-catalog', `הראשונה בקטלוג המורחב — קטלוג-בלבד (${ext[0].family})`);
+    assertEq(statusOf(ext[0].family), 'embedded', `הראשונה בקטלוג המורחב — מוטמע כעת (${ext[0].family})`);
     assertEq(statusOf('גופן-שלא-קיים-כלל'), 'unknown', 'לא ידוע — נפילה מתועדת');
     // החלטת הגודל מתועדת: 115MB ‏WOFF2 במקור מול 62MB ‏TTF מוטמעים — הקטלוג
     // המלא זמין לבחירה עם סימון ברור, בלי לנפח את הריפו
@@ -173,8 +187,13 @@ describe('EXT-9 ב — פתרון מחסניות המקור מול הקטלוג 
     for (const fam of ['Guttman Rashi', 'Hadassah Friedlaender', 'FrankReal', 'Frank Ruhl Libre', 'David Libre', 'Bellefair']) {
       assert(available.has(fam), `${fam} בקטלוג`);
     }
-    // כותרת H0: "'AlphaBlack', 'David Libre', serif" ⇒ David Libre
-    assertEq(settings['heading-0-font'], 'David Libre', 'מחסנית H0 ⇒ David Libre');
+    // **S6.3:** כותרת H0: "'AlphaBlack', 'David Libre', serif" ⇒ AlphaBlack —
+    // הגופן האמיתי של המקור (עד S6.3 נפל ל-David Libre כי הכינוי האנגלי
+    // לא היה בקטלוג; בקשת משתמש: "למה כל גופני ברירת המחדל לא מיושמים?").
+    assertEq(settings['heading-0-font'], 'AlphaBlack', 'מחסנית H0 ⇒ AlphaBlack (S6.3)');
+    assertEq(settings['heading-1-font'], 'Lia Sgula', 'מחסנית H1 ⇒ Lia Sgula (S6.3)');
+    assertEq(settings['shaar-title-font'], 'Lia Sgula', 'כותרת השער ⇒ Lia Sgula (S6.3)');
+    assertEq(settings['header-recto-right-font'], 'Livorna', 'כותרת עליונה ⇒ Livorna (S6.3)');
   });
 });
 
