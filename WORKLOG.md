@@ -2394,6 +2394,16 @@ RED הקטלוג הכיל שמות **עבריים** בלבד ("אלפא שחור
 - hdr-*-align/hdr-w-*/hdr-*-custom: הערכים בברירת המחדל זהים להתנהגות
   הקיימת (מרכז/33.3%) — חיבור פורמלי נדחה לשלב הבא.
 
+### ד2. פריסה — מעבר מ-legacy ל-workflow (S6.3-ג)
+הדחיפה ל-gh-pages עם 150MB הנכסים נכשלה **פעמיים** ב-timeout — הפריסה
+הישנה (build_type=legacy, actions/deploy-pages בברירת מחדל 600,000ms)
+נתקעה ב-syncing_files ("Timeout reached, aborting!"). הפתרון: מעבר ל
+**build_type=workflow** (API PUT /pages — 204) + ‏deploy-pages.yml ייעודי
+(checkout gh-pages → upload-pages-artifact → deploy-pages עם
+**timeout: 3600000** — 60 דק'); קובץ ה-workflow מועתק גם לענף ה-orphan
+בלעדיו on:push לא יירה לעולם; gh-pages-audit קיבל גם workflow_run על
+deploy-pages. הפריסה הראשונה במצב החדש: **success** (42721480615).
+
 ### ה. אימות
 - **657 בדידות ב-32 קבצים, 0 כשלים** (שלושה מבחני ציפייה עודכנו מהמצב
   הישן לחדש: real-fonts — כפילויות DUAL_NAMED + המורחב מוטמע + מחסניות
@@ -2403,7 +2413,13 @@ RED הקטלוג הכיל שמות **עבריים** בלבד ("אלפא שחור
   אפסית למרות החלפת גופני הכותרות: גוף הטקסט לא השתנה והגיאומטריה
   נשמרה). פריסה ?v=2026-11-10-s6.3 (שלושת המופעים זהים — s10 מאכף).
 - נכסים: fonts/ גדל מ-62MB ל-173MB (1,315 woff2 + Sgula TTF) — בגבולות
-  GitHub Pages; הודעת הפריסה מעידה על סך כולל תקין.
+  GitHub Pages (artifact 149.7MB; הפריסה ב-Actions mode עם timeout 60 דק').
+- **אודיט חי על ?v=2026-11-10-s6.3 (run 42721553569): ‏704/704 עמודים,
+  ‏43,117 שורות, ‏360,326 מילים, ‏0 בעיות — כולל בדיקת איזון-הטורים
+  החדשה (50 משפחות בדיקה, COLUMN_BOTTOMS_BALANCE כלולה); כל ארבעת
+  ה-workflows ירוקים (CI/parity/full-math/gh-pages-audit).** אימות נכסים
+  חי: Sgula-Regular.ttf ‏HTTP 200 ‏(55,368B), ‏woff2 לדוגמה HTTP 200,
+  index.html מגיש ?v=2026-11-10-s6.3.
 
 ---
 

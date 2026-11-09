@@ -30,6 +30,17 @@ column-imbalance, 0 עמודים עם הפרש > 2 פיץ'.
 f-h0-body/f-note-title ⇒ מפתחות רישום חדשים. נדחה במפורש: prop-*
 (הכיול גובר), dim-*/cbg-*/builder-* (במעקב).
 
+**חשוב — פריסה מעכשיו ב-Actions mode (S6.3-ג):** אחרי הגדלת הנכסים
+ל-150MB (הגופנים), הפריסה הישנה (build_type=legacy) נכשלה פעמיים
+ב-timeout של syncing_files. הועברנו ל-build_type=workflow: לפרוש יש
+**לדחוף ל-gh-pages שכולל את .github/workflows/deploy-pages.yml**
+(deploy-pages עם timeout 60 דק'). סדר הפריסה: (1) לבנות באנדלים
+(node tools/build-worker-bundle.js); (2) לרענן את ?v= ב-index.html
+וב-browser-entry.js; (3) ‏git push origin main; (4) ‏worktree מ-gh-pages
+→ rsync של red-build/ui/ → העתקת deploy-pages.yml → push ל-gh-pages.
+**האודיט החי על ?v=s6.3: 704/704, 43,117 שורות, 0 בעיות — כולל
+בדיקת איזון-הטורים החדשה.**
+
 **אימות:** 657 בדידות/32 קבצים/0 כשלים; דטרמיניזן מלא (legacy-61aec);
 layout-parity HARD 4/4 + 88.9% = הבסיס בדיוק (ירידה אפסית למרות החלפת
 הגופנים); פריסה ?v=2026-11-10-s6.3. מבחני ציפייה עודכנו מהמצב הישן
