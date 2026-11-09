@@ -1,3 +1,4 @@
 audits/layout-parity-artifacts/
 red-build/tmp-dbg.js
 audits/very-long-artifacts/
+.secrets/

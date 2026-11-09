@@ -27,6 +27,7 @@ const L = {
   'body-font': 'גופן גוף הטקסט', 'body-font-size-pt': 'גודל גוף הטקסט (pt)',
   'body-line-height': 'גובה שורה (יחס)', 'paren-style-scale': 'סקאלת סוגריים',
   'first-word-mode': 'אופן מילה ראשונה', 'first-word-length': 'אורך מילה ראשונה (מילים)',
+  'first-word-font': 'גופן מילה ראשונה',
   'first-word-threshold-lines': 'סף שורות למילה ראשונה', 'first-word-align-cap-top': 'יישור מילה ראשונה לקו בסיס גוף',
   'dh-auto-detect': 'זיהוי אוטומטי של דיבור־המתחיל', 'dh-font': 'גופן דיבור־המתחיל',
   'body-last-line-align': 'יישור שורה אחרונה בפסקה',

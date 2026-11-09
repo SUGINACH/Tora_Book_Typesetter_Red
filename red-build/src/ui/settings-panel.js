@@ -12,6 +12,10 @@
 
 const { BINDINGS, PANELS } = require('./bindings.generated');
 
+/** **S6.2:** בוררי העיצובים החיים (מיוזרשים ב-refreshValues — כך הבחירה
+ * הפעילה אחרי אתחול/טעינת ערכה מוצגת בבוררים גם כשנבנו מוקדם יותר). */
+let imudPickerSelects = []; // [{ pick, sel }]
+
 /** גופני בסיס (לפני טעינת הקטלוג) — preserve-missing-value (IMUD port). */
 const KNOWN_FONTS = ['Frank Ruhl Libre', 'David HB', 'David', 'Narkisim', 'Nachlieli', 'Alef', 'Rubin'];
 let fontCatalogFamilies = null; // **03.11:** קטלוג 439 הפונטים של IMUD (ברגע שנטען)
@@ -159,7 +163,7 @@ function buildSettingsTab(doc, opts) {
       const info = doc.createElement('p');
       info.className = 'action-info';
       info.textContent = p.key === 'BUILDER'
-        ? 'ספריית הפרויקט המקורי — שערים, עיטורים ומפרידים מעוצבים, וברירות המחדל המקוריות. הבחירה נשמרת כהפניית imud: ומופעלת בעימוד.'
+        ? 'ספריית הפרויקט המקורי: 32 שערים ראשיים, 27 משנה, 27 אחוריים, 302 עיטורי למעלה-למטה, 302 עיטורי צד, 323 מפרידים וערכות סגנון (תלמוד/פרשנות/קונטרס). הגופנים (427 משפחות מוטמעות) נגישים בבוררי הגופנים בפאנלים "טיפוגרפיה" ו"כותרות 0–7". הבחירה נשמרת כהפניית imud: ומופעלת בעימוד.'
         : 'ייבוא תוספים — עמודים מותאמים, סגנונות טקסט ותמונות (JSON). מנוע ההרחבות המלא נבנה ב־S11; הכניסה נעולה בהתאם.';
       body.appendChild(info);
       if (p.key === 'BUILDER' && opts.imudLibrary) {
@@ -254,6 +258,14 @@ function buildSettingsTab(doc, opts) {
       if (b.type === 'bool') ctl.checked = !!v;
       else ctl.value = String(v != null ? v : '');
     }
+    // **S6.2:** סנכרון בוררי העיצובים — ההפניה הפעילה (imud:<collection>:<id>)
+    // מוצגת בבורר המתאים; מזהה לא מוכר (למשל "" = ללא) מחזיר "— ללא —".
+    for (const { pick, sel } of imudPickerSelects) {
+      const ref = String(settings[pick.setting] || '');
+      const id = ref.startsWith(`imud:${pick.collection}:`) ? ref.split(':')[2] : '';
+      const known = Array.from(sel.options).some((o) => o.getAttribute('value') === id);
+      sel.value = known ? id : '';
+    }
   }
 
   /** **03.11 (EXT-14):** עדכון קטלוג הפונטים (439 משפחות IMUD) — בוררי הגופנים
@@ -301,6 +313,7 @@ function buildImudPicker(doc, opts) {
   ];
 
   const selects = [];
+  imudPickerSelects = selects; // **S6.2:** חשיפה ל-refreshValues (אותו מערך — פריטים מתווספים בהמשך)
   for (const pick of PICKS) {
     const row = doc.createElement('div');
     row.className = 'field-row';
@@ -374,8 +387,12 @@ function buildImudPicker(doc, opts) {
   wrap.appendChild(defaultsBtn);
 
   // טעינת רשימות העיצובים (עצלה — לפי אוסף) + אוכלוס ערכות הסגנון
+  // **S6.2:** גם סינכרון הערך הנוכחי מההגדרות — אחרי האתחול (ערכת הנושא
+  // של המקור נטענת אוטומטית) הבוררים מציגים את העיצוב הפעיל במקום "— ללא —"
+  // (בלי זה המשתמש רואה בורר ריק וסבור שאין אפשרות לבחור עיצובים).
   (async () => {
     try {
+      const settingsNow = opts.getSettings ? opts.getSettings() : {};
       // ערכות סגנון-ספר (setting_sets) — אוכלוס הבורר
       try {
         for (const name of opts.imudLibrary.listSettingSets()) {
@@ -394,6 +411,10 @@ function buildImudPicker(doc, opts) {
           o.textContent = `${it.name} (${it.id})`;
           sel.appendChild(o);
         }
+        // **S6.2:** הצגת הערך הפעיל — ההגדרה מחזיקה הפניה מלאה imud:<collection>:<id>
+        const activeRef = String(settingsNow[pick.setting] || '');
+        const activeId = activeRef.startsWith(`imud:${pick.collection}:`) ? activeRef.split(':')[2] : '';
+        if (activeId && items.some((it) => it.id === activeId)) sel.value = activeId;
       }
       note.textContent = `${selects.length} בוררי עיצוב מהספרייה המוטמעת.`;
     } catch (e) {

@@ -349,6 +349,34 @@ function createImudLibrary(engine) {
     return css;
   }
 
+  /** **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): הפעלת
+   * ערכת שערים מאוחדת לפי מספר ערכה** — כמו active-theme-select של המקור
+   * ("json_theme_40" ⇒ ערכה 40: שער ראשי + משנה + אחורי מעוצבים יחד,
+   * REQ-ORN-06). מאתר בכל אוסף את הפריט ששמו מתחיל ב-"<מספר> " (כגון
+   * "40   שער ראשי"), רושם אותו בשני הצדדים ומחזיר את ההפניות במבנה
+   * מפתחות-הגדרות מוכן להחלה: { 'imud-shaar-main': 'imud:shaar-main:<id>', … }.
+   * @returns {Promise<object>} רק הערכים שנמצאו (ערכה חלקית בספרייה ⇒ חלקית)
+   */
+  async function ensureThemeSet(setNo) {
+    const ROLES = [
+      { collection: 'shaar-main', setting: 'imud-shaar-main' },
+      { collection: 'shaar-sub', setting: 'imud-shaar-sub' },
+      { collection: 'shaar-back', setting: 'imud-shaar-back' }
+    ];
+    const prefix = new RegExp(`^\\s*${Number(setNo)}\\s+`);
+    const out = {};
+    for (const { collection, setting } of ROLES) {
+      try {
+        const items = await listDesigns(collection);
+        const hit = items.find((it) => prefix.test(String(it.name || '')));
+        if (!hit) continue;
+        const ref = await ensureDesign(collection, hit.id);
+        if (ref) out[setting] = ref;
+      } catch (e) { /* אוסף חסר — התפקיד נשאר בלי רקע, מתועד */ }
+    }
+    return out;
+  }
+
   /** **EXT-9:** משפחות הקטלוג שנטענו (סינכרוני) — לפתרון מחסניות גופן בייבוא
    * הגדרות/תבניות (importImudSettings ctx.availableFonts). null אם הקטלוג
    * עוד לא נטען — הייבוא ייפול למשפחה הראשונה (התנהגות היסטורית, מתועדת). */
@@ -356,7 +384,7 @@ function createImudLibrary(engine) {
     return fontCatalog.loaded ? new Set(fontCatalog.byFamily.keys()) : null;
   }
 
-  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, loadHeadingFont, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, ensureThemeSet, loadLegacyDefaults, loadHeadingFont, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };

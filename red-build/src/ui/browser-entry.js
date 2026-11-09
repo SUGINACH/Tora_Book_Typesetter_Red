@@ -80,7 +80,7 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-10-s6.1'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-10-s6.2'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   // **S5.2:** התעבורה מקבלת מפעל () => new Worker(url) במקום מופע קיים —
   // cancel/קריסה (terminate) נטרלו בעבר את המנוע לצמיתות; עכשיו הפוסט הבא
   // בונה מופע חדש מאותו URL (כולל ?v=). בלי זה כל בקשה אחרי ביטול הוחברה
@@ -163,8 +163,30 @@ function boot() {
   // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
   // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
   // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
-  imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(({ settings: imported }) => {
-    return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
+  imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(async ({ settings: imported, report }) => {
+    // **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): ערכת הנושא
+    // הפעילה של המקור.** ברירת המחדל של המקור היא active-theme-select =
+    // "json_theme_40" — כלומר עמודי השערים נולדים עם רקע מעוצב (שער ראשי/
+    // משנה/אחורי של ערכה 40), לא טקסט על רקע ריק. עד כאן ההגדרה מופתה כ-ui-state
+    // והושמטה — עכשיו היא ממומשת: פענוח מספר הערכה, רישום שלושת השערים
+    // בשני הצדדים (UI לתצוגה + Worker לייצוא) ומיזוג ההפניות להגדרות האתחול.
+    // כישלון (ספרייה חסרה) אינו חוסם — השערים נשארים טקסטואליים, מתועד.
+    try {
+      const raw = imported && imported._imudRaw ? imported._imudRaw : {};
+      const m = String(raw['active-theme-select'] || '').match(/json_theme_(\d+)/);
+      if (m && typeof imud.ensureThemeSet === 'function') {
+        const refs = await imud.ensureThemeSet(Number(m[1]));
+        if (refs && Object.keys(refs).length) Object.assign(imported, refs);
+      }
+    } catch (e) { /* ספריית השערים לא זמינה — שערים טקסטואליים, מתועד */ }
+    return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false })
+      .then(() => {
+        // **S6.2 (תיקון D):** אישור חיובי גלוי — המשתמש רואה שברירות המחדל
+        // המקוריות הוחלו בפועל (לא רק בשקט). בלי זה אין דרך לדעת שהאתחול
+        // הצליח עד לעימוד.
+        const fonts = report && report.mapped != null ? ` · ${report.mapped} הגדרות מהמקור` : '';
+        app.status.setNotice(`ברירות המחדל המקוריות הוחלו — גופנים, שערים וכותרות${fonts}.`);
+      });
   }).then(() => {
     // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
     // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל

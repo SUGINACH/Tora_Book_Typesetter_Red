@@ -1229,20 +1229,50 @@ function legacyTypeset(rawText, settings, env) {
       // הפרש הטורים > 60px → איזון; (4) אחרת — המילוי נשמר (במקור: מתיחה
       // אנכית עדינה של הטור הקצר, שאינה מזיזה נקודות חיתוך ולכן לא ממומשת
       // כאן). ה-S4.12 איזן בלי-תנאי בכל נקודות היציאה — עכשיו נאמן למקור.
-      const finalizeBlock = (blk, nextTok, sectionEnd) => {
+      const finalizeBlock = (blk, nextTok, sectionEnd, pageClose = false, reason = '') => {
         if (!blk || isH0) return;
         if (!(blk.cols[0].length || blk.cols[1].length)) return;
         const availH = colBottom() - blk.yTop;
-        if (sectionEnd) { balanceBlock(blk, availH); return; }
+        /** **S6.2:** דיווח שארית בלתי-פתירה אחרי איזון — כולל טור ריק לחלוטין
+         * (בקשת המשתמש המפורשת: "בדיקת אי האיזון תופסת גם מקרים שטור אחד
+         * ריק לחלוטין"). מדווח רק כשמילא המקום לתקן: איזון רץ ולא הצליח
+         * (מגבלות אלמנה/יתום min-2, או פסקה בת 2-3 שורות שאינה ניתנת
+         * לפיצול) — כמו 5 העמודים המגבלים בייחוס המקור עצמו. */
+        const balanceAndReport = (why) => {
+          balanceBlock(blk, availH);
+          const eff = effCols(blk);
+          const aH = colHeightUnits(eff[0]);
+          const bH = colHeightUnits(eff[1]);
+          if (eff[1].length === 0 || Math.abs(aH - bH) > 60) {
+            const rec = ledger.create('column-imbalance', `balance@p${pages.length - 1}`, pages.length - 1,
+              { emptyCol: eff[1].length === 0, deltaPx: Math.round(Math.abs(aH - bH)), reason: why }, 'legacy-flow');
+            ledger.transition(rec.issue_id, 'persists', 'legacy-flow',
+              `unfixable after optimal split (reason=${why})`);
+          }
+        };
+        if (sectionEnd) { balanceAndReport('section-end'); return; }
         const nextIsSpan = nextTok && nextTok.type[0] === 'h'
           && (HEADING_MODES[nextTok.level] || 'inline_2col') === 'span_1col';
-        // **S4.14 (מדידת עוגנים מפריכה את סעיף 3 בחיתוכי-עמוד):** עמ' 31
-        // בייחוס — בלוק 914px, ‏7 פסקאות גמורות (p-end), ‏39/32 שורות לא מאוזן
-        // (הפרש 150px > 60); עמ' 44: ‏49/38; עמ' 48: ‏40/51. כשהבלוק נגמר משום
-        // שהעמוד התמלא — המקור שומר את המילוי גם בהפרש גדול. האיזון בפועל
-        // רק בסוף מקטע ולפני span (ההוכחות של S4.13 לאותם מקרים תקפות).
         if (nextIsSpan) {
-          balanceBlock(blk, availH);
+          balanceAndReport('before-span');
+          return;
+        }
+        // **S6.2 (בקשת משתמש — "ולמה איזון טורים לא מיושם?"): החזרת סעיף 3
+        // של המקור בסגירות-עמוד שהבלוק סופי בהן.** S4.14 ביטל את האיזון
+        // בכל סגירת עמוד על בסיס עמ' 31/44/48 בייחוס — אך אלה סגירות
+        // "העמוד התמלא" (חיתוך p-cut בתחתית הטור; שתי הסגירות הללו נשארות
+        // ללא איזון, כמקור). מדידה מחדש של הייחוס כולו (layout-reference.json,
+        // 43 עמודי גוף דו-טוריים) מראה: **0** עמודים עם טור שמאלי ריק לגמרי
+        // ו-38/43 מאוזנים — כלומר המקור כן איזן כשהבלוק נקטע מוקדם (שער
+        // תקציב ההערות, span שלא נכנס, כותרת שלא נכנסה). הסף 60px = סף
+        // המקור עצמו (סעיף 3). סגירת "עמוד מלא" (חיתוך בתחתית הטור) אינה
+        // עוברת לכאן — pageClose=false בשני נתיבי החיתוך.
+        if (pageClose) {
+          const rH = colHeightUnits(blk.cols[0]);
+          const lH = colHeightUnits(blk.cols[1]);
+          if (blk.cols[1].length === 0 || Math.abs(rH - lH) > 60) {
+            balanceAndReport(reason || 'page-close');
+          }
         }
       };
 
@@ -1571,7 +1601,14 @@ function legacyTypeset(rawText, settings, env) {
           // **S4.13:** סף 60px — כמו המקור (if (currentAvailH < 60) break
           // לפני הצבת כותרת רוחבית); היה H3_SPAN_H+6≈46. **S4.24:** כותרת
           // מרובת-שורות דורשת מקום לכל שורותיה.
-          if (colBottom() - curY < 60 + (spanLines.length - 1) * H3_SPAN_H) break fillPage;
+          // **S6.2:** סגירת עמוד כשה-span לא נכנס — הבלוק סופי בעמוד זה
+          // ולכן מאוזן לפני השבירה (PT-06: "הטורים שלפניו מאוזנים" — גם כשה-H3
+          // עצמו נופל לעמוד הבא). finalizeBlock עם nextTok=tok (h3=span)
+          // מאזן דרך מסלול nextIsSpan.
+          if (colBottom() - curY < 60 + (spanLines.length - 1) * H3_SPAN_H) {
+            finalizeBlock(block, tok, false);
+            break fillPage;
+          }
           for (let li = 0; li < spanLines.length; li++) {
             stack.push({ type: 'span', text: spanLines[li], y: curY + li * H3_SPAN_H, h: H3_SPAN_H, tokenId: li === 0 ? tok.id : null });
           }
@@ -1610,7 +1647,9 @@ function legacyTypeset(rawText, settings, env) {
               // **S4.13:** סיום הבלוק לפני שבירת העמוד — כמו המקור (כל בלוק
               // מסתיים בהיגיון הארבעה; כאן הטוקן הבא הוא הכותרת שלא נכנסה).
               ti -= rollbackTrailingHeadings();
-              finalizeBlock(block, tok, false);
+              // **S6.2:** pageClose — הכותרת נופלת לראש העמוד הבא והבלוק
+              // סופי כאן; סעיף 3 של המקור (טור ריק/הפרש > 60px ⇒ איזון).
+              finalizeBlock(block, tok, false, true, 'heading-no-fit');
               break fillPage;
             }
           }
@@ -1705,7 +1744,14 @@ function legacyTypeset(rawText, settings, env) {
               if (seg.type === 'span') { placedB = Math.max(placedB, seg.y + seg.h); continue; }
               placedB = Math.max(placedB, seg.cursor[0], seg.cursor[1]);
             }
-            if (placedB > prospectiveBottom + 1.5) break fillPage;
+            // **S6.2 (שער התקציב הפרוספקטיבי):** הפסקה עם הערותיה נופלת
+            // שלמה לעמוד הבא — אבל הבלוק הנוכחי סופי בעמוד זה וחייב איזון
+            // (סעיף 3 של המקור; בלי זה נוצרים טורים שמאליים ריקים — 33 עמודים
+            // במסמך הבדיקה הקבוע לפני התיקון, מול 0 בייחוס המקור).
+            if (placedB > prospectiveBottom + 1.5) {
+              finalizeBlock(block, tok, false, true, 'fn-budget-gate');
+              break fillPage;
+            }
             for (const n of paraNotes.get(tok.id)) {
               // **S4.26 (תיקון שכפול — המשך):** הערה שהמשכה כבר בתור/בהמתנה
               // לא נוספת שוב במלואה (אחרת היא זורמת פעמיים: ההמשך + עותק
@@ -1767,7 +1813,10 @@ function legacyTypeset(rawText, settings, env) {
             // עמוד — לולאת הבלוקים שלו רצה רק כשהטוקן הבא הוא span. ההמשך-מטה
             // של S4.12/S4.13 הכניס תוכן עודף לעמודים מלאים (עמ' 31: ‏80 שורות
             // אצלנו מול 71 בייחוס — 2 פסקאות שלמות הוכנסו בכוח).
-            finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending);
+            // **S6.2:** pageClose — בדרך כלל העמוד מלא (איזון = no-op); המסלול
+            // כאן גם כשהכלל "אלמנה בודדת ⇒ דחיפה" (fit=1→0) או rollback
+            // כותרות-זנב פינו את הטור — אז סעיף 3 של המקור מאזן את השארית.
+            finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending, true, 'fit0');
             break fillPage;
           }
           else break fillPage;
@@ -1826,8 +1875,10 @@ function legacyTypeset(rawText, settings, env) {
       }
       // סגירת הבלוק האחרון: אם המקטע נגמר — איזון. אחרי משיכת-יתום שסגרה
       // את המקטע המקור אינו מאזן מחדש — המשיכה עצמה היא סוף הפרק.
+      // **S6.2:** עובר דרך finalizeBlock — כך גם סוף-המקטע מדווח ב-ledger
+      // כשנותר טור ריק/הפרש בלתי-פתיר (מגבלות min-2), במקום איזון שקט.
       if (block && sectionEnded && !reclaimed && !isH0 && (block.cols[0].length || block.cols[1].length)) {
-        balanceBlock(block, colBottom() - block.yTop);
+        finalizeBlock(block, null, true, false, 'section-end');
       }
 
       // ---- פריסת המחסנית לעמוד: פסים + בלוקים → טורים עם y מפורש ----
@@ -2269,6 +2320,10 @@ function legacyTypeset(rawText, settings, env) {
   }
 
   // ---- הרצת המקטעים ----
+  // **S6.2:** ה-ledger נוצר כאן — לפני הזרימה — כדי ש-finalizeBlock יוכל
+  // לדווח אי-איזון בלתי-פתיר (column-imbalance) בזמן ההצבה עצמה.
+  // בעבר נוצר בסוף (אחרי flowSection) — ולכן לא היה זמין לזרימה.
+  const ledger = new Ledger();
   for (const sec of sections) {
     if (sec.subShaar) {
       const t = sec.subShaar;
@@ -2518,6 +2573,21 @@ function legacyTypeset(rawText, settings, env) {
     p.folioDisplay = shows && p.pageNumber ? toGematria(p.pageNumber) : '';
   }
   final.forEach((p, i) => { p.index = i; });
+  // **S6.2:** התאמת מספרי העמודים ברשומות אי-האיזון לסדר הסופי —
+  // עמודי ה-TOC והריקים (EXT-15) מוכנסים אחרי הזרימה, ורשומות שנוצרו
+  // בזמן ההצבה מתייחסות לאינדקס הזמני של מערך הזרימה. ההתאמה לפי זהות
+  // העצם (כל עמוד ייחודי) — כך הניווט מהממצא בלשונית הבדיקה מגיע לעמוד
+  // הנכון בתצוגה.
+  {
+    const flowOrder = [...gates, ...bodies];
+    const finalIdx = new Map(final.map((p, i) => [p, i]));
+    for (const rec of ledger.issues.values()) {
+      if (rec.kind !== 'column-imbalance' || rec.page == null) continue;
+      const pgObj = flowOrder[rec.page];
+      const ni = pgObj ? finalIdx.get(pgObj) : null;
+      if (ni != null) { rec.page = ni; rec.target = `balance@p${ni}`; }
+    }
+  }
   // **EXT-19 (כותרות מתחלפות — hdr-alternating):** בעמודים זוגיים-פיזיים
   // (אינדקס אי-זוגי) חצאי שם הספר מתחלפים בין הצדדים — כמו buildHeaderGridHTML
   // של המקור (isEven ⇒ החלפה). ברירת המחדל כבויה — החצאים קבועים.
@@ -2564,7 +2634,6 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('page-plan', 'legacy-imud: flow + columns', { pages: pages.length });
   events.emit('folio', 'legacy-imud: folios + TOC', {});
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
-  const ledger = new Ledger();
 
   // **S5.2 (מיפוי מוקשים S1 — חשבונאות שימור תוכן אמיתית לנתיב החי):** עד כאן
   // הוחזר contentPreserved: true קבוע-קשה — כל רגרסיה בזרימת ההערות/המשכים/
