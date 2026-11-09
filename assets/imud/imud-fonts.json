@@ -1,5 +1,69 @@
 [
   {
+    "family": "Alpha",
+    "file": "Alpha-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "AlphaBlack",
+    "file": "Alpha-Black.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "AlphaLight",
+    "file": "Alpha-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Bellefair",
+    "file": "Bellefair-Regular.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/bellefair (SIL OFL 1.1)"
+  },
+  {
+    "family": "David Libre",
+    "file": "DavidLibre-Regular.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/davidlibre (SIL OFL 1.1)"
+  },
+  {
+    "family": "Frank Ruhl Libre",
+    "file": "FrankRuhlLibre-VF.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/frankruhllibre (SIL OFL 1.1) — variable, default 400"
+  },
+  {
+    "family": "FrankReal",
+    "file": "FrankReal-Bold.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Guttman Rashi",
+    "file": "Guttman-Rashi-Normal.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Hadassah Friedlaender",
+    "file": "Hadassah-Friedlaender-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Lia Sgula",
+    "file": "Sgula-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Livorna",
+    "file": "Livorna-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "Noto Serif Hebrew",
+    "file": "NotoSerifHebrew-VF.ttf",
+    "format": "truetype",
+    "source": "google-fonts/ofl/notoserifhebrew (SIL OFL 1.1) — variable, default 400"
+  },
+  {
     "family": "אהבה מודגש",
     "file": "Ahava-Bold.ttf",
     "format": "truetype"
@@ -75,13 +139,13 @@
     "format": "truetype"
   },
   {
-    "family": "אורון קשת מודגש מאוד",
-    "file": "Oron-Keshet-Ultra-Bold.ttf",
+    "family": "אורון קשת מודגש",
+    "file": "Oron-Keshet-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "אורון קשת מודגש",
-    "file": "Oron-Keshet-Bold.ttf",
+    "family": "אורון קשת מודגש מאוד",
+    "file": "Oron-Keshet-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -135,13 +199,13 @@
     "format": "truetype"
   },
   {
-    "family": "אות מורשת קל מאוד",
-    "file": "OtMoresht-Extra-Light.ttf",
+    "family": "אות מורשת קל",
+    "file": "OtMoresht-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "אות מורשת קל",
-    "file": "OtMoresht-Light.ttf",
+    "family": "אות מורשת קל מאוד",
+    "file": "OtMoresht-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -200,13 +264,13 @@
     "format": "truetype"
   },
   {
-    "family": "אלמוני מודגש מאוד",
-    "file": "Almoni-Ultra-Bold.ttf",
+    "family": "אלמוני מודגש",
+    "file": "Almoni-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "אלמוני מודגש",
-    "file": "Almoni-Bold.ttf",
+    "family": "אלמוני מודגש מאוד",
+    "file": "Almoni-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -220,18 +284,13 @@
     "format": "truetype"
   },
   {
-    "family": "אלמוני צר מודגש מאוד",
-    "file": "Almoni-Tzar-Ultra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "אלמוני צר מודגש",
     "file": "Almoni-Tzar-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "אלמוני צר קל מאוד",
-    "file": "Almoni-Tzar-Ultra-Light.ttf",
+    "family": "אלמוני צר מודגש מאוד",
+    "file": "Almoni-Tzar-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -240,13 +299,13 @@
     "format": "truetype"
   },
   {
-    "family": "אלמוני צר רגיל",
-    "file": "Almoni-Tzar-Regular.ttf",
+    "family": "אלמוני צר קל מאוד",
+    "file": "Almoni-Tzar-Ultra-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "אלמוני קל מאוד",
-    "file": "Almoni-Ultra-Light.ttf",
+    "family": "אלמוני צר רגיל",
+    "file": "Almoni-Tzar-Regular.ttf",
     "format": "truetype"
   },
   {
@@ -255,18 +314,23 @@
     "format": "truetype"
   },
   {
+    "family": "אלמוני קל מאוד",
+    "file": "Almoni-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "אלמוני רגיל",
     "file": "Almoni-Regular.ttf",
     "format": "truetype"
   },
   {
-    "family": "אלמוני שחור כבד",
-    "file": "Almoni-Ultra-Black.ttf",
+    "family": "אלמוני שחור",
+    "file": "Almoni-Black.ttf",
     "format": "truetype"
   },
   {
-    "family": "אלמוני שחור",
-    "file": "Almoni-Black.ttf",
+    "family": "אלמוני שחור כבד",
+    "file": "Almoni-Ultra-Black.ttf",
     "format": "truetype"
   },
   {
@@ -310,18 +374,13 @@
     "format": "truetype"
   },
   {
-    "family": "אסיסטנט מודגש מאוד",
-    "file": "Assistant-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "אסיסטנט מודגש",
     "file": "Assistant-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "אסיסטנט קל מאוד",
-    "file": "Assistant-Extra-Light.ttf",
+    "family": "אסיסטנט מודגש מאוד",
+    "file": "Assistant-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -330,18 +389,23 @@
     "format": "truetype"
   },
   {
+    "family": "אסיסטנט קל מאוד",
+    "file": "Assistant-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "אסיסטנט רגיל",
     "file": "Assistant-Regular.ttf",
     "format": "truetype"
   },
   {
-    "family": "אריאל מודגש נטוי",
-    "file": "Arial-Bold-Italic.ttf",
+    "family": "אריאל מודגש",
+    "file": "Arial-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "אריאל מודגש",
-    "file": "Arial-Bold.ttf",
+    "family": "אריאל מודגש נטוי",
+    "file": "Arial-Bold-Italic.ttf",
     "format": "truetype"
   },
   {
@@ -355,13 +419,13 @@
     "format": "truetype"
   },
   {
-    "family": "אריאל צר מודגש נטוי",
-    "file": "Arial-Narrow-Bold-Italic.ttf",
+    "family": "אריאל צר מודגש",
+    "file": "Arial-Narrow-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "אריאל צר מודגש",
-    "file": "Arial-Narrow-Bold.ttf",
+    "family": "אריאל צר מודגש נטוי",
+    "file": "Arial-Narrow-Bold-Italic.ttf",
     "format": "truetype"
   },
   {
@@ -410,13 +474,13 @@
     "format": "truetype"
   },
   {
-    "family": "בוסטר 1 מודגש מאוד",
-    "file": "Booster-1-Extra-Bold.ttf",
+    "family": "בוסטר 1 מודגש",
+    "file": "Booster-1-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "בוסטר 1 מודגש",
-    "file": "Booster-1-Bold.ttf",
+    "family": "בוסטר 1 מודגש מאוד",
+    "file": "Booster-1-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -690,13 +754,13 @@
     "format": "truetype"
   },
   {
-    "family": "היבו מודגש מאוד",
-    "file": "Heebo-Extra-Bold.ttf",
+    "family": "היבו מודגש",
+    "file": "Heebo-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "היבו מודגש",
-    "file": "Heebo-Bold.ttf",
+    "family": "היבו מודגש מאוד",
+    "file": "Heebo-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -770,13 +834,13 @@
     "format": "truetype"
   },
   {
-    "family": "טוביק סלאב קל מאוד",
-    "file": "Tubic-Slab-Extra-Light.ttf",
+    "family": "טוביק סלאב קל",
+    "file": "Tubic-Slab-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "טוביק סלאב קל",
-    "file": "Tubic-Slab-Light.ttf",
+    "family": "טוביק סלאב קל מאוד",
+    "file": "Tubic-Slab-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -805,13 +869,13 @@
     "format": "truetype"
   },
   {
-    "family": "טוביק סנס קל מאוד",
-    "file": "Tubic-Sans-Extra-Light.ttf",
+    "family": "טוביק סנס קל",
+    "file": "Tubic-Sans-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "טוביק סנס קל",
-    "file": "Tubic-Sans-Light.ttf",
+    "family": "טוביק סנס קל מאוד",
+    "file": "Tubic-Sans-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -825,13 +889,13 @@
     "format": "truetype"
   },
   {
-    "family": "טיימס ניו רומן מודגש נטוי",
-    "file": "Times-New-Roman-Bold-Italic.ttf",
+    "family": "טיימס ניו רומן מודגש",
+    "file": "Times-New-Roman-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "טיימס ניו רומן מודגש",
-    "file": "Times-New-Roman-Bold.ttf",
+    "family": "טיימס ניו רומן מודגש נטוי",
+    "file": "Times-New-Roman-Bold-Italic.ttf",
     "format": "truetype"
   },
   {
@@ -955,13 +1019,13 @@
     "format": "truetype"
   },
   {
-    "family": "מקומי מודגש מאוד",
-    "file": "Mekomi-Ultra-Bold.ttf",
+    "family": "מקומי מודגש",
+    "file": "Mekomi-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "מקומי מודגש",
-    "file": "Mekomi-Bold.ttf",
+    "family": "מקומי מודגש מאוד",
+    "file": "Mekomi-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1055,23 +1119,23 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית חצי צר מודגש מאוד",
-    "file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "נוטו סנס עברית חצי צר מודגש",
     "file": "Noto-Sans-Hebrew-SemiCondensed-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית חצי צר קל מאוד",
-    "file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Light.ttf",
+    "family": "נוטו סנס עברית חצי צר מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
     "family": "נוטו סנס עברית חצי צר קל",
     "file": "Noto-Sans-Hebrew-SemiCondensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית חצי צר קל מאוד",
+    "file": "Noto-Sans-Hebrew-SemiCondensed-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1085,13 +1149,13 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית מודגש מאוד",
-    "file": "Noto-Sans-Hebrew-Extra-Bold.ttf",
+    "family": "נוטו סנס עברית מודגש",
+    "file": "Noto-Sans-Hebrew-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית מודגש",
-    "file": "Noto-Sans-Hebrew-Bold.ttf",
+    "family": "נוטו סנס עברית מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1125,23 +1189,23 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית צר מאוד מודגש מאוד",
-    "file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "נוטו סנס עברית צר מאוד מודגש",
     "file": "Noto-Sans-Hebrew-ExtraCondensed-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית צר מאוד קל מאוד",
-    "file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Light.ttf",
+    "family": "נוטו סנס עברית צר מאוד מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
     "family": "נוטו סנס עברית צר מאוד קל",
     "file": "Noto-Sans-Hebrew-ExtraCondensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר מאוד קל מאוד",
+    "file": "Noto-Sans-Hebrew-ExtraCondensed-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1155,23 +1219,23 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית צר מודגש מאוד",
-    "file": "Noto-Sans-Hebrew-Condensed-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "נוטו סנס עברית צר מודגש",
     "file": "Noto-Sans-Hebrew-Condensed-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית צר קל מאוד",
-    "file": "Noto-Sans-Hebrew-Condensed-Extra-Light.ttf",
+    "family": "נוטו סנס עברית צר מודגש מאוד",
+    "file": "Noto-Sans-Hebrew-Condensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
     "family": "נוטו סנס עברית צר קל",
     "file": "Noto-Sans-Hebrew-Condensed-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו סנס עברית צר קל מאוד",
+    "file": "Noto-Sans-Hebrew-Condensed-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1185,13 +1249,13 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית קל מאוד",
-    "file": "Noto-Sans-Hebrew-Extra-Light.ttf",
+    "family": "נוטו סנס עברית קל",
+    "file": "Noto-Sans-Hebrew-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סנס עברית קל",
-    "file": "Noto-Sans-Hebrew-Light.ttf",
+    "family": "נוטו סנס עברית קל מאוד",
+    "file": "Noto-Sans-Hebrew-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1220,6 +1284,11 @@
     "format": "truetype"
   },
   {
+    "family": "נוטו סריף עברית חצי צר",
+    "file": "Noto-Serif-Hebrew-SemiCondensed.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "נוטו סריף עברית חצי צר בינוני",
     "file": "Noto-Serif-Hebrew-SemiCondensed-Medium.ttf",
     "format": "truetype"
@@ -1235,18 +1304,13 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית חצי צר מודגש מאוד",
-    "file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "נוטו סריף עברית חצי צר מודגש",
     "file": "Noto-Serif-Hebrew-SemiCondensed-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית חצי צר קל מאוד",
-    "file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Light.ttf",
+    "family": "נוטו סריף עברית חצי צר מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1255,13 +1319,18 @@
     "format": "truetype"
   },
   {
+    "family": "נוטו סריף עברית חצי צר קל מאוד",
+    "file": "Noto-Serif-Hebrew-SemiCondensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "נוטו סריף עברית חצי צר שחור",
     "file": "Noto-Serif-Hebrew-SemiCondensed-Black.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית חצי צר",
-    "file": "Noto-Serif-Hebrew-SemiCondensed.ttf",
+    "family": "נוטו סריף עברית מודגש",
+    "file": "Noto-Serif-Hebrew-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1270,8 +1339,8 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית מודגש",
-    "file": "Noto-Serif-Hebrew-Bold.ttf",
+    "family": "נוטו סריף עברית צר",
+    "file": "Noto-Serif-Hebrew-Condensed.ttf",
     "format": "truetype"
   },
   {
@@ -1290,6 +1359,11 @@
     "format": "truetype"
   },
   {
+    "family": "נוטו סריף עברית צר מאוד",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "נוטו סריף עברית צר מאוד בינוני",
     "file": "Noto-Serif-Hebrew-ExtraCondensed-Medium.ttf",
     "format": "truetype"
@@ -1305,18 +1379,13 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית צר מאוד מודגש מאוד",
-    "file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "נוטו סריף עברית צר מאוד מודגש",
     "file": "Noto-Serif-Hebrew-ExtraCondensed-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית צר מאוד קל מאוד",
-    "file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Light.ttf",
+    "family": "נוטו סריף עברית צר מאוד מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1325,18 +1394,13 @@
     "format": "truetype"
   },
   {
+    "family": "נוטו סריף עברית צר מאוד קל מאוד",
+    "file": "Noto-Serif-Hebrew-ExtraCondensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "נוטו סריף עברית צר מאוד שחור",
     "file": "Noto-Serif-Hebrew-ExtraCondensed-Black.ttf",
-    "format": "truetype"
-  },
-  {
-    "family": "נוטו סריף עברית צר מאוד",
-    "file": "Noto-Serif-Hebrew-ExtraCondensed.ttf",
-    "format": "truetype"
-  },
-  {
-    "family": "נוטו סריף עברית צר מודגש מאוד",
-    "file": "Noto-Serif-Hebrew-Condensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1345,8 +1409,8 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית צר קל מאוד",
-    "file": "Noto-Serif-Hebrew-Condensed-Extra-Light.ttf",
+    "family": "נוטו סריף עברית צר מודגש מאוד",
+    "file": "Noto-Serif-Hebrew-Condensed-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1355,23 +1419,23 @@
     "format": "truetype"
   },
   {
+    "family": "נוטו סריף עברית צר קל מאוד",
+    "file": "Noto-Serif-Hebrew-Condensed-Extra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "נוטו סריף עברית צר שחור",
     "file": "Noto-Serif-Hebrew-Condensed-Black.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו סריף עברית צר",
-    "file": "Noto-Serif-Hebrew-Condensed.ttf",
+    "family": "נוטו סריף עברית קל",
+    "file": "Noto-Serif-Hebrew-Light.ttf",
     "format": "truetype"
   },
   {
     "family": "נוטו סריף עברית קל מאוד",
     "file": "Noto-Serif-Hebrew-Extra-Light.ttf",
-    "format": "truetype"
-  },
-  {
-    "family": "נוטו סריף עברית קל",
-    "file": "Noto-Serif-Hebrew-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1400,23 +1464,23 @@
     "format": "truetype"
   },
   {
-    "family": "נוטו רש\"י עברית מודגש מאוד",
-    "file": "Noto-Rashi-Hebrew-Extra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "נוטו רש\"י עברית מודגש",
     "file": "Noto-Rashi-Hebrew-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "נוטו רש\"י עברית קל מאוד",
-    "file": "Noto-Rashi-Hebrew-Extra-Light.ttf",
+    "family": "נוטו רש\"י עברית מודגש מאוד",
+    "file": "Noto-Rashi-Hebrew-Extra-Bold.ttf",
     "format": "truetype"
   },
   {
     "family": "נוטו רש\"י עברית קל",
     "file": "Noto-Rashi-Hebrew-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "נוטו רש\"י עברית קל מאוד",
+    "file": "Noto-Rashi-Hebrew-Extra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1460,23 +1524,23 @@
     "format": "truetype"
   },
   {
-    "family": "פלוני יד מודגש מאוד",
-    "file": "Ploni-Yad-Ultra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "פלוני יד מודגש",
     "file": "Ploni-Yad-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "פלוני יד קל מאוד",
-    "file": "Ploni-Yad-Ultra-Light.ttf",
+    "family": "פלוני יד מודגש מאוד",
+    "file": "Ploni-Yad-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
     "family": "פלוני יד קל",
     "file": "Ploni-Yad-Light.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פלוני יד קל מאוד",
+    "file": "Ploni-Yad-Ultra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1490,13 +1554,13 @@
     "format": "truetype"
   },
   {
-    "family": "פלוני מודגש מאוד",
-    "file": "Ploni-Ultra-Bold.ttf",
+    "family": "פלוני מודגש",
+    "file": "Ploni-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "פלוני מודגש",
-    "file": "Ploni-Bold.ttf",
+    "family": "פלוני מודגש מאוד",
+    "file": "Ploni-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1510,13 +1574,13 @@
     "format": "truetype"
   },
   {
-    "family": "פלוני מעוגל מודגש מאוד",
-    "file": "Ploni-Round-Ultra-Bold.ttf",
+    "family": "פלוני מעוגל מודגש",
+    "file": "Ploni-Round-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "פלוני מעוגל מודגש",
-    "file": "Ploni-Round-Bold.ttf",
+    "family": "פלוני מעוגל מודגש מאוד",
+    "file": "Ploni-Round-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1545,18 +1609,13 @@
     "format": "truetype"
   },
   {
-    "family": "פלוני צר מודגש מאוד",
-    "file": "Ploni-Tzar-Ultra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "פלוני צר מודגש",
     "file": "Ploni-Tzar-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "פלוני צר קל מאוד",
-    "file": "Ploni-Tzar-Ultra-Light.ttf",
+    "family": "פלוני צר מודגש מאוד",
+    "file": "Ploni-Tzar-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -1565,18 +1624,23 @@
     "format": "truetype"
   },
   {
+    "family": "פלוני צר קל מאוד",
+    "file": "Ploni-Tzar-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "פלוני צר רגיל",
     "file": "Ploni-Tzar-Regular.ttf",
     "format": "truetype"
   },
   {
-    "family": "פלוני קל מאוד",
-    "file": "Ploni-Ultra-Light.ttf",
+    "family": "פלוני קל",
+    "file": "Ploni-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "פלוני קל",
-    "file": "Ploni-Light.ttf",
+    "family": "פלוני קל מאוד",
+    "file": "Ploni-Ultra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1590,18 +1654,13 @@
     "format": "truetype"
   },
   {
-    "family": "פרנק רה בינוני נטוי",
-    "file": "Frank-Re-Medium-Natui-Italic.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "פרנק רה בינוני",
     "file": "Frank-Re-Medium.ttf",
     "format": "truetype"
   },
   {
-    "family": "פרנק רה מודגש נטוי",
-    "file": "Frank-Re-Bold-Natui-Italic.ttf",
+    "family": "פרנק רה בינוני נטוי",
+    "file": "Frank-Re-Medium-Natui-Italic.ttf",
     "format": "truetype"
   },
   {
@@ -1610,13 +1669,18 @@
     "format": "truetype"
   },
   {
-    "family": "פרנק רה רגיל נטוי",
-    "file": "Frank-Re-Regular-Natui-Italic.ttf",
+    "family": "פרנק רה מודגש נטוי",
+    "file": "Frank-Re-Bold-Natui-Italic.ttf",
     "format": "truetype"
   },
   {
     "family": "פרנק רה רגיל",
     "file": "Frank-Re-Regular.ttf",
+    "format": "truetype"
+  },
+  {
+    "family": "פרנק רה רגיל נטוי",
+    "file": "Frank-Re-Regular-Natui-Italic.ttf",
     "format": "truetype"
   },
   {
@@ -1695,13 +1759,13 @@
     "format": "truetype"
   },
   {
-    "family": "קדם סנס קל מאוד",
-    "file": "Kedem-Sans-Ultra-Light.ttf",
+    "family": "קדם סנס קל",
+    "file": "Kedem-Sans-Light.ttf",
     "format": "truetype"
   },
   {
-    "family": "קדם סנס קל",
-    "file": "Kedem-Sans-Light.ttf",
+    "family": "קדם סנס קל מאוד",
+    "file": "Kedem-Sans-Ultra-Light.ttf",
     "format": "truetype"
   },
   {
@@ -1875,13 +1939,13 @@
     "format": "truetype"
   },
   {
-    "family": "רוביק מודגש נטוי",
-    "file": "Rubik-Bold-Italic.ttf",
+    "family": "רוביק מודגש",
+    "file": "Rubik-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "רוביק מודגש",
-    "file": "Rubik-Bold.ttf",
+    "family": "רוביק מודגש נטוי",
+    "file": "Rubik-Bold-Italic.ttf",
     "format": "truetype"
   },
   {
@@ -2155,13 +2219,13 @@
     "format": "truetype"
   },
   {
-    "family": "תהילה רגיל 2",
-    "file": "Tehila-Regular_2.ttf",
+    "family": "תהילה רגיל",
+    "file": "Tehila-Regular.ttf",
     "format": "truetype"
   },
   {
-    "family": "תהילה רגיל",
-    "file": "Tehila-Regular.ttf",
+    "family": "תהילה רגיל 2",
+    "file": "Tehila-Regular_2.ttf",
     "format": "truetype"
   },
   {
@@ -2170,18 +2234,13 @@
     "format": "truetype"
   },
   {
-    "family": "תעמולה מודגש מאוד",
-    "file": "Taamula-Ultra-Bold.ttf",
-    "format": "truetype"
-  },
-  {
     "family": "תעמולה מודגש",
     "file": "Taamula-Bold.ttf",
     "format": "truetype"
   },
   {
-    "family": "תעמולה קל מאוד",
-    "file": "Taamula-Ultra-Light.ttf",
+    "family": "תעמולה מודגש מאוד",
+    "file": "Taamula-Ultra-Bold.ttf",
     "format": "truetype"
   },
   {
@@ -2190,47 +2249,13 @@
     "format": "truetype"
   },
   {
+    "family": "תעמולה קל מאוד",
+    "file": "Taamula-Ultra-Light.ttf",
+    "format": "truetype"
+  },
+  {
     "family": "תעמולה רגיל",
     "file": "Taamula-Regular.ttf",
-    "format": "truetype"
-  },
-  {
-    "family": "David Libre",
-    "file": "DavidLibre-Regular.ttf",
-    "format": "truetype",
-    "source": "google-fonts/ofl/davidlibre (SIL OFL 1.1)"
-  },
-  {
-    "family": "Frank Ruhl Libre",
-    "file": "FrankRuhlLibre-VF.ttf",
-    "format": "truetype",
-    "source": "google-fonts/ofl/frankruhllibre (SIL OFL 1.1) — variable, default 400"
-  },
-  {
-    "family": "Bellefair",
-    "file": "Bellefair-Regular.ttf",
-    "format": "truetype",
-    "source": "google-fonts/ofl/bellefair (SIL OFL 1.1)"
-  },
-  {
-    "family": "Noto Serif Hebrew",
-    "file": "NotoSerifHebrew-VF.ttf",
-    "format": "truetype",
-    "source": "google-fonts/ofl/notoserifhebrew (SIL OFL 1.1) — variable, default 400"
-  },
-  {
-    "family": "Guttman Rashi",
-    "file": "Guttman-Rashi-Normal.ttf",
-    "format": "truetype"
-  },
-  {
-    "family": "Hadassah Friedlaender",
-    "file": "Hadassah-Friedlaender-Regular.ttf",
-    "format": "truetype"
-  },
-  {
-    "family": "FrankReal",
-    "file": "FrankReal-Bold.ttf",
     "format": "truetype"
   }
 ]
