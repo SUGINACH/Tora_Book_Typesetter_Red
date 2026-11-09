@@ -470,7 +470,7 @@ function boot() {
   const mount = document.getElementById('app');
   if (!mount) return;
   injectPageBaseCss();
-  const ASSET_VERSION = '2026-11-10-s6.1'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
+  const ASSET_VERSION = '2026-11-10-s6.2'; // cache-busting: מנע גרסה מיושנת מהמטמון אחרי פריסה
   // **S5.2:** התעבורה מקבלת מפעל () => new Worker(url) במקום מופע קיים —
   // cancel/קריסה (terminate) נטרלו בעבר את המנוע לצמיתות; עכשיו הפוסט הבא
   // בונה מופע חדש מאותו URL (כולל ?v=). בלי זה כל בקשה אחרי ביטול הוחברה
@@ -553,8 +553,30 @@ function boot() {
   // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
   // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
   // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
-  imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(({ settings: imported }) => {
-    return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false });
+  imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(async ({ settings: imported, report }) => {
+    // **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): ערכת הנושא
+    // הפעילה של המקור.** ברירת המחדל של המקור היא active-theme-select =
+    // "json_theme_40" — כלומר עמודי השערים נולדים עם רקע מעוצב (שער ראשי/
+    // משנה/אחורי של ערכה 40), לא טקסט על רקע ריק. עד כאן ההגדרה מופתה כ-ui-state
+    // והושמטה — עכשיו היא ממומשת: פענוח מספר הערכה, רישום שלושת השערים
+    // בשני הצדדים (UI לתצוגה + Worker לייצוא) ומיזוג ההפניות להגדרות האתחול.
+    // כישלון (ספרייה חסרה) אינו חוסם — השערים נשארים טקסטואליים, מתועד.
+    try {
+      const raw = imported && imported._imudRaw ? imported._imudRaw : {};
+      const m = String(raw['active-theme-select'] || '').match(/json_theme_(\d+)/);
+      if (m && typeof imud.ensureThemeSet === 'function') {
+        const refs = await imud.ensureThemeSet(Number(m[1]));
+        if (refs && Object.keys(refs).length) Object.assign(imported, refs);
+      }
+    } catch (e) { /* ספריית השערים לא זמינה — שערים טקסטואליים, מתועד */ }
+    return app.applyLegacyDefaults(imported, { source: 'boot', retypeset: false })
+      .then(() => {
+        // **S6.2 (תיקון D):** אישור חיובי גלוי — המשתמש רואה שברירות המחדל
+        // המקוריות הוחלו בפועל (לא רק בשקט). בלי זה אין דרך לדעת שהאתחול
+        // הצליח עד לעימוד.
+        const fonts = report && report.mapped != null ? ` · ${report.mapped} הגדרות מהמקור` : '';
+        app.status.setNotice(`ברירות המחדל המקוריות הוחלו — גופנים, שערים וכותרות${fonts}.`);
+      });
   }).then(() => {
     // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
     // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל
@@ -1316,7 +1338,11 @@ __modules["src/engine/core/settings-registry.js"] = function (require, module, e
 
 const P = {
   THEMES: 'ערכות נושא, שערים ורקעים',
-  BUILDER: 'בונה ערכות נושא (SVG Builder)',
+  // **S6.2 (בקשת משתמש — "למה אני לא רואה אפשרות לבחור בהם?"):** שם
+  // הפאנל נותן עכשיו תשובה מפורשת — זו ספריית העיצובים של הפרויקט המקורי
+  // (שערים/עיטורים/מפרידים + ברירות המחדל). בעבר נקרא "בונה ערכות נושא
+  // (SVG Builder)" — שם שהסתיר את תוכן הפאנל והמשתמש לא מצא את הבוררים.
+  BUILDER: 'ספריית העיצובים של המקור — שערים, עיטורים, מפרידים וגופנים',
   IMPORTS: 'ייבוא תוספים',
   NOTES: 'הערות שוליים וסיום',
   QUALITY: 'איכות עימוד',
@@ -1460,13 +1486,13 @@ const registry = [
   // ---- עיטורים (ORNAMENTS) ---- **S8 (D-54): מפתחות העיטורים חוזרים עם מנגנון חי + בדיקת אפקט**
   // (D-45 הסיר אותם עד שיהיה מנגנום; כעת כל אחד נצרך בפועל בפאס העיטורים L5).
   K('h2-orn-scope', 'enum', 'both', P.ORNAMENTS, 'sel-h2-orn-scope', ['decoration/ornament-fit'], 'fx:h2-orn-scope', { enum: ['none', 'sign', 'title', 'both'], note: 'REQ-ORN-02: סימן בלבד / כותרת בלבד / שניהם / כלום. **S4.6 (ביקורת 3):** none נוסף — במקור IMUD h2-title-orn-mode=none היה מומר ל-both (היפוך הגדרת המשתמש); ornament-fit כבר תומך (scope-off)' }),
-  K('h2-orn-top', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-top', ['decoration/ornament-fit'], 'fx:h2-orn-top', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור עליון לסימן (V4: מצבים עצמאיים)' }),
-  K('h2-orn-bottom', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-bottom', ['decoration/ornament-fit'], 'fx:h2-orn-bottom', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור תחתון לסימן' }),
+  K('h2-orn-top', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-top', ['decoration/ornament-fit'], 'fx:h2-orn-top', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור עליון לסימן (V4: מצבים עצמאיים). עיטורים מעוצבים מהמקור (302 עיצובים) — בפאנל "ספריית העיצובים של המקור"' }),
+  K('h2-orn-bottom', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-bottom', ['decoration/ornament-fit'], 'fx:h2-orn-bottom', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור תחתון לסימן. עיטורים מעוצבים מהמקור — בפאנל "ספריית העיצובים של המקור"' }),
   K('h2-orn-side', 'enum', 'none', P.ORNAMENTS, 'sel-h2-orn-side', ['decoration/ornament-fit'], 'fx:h2-orn-side', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'עיטור צדדי לכותרת (V4)' }),
   K('h2-orn-fit-to-text', 'bool', true, P.ORNAMENTS, 'chk-h2-orn-fit', ['decoration/ornament-fit'], 'fx:h2-orn-fit', { note: 'REQ-ORN-01: התאמת רוחב לטקסט במדידת JS — CSS fit-content נכשל (V3/V4); המידות נקבעות בהזמנת הפריסה (F-08)' }),
   K('h3-side-orn', 'enum', 'none', P.ORNAMENTS, 'sel-h3-side-orn', ['decoration/ornament-plan'], 'fx:h3-side-orn', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll'], note: 'REQ-ORN-01: עיטורי צד H3 — התאמת גובה לשורה' }),
   K('h3-side-orn-height-em', 'number', 1, P.ORNAMENTS, 'rng-h3-side-orn-h', ['decoration/ornament-plan'], 'fx:h3-side-orn-h', { min: 0.5, max: 2, step: 0.1, note: 'גובה ב־em; מקור שליטה יחיד — אין !important מול inline (F-09)' }),
-  K('chapter-end-ornament', 'enum', 'none', P.ORNAMENTS, 'sel-chapter-end-orn', ['decoration/ornament-plan'], 'fx:chapter-end-orn', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'REQ-ORN-03: פירמידת וילנא/רומח/שושנתא/סלסול/תמונה — התאמה לתקציב הפנוי; לעולם לא דוחף תוכן' }),
+  K('chapter-end-ornament', 'enum', 'none', P.ORNAMENTS, 'sel-chapter-end-orn', ['decoration/ornament-plan'], 'fx:chapter-end-orn', { enum: ['none', 'pyramid', 'lance', 'shoshanta', 'scroll', 'image'], note: 'REQ-ORN-03: פירמידת וילנא/רומח/שושנתא/סלסול/תמונה — התאמה לתקציב הפנוי; לעולם לא דוחף תוכן. עיטורי סיום מעוצבים מהמקור — בפאנל "ספריית העיצובים של המקור"' }),
   K('chapter-end-ornament-w-em', 'number', 4, P.ORNAMENTS, 'rng-chapter-end-w', ['decoration/ornament-plan'], 'fx:chapter-end-w', { min: 1, max: 12 }),
   K('chapter-end-ornament-h-em', 'number', 1.2, P.ORNAMENTS, 'rng-chapter-end-h', ['decoration/ornament-plan'], 'fx:chapter-end-h', { min: 0.3, max: 4 }),
   K('heading-dividers-h3-h6', 'bool', false, P.ORNAMENTS, 'chk-hdr-dividers', ['decoration/dividers', 'decoration/ornament-plan'], 'fx:hdr-dividers', { note: 'REQ-ORN-04: fits() נמדד בכל אתרי ההוספה; בלי עיטור בראש טור/עמוד ריק; rollback-aware (Orange)' }),
@@ -2539,6 +2565,10 @@ __modules["src/ui/settings-panel.js"] = function (require, module, exports) {
 
 const { BINDINGS, PANELS } = require('./bindings.generated');
 
+/** **S6.2:** בוררי העיצובים החיים (מיוזרשים ב-refreshValues — כך הבחירה
+ * הפעילה אחרי אתחול/טעינת ערכה מוצגת בבוררים גם כשנבנו מוקדם יותר). */
+let imudPickerSelects = []; // [{ pick, sel }]
+
 /** גופני בסיס (לפני טעינת הקטלוג) — preserve-missing-value (IMUD port). */
 const KNOWN_FONTS = ['Frank Ruhl Libre', 'David HB', 'David', 'Narkisim', 'Nachlieli', 'Alef', 'Rubin'];
 let fontCatalogFamilies = null; // **03.11:** קטלוג 439 הפונטים של IMUD (ברגע שנטען)
@@ -2686,7 +2716,7 @@ function buildSettingsTab(doc, opts) {
       const info = doc.createElement('p');
       info.className = 'action-info';
       info.textContent = p.key === 'BUILDER'
-        ? 'ספריית הפרויקט המקורי — שערים, עיטורים ומפרידים מעוצבים, וברירות המחדל המקוריות. הבחירה נשמרת כהפניית imud: ומופעלת בעימוד.'
+        ? 'ספריית הפרויקט המקורי: 32 שערים ראשיים, 27 משנה, 27 אחוריים, 302 עיטורי למעלה-למטה, 302 עיטורי צד, 323 מפרידים וערכות סגנון (תלמוד/פרשנות/קונטרס). הגופנים (427 משפחות מוטמעות) נגישים בבוררי הגופנים בפאנלים "טיפוגרפיה" ו"כותרות 0–7". הבחירה נשמרת כהפניית imud: ומופעלת בעימוד.'
         : 'ייבוא תוספים — עמודים מותאמים, סגנונות טקסט ותמונות (JSON). מנוע ההרחבות המלא נבנה ב־S11; הכניסה נעולה בהתאם.';
       body.appendChild(info);
       if (p.key === 'BUILDER' && opts.imudLibrary) {
@@ -2781,6 +2811,14 @@ function buildSettingsTab(doc, opts) {
       if (b.type === 'bool') ctl.checked = !!v;
       else ctl.value = String(v != null ? v : '');
     }
+    // **S6.2:** סנכרון בוררי העיצובים — ההפניה הפעילה (imud:<collection>:<id>)
+    // מוצגת בבורר המתאים; מזהה לא מוכר (למשל "" = ללא) מחזיר "— ללא —".
+    for (const { pick, sel } of imudPickerSelects) {
+      const ref = String(settings[pick.setting] || '');
+      const id = ref.startsWith(`imud:${pick.collection}:`) ? ref.split(':')[2] : '';
+      const known = Array.from(sel.options).some((o) => o.getAttribute('value') === id);
+      sel.value = known ? id : '';
+    }
   }
 
   /** **03.11 (EXT-14):** עדכון קטלוג הפונטים (439 משפחות IMUD) — בוררי הגופנים
@@ -2828,6 +2866,7 @@ function buildImudPicker(doc, opts) {
   ];
 
   const selects = [];
+  imudPickerSelects = selects; // **S6.2:** חשיפה ל-refreshValues (אותו מערך — פריטים מתווספים בהמשך)
   for (const pick of PICKS) {
     const row = doc.createElement('div');
     row.className = 'field-row';
@@ -2901,8 +2940,12 @@ function buildImudPicker(doc, opts) {
   wrap.appendChild(defaultsBtn);
 
   // טעינת רשימות העיצובים (עצלה — לפי אוסף) + אוכלוס ערכות הסגנון
+  // **S6.2:** גם סינכרון הערך הנוכחי מההגדרות — אחרי האתחול (ערכת הנושא
+  // של המקור נטענת אוטומטית) הבוררים מציגים את העיצוב הפעיל במקום "— ללא —"
+  // (בלי זה המשתמש רואה בורר ריק וסבור שאין אפשרות לבחור עיצובים).
   (async () => {
     try {
+      const settingsNow = opts.getSettings ? opts.getSettings() : {};
       // ערכות סגנון-ספר (setting_sets) — אוכלוס הבורר
       try {
         for (const name of opts.imudLibrary.listSettingSets()) {
@@ -2921,6 +2964,10 @@ function buildImudPicker(doc, opts) {
           o.textContent = `${it.name} (${it.id})`;
           sel.appendChild(o);
         }
+        // **S6.2:** הצגת הערך הפעיל — ההגדרה מחזיקה הפניה מלאה imud:<collection>:<id>
+        const activeRef = String(settingsNow[pick.setting] || '');
+        const activeId = activeRef.startsWith(`imud:${pick.collection}:`) ? activeRef.split(':')[2] : '';
+        if (activeId && items.some((it) => it.id === activeId)) sel.value = activeId;
       }
       note.textContent = `${selects.length} בוררי עיצוב מהספרייה המוטמעת.`;
     } catch (e) {
@@ -3363,7 +3410,7 @@ const BINDINGS = [
     "control": "sel-fw-font",
     "panel": "טיפוגרפיה וגוף הטקסט",
     "panelKey": "TYPO",
-    "labelHe": "first-word-font",
+    "labelHe": "גופן מילה ראשונה",
     "type": "font",
     "def": "",
     "enum": null,
@@ -5096,7 +5143,7 @@ const BINDINGS = [
     "min": null,
     "max": null,
     "step": null,
-    "note": "עיטור עליון לסימן (V4: מצבים עצמאיים)"
+    "note": "עיטור עליון לסימן (V4: מצבים עצמאיים). עיטורים מעוצבים מהמקור (302 עיצובים) — בפאנל \"ספריית העיצובים של המקור\""
   },
   {
     "id": "h2-orn-bottom",
@@ -5117,7 +5164,7 @@ const BINDINGS = [
     "min": null,
     "max": null,
     "step": null,
-    "note": "עיטור תחתון לסימן"
+    "note": "עיטור תחתון לסימן. עיטורים מעוצבים מהמקור — בפאנל \"ספריית העיצובים של המקור\""
   },
   {
     "id": "h2-orn-side",
@@ -5207,7 +5254,7 @@ const BINDINGS = [
     "min": null,
     "max": null,
     "step": null,
-    "note": "REQ-ORN-03: פירמידת וילנא/רומח/שושנתא/סלסול/תמונה — התאמה לתקציב הפנוי; לעולם לא דוחף תוכן"
+    "note": "REQ-ORN-03: פירמידת וילנא/רומח/שושנתא/סלסול/תמונה — התאמה לתקציב הפנוי; לעולם לא דוחף תוכן. עיטורי סיום מעוצבים מהמקור — בפאנל \"ספריית העיצובים של המקור\""
   },
   {
     "id": "chapter-end-ornament-w-em",
@@ -6333,7 +6380,7 @@ const PANELS = [
   },
   {
     "key": "BUILDER",
-    "label": "בונה ערכות נושא (SVG Builder)",
+    "label": "ספריית העיצובים של המקור — שערים, עיטורים, מפרידים וגופנים",
     "kind": "action"
   },
   {
@@ -12414,20 +12461,50 @@ function legacyTypeset(rawText, settings, env) {
       // הפרש הטורים > 60px → איזון; (4) אחרת — המילוי נשמר (במקור: מתיחה
       // אנכית עדינה של הטור הקצר, שאינה מזיזה נקודות חיתוך ולכן לא ממומשת
       // כאן). ה-S4.12 איזן בלי-תנאי בכל נקודות היציאה — עכשיו נאמן למקור.
-      const finalizeBlock = (blk, nextTok, sectionEnd) => {
+      const finalizeBlock = (blk, nextTok, sectionEnd, pageClose = false, reason = '') => {
         if (!blk || isH0) return;
         if (!(blk.cols[0].length || blk.cols[1].length)) return;
         const availH = colBottom() - blk.yTop;
-        if (sectionEnd) { balanceBlock(blk, availH); return; }
+        /** **S6.2:** דיווח שארית בלתי-פתירה אחרי איזון — כולל טור ריק לחלוטין
+         * (בקשת המשתמש המפורשת: "בדיקת אי האיזון תופסת גם מקרים שטור אחד
+         * ריק לחלוטין"). מדווח רק כשמילא המקום לתקן: איזון רץ ולא הצליח
+         * (מגבלות אלמנה/יתום min-2, או פסקה בת 2-3 שורות שאינה ניתנת
+         * לפיצול) — כמו 5 העמודים המגבלים בייחוס המקור עצמו. */
+        const balanceAndReport = (why) => {
+          balanceBlock(blk, availH);
+          const eff = effCols(blk);
+          const aH = colHeightUnits(eff[0]);
+          const bH = colHeightUnits(eff[1]);
+          if (eff[1].length === 0 || Math.abs(aH - bH) > 60) {
+            const rec = ledger.create('column-imbalance', `balance@p${pages.length - 1}`, pages.length - 1,
+              { emptyCol: eff[1].length === 0, deltaPx: Math.round(Math.abs(aH - bH)), reason: why }, 'legacy-flow');
+            ledger.transition(rec.issue_id, 'persists', 'legacy-flow',
+              `unfixable after optimal split (reason=${why})`);
+          }
+        };
+        if (sectionEnd) { balanceAndReport('section-end'); return; }
         const nextIsSpan = nextTok && nextTok.type[0] === 'h'
           && (HEADING_MODES[nextTok.level] || 'inline_2col') === 'span_1col';
-        // **S4.14 (מדידת עוגנים מפריכה את סעיף 3 בחיתוכי-עמוד):** עמ' 31
-        // בייחוס — בלוק 914px, ‏7 פסקאות גמורות (p-end), ‏39/32 שורות לא מאוזן
-        // (הפרש 150px > 60); עמ' 44: ‏49/38; עמ' 48: ‏40/51. כשהבלוק נגמר משום
-        // שהעמוד התמלא — המקור שומר את המילוי גם בהפרש גדול. האיזון בפועל
-        // רק בסוף מקטע ולפני span (ההוכחות של S4.13 לאותם מקרים תקפות).
         if (nextIsSpan) {
-          balanceBlock(blk, availH);
+          balanceAndReport('before-span');
+          return;
+        }
+        // **S6.2 (בקשת משתמש — "ולמה איזון טורים לא מיושם?"): החזרת סעיף 3
+        // של המקור בסגירות-עמוד שהבלוק סופי בהן.** S4.14 ביטל את האיזון
+        // בכל סגירת עמוד על בסיס עמ' 31/44/48 בייחוס — אך אלה סגירות
+        // "העמוד התמלא" (חיתוך p-cut בתחתית הטור; שתי הסגירות הללו נשארות
+        // ללא איזון, כמקור). מדידה מחדש של הייחוס כולו (layout-reference.json,
+        // 43 עמודי גוף דו-טוריים) מראה: **0** עמודים עם טור שמאלי ריק לגמרי
+        // ו-38/43 מאוזנים — כלומר המקור כן איזן כשהבלוק נקטע מוקדם (שער
+        // תקציב ההערות, span שלא נכנס, כותרת שלא נכנסה). הסף 60px = סף
+        // המקור עצמו (סעיף 3). סגירת "עמוד מלא" (חיתוך בתחתית הטור) אינה
+        // עוברת לכאן — pageClose=false בשני נתיבי החיתוך.
+        if (pageClose) {
+          const rH = colHeightUnits(blk.cols[0]);
+          const lH = colHeightUnits(blk.cols[1]);
+          if (blk.cols[1].length === 0 || Math.abs(rH - lH) > 60) {
+            balanceAndReport(reason || 'page-close');
+          }
         }
       };
 
@@ -12756,7 +12833,14 @@ function legacyTypeset(rawText, settings, env) {
           // **S4.13:** סף 60px — כמו המקור (if (currentAvailH < 60) break
           // לפני הצבת כותרת רוחבית); היה H3_SPAN_H+6≈46. **S4.24:** כותרת
           // מרובת-שורות דורשת מקום לכל שורותיה.
-          if (colBottom() - curY < 60 + (spanLines.length - 1) * H3_SPAN_H) break fillPage;
+          // **S6.2:** סגירת עמוד כשה-span לא נכנס — הבלוק סופי בעמוד זה
+          // ולכן מאוזן לפני השבירה (PT-06: "הטורים שלפניו מאוזנים" — גם כשה-H3
+          // עצמו נופל לעמוד הבא). finalizeBlock עם nextTok=tok (h3=span)
+          // מאזן דרך מסלול nextIsSpan.
+          if (colBottom() - curY < 60 + (spanLines.length - 1) * H3_SPAN_H) {
+            finalizeBlock(block, tok, false);
+            break fillPage;
+          }
           for (let li = 0; li < spanLines.length; li++) {
             stack.push({ type: 'span', text: spanLines[li], y: curY + li * H3_SPAN_H, h: H3_SPAN_H, tokenId: li === 0 ? tok.id : null });
           }
@@ -12795,7 +12879,9 @@ function legacyTypeset(rawText, settings, env) {
               // **S4.13:** סיום הבלוק לפני שבירת העמוד — כמו המקור (כל בלוק
               // מסתיים בהיגיון הארבעה; כאן הטוקן הבא הוא הכותרת שלא נכנסה).
               ti -= rollbackTrailingHeadings();
-              finalizeBlock(block, tok, false);
+              // **S6.2:** pageClose — הכותרת נופלת לראש העמוד הבא והבלוק
+              // סופי כאן; סעיף 3 של המקור (טור ריק/הפרש > 60px ⇒ איזון).
+              finalizeBlock(block, tok, false, true, 'heading-no-fit');
               break fillPage;
             }
           }
@@ -12890,7 +12976,14 @@ function legacyTypeset(rawText, settings, env) {
               if (seg.type === 'span') { placedB = Math.max(placedB, seg.y + seg.h); continue; }
               placedB = Math.max(placedB, seg.cursor[0], seg.cursor[1]);
             }
-            if (placedB > prospectiveBottom + 1.5) break fillPage;
+            // **S6.2 (שער התקציב הפרוספקטיבי):** הפסקה עם הערותיה נופלת
+            // שלמה לעמוד הבא — אבל הבלוק הנוכחי סופי בעמוד זה וחייב איזון
+            // (סעיף 3 של המקור; בלי זה נוצרים טורים שמאליים ריקים — 33 עמודים
+            // במסמך הבדיקה הקבוע לפני התיקון, מול 0 בייחוס המקור).
+            if (placedB > prospectiveBottom + 1.5) {
+              finalizeBlock(block, tok, false, true, 'fn-budget-gate');
+              break fillPage;
+            }
             for (const n of paraNotes.get(tok.id)) {
               // **S4.26 (תיקון שכפול — המשך):** הערה שהמשכה כבר בתור/בהמתנה
               // לא נוספת שוב במלואה (אחרת היא זורמת פעמיים: ההמשך + עותק
@@ -12952,7 +13045,10 @@ function legacyTypeset(rawText, settings, env) {
             // עמוד — לולאת הבלוקים שלו רצה רק כשהטוקן הבא הוא span. ההמשך-מטה
             // של S4.12/S4.13 הכניס תוכן עודף לעמודים מלאים (עמ' 31: ‏80 שורות
             // אצלנו מול 71 בייחוס — 2 פסקאות שלמות הוכנסו בכוח).
-            finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending);
+            // **S6.2:** pageClose — בדרך כלל העמוד מלא (איזון = no-op); המסלול
+            // כאן גם כשהכלל "אלמנה בודדת ⇒ דחיפה" (fit=1→0) או rollback
+            // כותרות-זנב פינו את הטור — אז סעיף 3 של המקור מאזן את השארית.
+            finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending, true, 'fit0');
             break fillPage;
           }
           else break fillPage;
@@ -13011,8 +13107,10 @@ function legacyTypeset(rawText, settings, env) {
       }
       // סגירת הבלוק האחרון: אם המקטע נגמר — איזון. אחרי משיכת-יתום שסגרה
       // את המקטע המקור אינו מאזן מחדש — המשיכה עצמה היא סוף הפרק.
+      // **S6.2:** עובר דרך finalizeBlock — כך גם סוף-המקטע מדווח ב-ledger
+      // כשנותר טור ריק/הפרש בלתי-פתיר (מגבלות min-2), במקום איזון שקט.
       if (block && sectionEnded && !reclaimed && !isH0 && (block.cols[0].length || block.cols[1].length)) {
-        balanceBlock(block, colBottom() - block.yTop);
+        finalizeBlock(block, null, true, false, 'section-end');
       }
 
       // ---- פריסת המחסנית לעמוד: פסים + בלוקים → טורים עם y מפורש ----
@@ -13454,6 +13552,10 @@ function legacyTypeset(rawText, settings, env) {
   }
 
   // ---- הרצת המקטעים ----
+  // **S6.2:** ה-ledger נוצר כאן — לפני הזרימה — כדי ש-finalizeBlock יוכל
+  // לדווח אי-איזון בלתי-פתיר (column-imbalance) בזמן ההצבה עצמה.
+  // בעבר נוצר בסוף (אחרי flowSection) — ולכן לא היה זמין לזרימה.
+  const ledger = new Ledger();
   for (const sec of sections) {
     if (sec.subShaar) {
       const t = sec.subShaar;
@@ -13703,6 +13805,21 @@ function legacyTypeset(rawText, settings, env) {
     p.folioDisplay = shows && p.pageNumber ? toGematria(p.pageNumber) : '';
   }
   final.forEach((p, i) => { p.index = i; });
+  // **S6.2:** התאמת מספרי העמודים ברשומות אי-האיזון לסדר הסופי —
+  // עמודי ה-TOC והריקים (EXT-15) מוכנסים אחרי הזרימה, ורשומות שנוצרו
+  // בזמן ההצבה מתייחסות לאינדקס הזמני של מערך הזרימה. ההתאמה לפי זהות
+  // העצם (כל עמוד ייחודי) — כך הניווט מהממצא בלשונית הבדיקה מגיע לעמוד
+  // הנכון בתצוגה.
+  {
+    const flowOrder = [...gates, ...bodies];
+    const finalIdx = new Map(final.map((p, i) => [p, i]));
+    for (const rec of ledger.issues.values()) {
+      if (rec.kind !== 'column-imbalance' || rec.page == null) continue;
+      const pgObj = flowOrder[rec.page];
+      const ni = pgObj ? finalIdx.get(pgObj) : null;
+      if (ni != null) { rec.page = ni; rec.target = `balance@p${ni}`; }
+    }
+  }
   // **EXT-19 (כותרות מתחלפות — hdr-alternating):** בעמודים זוגיים-פיזיים
   // (אינדקס אי-זוגי) חצאי שם הספר מתחלפים בין הצדדים — כמו buildHeaderGridHTML
   // של המקור (isEven ⇒ החלפה). ברירת המחדל כבויה — החצאים קבועים.
@@ -13749,7 +13866,6 @@ function legacyTypeset(rawText, settings, env) {
   events.emit('page-plan', 'legacy-imud: flow + columns', { pages: pages.length });
   events.emit('folio', 'legacy-imud: folios + TOC', {});
   events.emit('render', 'legacy-imud: result', { layoutHash: layoutHashValue });
-  const ledger = new Ledger();
 
   // **S5.2 (מיפוי מוקשים S1 — חשבונאות שימור תוכן אמיתית לנתיב החי):** עד כאן
   // הוחזר contentPreserved: true קבוע-קשה — כל רגרסיה בזרימת ההערות/המשכים/
@@ -19795,6 +19911,34 @@ function createImudLibrary(engine) {
     return css;
   }
 
+  /** **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): הפעלת
+   * ערכת שערים מאוחדת לפי מספר ערכה** — כמו active-theme-select של המקור
+   * ("json_theme_40" ⇒ ערכה 40: שער ראשי + משנה + אחורי מעוצבים יחד,
+   * REQ-ORN-06). מאתר בכל אוסף את הפריט ששמו מתחיל ב-"<מספר> " (כגון
+   * "40   שער ראשי"), רושם אותו בשני הצדדים ומחזיר את ההפניות במבנה
+   * מפתחות-הגדרות מוכן להחלה: { 'imud-shaar-main': 'imud:shaar-main:<id>', … }.
+   * @returns {Promise<object>} רק הערכים שנמצאו (ערכה חלקית בספרייה ⇒ חלקית)
+   */
+  async function ensureThemeSet(setNo) {
+    const ROLES = [
+      { collection: 'shaar-main', setting: 'imud-shaar-main' },
+      { collection: 'shaar-sub', setting: 'imud-shaar-sub' },
+      { collection: 'shaar-back', setting: 'imud-shaar-back' }
+    ];
+    const prefix = new RegExp(`^\\s*${Number(setNo)}\\s+`);
+    const out = {};
+    for (const { collection, setting } of ROLES) {
+      try {
+        const items = await listDesigns(collection);
+        const hit = items.find((it) => prefix.test(String(it.name || '')));
+        if (!hit) continue;
+        const ref = await ensureDesign(collection, hit.id);
+        if (ref) out[setting] = ref;
+      } catch (e) { /* אוסף חסר — התפקיד נשאר בלי רקע, מתועד */ }
+    }
+    return out;
+  }
+
   /** **EXT-9:** משפחות הקטלוג שנטענו (סינכרוני) — לפתרון מחסניות גופן בייבוא
    * הגדרות/תבניות (importImudSettings ctx.availableFonts). null אם הקטלוג
    * עוד לא נטען — הייבוא ייפול למשפחה הראשונה (התנהגות היסטורית, מתועדת). */
@@ -19802,7 +19946,7 @@ function createImudLibrary(engine) {
     return fontCatalog.loaded ? new Set(fontCatalog.byFamily.keys()) : null;
   }
 
-  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, loadLegacyDefaults, loadHeadingFont, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
+  return { loadFontCatalog, loadFont, loadDefaultExportFont, listDesigns, ensureDesign, ensureThemeSet, loadLegacyDefaults, loadHeadingFont, exportFontCss, resolveFamily, loadFontStack, catalogFamilies, listSettingSets, loadSettingSet, fontStatus, catalogEntries };
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };
