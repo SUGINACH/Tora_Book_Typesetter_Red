@@ -5,7 +5,7 @@
  * הרצה עצמאית (אפס תלויות חוץ מ-agent-browser) של האודיט המתמטי המלא:
  *   1. מגיש את האפליקציה (red-build/ui) בשרת מקומי — או פותח URL חי (--url).
  *   2. מזרים את ה-fixture (ברירת מחדל: audits/very_long_test_text.txt —
- *      3.4MB, ~700 עמודים) — מקומית דרך השרת, בחי דרך base64 בחתיכות
+ *      2.7MB, ~291K words) — מקומית דרך השרת, בחי דרך base64 בחתיכות
  *      (עוקף MAX_ARG_STRLEN).
  *   3. ממתין לסיום העימוד (polling של מצב האפליקציה).
  *   4. מריץ את full-math-audit.js בתוך הדף (21 משפחות בדיקות — דיו בפועל,
@@ -23,7 +23,7 @@
  *   node tools/layout-audit/run-full-math.js [--fixture <path>] [--min-pages <n>] [--url <url>]
  *        [--tag <name>] [--out <dir>] [--skip-determinism]
  * דוגמאות:
- *   node tools/layout-audit/run-full-math.js                      # מקומי + very_long
+ *   node tools/layout-audit/run-full-math.js                      # local + largest valid corpus
  *   node tools/layout-audit/run-full-math.js --url https://suginach.github.io/Tora_Book_Typesetter_Red/ --tag live
  */
 const { spawn } = require('child_process');
@@ -43,7 +43,7 @@ const argOf = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && i + 1 < args.length ? args[i + 1] : def;
 };
-const FIXTURE = path.resolve(argOf('--fixture', path.join(ROOT, 'audits', 'very_long_test_text.txt')));
+const FIXTURE = path.resolve(argOf('--fixture', path.join(ROOT, 'audits', 'long_test_text.txt')));
 const URL = argOf('--url', null);
 const TAG = argOf('--tag', URL ? 'live' : 'local');
 const OUT = path.resolve(argOf('--out', path.join(ROOT, 'red-build', 'tests', 'artifacts', 'full-math-audit')));
@@ -52,11 +52,13 @@ const PORT = 8932;
 const B64_CHUNK = 100_000;
 const READY_TIMEOUT_MS = 900_000;
 // **S5.2 (רצפת נפח):** ספר שהתקצר בשקט (מנוע שבורע/מדלג תוכן) עבר ירוק כל
-// עוד 0 בעיות במה שכן רונדר. הקורפוס הקנוני: 704 עמודים / 363,232 מילים —
-// הרצפה מכוונת בכוונה נדיבה (690) כי שינויי TOC/הערות-סיום של המנוע עשויים
-// להזיז את מספר העמודים במעט; יחס המילים (0.98) תופס איבוד תוכן אמיתי.
-const EXPECTED_PAGES_MIN = 690;
-const MIN_PAGES = Number(argOf('--min-pages', String(EXPECTED_PAGES_MIN)));
+// עוד 0 בעיות במה שכן רונדר. הקורפוס הקנוני הישן: 704 עמודים / 363,232 מילים;
+// עבורו נשמרת רצפת 690. הקורפוס התקין long_test_text נמדד ב-552 עמודים במסלול UI;
+// ברירת המחדל עבורו היא 525 (מרווח ~5%). רצפת המילים (0.98) נשארת ללא שינוי
+// ומונעת קבלה של אובדן תוכן גם אם מספר העמודים דומה.
+const EXPECTED_PAGES_MIN = 690; // legacy baseline for the old 363K canonical fixture
+const DEFAULT_PAGES_MIN = path.basename(FIXTURE) === 'long_test_text.txt' ? 525 : EXPECTED_PAGES_MIN;
+const MIN_PAGES = Number(argOf('--min-pages', String(DEFAULT_PAGES_MIN)));
 if (!Number.isInteger(MIN_PAGES) || MIN_PAGES < 1) {
   throw new Error('--min-pages must be a positive integer');
 }
