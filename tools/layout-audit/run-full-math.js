@@ -20,7 +20,7 @@
  * לו (נמדד: קיפאון כפול — ה-open מסתיים ב-EAGAIN מול הדמון).
  *
  * שימוש:
- *   node tools/layout-audit/run-full-math.js [--fixture <path>] [--url <url>]
+ *   node tools/layout-audit/run-full-math.js [--fixture <path>] [--min-pages <n>] [--url <url>]
  *        [--tag <name>] [--out <dir>] [--skip-determinism]
  * דוגמאות:
  *   node tools/layout-audit/run-full-math.js                      # מקומי + very_long
@@ -56,6 +56,10 @@ const READY_TIMEOUT_MS = 900_000;
 // הרצפה מכוונת בכוונה נדיבה (690) כי שינויי TOC/הערות-סיום של המנוע עשויים
 // להזיז את מספר העמודים במעט; יחס המילים (0.98) תופס איבוד תוכן אמיתי.
 const EXPECTED_PAGES_MIN = 690;
+const MIN_PAGES = Number(argOf('--min-pages', String(EXPECTED_PAGES_MIN)));
+if (!Number.isInteger(MIN_PAGES) || MIN_PAGES < 1) {
+  throw new Error('--min-pages must be a positive integer');
+}
 const EXPECTED_WORDS_MIN_RATIO = 0.98;
 
 const log = (m) => console.log(m);
@@ -307,11 +311,12 @@ const gotoView = async () => {
   const st = report.stats || {};
 
   // **S5.2 (רצפת נפח):** כיסוי מלא של הספר כולו — לא רק "0 בעיות במה שכן רונדר".
-  // עמודים: הקורפוס הקנוני 704 (רצפה 690 — נדיבה בכוונה לשינויי TOC/הערות-סיום
-  // של המנוע). מילים: ספירת הדוח (שורות+הערות+פסים+TOC) מול ה-fixture ביחס
+  // עמודים: ברירת מחדל 690 לקורפוס הקנוני הישן. לקורפוס אחר יש לספק --min-pages
+  // על בסיס מדידת UI מאומתת מראש, תוך שמירת מרווח בטיחות. מילים: ספירת הדוח
+  // (שורות+הערות+פסים+TOC) מול ה-fixture ביחס
   // ≥0.98 — תופס מנוע שמדלג תוכן שלם בשקט.
   const floorFail = [];
-  if (!(pages1 >= EXPECTED_PAGES_MIN)) floorFail.push(`עמודים ${pages1} < רצפת המינימום ${EXPECTED_PAGES_MIN}`);
+  if (!(pages1 >= MIN_PAGES)) floorFail.push(`עמודים ${pages1} < רצפת המינימום ${MIN_PAGES}`);
   const totalWords = s.totalWords || 0;
   if (!(totalWords >= EXPECTED_WORDS_MIN_RATIO * fixtureWords)) {
     floorFail.push(`מילים מרונדרות ${totalWords.toLocaleString()} < ${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()} (= ${EXPECTED_WORDS_MIN_RATIO} × ${fixtureWords.toLocaleString()} מילות ה-fixture)`);
@@ -323,7 +328,7 @@ const gotoView = async () => {
     if (server) server.close();
     process.exit(1);
   }
-  log(`רצפת נפח ✓: ${pages1} עמודים (≥${EXPECTED_PAGES_MIN}) | ${totalWords.toLocaleString()} מילים (≥${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()})`);
+  log(`רצפת נפח ✓: ${pages1} עמודים (≥${MIN_PAGES}) | ${totalWords.toLocaleString()} מילים (≥${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()})`);
   log('─'.repeat(62));
   log(`עמודים: ${s.pages}/${s.slots} | שורות: ${(s.totalLines || 0).toLocaleString()} | וירטואלי: ${s.virtualized} | סריקה: ${s.sweep && s.sweep.ms}ms`);
   log(`בעיות (סה"כ): ${s.problems} | לפי סוג: ${JSON.stringify(st.counts || {})}`);
