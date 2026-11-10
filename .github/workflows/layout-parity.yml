@@ -67,45 +67,13 @@ jobs:
           ec=$?
           set -e
           # קודי יציאה של compare.py: 0 תקין | 1 כשל HARD | 2 כשל PARITY | 3 שניהם.
-          # **04.11:** כשל HARD = באג אמיתי (חפיפות/גלישות/אובדן תוכן) — קטלני.
-          # פערי PARITY = עבודת כיול פתוחה מתועדת (הציון ממשיך לעלות עם כל
-          # תיקון; הדוח המלא עולה כ-artifact) — אינם חוסמים את ה-CI, אחרת
-          # כל דחיפה עד השלמת הזהות המלאה הייתה אדומה ואות אזהרה היה נחלש.
-          if [ "$ec" -eq 1 ] || [ "$ec" -eq 3 ]; then
-            echo "✗ HARD invariants FAILED (exit $ec) — כשל נכונות אמיתי"; exit 1
-          fi
-          if [ "$ec" -eq 2 ]; then
-            score=$(python3 -c "import json;print(json.load(open('audits/layout-parity-artifacts/parity-report.json'))['summary']['score'])")
-            echo "ℹ Legacy sample distance: ${score}% (diagnostic only; not a correctness or quality score; full report in artifact)"
-          fi
-
-      # No parity-score ratchet: the old PDF is an illustrative historical sample,
-      # not the final product specification. Only independent HARD invariants block CI.
-
-      - name: Always upload the full report + our PDF
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: layout-parity-report
-          path: |
-            audits/layout-parity-artifacts/parity-report.json
-            audits/layout-parity-artifacts/ours-model.json
-            audits/layout-parity-artifacts/ours.pdf
-          if-no-files-found: warn
-
-  # **04.11 (בקשת המשתמש: "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"):**
-  # הקורפוס הגדול מאוד — audits/very_long_test_text.txt (3.4MB, 2,571 כותרות,
-  # 10 חלקים, 363K מילים). לקורפוס זה אין ייחוס PDF של הגרסה הישנה, ולכן
-  # הבדיקה היא באינווריאנטים מוחלטים בלבד (verify-corpus.py): תכונות שכל
-  # עימוד נכון חייב לקיים בפני עצמו, בלי תלות באף פלט חיצוני —
-  #   C1 שימור תוכן (מולטיסט מילים) · C2 אפס חפיפות · C3 גבולות עמוד ·
-  #   C4-C8: מדדי יישור/עמודונים/רצף עמודים/TOC/כותרות — מידע בלבד; נדרש settings-aware contract לפני חסימה.
-  #   C8 כותרות עליונות · C9 שימור כותרות · C10 הערות שוליים · C11 PDF תקין ·
-  #   C12 ייצוא HTML (S4.11 — אותו רינדור כמו התצוגה החיה).
-  # בנוסף: דטרמיניזם (הרצה כפולה — hash ועמודים זהים) בתוך run-ours.js,
-  # והספר המיוצא עצמו (PDF+HTML) עולה כ-artifact.
-  # זה הקורפוס שחשף את שלושת באגי ההערות שתוקנו ב-S4.10 — קובעי הרף שלו
-  # הם שומרי הרגרסיה לכל תיקון עתידי.
+          # D-100: audits/very_long_test_text.txt (363K מילים) מכיל מקור פגום ולכן נשמר
+  # כ-negative control: ה-CLI חייב לאשר שהוא נדחה לפני מדידה/עימוד.
+  # לבדיקת עומס מלאה משתמשים בקובץ הגדול ביותר שעובר D-100:
+  # audits/long_test_text.txt — 291,719 מילים, כ-1,038 עמודים בריצת DP.
+  # כך אין תיקון או המצאת תוכן בקורפוס ההיסטורי, ובכל זאת נשמרת בדיקת עומס
+  # רצינית על מקור תקין: C1 שימור · C2 חפיפות · C3 גבולות · C9 כותרות ·
+  # C10 הערות · C11 PDF · C12 HTML; C4–C8 נשארים מידעיים לפי D-99.
   very-long-corpus:
     runs-on: ubuntu-latest
     # **S5.2 (P-11):** תקרה מפורשת — כמו בכל שאר ה-jobs.
@@ -124,8 +92,14 @@ jobs:
       - name: Install PyMuPDF (חילוץ גיאומטריה מ-PDF)
         run: pip install pymupdf==1.26.7
 
-      - name: Run RED on the very large corpus (live path + determinism double-run + HTML export)
-        run: node tools/layout-parity/run-ours.js audits/very_long_test_text.txt audits/very-long-artifacts --determinism --html
+      - name: D-100 negative control — malformed 363K source must be rejected
+        run: node tools/validate-source-structure.js audits/very_long_test_text.txt --expect-invalid
+
+      - name: Validate largest structurally valid stress corpus
+        run: node tools/validate-source-structure.js audits/long_test_text.txt
+
+      - name: Run RED on the largest valid corpus (live path + deterministic double-run + HTML)
+        run: node tools/layout-parity/run-ours.js audits/long_test_text.txt audits/very-long-artifacts --determinism --html
 
       - name: Corpus invariants + informational alignment metric (C1..C12 — כולל ייצוא HTML)
         run: |
@@ -140,7 +114,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: very-long-corpus-report
+          name: largest-valid-corpus-report
           path: |
             audits/very-long-artifacts/corpus-report.json
             audits/very-long-artifacts/ours-model.json
