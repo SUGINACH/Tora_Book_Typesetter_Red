@@ -1,0 +1,707 @@
+From 2380d42d63e68987399405a58a75f1ddbd2fac89 Mon Sep 17 00:00:00 2001
+From: "Claude (Agent 1)" <noreply@anthropic.com>
+Date: Tue, 10 Nov 2026 09:15:52 +0000
+Subject: [PATCH] =?UTF-8?q?ui(agent-1):=20=D7=96=D7=94=D7=95=D7=AA=20?=
+ =?UTF-8?q?=D7=94=D7=A8=D7=99=D7=A6=D7=94=20=D7=94=D7=90=D7=97=D7=A8=D7=95?=
+ =?UTF-8?q?=D7=A0=D7=94=20=D7=9E=D7=95=D7=A6=D7=92=D7=AA=20=E2=80=94=20has?=
+ =?UTF-8?q?h=20=D7=A4=D7=A8=D7=99=D7=A1=D7=94/=D7=A7=D7=9C=D7=98,=20=D7=9E?=
+ =?UTF-8?q?=D7=96=D7=94=D7=94=20=D7=A8=D7=99=D7=A6=D7=94,=20=D7=96=D7=9E?=
+ =?UTF-8?q?=D7=9F=20(=D7=AA=D7=95=D7=9B=D7=A0=D7=99=D7=AA=20=D7=94=D7=90?=
+ =?UTF-8?q?=D7=91=20=C2=A77.1)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- run-info.js (טהור) + שבב .chip--run בפס המצב + סעיף 'פרטי הריצה האחרונה' בלשונית הבדיקה
+- אין שינוי ב-Worker protocol/מנוע: layoutHash/contentHashIn כבר חלק מ-ui-result-v1
+- בדיקה חדשה tests/e2e/a1-run-summary.test.js (6 בדיקות; לפני התיקון 5/6 נכשלו)
+- ui/app.bundle.js נבנה מחדש; engine-worker.bundle.js זהה בייט-לבייט
+---
+ red-build/package.json                     |   4 +-
+ red-build/src/ui/app-shell.js              |   7 +-
+ red-build/src/ui/run-info.js               |  32 +++
+ red-build/src/ui/status-strip.js           |  21 +-
+ red-build/src/ui/testing-tab.js            |  42 +++-
+ red-build/tests/e2e/a1-run-summary.test.js | 240 +++++++++++++++++++++
+ red-build/ui/app.bundle.js                 | 108 +++++++++-
+ 7 files changed, 445 insertions(+), 9 deletions(-)
+ create mode 100644 red-build/src/ui/run-info.js
+ create mode 100644 red-build/tests/e2e/a1-run-summary.test.js
+
+diff --git a/red-build/package.json b/red-build/package.json
+index 83198db..11aa035 100755
+--- a/red-build/package.json
++++ b/red-build/package.json
+@@ -4,7 +4,7 @@
+   "private": true,
+   "description": "Tora Book Typesetter RED — the definitive rebuild (engine core + full UI, zero runtime dependencies)",
+   "scripts": {
+-    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/integration/imud-migration.test.js && node tests/integration/setting-sets.test.js && node tests/integration/source-variants.test.js && node tests/layout/s5-s6.test.js && node tests/layout/ext8-optimal-balance.test.js && node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/s8-decoration.test.js && node tests/e2e/s9-headers.test.js && node tests/e2e/s10-ui.test.js && node tests/e2e/s11-extensions.test.js && node tests/e2e/s12-export.test.js && node tests/e2e/real-fonts.test.js && node tests/e2e/d89-visual-fixes.test.js && node tests/e2e/s15-view-justify.test.js && node tests/e2e/s24-fullmath-fixes.test.js && node tests/e2e/pdf-targets.test.js && node tests/e2e/s13-acceptance.test.js && node tests/e2e/s14-layout-audit.test.js && node tests/e2e/canonical.test.js && node tests/e2e/long-real-text.test.js && node tests/audit/negative-controls.test.js && node tests/audit/s13-security-a11y.test.js && node tests/e2e/s52-dp-fixes.test.js && node tests/e2e/s52-ui-fixes.test.js && node tests/e2e/audit-sensitivity.test.js && node tests/e2e/s53-dp-notes-export.test.js && node tests/e2e/s60-monster-fixes.test.js && node tests/e2e/s61-gap-fixes.test.js && node tests/e2e/s62-user-questions.test.js && node ../tools/scan-control-triggers.js",
++    "test": "node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/integration/imud-migration.test.js && node tests/integration/setting-sets.test.js && node tests/integration/source-variants.test.js && node tests/layout/s5-s6.test.js && node tests/layout/ext8-optimal-balance.test.js && node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/s8-decoration.test.js && node tests/e2e/s9-headers.test.js && node tests/e2e/s10-ui.test.js && node tests/e2e/s11-extensions.test.js && node tests/e2e/s12-export.test.js && node tests/e2e/real-fonts.test.js && node tests/e2e/d89-visual-fixes.test.js && node tests/e2e/s15-view-justify.test.js && node tests/e2e/s24-fullmath-fixes.test.js && node tests/e2e/pdf-targets.test.js && node tests/e2e/s13-acceptance.test.js && node tests/e2e/s14-layout-audit.test.js && node tests/e2e/canonical.test.js && node tests/e2e/long-real-text.test.js && node tests/audit/negative-controls.test.js && node tests/audit/s13-security-a11y.test.js && node tests/e2e/s52-dp-fixes.test.js && node tests/e2e/s52-ui-fixes.test.js && node tests/e2e/audit-sensitivity.test.js && node tests/e2e/s53-dp-notes-export.test.js && node tests/e2e/s60-monster-fixes.test.js && node tests/e2e/s61-gap-fixes.test.js && node tests/e2e/s62-user-questions.test.js && node tests/e2e/a1-run-summary.test.js && node ../tools/scan-control-triggers.js",
+     "test:unit": "node tests/unit/parser.test.js && node tests/unit/typography.test.js",
+     "test:settings": "node tests/integration/registry.test.js",
+     "test:layout": "node tests/layout/s5-s6.test.js",
+@@ -14,7 +14,7 @@
+     "test:headers": "node tests/e2e/s9-headers.test.js",
+     "test:canonical": "node tests/e2e/canonical.test.js",
+     "test:determinism": "node -e \"const{typeset}=require('./src/engine/core/pipeline');const{getDefaultSettings}=require('./src/engine/core/settings-registry');const fs=require('fs');const t=fs.readFileSync('tests/fixtures/canonical_corpus.txt','utf8');const a=typeset(t,getDefaultSettings());const b=typeset(t,getDefaultSettings());if(a.layoutHash!==b.layoutHash){console.error('NON-DETERMINISTIC');process.exit(1)}console.log('deterministic OK',a.layoutHash.slice(0,16),'pages:',a.pages.length)\"",
+-    "test:ui": "node tests/e2e/s10-ui.test.js",
++    "test:ui": "node tests/e2e/s10-ui.test.js && node tests/e2e/a1-run-summary.test.js",
+     "test:extensions": "node tests/e2e/s11-extensions.test.js",
+     "test:scan": "node ../tools/scan-control-triggers.js",
+     "test:export": "node tests/e2e/s12-export.test.js",
+diff --git a/red-build/src/ui/app-shell.js b/red-build/src/ui/app-shell.js
+index 20a1e23..d40579e 100755
+--- a/red-build/src/ui/app-shell.js
++++ b/red-build/src/ui/app-shell.js
+@@ -26,6 +26,7 @@ const { buildTestingTab } = require('./testing-tab');
+ const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
+ const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
+ const { buildCaretMap } = require('./caret-map');
++const { buildRunInfo } = require('./run-info'); // **סוכן 1 (§7.1):** זהות הריצה האחרונה לתצוגה
+ 
+ const TABS = [
+   { id: 'editor', label: '✍️ עורך' },
+@@ -43,6 +44,7 @@ function createApp(doc, opts = {}) {
+   let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
+   let lightTimer = null;
+   let lastLightRefreshMs = null;
++  let lastRun = null;           // **סוכן 1 (§7.1):** {n, jobId, ms, layoutHash, contentHashIn} — תצוגה בלבד
+   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
+ 
+   // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
+@@ -300,7 +302,7 @@ function createApp(doc, opts = {}) {
+     status.setPending({ light: false, heavy: false });
+     status.setEngineState('working', { label: 'מתחיל עימוד…' });
+     const started = perf.now();
+-    const { promise } = engine.requestTypeset({
++    const { promise, jobId } = engine.requestTypeset({
+       text, settings,
+       onProgress: (m) => status.setEngineState('working', m) // "עמוד X מתוך Y"
+     });
+@@ -308,6 +310,7 @@ function createApp(doc, opts = {}) {
+       if (res && res.cancelled) return;
+       result = res;
+       typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
++      lastRun = buildRunInfo(res, { n: typesetGen, jobId, ms: perf.now() - started }); // **סוכן 1 (§7.1)**
+       applyResultToViews();
+       status.setEngineState('idle');
+       status.setPages(result.pages.length);
+@@ -336,6 +339,7 @@ function createApp(doc, opts = {}) {
+       testing.setResult({ pages: [], report: { findings: [], counts: {} }, trace: { events: [] }, tokens: [], droppedEvents: 0 });
+       editor.setPageBreaks([]);
+       status.setPages(0);
++      lastRun = null; status.setRun(null); testing.setRun(null); // **סוכן 1 (§7.1):** אין hash של מסמך שנמחק
+       status.setPending({ light: false, heavy: false });
+       status.setEngineState('idle');
+       return;
+@@ -562,6 +566,7 @@ function createApp(doc, opts = {}) {
+     preview.setResult(result, settings);
+     testing.setResult(result);
+     testing.setRecommendations(result.recommendations || null); // **S11:** המלצות עם הוכחות
++    status.setRun(lastRun); testing.setRun(lastRun); // **סוכן 1 (§7.1):** זהות הריצה — תצוגה בלבד (F-06)
+     // מפת שבירות עמודים לעורך (⏎ — תצוגה בלבד, F-01)
+     const breaks = [];
+     for (const pg of result.pages) {
+diff --git a/red-build/src/ui/run-info.js b/red-build/src/ui/run-info.js
+new file mode 100644
+index 0000000..d1679ad
+--- /dev/null
++++ b/red-build/src/ui/run-info.js
+@@ -0,0 +1,32 @@
++// src/ui/run-info.js — זהות הריצה האחרונה לתצוגה (סוכן 1, תוכנית האב §7.1)
++'use strict';
++
++/**
++ * טהור: בלי DOM ובלי מנוע (F-06). ממיר תוצאה מסוריאליזת פרוטוקול (ui-result-v1) + נתוני ריצה שבצד ה־UI
++ * לאובייקט תצוגה אחד המשמש את פס המצב ואת לשונית הבדיקה — מקור יחיד לערכים המוצגים.
++ * אין כאן שום שינוי בחוזה ה־Worker: layoutHash ו־contentHashIn כבר מוחזרים היום ב־serializeTypesetResult.
++ */
++
++/** משך לתצוגה: מתחת לשנייה — מילישניות; אחרת — שניות בשתי ספרות. */
++function formatDuration(ms) {
++  if (!(Number.isFinite(ms) && ms >= 0)) return '—';
++  return ms < 1000 ? `${Math.round(ms)} מילישניות` : `${(ms / 1000).toFixed(2)} שניות`;
++}
++
++/**
++ * @param {object} result תוצאה מסוריאליזת פרוטוקול
++ * @param {{n?:number, jobId?:string, ms?:number}} meta נתוני ריצה שבצד ה־UI (מונה, מזהה עבודה, זמן כולל)
++ */
++function buildRunInfo(result, meta) {
++  const m = meta || {};
++  return {
++    n: m.n != null ? m.n : null,
++    jobId: m.jobId || null,
++    ms: Number.isFinite(m.ms) ? m.ms : null,
++    elapsedLabel: formatDuration(m.ms),
++    layoutHash: (result && result.layoutHash) || null,
++    contentHashIn: (result && result.contentHashIn) || null
++  };
++}
++
++module.exports = { formatDuration, buildRunInfo };
+diff --git a/red-build/src/ui/status-strip.js b/red-build/src/ui/status-strip.js
+index 1100c4d..10e5ac6 100755
+--- a/red-build/src/ui/status-strip.js
++++ b/red-build/src/ui/status-strip.js
+@@ -52,6 +52,12 @@ function buildStatusStrip(doc, opts) {
+   pages.className = 'chip chip--pages';
+   pages.textContent = '📄 0 עמודים';
+ 
++  // ---- זהות הריצה האחרונה (סוכן 1, §7.1): מס' ריצה · זמן · hash פריסה קצר; המלא ב-title ----
++  const run = doc.createElement('span');
++  run.className = 'chip chip--run';
++  run.setAttribute('aria-live', 'polite');
++  run.textContent = '';
++
+   // ---- הודעות חולפות (S11: ייבוא/סירוב פורמט/החלת המלצה — חוק 14 בלי חלונות) ----
+   const notice = doc.createElement('span');
+   notice.className = 'chip chip--notice';
+@@ -60,7 +66,7 @@ function buildStatusStrip(doc, opts) {
+   notice.textContent = '';
+   let noticeTimer = null;
+ 
+-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, notice]) root.appendChild(el);
++  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, run, notice]) root.appendChild(el);
+ 
+   return {
+     root, bolt,
+@@ -98,6 +104,19 @@ function buildStatusStrip(doc, opts) {
+       fonts.textContent = map[status] || map.ready;
+     },
+     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
++    /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
++    setRun(info) {
++      if (!info) { run.textContent = ''; run.title = ''; return; }
++      const parts = [`ריצה #${info.n}`];
++      if (info.ms != null) parts.push(info.elapsedLabel);
++      if (info.layoutHash) parts.push(`פריסה ${String(info.layoutHash).slice(0, 8)}`);
++      run.textContent = parts.join(' · ');
++      run.title = [
++        info.jobId ? `מזהה ריצה: ${info.jobId}` : null,
++        info.layoutHash ? `hash פריסה: ${info.layoutHash}` : null,
++        info.contentHashIn ? `hash קלט: ${info.contentHashIn}` : null
++      ].filter(Boolean).join('\n');
++    },
+     /** הודעה חולפת (8 שניות) — ייבוא, סירוב פורמט, החלת המלצה. */
+     setNotice(text) {
+       notice.textContent = String(text != null ? text : '');
+diff --git a/red-build/src/ui/testing-tab.js b/red-build/src/ui/testing-tab.js
+index 3654ee8..e3871c4 100755
+--- a/red-build/src/ui/testing-tab.js
++++ b/red-build/src/ui/testing-tab.js
+@@ -27,6 +27,46 @@ function buildTestingTab(doc, opts) {
+ 
+   let lastResult = null;
+ 
++  // ============ סעיף 0: פרטי הריצה האחרונה (זהות הריצה — תוכנית האב §7.1) ============
++  // תצוגה בלבד (F-06): הערכים מגיעים מה-app מ-buildRunInfo; אין כאן קריאה למנוע.
++  const runSec = doc.createElement('div');
++  runSec.className = 'testing-section run-summary';
++  runSec.setAttribute('aria-label', 'פרטי הריצה האחרונה');
++  const runHead = doc.createElement('h3');
++  runHead.textContent = 'פרטי הריצה האחרונה';
++  runSec.appendChild(runHead);
++  const runBody = doc.createElement('div');
++  runSec.appendChild(runBody);
++  root.appendChild(runSec);
++
++  /** @param {object|null} info — buildRunInfo(...); null ⇒ אין ריצה */
++  function setRun(info) {
++    runBody.textContent = '';
++    if (!info) {
++      const p = doc.createElement('p');
++      p.className = 'run-summary-empty';
++      p.textContent = 'עוד לא בוצע עימוד';
++      runBody.appendChild(p);
++      return;
++    }
++    const dl = doc.createElement('dl');
++    dl.className = 'run-summary-list';
++    const add = (field, label, value, ltr) => {
++      const dt = doc.createElement('dt'); dt.textContent = label;
++      const dd = doc.createElement('dd'); dd.dataset.field = field;
++      dd.textContent = value != null ? String(value) : '—';
++      if (ltr) dd.setAttribute('dir', 'ltr');
++      dl.appendChild(dt); dl.appendChild(dd);
++    };
++    add('jobId', 'מזהה ריצה', info.jobId, true);
++    add('run', 'ריצה מס׳ (בסשן)', info.n);
++    add('elapsed', 'זמן עימוד (צד UI, כולל העברה מה־Worker)', info.elapsedLabel);
++    add('layoutHash', 'hash פריסה (SHA-256)', info.layoutHash, true);
++    add('contentHashIn', 'hash תוכן הקלט', info.contentHashIn, true);
++    runBody.appendChild(dl);
++  }
++  setRun(null);
++
+   // ============ סעיף 1: טבלת ממצאים ============
+   const findingsSec = doc.createElement('div');
+   findingsSec.className = 'testing-section';
+@@ -333,7 +373,7 @@ function buildTestingTab(doc, opts) {
+     }
+   }
+ 
+-  return { root, setResult, setRecommendations };
++  return { root, setResult, setRecommendations, setRun };
+ }
+ 
+ module.exports = { buildTestingTab, STATUS_HE };
+diff --git a/red-build/tests/e2e/a1-run-summary.test.js b/red-build/tests/e2e/a1-run-summary.test.js
+new file mode 100644
+index 0000000..a34269a
+--- /dev/null
++++ b/red-build/tests/e2e/a1-run-summary.test.js
+@@ -0,0 +1,240 @@
++// tests/e2e/a1-run-summary.test.js — סוכן 1 (UI תפעולי): זהות הריצה האחרונה מוצגת למשתמש (תוכנית האב §7.1)
++// לפני התיקון: hash הפריסה נראה רק בתוך תא JSON של טבלת ה-trace; hash הקלט, מזהה הריצה והזמן לא הוצגו בכלל.
++'use strict';
++
++const { describe, it, assert, assertEq, report } = require('../harness');
++const { typeset } = require('../../src/engine/core/pipeline');
++const { getDefaultSettings } = require('../../src/engine/core/settings-registry');
++const { createApp } = require('../../src/ui/app-shell');
++const inlineTransport = require('../../src/ui/inline-transport');
++
++// ================= DOM shim — העתק מ-s10-ui.test.js (+ select.options; נדרש גם ב-DOM אמיתי) =================
++// ================= DOM shim (עשיר — לכל מודולי ה־UI; מבוסס דפוס s9) =================
++function makeDoc() {
++  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
++  const cssKey = (k) => k.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
++  class ClassList {
++    constructor(el) { this.el = el; this.set = new Set(); }
++    _sync() { this.el._class = [...this.set].join(' '); }
++    add(...ns) { ns.forEach(n => this.set.add(n)); this._sync(); }
++    remove(...ns) { ns.forEach(n => this.set.delete(n)); this._sync(); }
++    contains(n) { return this.set.has(n); }
++    toggle(n, force) {
++      const want = force === undefined ? !this.set.has(n) : !!force;
++      if (want) this.set.add(n); else this.set.delete(n);
++      this._sync();
++      return want;
++    }
++  }
++  class El {
++    constructor(tag) {
++      this.tagName = tag.toUpperCase(); this.children = []; this.attrs = {}; this.dataset = {};
++      this.style = {}; this._class = ''; this.dir = ''; this._text = '';
++      this.classList = new ClassList(this);
++      this._listeners = new Map();
++      this.value = ''; this.checked = false; this.disabled = false;
++      this.type = ''; this.title = ''; this.selectionStart = 0; this.selectionEnd = 0;
++      this._scrolled = false;
++    }
++    set className(v) { this._class = String(v); this.classList.set = new Set(String(v).split(/\s+/).filter(Boolean)); }
++    get className() { return this._class; }
++    appendChild(c) { this.children.push(c); c.parentNode = this; return c; }
++    set textContent(v) { this._text = String(v); this.children = []; }
++    get textContent() {
++      if (this.children.length) return this.children.map(c => c.textContent).join('');
++      return this._text;
++    }
++    setAttribute(k, v) { this.attrs[k] = String(v); if (k === 'id') this.id = String(v); }
++    getAttribute(k) { return k in this.attrs ? this.attrs[k] : (k === 'id' && this.id != null ? this.id : null); }
++    removeAttribute(k) { delete this.attrs[k]; }
++    addEventListener(type, cb) {
++      if (!this._listeners.has(type)) this._listeners.set(type, []);
++      this._listeners.get(type).push(cb);
++    }
++    removeEventListener(type, cb) {
++      const arr = this._listeners.get(type) || [];
++      const i = arr.indexOf(cb);
++      if (i >= 0) arr.splice(i, 1);
++    }
++    dispatchEvent(ev) {
++      ev = ev || {};
++      ev.target = ev.target || this;
++      ev.type = ev.type || 'click';
++      ev.preventDefault = ev.preventDefault || (() => {});
++      ev.stopPropagation = ev.stopPropagation || (() => {});
++      ev._stopped = false;
++      const stop = ev.stopPropagation.bind(ev);
++      ev.stopPropagation = () => { ev._stopped = true; stop(); };
++      let node = this;
++      while (node) { // bubbling — כמו DOM אמיתי (delegation על קנבס/טפסים)
++        ev.currentTarget = node;
++        for (const cb of (node._listeners.get(ev.type) || []).slice()) cb(ev);
++        if (ev._stopped) break;
++        node = node.parentNode;
++      }
++      return true;
++    }
++    get options() { return this.children.filter(c => c.tagName === 'OPTION'); }
++    click() { this.dispatchEvent({ type: 'click' }); }
++    setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; }
++    scrollIntoView() { this._scrolled = true; }
++    focus() { this._focused = true; }
++    _matchesPart(sel) {
++      if (sel.startsWith('.')) return this.classList.contains(sel.slice(1));
++      if (sel.startsWith('#')) return this.getAttribute('id') === sel.slice(1);
++      if (sel.startsWith('[')) {
++        const m = sel.match(/^\[([^\]]+)\]$/);
++        return !!m && (m[1] in this.dataset || m[1] in this.attrs);
++      }
++      return this.tagName === sel.toUpperCase();
++    }
++    _matches(sel) {
++      // תמיכה בבוררי צאצא: '.trace-table tbody tr' — החלק האחרון על האלמנט,
++      // השאר על שרשרת אבות בסדר הפוך (כמו querySelector אמיתי)
++      const parts = String(sel).trim().split(/\s+/);
++      if (!this._matchesPart(parts[parts.length - 1])) return false;
++      let ancestor = this.parentNode, pi = parts.length - 2;
++      while (pi >= 0 && ancestor) {
++        if (ancestor._matchesPart && ancestor._matchesPart(parts[pi])) pi--;
++        ancestor = ancestor.parentNode;
++      }
++      return pi < 0;
++    }
++    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
++    querySelectorAll(sel) {
++      const out = [];
++      (function walk(el) {
++        for (const c of el.children) {
++          if (c._matches && c._matches(sel)) out.push(c);
++          walk(c);
++        }
++      })(this);
++      return out;
++    }
++    outerHTML() {
++      const styleStr = Object.entries(this.style).map(([k, v]) => `${cssKey(k)}:${esc(String(v))}`).join(';');
++      const attrsStr = Object.entries(this.attrs).map(([k, v]) => ` ${k}="${esc(v)}"`).join('')
++        + (this._class ? ` class="${esc(this._class)}"` : '')
++        + (styleStr ? ` style="${styleStr}"` : '')
++        + Object.entries(this.dataset).map(([k, v]) => ` data-${k}="${esc(v)}"`).join('');
++      const inner = this.children.length ? this.children.map(c => c.outerHTML()).join('') : esc(this._text);
++      return `<${this.tagName.toLowerCase()}${attrsStr}>${inner}</${this.tagName.toLowerCase()}>`;
++    }
++  }
++  return {
++    createElement: (tag) => new El(tag),
++    createTextNode: (t) => { const e = new El('#text'); e._text = String(t); return e; },
++    _El: El
++  };
++}
++
++function fire(el, type, extra) { el.dispatchEvent(Object.assign({ type }, extra || {})); }
++const settle = (ms = 20) => new Promise(r => setTimeout(r, ms));
++const wait = (ms) => new Promise(r => setTimeout(r, ms));
++function throws(fn, re) {
++  try { fn(); } catch (e) {
++    if (re && !re.test(e.message)) throw new Error(`שגיאה שונה מהצפוי: ${e.message}`);
++    return;
++  }
++  throw new Error('הייתה אמורה להיזרק שגיאה');
++}
++
++const SMALL_DOC = [
++  'ספר - אוסף לבדיקות UI',
++  '',
++  'כותרת 1 - חלק ראשון',
++  'פסקת פתיחה ראשונה עם כמה מילים כדי למלא שורה אחת לפחות בעמוד.',
++  'פסקה שנייה עם הערת שוליים [זו הערת השוליים הראשונה] בתוך הטקסט.',
++  'כותרת 2 - סימן ראשון',
++  'תוכן הסימן הראשון פסקה ראשונה עם עוד הערה [הערה שנייה כאן] לבדיקה.'
++].join('\n');
++
++const mkApp = () => createApp(makeDoc(), { transport: inlineTransport.createInlineTransport() });
++const paste = (app, t) => fire(app.editor.textarea, 'paste', { clipboardData: { getData: () => t } });
++async function until(fn, ms = 20000) { const t0 = Date.now(); while (!fn()) { if (Date.now() - t0 > ms) throw new Error('timeout'); await wait(10); } }
++
++/** שדות סעיף "פרטי הריצה האחרונה" לפי data-field (עמיד לשינוי ניסוח התוויות). */
++function runFields(app) {
++  const out = {};
++  for (const dd of app.testing.root.querySelectorAll('.run-summary dd')) out[dd.dataset.field] = dd.textContent;
++  return out;
++}
++const chipRun = (app) => app.status.root.querySelectorAll('.chip--run')[0];
++const HEX64 = /^[0-9a-f]{64}$/;
++
++describe('A1 — פרטי הריצה האחרונה (זהות הריצה מוצגת, §7.1)', () => {
++  it('לפני עימוד: הסעיף ופס המצב מציינים שאין ריצה', () => {
++    const app = mkApp();
++    const sec = app.testing.root.querySelectorAll('.run-summary')[0];
++    assert(sec, 'סעיף .run-summary קיים בלשונית הבדיקה');
++    assert(sec.textContent.includes('עוד לא בוצע עימוד'), 'מצב ריק מוסבר');
++    const chip = chipRun(app);
++    assert(chip, 'שבב .chip--run קיים בפס המצב');
++    assertEq(chip.textContent, '', 'אין טקסט ריצה לפני עימוד');
++  });
++
++  it('אחרי עימוד: מזהה ריצה, מס׳ ריצה, זמן, hash פריסה ו-hash קלט — תואמים להרצה ישירה של המנוע', async () => {
++    const app = mkApp();
++    paste(app, SMALL_DOC);
++    await until(() => app.getState().hasResult);
++    const direct = typeset(SMALL_DOC, getDefaultSettings());
++    const f = runFields(app);
++    assert(/^job-/.test(f.jobId || ''), `מזהה ריצה (job-…): ${f.jobId}`);
++    assertEq(f.run, '1', 'ריצה מס׳ 1');
++    assert(/\d/.test(f.elapsed || '') && /(שניות|מילישניות)/.test(f.elapsed), `זמן עימוד מוצג: ${f.elapsed}`);
++    assert(HEX64.test(f.layoutHash || ''), `hash פריסה מלא (64 hex): ${f.layoutHash}`);
++    assertEq(f.layoutHash, direct.layoutHash, 'hash הפריסה בממשק = הרצה ישירה (אותו קלט/הגדרות)');
++    assert(HEX64.test(f.contentHashIn || ''), `hash קלט מלא (64 hex): ${f.contentHashIn}`);
++    assertEq(f.contentHashIn, direct.contentHashIn, 'hash הקלט בממשק = הרצה ישירה');
++    const chip = chipRun(app);
++    assert(chip.textContent.includes('ריצה #1'), `שבב מציג מס׳ ריצה: ${chip.textContent}`);
++    assert(chip.textContent.includes(direct.layoutHash.slice(0, 8)), 'שבב מציג hash פריסה קצר');
++    assert(String(chip.title).includes(direct.layoutHash) && String(chip.title).includes(direct.contentHashIn), 'ה-title של השבב נושא את ה-hashים המלאים');
++  });
++
++  it('ריצה שנייה על אותו קלט והגדרות: ריצה #2, אותו hash פריסה (דטרמיניזם גלוי), מזהה ריצה חדש', async () => {
++    const app = mkApp();
++    paste(app, SMALL_DOC);
++    await until(() => app.getState().hasResult);
++    const first = runFields(app);
++    app.onExplicitRetypeset();
++    await until(() => app.getState().gen === 2);
++    const second = runFields(app);
++    assertEq(second.run, '2', 'מונה הריצות עלה');
++    assertEq(second.layoutHash, first.layoutHash, 'אותו קלט/הגדרות ⇒ אותו hash פריסה');
++    assertEq(second.contentHashIn, first.contentHashIn, 'אותו hash קלט');
++    assert(second.jobId !== first.jobId, 'מזהה ריצה חדש לכל ריצה');
++  });
++
++  it('שינוי הטקסט ועימוד מחדש משנה את hash הקלט וה-hash של הפריסה (הממשק לא מציג ערך ישן)', async () => {
++    const app = mkApp();
++    paste(app, SMALL_DOC);
++    await until(() => app.getState().hasResult);
++    const first = runFields(app);
++    paste(app, SMALL_DOC + '\nפסקה נוספת שמשנה את התוכן.');
++    await until(() => app.getState().gen === 2);
++    const second = runFields(app);
++    assert(second.contentHashIn !== first.contentHashIn, 'hash הקלט השתנה');
++    assert(second.layoutHash !== first.layoutHash, 'hash הפריסה השתנה');
++  });
++
++  it('ניקוי המסמך מאפס את פרטי הריצה (אין hash של מסמך שנמחק)', async () => {
++    const app = mkApp();
++    paste(app, SMALL_DOC);
++    await until(() => app.getState().hasResult);
++    app.onDocumentAction('clear', '');
++    const sec = app.testing.root.querySelectorAll('.run-summary')[0];
++    assert(sec.textContent.includes('עוד לא בוצע עימוד'), 'הסעיף חזר למצב ריק');
++    assertEq(chipRun(app).textContent, '', 'שבב הריצה התרוקן');
++  });
++
++  it('F-06: הצגת פרטי הריצה אינה מפעילה עימוד נוסף (ריצה אחת = עימוד אחד)', async () => {
++    const app = mkApp();
++    paste(app, SMALL_DOC);
++    await until(() => app.getState().hasResult);
++    await wait(150);
++    assertEq(app.getState().gen, 1, 'בדיוק עימוד אחד הושלם');
++  });
++});
++
++report('a1-run-summary');
+diff --git a/red-build/ui/app.bundle.js b/red-build/ui/app.bundle.js
+index 5e4ccc6..c452a5c 100755
+--- a/red-build/ui/app.bundle.js
++++ b/red-build/ui/app.bundle.js
+@@ -1,6 +1,6 @@
+ // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
+ // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
+-// מודולים: 60 · בלי חותמות זמן (דטרמיניזם)
++// מודולים: 61 · בלי חותמות זמן (דטרמיניזם)
+ 'use strict';
+ 
+ var __crypto = (function () {
+@@ -313,6 +313,7 @@ var __paths = {
+   "src/ui/app-shell.js|./worker-client": "src/ui/worker-client.js",
+   "src/ui/app-shell.js|./retypeset-policy": "src/ui/retypeset-policy.js",
+   "src/ui/app-shell.js|./caret-map": "src/ui/caret-map.js",
++  "src/ui/app-shell.js|./run-info": "src/ui/run-info.js",
+   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
+   "src/ui/app-shell.js|./inline-transport": "src/ui/inline-transport.js",
+   "src/ui/app-shell.js|../engine/output/export-api": "src/engine/output/export-api.js",
+@@ -641,6 +642,7 @@ const { buildTestingTab } = require('./testing-tab');
+ const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
+ const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
+ const { buildCaretMap } = require('./caret-map');
++const { buildRunInfo } = require('./run-info'); // **סוכן 1 (§7.1):** זהות הריצה האחרונה לתצוגה
+ 
+ const TABS = [
+   { id: 'editor', label: '✍️ עורך' },
+@@ -658,6 +660,7 @@ function createApp(doc, opts = {}) {
+   let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
+   let lightTimer = null;
+   let lastLightRefreshMs = null;
++  let lastRun = null;           // **סוכן 1 (§7.1):** {n, jobId, ms, layoutHash, contentHashIn} — תצוגה בלבד
+   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
+ 
+   // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
+@@ -915,7 +918,7 @@ function createApp(doc, opts = {}) {
+     status.setPending({ light: false, heavy: false });
+     status.setEngineState('working', { label: 'מתחיל עימוד…' });
+     const started = perf.now();
+-    const { promise } = engine.requestTypeset({
++    const { promise, jobId } = engine.requestTypeset({
+       text, settings,
+       onProgress: (m) => status.setEngineState('working', m) // "עמוד X מתוך Y"
+     });
+@@ -923,6 +926,7 @@ function createApp(doc, opts = {}) {
+       if (res && res.cancelled) return;
+       result = res;
+       typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
++      lastRun = buildRunInfo(res, { n: typesetGen, jobId, ms: perf.now() - started }); // **סוכן 1 (§7.1)**
+       applyResultToViews();
+       status.setEngineState('idle');
+       status.setPages(result.pages.length);
+@@ -951,6 +955,7 @@ function createApp(doc, opts = {}) {
+       testing.setResult({ pages: [], report: { findings: [], counts: {} }, trace: { events: [] }, tokens: [], droppedEvents: 0 });
+       editor.setPageBreaks([]);
+       status.setPages(0);
++      lastRun = null; status.setRun(null); testing.setRun(null); // **סוכן 1 (§7.1):** אין hash של מסמך שנמחק
+       status.setPending({ light: false, heavy: false });
+       status.setEngineState('idle');
+       return;
+@@ -1177,6 +1182,7 @@ function createApp(doc, opts = {}) {
+     preview.setResult(result, settings);
+     testing.setResult(result);
+     testing.setRecommendations(result.recommendations || null); // **S11:** המלצות עם הוכחות
++    status.setRun(lastRun); testing.setRun(lastRun); // **סוכן 1 (§7.1):** זהות הריצה — תצוגה בלבד (F-06)
+     // מפת שבירות עמודים לעורך (⏎ — תצוגה בלבד, F-01)
+     const breaks = [];
+     for (const pg of result.pages) {
+@@ -1780,6 +1786,12 @@ function buildStatusStrip(doc, opts) {
+   pages.className = 'chip chip--pages';
+   pages.textContent = '📄 0 עמודים';
+ 
++  // ---- זהות הריצה האחרונה (סוכן 1, §7.1): מס' ריצה · זמן · hash פריסה קצר; המלא ב-title ----
++  const run = doc.createElement('span');
++  run.className = 'chip chip--run';
++  run.setAttribute('aria-live', 'polite');
++  run.textContent = '';
++
+   // ---- הודעות חולפות (S11: ייבוא/סירוב פורמט/החלת המלצה — חוק 14 בלי חלונות) ----
+   const notice = doc.createElement('span');
+   notice.className = 'chip chip--notice';
+@@ -1788,7 +1800,7 @@ function buildStatusStrip(doc, opts) {
+   notice.textContent = '';
+   let noticeTimer = null;
+ 
+-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, notice]) root.appendChild(el);
++  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, run, notice]) root.appendChild(el);
+ 
+   return {
+     root, bolt,
+@@ -1826,6 +1838,19 @@ function buildStatusStrip(doc, opts) {
+       fonts.textContent = map[status] || map.ready;
+     },
+     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
++    /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
++    setRun(info) {
++      if (!info) { run.textContent = ''; run.title = ''; return; }
++      const parts = [`ריצה #${info.n}`];
++      if (info.ms != null) parts.push(info.elapsedLabel);
++      if (info.layoutHash) parts.push(`פריסה ${String(info.layoutHash).slice(0, 8)}`);
++      run.textContent = parts.join(' · ');
++      run.title = [
++        info.jobId ? `מזהה ריצה: ${info.jobId}` : null,
++        info.layoutHash ? `hash פריסה: ${info.layoutHash}` : null,
++        info.contentHashIn ? `hash קלט: ${info.contentHashIn}` : null
++      ].filter(Boolean).join('\n');
++    },
+     /** הודעה חולפת (8 שניות) — ייבוא, סירוב פורמט, החלת המלצה. */
+     setNotice(text) {
+       notice.textContent = String(text != null ? text : '');
+@@ -15468,6 +15493,46 @@ function buildTestingTab(doc, opts) {
+ 
+   let lastResult = null;
+ 
++  // ============ סעיף 0: פרטי הריצה האחרונה (זהות הריצה — תוכנית האב §7.1) ============
++  // תצוגה בלבד (F-06): הערכים מגיעים מה-app מ-buildRunInfo; אין כאן קריאה למנוע.
++  const runSec = doc.createElement('div');
++  runSec.className = 'testing-section run-summary';
++  runSec.setAttribute('aria-label', 'פרטי הריצה האחרונה');
++  const runHead = doc.createElement('h3');
++  runHead.textContent = 'פרטי הריצה האחרונה';
++  runSec.appendChild(runHead);
++  const runBody = doc.createElement('div');
++  runSec.appendChild(runBody);
++  root.appendChild(runSec);
++
++  /** @param {object|null} info — buildRunInfo(...); null ⇒ אין ריצה */
++  function setRun(info) {
++    runBody.textContent = '';
++    if (!info) {
++      const p = doc.createElement('p');
++      p.className = 'run-summary-empty';
++      p.textContent = 'עוד לא בוצע עימוד';
++      runBody.appendChild(p);
++      return;
++    }
++    const dl = doc.createElement('dl');
++    dl.className = 'run-summary-list';
++    const add = (field, label, value, ltr) => {
++      const dt = doc.createElement('dt'); dt.textContent = label;
++      const dd = doc.createElement('dd'); dd.dataset.field = field;
++      dd.textContent = value != null ? String(value) : '—';
++      if (ltr) dd.setAttribute('dir', 'ltr');
++      dl.appendChild(dt); dl.appendChild(dd);
++    };
++    add('jobId', 'מזהה ריצה', info.jobId, true);
++    add('run', 'ריצה מס׳ (בסשן)', info.n);
++    add('elapsed', 'זמן עימוד (צד UI, כולל העברה מה־Worker)', info.elapsedLabel);
++    add('layoutHash', 'hash פריסה (SHA-256)', info.layoutHash, true);
++    add('contentHashIn', 'hash תוכן הקלט', info.contentHashIn, true);
++    runBody.appendChild(dl);
++  }
++  setRun(null);
++
+   // ============ סעיף 1: טבלת ממצאים ============
+   const findingsSec = doc.createElement('div');
+   findingsSec.className = 'testing-section';
+@@ -15774,7 +15839,7 @@ function buildTestingTab(doc, opts) {
+     }
+   }
+ 
+-  return { root, setResult, setRecommendations };
++  return { root, setResult, setRecommendations, setRun };
+ }
+ 
+ module.exports = { buildTestingTab, STATUS_HE };
+@@ -18007,6 +18072,41 @@ module.exports = {
+   ENDNOTE_CLASS_RE, METADATA_KEYS, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix
+ };
+ 
++};
++__modules["src/ui/run-info.js"] = function (require, module, exports) {
++// src/ui/run-info.js — זהות הריצה האחרונה לתצוגה (סוכן 1, תוכנית האב §7.1)
++'use strict';
++
++/**
++ * טהור: בלי DOM ובלי מנוע (F-06). ממיר תוצאה מסוריאליזת פרוטוקול (ui-result-v1) + נתוני ריצה שבצד ה־UI
++ * לאובייקט תצוגה אחד המשמש את פס המצב ואת לשונית הבדיקה — מקור יחיד לערכים המוצגים.
++ * אין כאן שום שינוי בחוזה ה־Worker: layoutHash ו־contentHashIn כבר מוחזרים היום ב־serializeTypesetResult.
++ */
++
++/** משך לתצוגה: מתחת לשנייה — מילישניות; אחרת — שניות בשתי ספרות. */
++function formatDuration(ms) {
++  if (!(Number.isFinite(ms) && ms >= 0)) return '—';
++  return ms < 1000 ? `${Math.round(ms)} מילישניות` : `${(ms / 1000).toFixed(2)} שניות`;
++}
++
++/**
++ * @param {object} result תוצאה מסוריאליזת פרוטוקול
++ * @param {{n?:number, jobId?:string, ms?:number}} meta נתוני ריצה שבצד ה־UI (מונה, מזהה עבודה, זמן כולל)
++ */
++function buildRunInfo(result, meta) {
++  const m = meta || {};
++  return {
++    n: m.n != null ? m.n : null,
++    jobId: m.jobId || null,
++    ms: Number.isFinite(m.ms) ? m.ms : null,
++    elapsedLabel: formatDuration(m.ms),
++    layoutHash: (result && result.layoutHash) || null,
++    contentHashIn: (result && result.contentHashIn) || null
++  };
++}
++
++module.exports = { formatDuration, buildRunInfo };
++
+ };
+ __modules["src/ui/inline-transport.js"] = function (require, module, exports) {
+ throw new Error('bundle: module src/ui/inline-transport.js excluded from this bundle (by design — see tools/build-worker-bundle.js)');
+-- 
+2.43.0
+
