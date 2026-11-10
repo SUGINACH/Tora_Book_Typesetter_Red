@@ -20,6 +20,7 @@
 const { getDefaultSettings, derivePlacementFlags } = require('./settings-registry');
 const { lexDocument } = require('../parser/dfa-lexer');
 const { tokenize, contentHash, normalizeText } = require('../parser/block-tokenizer');
+const { assertHeadingStructure } = require('../parser/document-structure');
 const { scanBrackets } = require('../parser/bracket-scanner');
 const { MeasureAPI, resolveMeasureImpl } = require('../typography/measure-api');
 const { protectWords } = require('../typography/protectors');
@@ -109,6 +110,17 @@ function offsetInSpans(at, spans) {
  *   אסור לו לגעת בפריסה — no-op proof נאכף בבדיקה (hash זהה עם ובלי המזליף).
  */
 function typeset(rawText, settingsIn, env = {}) {
+  // D-100: reject malformed heading structure before either the DP or legacy layout path.
+  // This is source validation, not a pagination heuristic or an automatic repair.
+  const structuralParseOpts = {
+    endnotePrefix: settingsIn && settingsIn['en-line-prefix'],
+    fnOpen: settingsIn && settingsIn['fn-delim-open'],
+    fnClose: settingsIn && settingsIn['fn-delim-close']
+  };
+  const structuralBody = lexDocument(String(rawText == null ? '' : rawText), structuralParseOpts).bodyLines;
+  const structuralTokens = tokenize(structuralBody, structuralParseOpts);
+  assertHeadingStructure(structuralTokens, structuralParseOpts);
+
   // **S4.9 (פרופיל העימוד המקורי):** הגדרות שמקורן ב-default_settings.json של
   // התוכנה המקורית (importImudSettings מסמן layout-profile='imud' ומצרף
   // את ה-JSON הגולמי) ⇒ הפעלת הפורט הנאמן של מנוע המקור. התנהגות המקור
