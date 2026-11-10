@@ -60,7 +60,7 @@ jobs:
           npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
       - name: Full math audit — largest structurally valid corpus (291,719 words, ~1,038 pages)
-        run: node tools/layout-audit/run-full-math.js --tag local --fixture audits/long_test_text.txt --min-pages 525 --min-pages 525
+        run: node tools/layout-audit/run-full-math.js --tag local --fixture audits/long_test_text.txt --min-pages 525
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -90,7 +90,7 @@ jobs:
         run: |
           node tools/layout-audit/run-full-math.js --tag live \
             --url https://suginach.github.io/Tora_Book_Typesetter_Red/ \
-            --fixture audits/very_long_test_text.txt
+            --fixture audits/long_test_text.txt --min-pages 525
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
