@@ -52,6 +52,13 @@ function buildStatusStrip(doc, opts) {
   pages.className = 'chip chip--pages';
   pages.textContent = '📄 0 עמודים';
 
+  // ---- זהות הריצה האחרונה (סוכן 1, §7.1): מס' ריצה · זמן · hash פריסה קצר; המלא ב-title ----
+  const run = doc.createElement('span');
+  run.className = 'chip chip--run';
+  run.setAttribute('aria-live', 'polite');
+  run.textContent = '';
+  run.hidden = true; // מוצג רק אחרי עימוד ראשון (בלי "כדור" ריק)
+
   // ---- הודעות חולפות (S11: ייבוא/סירוב פורמט/החלת המלצה — חוק 14 בלי חלונות) ----
   const notice = doc.createElement('span');
   notice.className = 'chip chip--notice';
@@ -60,7 +67,7 @@ function buildStatusStrip(doc, opts) {
   notice.textContent = '';
   let noticeTimer = null;
 
-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, notice]) root.appendChild(el);
+  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, run, notice]) root.appendChild(el);
 
   return {
     root, bolt,
@@ -98,6 +105,20 @@ function buildStatusStrip(doc, opts) {
       fonts.textContent = map[status] || map.ready;
     },
     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
+    /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
+    setRun(info) {
+      if (!info) { run.textContent = ''; run.title = ''; run.hidden = true; return; }
+      const parts = [`ריצה #${info.n}`];
+      if (info.ms != null) parts.push(info.elapsedLabel);
+      if (info.layoutHash) parts.push(`פריסה ${String(info.layoutHash).slice(0, 8)}`);
+      run.textContent = parts.join(' · ');
+      run.hidden = false;
+      run.title = [
+        info.jobId ? `מזהה ריצה: ${info.jobId}` : null,
+        info.layoutHash ? `hash פריסה: ${info.layoutHash}` : null,
+        info.contentHashIn ? `hash קלט: ${info.contentHashIn}` : null
+      ].filter(Boolean).join('\n');
+    },
     /** הודעה חולפת (8 שניות) — ייבוא, סירוב פורמט, החלת המלצה. */
     setNotice(text) {
       notice.textContent = String(text != null ? text : '');

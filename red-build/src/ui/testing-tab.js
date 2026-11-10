@@ -27,6 +27,46 @@ function buildTestingTab(doc, opts) {
 
   let lastResult = null;
 
+  // ============ סעיף 0: פרטי הריצה האחרונה (זהות הריצה — תוכנית האב §7.1) ============
+  // תצוגה בלבד (F-06): הערכים מגיעים מה-app מ-buildRunInfo; אין כאן קריאה למנוע.
+  const runSec = doc.createElement('div');
+  runSec.className = 'testing-section run-summary';
+  runSec.setAttribute('aria-label', 'פרטי הריצה האחרונה');
+  const runHead = doc.createElement('h3');
+  runHead.textContent = 'פרטי הריצה האחרונה';
+  runSec.appendChild(runHead);
+  const runBody = doc.createElement('div');
+  runSec.appendChild(runBody);
+  root.appendChild(runSec);
+
+  /** @param {object|null} info — buildRunInfo(...); null ⇒ אין ריצה */
+  function setRun(info) {
+    runBody.textContent = '';
+    if (!info) {
+      const p = doc.createElement('p');
+      p.className = 'run-summary-empty';
+      p.textContent = 'עוד לא בוצע עימוד';
+      runBody.appendChild(p);
+      return;
+    }
+    const dl = doc.createElement('dl');
+    dl.className = 'run-summary-list';
+    const add = (field, label, value, ltr) => {
+      const dt = doc.createElement('dt'); dt.textContent = label;
+      const dd = doc.createElement('dd'); dd.dataset.field = field;
+      dd.textContent = value != null ? String(value) : '—';
+      if (ltr) dd.setAttribute('dir', 'ltr');
+      dl.appendChild(dt); dl.appendChild(dd);
+    };
+    add('jobId', 'מזהה ריצה', info.jobId, true);
+    add('run', 'ריצה מס׳ (בסשן)', info.n);
+    add('elapsed', 'זמן עימוד (צד UI, כולל העברה מה־Worker)', info.elapsedLabel);
+    add('layoutHash', 'hash פריסה (SHA-256)', info.layoutHash, true);
+    add('contentHashIn', 'hash תוכן הקלט', info.contentHashIn, true);
+    runBody.appendChild(dl);
+  }
+  setRun(null);
+
   // ============ סעיף 1: טבלת ממצאים ============
   const findingsSec = doc.createElement('div');
   findingsSec.className = 'testing-section';
@@ -333,7 +373,7 @@ function buildTestingTab(doc, opts) {
     }
   }
 
-  return { root, setResult, setRecommendations };
+  return { root, setResult, setRecommendations, setRun };
 }
 
 module.exports = { buildTestingTab, STATUS_HE };
