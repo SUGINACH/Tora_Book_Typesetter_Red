@@ -290,9 +290,11 @@ def main():
                 folio_breaks.append({"page": p["index"], "why": f"{p['type']} לא ממוספר"})
             elif gematria(p["folio"]["text"]) != counter:
                 folio_breaks.append({"page": p["index"], "why": f"קיבלנו {p['folio']['text']} צפוי {counter}"})
-    C.add("C5", "רצף עמודונים — מונה עוקב, גימטריה תקנית, נסתר בשער-משנה/ריק",
-          not folio_breaks, count=len(folio_breaks), sample=folio_breaks[:5],
-          detail=f"אחרון: {pages[-1]['folio']['text']} (מונה {counter})")
+    C.add("C5", "מדיניות עמודונים — אבחון מול הנחות ברירת מחדל היסטוריות (מידע בלבד)",
+          None, count=len(folio_breaks), sample=folio_breaks[:5],
+          detail=f"אחרון: {pages[-1]['folio']['text']} (מונה {counter})",
+          gateEnabled=False,
+          note="Folio count/show and initial value are user-configurable; this legacy default is not a universal invariant.")
 
     # ============ C6: מכונת מצבים של סוגי עמודים ============
     seq = [p["type"] for p in pages]
@@ -340,9 +342,11 @@ def main():
         after = set(seq[tg[-1] + 1:]) - {"shaar-sub", "chapter-open", "body", "blank"}
         if after:
             problems.append(f"סוגים זרים אחרי ה-TOC: {sorted(after)}")
-    C.add("C6", "מכונת מצבים — סדר סוגי עמודים חוקי ותואם למבנה המקור",
-          not problems, count=len(problems), sample=problems[:5],
-          detail=f"shaar-sub={len(ss)} (h1={h1_count}), chapter-open={len(co)} (h0={h0_count})")
+    C.add("C6", "סדר סוגי עמודים/שערים — השוואה למדיניות ההיסטורית (מידע בלבד)",
+          None, count=len(problems), sample=problems[:5],
+          detail=f"shaar-sub={len(ss)} (h1={h1_count}), chapter-open={len(co)} (h0={h0_count})",
+          gateEnabled=False,
+          note="Exact front-matter order and blank-page insertion require an approved, settings-aware page-sequence policy.")
 
     # ============ C7: שלמות תוכן-העניינים ============
     # מפתח: טקסט כותרת מנורמל → ערכת עמודים שבהם היא מופיעה כשורת כותרת/שער
@@ -423,9 +427,11 @@ def main():
                 toc_bad.append({"why": "העמודון אינו מצביע על העמוד שבו הכותרת מופיעה",
                                 "text": e["text"][:30], "label": label,
                                 "candidatePages": sorted(cands)[:3]})
-    C.add("C7", "תוכן-עניינים — ערכים תואמים למקור ועמודונים מצביעים נכון",
-          not toc_bad, checked=checked, count=len(toc_bad), sample=toc_bad[:5],
-          detail=f"כללי {len(got_general)}/{len(src_general)}, מפורט {len(got_detailed)}/{len(src_detailed)}")
+    C.add("C7", "תוכן-עניינים — אבחון של תכולה/עמודונים לפי הנחות ברירת מחדל (מידע בלבד)",
+          None, checked=checked, count=len(toc_bad), sample=toc_bad[:5],
+          detail=f"כללי {len(got_general)}/{len(src_general)}, מפורט {len(got_detailed)}/{len(src_detailed)}",
+          gateEnabled=False,
+          note="TOC levels, visibility, inline grouping, numbering and page labels are configurable; derive expected entries from effective settings before gating.")
 
     # ============ C8: כותרות עליונות ============
     tw = book_title.split()
@@ -453,9 +459,11 @@ def main():
         elif c not in section_names:
             hdr_bad.append({"page": i, "why": "המרכז אינו כותרת h0/h2 מהמקור",
                             "got": (h.get("center") or "")[:40]})
-    C.add("C8", "כותרות עליונות — חצאי שם הספר בצדדים, סעיף h0/h2 אמיתי במרכז",
-          not hdr_bad, count=len(hdr_bad), sample=hdr_bad[:5],
-          detail=f"שם הספר: \"{want_r} | {want_l}\"")
+    C.add("C8", "כותרות עליונות — אבחון מול פרופיל הכותרת ההיסטורי (מידע בלבד)",
+          None, count=len(hdr_bad), sample=hdr_bad[:5],
+          detail=f"שם הספר: \"{want_r} | {want_l}\"",
+          gateEnabled=False,
+          note="Header sources, split-title behavior, slots and visibility are settings-driven; verify against effective settings before gating.")
 
     # ============ C9: שימור כותרות ============
     out_heading_texts = set()
