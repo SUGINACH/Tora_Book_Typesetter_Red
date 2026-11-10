@@ -6,16 +6,17 @@ verify-corpus.py — אימות אינווריאנטים מוחלטים של ה�
 בקשת המשתמש (04.11): "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"
 (audits/very_long_test_text.txt — 3.4MB, 2,571 כותרות, 10 חלקים).
 
-ההבדל מ-compare.py: אין כאן ייחוס של הגרסה הישנה (הייחוס קיים רק ל-no_long).
-במקום זה — אינווריאנטים מוחלטים: תכונות שכל עימוד נכון חייב לקיים בפני עצמו,
-בלי תלות בפלט של אף גרסה. כל בדיקה כאן ניתנת להוכחה מתמטית מהקוד:
+הבדל מ-compare.py: אין כאן השוואת פלט ל-PDF הישן. בדיקות C1-C3 ו-C5-C12
+נועדו לבדוק נכונות/חוזים פנימיים של RED. C4 הוא מדד איכות ליישור, לא
+אינווריאנט אוניברסלי: ברירת המחדל מדווחת אותו בלבד; הוא יחסום רק אם יועבר
+סף מפורש שאושר כדרישת מוצר. אין להסיק את הסף מן ה-PDF ההיסטורי.
 
   C1  שימור תוכן — מולטיסט המילים בפלט (גוף+הערות) זהה למקור
       (הערות [..] עוברות למרזב — אותה התמרה בשני הצדדים).
   C2  אפס חפיפות שורות ב-PDF — שורה אחת על גבי רעותה.
   C3  כל הטקסט בתוך גבולות העמוד.
-  C4  יישור — שורות גוף מגיעות לשתי שפות הטור (רצפה מכוילת: הגרסה
-      הישנה עצמה מגיעה ל-69.1% בייחוס; הרצפה נמוכה בכוונה).
+  C4  מדד איכות — שיעור שורות גוף המגיעות לשתי שפות הטור; מדווח בלבד
+      כברירת מחדל. סף מחייב יופעל רק באמצעות --justify-floor מפורש ומאושר.
   C5  רצף עמודונים — המונה מתקדם בכל עמוד פרט לשערים הראשיים; גימטריה
       תקנית (טו/טז); נסתר ב-blank/שער-משנה; גלוי בשאר (כמו המקור).
   C6  מכונת מצבים של סוגי עמודים — שערים → תוכן-כללי → [ריק] → שער-משנה
@@ -40,9 +41,10 @@ verify-corpus.py — אימות אינווריאנטים מוחלטים של ה�
 בתוך אותו תהליך — hash ועמודים זהים).
 
 שימוש:
-  python3 verify-corpus.py <source.txt> <model.json> <ours.pdf> [report.json] [ours.html] [--justify-floor 0.6]
+  python3 verify-corpus.py <source.txt> <model.json> <ours.pdf> [report.json] [ours.html]
+  אופציונלי: --justify-floor 0.6 (רק אם סף זה אושר במפורש כדרישת מוצר).
 
-קודי יציאה: 0 = הכל עובר | 1 = כשל אינווריאנט.
+קודי יציאה: 0 = כל האינווריאנטים עברו | 1 = כשל באינווריאנט. C4 מדווח בלבד כברירת מחדל.
 """
 
 import json
@@ -75,16 +77,17 @@ class Checks:
         self.rows = []
 
     def add(self, cid, name, ok, **detail):
-        self.rows.append({"id": cid, "name": name, "ok": bool(ok), **detail})
-        mark = "✓" if ok else "✗"
+        status = "informational" if ok is None else ("passed" if ok else "failed")
+        self.rows.append({"id": cid, "name": name, "ok": ok, "status": status, **detail})
+        mark = "ℹ" if ok is None else ("✓" if ok else "✗")
         print(f"  {mark} [{cid}] {name}")
-        if not ok:
+        if ok is False:
             for k in ("sample", "count", "detail"):
                 if k in detail and detail[k]:
                     print(f"        {k}: {str(detail[k])[:400]}")
 
     def failures(self):
-        return [r for r in self.rows if not r["ok"]]
+        return [r for r in self.rows if r["ok"] is False]
 
 
 # ---------- פרוס המקור (אותו טוקניזר כמו המנוע) ----------
@@ -135,11 +138,25 @@ def parse_source(src_text):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    justify_floor = 0.6
-    for a in sys.argv[1:]:
+    args = []
+    justify_floor = None
+    i = 1
+    while i < len(sys.argv):
+        a = sys.argv[i]
+        if a == "--justify-floor":
+            if i + 1 >= len(sys.argv):
+                raise SystemExit("--justify-floor requires an explicit numeric value")
+            justify_floor = float(sys.argv[i + 1])
+            i += 2
+            continue
         if a.startswith("--justify-floor="):
             justify_floor = float(a.split("=", 1)[1])
+            i += 1
+            continue
+        if a.startswith("--"):
+            raise SystemExit(f"unknown option: {a}")
+        args.append(a)
+        i += 1
     src_path = args[0] if len(args) > 0 else os.path.join(ROOT, "audits/very_long_test_text.txt")
     model_path = args[1] if len(args) > 1 else os.path.join(ROOT, "audits/very-long-artifacts/ours-model.json")
     pdf_path = args[2] if len(args) > 2 else os.path.join(ROOT, "audits/very-long-artifacts/ours.pdf")
@@ -189,7 +206,7 @@ def main():
           missingWords=sum(missing.values()), missingSample=list(missing)[:8],
           extraWords=sum(extra.values()), extraSample=list(extra)[:8])
 
-    # ============ C2-C4, C11: אינווריאנטים גיאומטריים ב-PDF ============
+    # ============ C2-C3, C11: אינווריאנטים גיאומטריים; C4: מדד איכות ============
     doc = fitz.open(pdf_path)
     overlaps, oob = [], []
     justify_ratios = []
@@ -236,9 +253,16 @@ def main():
           count=len(overlaps), sample=overlaps[:5])
     C.add("C3", "כל הטקסט בתוך גבולות העמוד", not oob,
           count=len(oob), sample=oob[:5])
-    C.add("C4", f"יישור — שיעור הגעה לשתי שפות הטור (רצפה {justify_floor:.0%}, כמקור ~69%)",
-          mean_just >= justify_floor,
-          meanRatio=round(mean_just, 4), columns=len(justify_ratios))
+    if justify_floor is None:
+        C.add("C4", "מדד איכות/יישור — שיעור שורות שמגיעות לשתי שפות הטור (מידע בלבד)",
+              None, meanRatio=round(mean_just, 4), columns=len(justify_ratios),
+              gateEnabled=False,
+              note="No approved threshold supplied; legacy PDF alignment rate is not a requirement.")
+    else:
+        C.add("C4", f"מדד איכות/יישור — סף מפורש {justify_floor:.0%}",
+              mean_just >= justify_floor,
+              meanRatio=round(mean_just, 4), columns=len(justify_ratios),
+              gateEnabled=True, approvedThreshold=justify_floor)
 
     # ============ C11: תקינות PDF ============
     C.add("C11", "PDF תקין — מספר עמודים תואם למודל וגופנים מוטמעים",
@@ -266,9 +290,11 @@ def main():
                 folio_breaks.append({"page": p["index"], "why": f"{p['type']} לא ממוספר"})
             elif gematria(p["folio"]["text"]) != counter:
                 folio_breaks.append({"page": p["index"], "why": f"קיבלנו {p['folio']['text']} צפוי {counter}"})
-    C.add("C5", "רצף עמודונים — מונה עוקב, גימטריה תקנית, נסתר בשער-משנה/ריק",
-          not folio_breaks, count=len(folio_breaks), sample=folio_breaks[:5],
-          detail=f"אחרון: {pages[-1]['folio']['text']} (מונה {counter})")
+    C.add("C5", "מדיניות עמודונים — אבחון מול הנחות ברירת מחדל היסטוריות (מידע בלבד)",
+          None, count=len(folio_breaks), sample=folio_breaks[:5],
+          detail=f"אחרון: {pages[-1]['folio']['text']} (מונה {counter})",
+          gateEnabled=False,
+          note="Folio count/show and initial value are user-configurable; this legacy default is not a universal invariant.")
 
     # ============ C6: מכונת מצבים של סוגי עמודים ============
     seq = [p["type"] for p in pages]
@@ -316,9 +342,11 @@ def main():
         after = set(seq[tg[-1] + 1:]) - {"shaar-sub", "chapter-open", "body", "blank"}
         if after:
             problems.append(f"סוגים זרים אחרי ה-TOC: {sorted(after)}")
-    C.add("C6", "מכונת מצבים — סדר סוגי עמודים חוקי ותואם למבנה המקור",
-          not problems, count=len(problems), sample=problems[:5],
-          detail=f"shaar-sub={len(ss)} (h1={h1_count}), chapter-open={len(co)} (h0={h0_count})")
+    C.add("C6", "סדר סוגי עמודים/שערים — השוואה למדיניות ההיסטורית (מידע בלבד)",
+          None, count=len(problems), sample=problems[:5],
+          detail=f"shaar-sub={len(ss)} (h1={h1_count}), chapter-open={len(co)} (h0={h0_count})",
+          gateEnabled=False,
+          note="Exact front-matter order and blank-page insertion require an approved, settings-aware page-sequence policy.")
 
     # ============ C7: שלמות תוכן-העניינים ============
     # מפתח: טקסט כותרת מנורמל → ערכת עמודים שבהם היא מופיעה כשורת כותרת/שער
@@ -399,9 +427,11 @@ def main():
                 toc_bad.append({"why": "העמודון אינו מצביע על העמוד שבו הכותרת מופיעה",
                                 "text": e["text"][:30], "label": label,
                                 "candidatePages": sorted(cands)[:3]})
-    C.add("C7", "תוכן-עניינים — ערכים תואמים למקור ועמודונים מצביעים נכון",
-          not toc_bad, checked=checked, count=len(toc_bad), sample=toc_bad[:5],
-          detail=f"כללי {len(got_general)}/{len(src_general)}, מפורט {len(got_detailed)}/{len(src_detailed)}")
+    C.add("C7", "תוכן-עניינים — אבחון של תכולה/עמודונים לפי הנחות ברירת מחדל (מידע בלבד)",
+          None, checked=checked, count=len(toc_bad), sample=toc_bad[:5],
+          detail=f"כללי {len(got_general)}/{len(src_general)}, מפורט {len(got_detailed)}/{len(src_detailed)}",
+          gateEnabled=False,
+          note="TOC levels, visibility, inline grouping, numbering and page labels are configurable; derive expected entries from effective settings before gating.")
 
     # ============ C8: כותרות עליונות ============
     tw = book_title.split()
@@ -429,9 +459,11 @@ def main():
         elif c not in section_names:
             hdr_bad.append({"page": i, "why": "המרכז אינו כותרת h0/h2 מהמקור",
                             "got": (h.get("center") or "")[:40]})
-    C.add("C8", "כותרות עליונות — חצאי שם הספר בצדדים, סעיף h0/h2 אמיתי במרכז",
-          not hdr_bad, count=len(hdr_bad), sample=hdr_bad[:5],
-          detail=f"שם הספר: \"{want_r} | {want_l}\"")
+    C.add("C8", "כותרות עליונות — אבחון מול פרופיל הכותרת ההיסטורי (מידע בלבד)",
+          None, count=len(hdr_bad), sample=hdr_bad[:5],
+          detail=f"שם הספר: \"{want_r} | {want_l}\"",
+          gateEnabled=False,
+          note="Header sources, split-title behavior, slots and visibility are settings-driven; verify against effective settings before gating.")
 
     # ============ C9: שימור כותרות ============
     out_heading_texts = set()
@@ -581,11 +613,13 @@ def main():
               count=len(html_bad), sample=html_bad[:5])
 
     # ============ סיכום ============
-    total = len(C.rows)
-    passed = total - len(C.failures())
-    score = round(100 * passed / total, 1)
+    gated_rows = [row for row in C.rows if row["ok"] is not None]
+    informational_rows = [row for row in C.rows if row["ok"] is None]
+    total = len(gated_rows)
+    passed = sum(1 for row in gated_rows if row["ok"] is True)
+    score = round(100 * passed / total, 1) if total else 100.0
     print("─" * 66)
-    print(f"  עוברות: {passed}/{total}  |  ציון קורפוס: {score}%")
+    print(f"  שערים שעברו: {passed}/{total}  |  ציון אינווריאנטים: {score}%  |  מדדים מידעיים: {len(informational_rows)}")
     report = {
         "corpus": os.path.relpath(src_path, ROOT),
         "model": os.path.relpath(model_path, ROOT),
@@ -597,6 +631,7 @@ def main():
         "sourceWords": sum(src_words.values()),
         "justifyMeanRatio": round(mean_just, 4),
         "checks": C.rows,
+        "informationalChecks": len(informational_rows),
         "passed": passed, "total": total, "score": score,
         "verdict": "PASS" if not C.failures() else "FAIL",
     }

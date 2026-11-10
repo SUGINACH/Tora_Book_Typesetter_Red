@@ -180,7 +180,7 @@ C10 — הבודק השווה קטעי הערות המפוצלות (S4.24 שור
 | P-7 | ~~פטור window-wrap רחב ב-audit-in-page~~ **נסגר (S5.2)** | audit-in-page.js | — | הושווה ל-full-math: ‏INK_OUTSIDE/LINE_ABOVE על כל שורה; הפטור נשאר ליישור בלבד |
 | P-8 | פיץ'/יישור/פוליו/סמנים/TOC — **רוב נסגר (S5.2)**: ‏PITCH_UNIFORMITY, ‏BODY_FONT_UNIFORMITY, ‏FOLIO_SEQUENCE, ‏MARKER_NOTE_MATCH, ‏TOC_ROWS, ‏LINE_ABOVE_COLUMN, ‏COLUMN_TOPS_ALIGN, ‏FN_RULE_PRESENT, ‏TYPE_UNKNOWN — נאכפים כעת בשני האודיטים + 23 בקרות רגישות (audit-sensitivity); נותרו: ‏A4 קשיח בכמה בודקים, ‏EMPTY_PAGE רק regular | full-math-audit.js | נמוך | אכיפה מוכחת |
 | P-9 | hdr-r/c/l-type מתים במורשת (5/8 מקורות בקונפיגורציה אחרת) + verso + fn-columns + aq-* + תוכן שערים מהמטא בלבד | legacy-imud-flow.js:208-210,814-871; readConfig | בינוני (הגדרות) | עדכון הגדרה בודדת לא זורם לחי — רשימת חריגים מדויקת בסקירת 1-E; נתיב המורשת מוקשה מכויל-ייחוס |
-| P-10 | ~~parity לא חוסם; אין workflow על gh-pages~~ **נסגר (S5.2)** | layout-parity.yml | — | ‏ratchet לציון (בסיס 0.85) + **gh-pages-audit.yml**: כל דחיפה ל-gh-pages ממתינה לבניית Pages ומריצה אודיט חי עם אימות sha256 של הבאנדלים הפרוסים מול main |
+| P-10 | ~~parity לא חוסם; אין workflow על gh-pages~~ **נסגר (S5.2)**; **ratchet לציון Legacy הוסר (D-98)** | layout-parity.yml | — | **gh-pages-audit.yml** מאמת sha256 של הבאנדלים הפרוסים מול main. ציון P1–P9 הוא מרחק היסטורי ואינו רצפת קבלה. H4/C4–C8 אינם שערים ללא חוזה מאושר; C5–C8 ממתינים לבדיקות settings-aware. הדוח נשמר לאבחון בלבד. |
 | P-11 | מינורי — **רוב נסגר (S5.2)**: ‏fit-matrix נתיב, ‏convert_imud_fonts יציאה, לולאת הקישורים המתה הוסרה, ‏s14 מיקוב מדויק, ‏MediaBox/BleedBox חוקיים + סימני חיתוך בדימות; ‏columnDividerGeometry נותר (בשימוש ב-s8); ‏Number(null) נותר | — | נמוך | ניקוי |
 
 

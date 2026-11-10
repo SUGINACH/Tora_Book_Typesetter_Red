@@ -321,6 +321,7 @@
 28. **H2 not starting fresh page** — contract test (page index & top geometry).
 29. **H7 as side-note ignoring mode-h7** (F-13) — control must be wired; dead-control CI (REQ-GOV-04).
 30. **Chapter numbering reset per part** — counters integration test.
+31. **Source heading-chain validity (D-100/U-G)** — preflight before measurement: heading-only runs must descend strictly; deepest heading must be followed by real body text; footnote-only content does not count; invalid documents are rejected without silent repair.
 
 ## D6. גרפיקה
 
@@ -512,6 +513,14 @@
 - אותו מספור עמודים התייחסות (המשתמש תיקן הנחת AI) `[מ-מ]` Chat_06.
 - "דריכה במקום" → דרוש התקדמות מהותית, לא אישורון `[מ-מ]` Chat_06.
 
+## U-G. דרישה מפורשת — תקינות מבנית של מסמך המקור (10.11.2026) [USER-EXPLICIT]
+
+- כל מסמך, לרבות מסמך בדיקה קבוע או רנדומלי, חייב להיות בנוי בצורה תקינה לפני שמנסים לעמד אותו.
+- אין שתי כותרות מאותה רמה ברצף ללא טקסט ממשי ביניהן; רצף כותרות ברמות עולות מותר (למשל 1→2→3→4→5→6→7), אך הכותרת העמוקה/האחרונה חייבת להיות מלווה בטקסט גוף.
+- הערת שוליים לבדה אינה טקסט גוף, וכותרת שתוכנה שלה הוא הערת שוליים בלבד אינה תקינה.
+- יש לדחות מסמך פגום באבחון מפורש לפני המדידה; אין לבצע תיקון מבני אוטומטי ושקט.
+- חוזה מפורט ודוגמאות: `spec/SOURCE_DOCUMENT_STRUCTURAL_VALIDITY.md`.
+
 ---
 
 # חלק ט׳ — ארכיטקטורה יעד (Target Architecture)
@@ -539,7 +548,7 @@ INPUT(raw text/files)
 
 ```
 src/engine/
-  parser/{dfa-lexer, bracket-scanner, block-tokenizer, metadata, ast-model}.js
+  parser/{dfa-lexer, bracket-scanner, block-tokenizer, document-structure, metadata, ast-model}.js
   typography/{measure-api, harfbuzz-runner, font-metrics, kp-linebreak, glue-tables, protectors(runt,marker,abbr)}.js
   layout/{page-templates, column-flow, candidate-generator, scorer(capacity+context+penalties), dp-planner, protections-matrix, balancing(chapter-end,H3,AQ-stretches), footnote-budget, endnote-pages, sidenotes, headings-escort, dividers-state, rollback-snapshot}.js
   decoration/{ornament-fit, shaar-boxes, headers-builder, folio, toc-builder}.js

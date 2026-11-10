@@ -1,21 +1,21 @@
 name: layout-parity
 
-# בדיקת עימוד מתמטית־מוחלטת מול הייחוס של הגרסה הישנה (03.11 — בקשת המשתמש).
+# השוואה אבחונית לדוגמת PDF היסטורית מוקדמת — אינה מפרט עימוד או שער איכות.
 #
 # הגרסה הישנה (הצהובה) הפיקה את קובצי ה-PDF ב-audits (כולל גרסאות עם סימון
 # גיאומטרי בלתי־נראה: תגיות p-end/p-cut + מידות בלוקים). extract-reference.py
 # הופך אותם לייצוג מתמטי מחויב (audits/layout-reference.json) — והרצה הזו
-# משווה את הפלט החי של RED (נתיב האפליקציה, גופן Guttman Rashi אמיתי,
+# משווה את הפלט החי של RED לדוגמה ההיסטורית לצורכי אבחון בלבד (נתיב האפליקציה,
 # מדידת font-metrics, ייצוא PDF) מול אותו ייחוס:
 #
-#   HARD   — אינווריאנטים מוחלטים: שימור תוכן, אפס חפיפות, גבולות עמוד, יישור.
-#   PARITY — זהות למקור: מספר/סוגי עמודים, עמודונים (גימטריה יחידה), כותרות
-#            עליונות, תוכן-עניינים כפול, רצף פסקאות (שורות+מילים), שקילות
-#            שבירת שורות, תיבות טורים, מיקום כותרת/עמודון, גופן, פס שורות,
-#            וקומפקטיות כותרות פתיחה.
+#   HARD   — אינווריאנטים עצמאיים: שימור תוכן, אפס חפיפות וגבולות עמוד; H4 הוא LEGACY.
+#   LEGACY COMPARISON — מרחק מדוגמת העימוד הישנה; אינו קובע נכונות או איכות.
+#            P1–P9, ובפרט P6/P7, נשמרים לחקירת הבדלים היסטוריים בלבד.
 #
-# הציון (0-100%) הוא האמת המתמטית על מצב העימוד. כל תיקון אמור להעלות אותו;
-# ירידה = נסיגה. קודי יציאה: 0 תקין | 1 כשל HARD | 2 כשל PARITY | 3 שניהם.
+#
+#
+# ציון ההשוואה הוא מרחק היסטורי בלבד; אין להשתמש בו כ-ratchet, יעד או שער קבלה.
+# רק כשל HARD באינווריאנט עצמאי חוסם. קודי יציאה: 0 תקין | 1 HARD | 2 legacy-difference | 3 שניהם.
 #
 # הערה: הייחוס נבדק לדטרמיניזם — ריצה מחדש של החילוץ חייבת לתת קובץ זהה
 # בתת-ספרה (git diff) — אחרת ההשוואה אינה תקפה.
@@ -47,7 +47,7 @@ jobs:
       - name: Install PyMuPDF (חילוץ גיאומטריה מ-PDF)
         run: pip install pymupdf==1.26.7
 
-      - name: Verify reference extraction is deterministic (committed JSON == PDFs)
+      - name: Verify the historical sample extraction is deterministic (committed JSON == PDFs)
         run: |
           python3 tools/layout-parity/extract-reference.py
           git diff --exit-code -- audits/layout-reference.json || {
@@ -56,7 +56,7 @@ jobs:
       - name: Run RED through the live path (IMUD defaults + real font → model + PDF)
         run: node tools/layout-parity/run-ours.js
 
-      - name: Mathematical comparison against the old-version reference
+      - name: Diagnostic comparison against the historical sample (non-normative)
         run: |
           set +e
           python3 tools/layout-parity/compare.py \
@@ -67,61 +67,13 @@ jobs:
           ec=$?
           set -e
           # קודי יציאה של compare.py: 0 תקין | 1 כשל HARD | 2 כשל PARITY | 3 שניהם.
-          # **04.11:** כשל HARD = באג אמיתי (חפיפות/גלישות/אובדן תוכן) — קטלני.
-          # פערי PARITY = עבודת כיול פתוחה מתועדת (הציון ממשיך לעלות עם כל
-          # תיקון; הדוח המלא עולה כ-artifact) — אינם חוסמים את ה-CI, אחרת
-          # כל דחיפה עד השלמת הזהות המלאה הייתה אדומה ואות אזהרה היה נחלש.
-          if [ "$ec" -eq 1 ] || [ "$ec" -eq 3 ]; then
-            echo "✗ HARD invariants FAILED (exit $ec) — כשל נכונות אמיתי"; exit 1
-          fi
-          if [ "$ec" -eq 2 ]; then
-            score=$(python3 -c "import json;print(json.load(open('audits/layout-parity-artifacts/parity-report.json'))['summary']['score'])")
-            echo "⚠ PARITY gaps remain — score: ${score}% (open calibration: P1/P3b/P4/P6/P7; full report in artifact)"
-          fi
-
-      # **S5.2 (P-11 — קובע-רץ לציון הקבילה):** ירידה בציון = נסיגה. הציון נקרא
-      # מ-parity-report.json (summary.score, סקאלה 0-100) ומושווה מול בסיס נעול
-      # ב-red-build/tests/artifacts/parity-baseline.json (score ביחס 0-1).
-      # שלב זה אינו משנה את קודי היציאה של compare.py: HARD נשאר קטלני
-      # בשלב הקודם; פה רק רצפת הציון. העלאת הבסיס — בכוונה ובתיעוד בלבד.
-      - name: Parity ratchet — score floor vs committed baseline
-        run: |
-          python3 - <<'EOF'
-          import json, sys
-          run = json.load(open('audits/layout-parity-artifacts/parity-report.json'))['summary']['score']
-          base = json.load(open('red-build/tests/artifacts/parity-baseline.json'))['score']
-          floor = base * 100  # הבסיס ביחס 0–1; compare.py מדווח 0–100
-          print(f'parity score: {run}% | baseline: {base} (= {floor:g}%)')
-          if run < floor:
-              print(f'✗ ציון הקבילה ירד מתחת לבסיס הנעול: {run}% < {floor:g}% — ירידה היא נסיגה; עדכון הבסיס רק בכוונה ובתיעוד')
-              sys.exit(1)
-          print(f'✓ ציון {run}% ≥ בסיס {floor:g}%')
-          EOF
-
-      - name: Always upload the full report + our PDF
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: layout-parity-report
-          path: |
-            audits/layout-parity-artifacts/parity-report.json
-            audits/layout-parity-artifacts/ours-model.json
-            audits/layout-parity-artifacts/ours.pdf
-          if-no-files-found: warn
-
-  # **04.11 (בקשת המשתמש: "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"):**
-  # הקורפוס הגדול מאוד — audits/very_long_test_text.txt (3.4MB, 2,571 כותרות,
-  # 10 חלקים, 363K מילים). לקורפוס זה אין ייחוס PDF של הגרסה הישנה, ולכן
-  # הבדיקה היא באינווריאנטים מוחלטים בלבד (verify-corpus.py): תכונות שכל
-  # עימוד נכון חייב לקיים בפני עצמו, בלי תלות באף פלט חיצוני —
-  #   C1 שימור תוכן (מולטיסט מילים) · C2 אפס חפיפות · C3 גבולות עמוד ·
-  #   C4 יישור · C5 רצף עמודונים · C6 מכונת מצבים · C7 שלמות תוכן-עניינים ·
-  #   C8 כותרות עליונות · C9 שימור כותרות · C10 הערות שוליים · C11 PDF תקין ·
-  #   C12 ייצוא HTML (S4.11 — אותו רינדור כמו התצוגה החיה).
-  # בנוסף: דטרמיניזם (הרצה כפולה — hash ועמודים זהים) בתוך run-ours.js,
-  # והספר המיוצא עצמו (PDF+HTML) עולה כ-artifact.
-  # זה הקורפוס שחשף את שלושת באגי ההערות שתוקנו ב-S4.10 — קובעי הרף שלו
-  # הם שומרי הרגרסיה לכל תיקון עתידי.
+          # D-100: audits/very_long_test_text.txt (363K מילים) מכיל מקור פגום ולכן נשמר
+  # כ-negative control: ה-CLI חייב לאשר שהוא נדחה לפני מדידה/עימוד.
+  # לבדיקת עומס מלאה משתמשים בקובץ הגדול ביותר שעובר D-100:
+  # audits/long_test_text.txt — 291,719 מילים, כ-1,038 עמודים בריצת DP.
+  # כך אין תיקון או המצאת תוכן בקורפוס ההיסטורי, ובכל זאת נשמרת בדיקת עומס
+  # רצינית על מקור תקין: C1 שימור · C2 חפיפות · C3 גבולות · C9 כותרות ·
+  # C10 הערות · C11 PDF · C12 HTML; C4–C8 נשארים מידעיים לפי D-99.
   very-long-corpus:
     runs-on: ubuntu-latest
     # **S5.2 (P-11):** תקרה מפורשת — כמו בכל שאר ה-jobs.
@@ -140,10 +92,16 @@ jobs:
       - name: Install PyMuPDF (חילוץ גיאומטריה מ-PDF)
         run: pip install pymupdf==1.26.7
 
-      - name: Run RED on the very large corpus (live path + determinism double-run + HTML export)
-        run: node tools/layout-parity/run-ours.js audits/very_long_test_text.txt audits/very-long-artifacts --determinism --html
+      - name: D-100 negative control — malformed 363K source must be rejected
+        run: node tools/validate-source-structure.js audits/very_long_test_text.txt --expect-invalid
 
-      - name: Absolute invariants verification (C1..C12 — כולל ייצוא HTML)
+      - name: Validate largest structurally valid stress corpus
+        run: node tools/validate-source-structure.js audits/long_test_text.txt
+
+      - name: Run RED on the largest valid corpus (live path + deterministic double-run + HTML)
+        run: node tools/layout-parity/run-ours.js audits/long_test_text.txt audits/very-long-artifacts --determinism --html
+
+      - name: Corpus invariants + informational alignment metric (C1..C12 — כולל ייצוא HTML)
         run: |
           python3 tools/layout-parity/verify-corpus.py \
             audits/very_long_test_text.txt \
@@ -156,7 +114,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: very-long-corpus-report
+          name: largest-valid-corpus-report
           path: |
             audits/very-long-artifacts/corpus-report.json
             audits/very-long-artifacts/ours-model.json

@@ -5,7 +5,7 @@
  * הרצה עצמאית (אפס תלויות חוץ מ-agent-browser) של האודיט המתמטי המלא:
  *   1. מגיש את האפליקציה (red-build/ui) בשרת מקומי — או פותח URL חי (--url).
  *   2. מזרים את ה-fixture (ברירת מחדל: audits/very_long_test_text.txt —
- *      3.4MB, ~700 עמודים) — מקומית דרך השרת, בחי דרך base64 בחתיכות
+ *      2.7MB, ~291K words) — מקומית דרך השרת, בחי דרך base64 בחתיכות
  *      (עוקף MAX_ARG_STRLEN).
  *   3. ממתין לסיום העימוד (polling של מצב האפליקציה).
  *   4. מריץ את full-math-audit.js בתוך הדף (21 משפחות בדיקות — דיו בפועל,
@@ -20,10 +20,10 @@
  * לו (נמדד: קיפאון כפול — ה-open מסתיים ב-EAGAIN מול הדמון).
  *
  * שימוש:
- *   node tools/layout-audit/run-full-math.js [--fixture <path>] [--url <url>]
+ *   node tools/layout-audit/run-full-math.js [--fixture <path>] [--min-pages <n>] [--url <url>]
  *        [--tag <name>] [--out <dir>] [--skip-determinism]
  * דוגמאות:
- *   node tools/layout-audit/run-full-math.js                      # מקומי + very_long
+ *   node tools/layout-audit/run-full-math.js                      # local + largest valid corpus
  *   node tools/layout-audit/run-full-math.js --url https://suginach.github.io/Tora_Book_Typesetter_Red/ --tag live
  */
 const { spawn } = require('child_process');
@@ -43,7 +43,7 @@ const argOf = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && i + 1 < args.length ? args[i + 1] : def;
 };
-const FIXTURE = path.resolve(argOf('--fixture', path.join(ROOT, 'audits', 'very_long_test_text.txt')));
+const FIXTURE = path.resolve(argOf('--fixture', path.join(ROOT, 'audits', 'long_test_text.txt')));
 const URL = argOf('--url', null);
 const TAG = argOf('--tag', URL ? 'live' : 'local');
 const OUT = path.resolve(argOf('--out', path.join(ROOT, 'red-build', 'tests', 'artifacts', 'full-math-audit')));
@@ -52,10 +52,16 @@ const PORT = 8932;
 const B64_CHUNK = 100_000;
 const READY_TIMEOUT_MS = 900_000;
 // **S5.2 (רצפת נפח):** ספר שהתקצר בשקט (מנוע שבורע/מדלג תוכן) עבר ירוק כל
-// עוד 0 בעיות במה שכן רונדר. הקורפוס הקנוני: 704 עמודים / 363,232 מילים —
-// הרצפה מכוונת בכוונה נדיבה (690) כי שינויי TOC/הערות-סיום של המנוע עשויים
-// להזיז את מספר העמודים במעט; יחס המילים (0.98) תופס איבוד תוכן אמיתי.
-const EXPECTED_PAGES_MIN = 690;
+// עוד 0 בעיות במה שכן רונדר. הקורפוס הקנוני הישן: 704 עמודים / 363,232 מילים;
+// עבורו נשמרת רצפת 690. הקורפוס התקין long_test_text נמדד ב-552 עמודים במסלול UI;
+// ברירת המחדל עבורו היא 525 (מרווח ~5%). רצפת המילים (0.98) נשארת ללא שינוי
+// ומונעת קבלה של אובדן תוכן גם אם מספר העמודים דומה.
+const EXPECTED_PAGES_MIN = 690; // legacy baseline for the old 363K canonical fixture
+const DEFAULT_PAGES_MIN = path.basename(FIXTURE) === 'long_test_text.txt' ? 525 : EXPECTED_PAGES_MIN;
+const MIN_PAGES = Number(argOf('--min-pages', String(DEFAULT_PAGES_MIN)));
+if (!Number.isInteger(MIN_PAGES) || MIN_PAGES < 1) {
+  throw new Error('--min-pages must be a positive integer');
+}
 const EXPECTED_WORDS_MIN_RATIO = 0.98;
 
 const log = (m) => console.log(m);
@@ -307,11 +313,12 @@ const gotoView = async () => {
   const st = report.stats || {};
 
   // **S5.2 (רצפת נפח):** כיסוי מלא של הספר כולו — לא רק "0 בעיות במה שכן רונדר".
-  // עמודים: הקורפוס הקנוני 704 (רצפה 690 — נדיבה בכוונה לשינויי TOC/הערות-סיום
-  // של המנוע). מילים: ספירת הדוח (שורות+הערות+פסים+TOC) מול ה-fixture ביחס
+  // עמודים: ברירת מחדל 690 לקורפוס הקנוני הישן. לקורפוס אחר יש לספק --min-pages
+  // על בסיס מדידת UI מאומתת מראש, תוך שמירת מרווח בטיחות. מילים: ספירת הדוח
+  // (שורות+הערות+פסים+TOC) מול ה-fixture ביחס
   // ≥0.98 — תופס מנוע שמדלג תוכן שלם בשקט.
   const floorFail = [];
-  if (!(pages1 >= EXPECTED_PAGES_MIN)) floorFail.push(`עמודים ${pages1} < רצפת המינימום ${EXPECTED_PAGES_MIN}`);
+  if (!(pages1 >= MIN_PAGES)) floorFail.push(`עמודים ${pages1} < רצפת המינימום ${MIN_PAGES}`);
   const totalWords = s.totalWords || 0;
   if (!(totalWords >= EXPECTED_WORDS_MIN_RATIO * fixtureWords)) {
     floorFail.push(`מילים מרונדרות ${totalWords.toLocaleString()} < ${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()} (= ${EXPECTED_WORDS_MIN_RATIO} × ${fixtureWords.toLocaleString()} מילות ה-fixture)`);
@@ -323,7 +330,7 @@ const gotoView = async () => {
     if (server) server.close();
     process.exit(1);
   }
-  log(`רצפת נפח ✓: ${pages1} עמודים (≥${EXPECTED_PAGES_MIN}) | ${totalWords.toLocaleString()} מילים (≥${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()})`);
+  log(`רצפת נפח ✓: ${pages1} עמודים (≥${MIN_PAGES}) | ${totalWords.toLocaleString()} מילים (≥${Math.round(EXPECTED_WORDS_MIN_RATIO * fixtureWords).toLocaleString()})`);
   log('─'.repeat(62));
   log(`עמודים: ${s.pages}/${s.slots} | שורות: ${(s.totalLines || 0).toLocaleString()} | וירטואלי: ${s.virtualized} | סריקה: ${s.sweep && s.sweep.ms}ms`);
   log(`בעיות (סה"כ): ${s.problems} | לפי סוג: ${JSON.stringify(st.counts || {})}`);
