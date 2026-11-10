@@ -49,8 +49,13 @@ function validateHeadingStructure(tokens, opts = {}) {
         pending = [info];
         continue;
       }
-      if (!hasMeaningfulText(withoutFootnotes(info.title, opts))) {
-        issues.push({ code: 'heading-title-note-only', ...info });
+      const titleWithoutNotes = withoutFootnotes(info.title, opts);
+      if (!hasMeaningfulText(titleWithoutNotes)) {
+        const containsNoteMarkup = info.title.trim() !== titleWithoutNotes.trim();
+        issues.push({
+          code: containsNoteMarkup ? 'heading-title-note-only' : 'heading-title-no-meaningful-text',
+          ...info
+        });
       }
       if (pending.length) {
         const previous = pending[pending.length - 1];
@@ -92,7 +97,9 @@ function formatHeadingStructureIssues(issues) {
     const at = issue.tokenId ? ' [' + issue.tokenId + ']' : '';
     switch (issue.code) {
       case 'heading-title-note-only':
-        return 'כותרת H' + issue.level + at + ' אינה מכילה טקסט כותרת ממשי; הערת שוליים לבדה אינה כותרת.';
+        return 'כותרת H' + issue.level + at + ' מכילה הערת שוליים בלבד ואינה כוללת טקסט כותרת עצמאי.';
+      case 'heading-title-no-meaningful-text':
+        return 'כותרת H' + issue.level + at + ' אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.';
       case 'heading-chain-not-increasing':
         return 'רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H' + issue.previousLevel +
           ' מופיעה H' + issue.level + at +
