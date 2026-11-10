@@ -1,2019 +1,667 @@
-# תכנית עבודה אסטרטגית: שדרוג RED עם רכיבים מהגרסאות הקלאסיות
+# תוכנית עבודה מעודכנת — RED: פיתוח מנוע תחילה
 
-## 🎯 חזון הפרויקט
-
-**מטרה:** ליצור את מערכת העימוד התורנית הטובה ביותר בעולם, המשלבת:
-- מנוע עימוד דטרמיניסטי ומהיר (RED)
-- ממשק משתמש בוגר ומקצועי (Orange)
-- כלי דיבאג מתקדמים (Gold)
-- טעינה אופטימלית (Yellow)
-- בדיקות אוטומטיות מקיפות (Green)
-
-**עקרון ברזל:** **אסור לפגוע במנוע הליבה של RED**. כל השיפורים יהיו בשכבות החיצוניות (UI, דיבאג, טעינה, בדיקות).
+> **גרסה:** 2.0 — מחליפה את תוכנית חמשת הסוכנים המקורית  
+> **תאריך עדכון:** 10.11.2026  
+> **מאגר יעד:** SUGINACH/Tora_Book_Typesetter_Red  
+> **מטרת המסמך:** לקבוע סדר עבודה מעשי שמאפשר להמשיך מיד בפיתוח, בדיוק ובייצוב מנוע העימוד, בלי שעבודות UI, גופנים, ארגון או שחרור יעכבו אותו.
 
 ---
 
-## 📋 ארכיטקטורת העבודה: 5 סוכנים עצמאיים
+## 1. החלטה אסטרטגית
 
-```
-RED Core Engine (קדוש - לא נוגעים!)
-    │
-    ├─ Agent 1: UI Layer ← Orange UI
-    ├─ Agent 2: Debug Layer ← Gold geometry-audit  
-    ├─ Agent 3: Font Loader ← Yellow two-stage
-    ├─ Agent 4: Test Suite ← Green Playwright
-    └─ Agent 5: Docs & Release ← Orange docs
-```
+הפרויקט עבר משלב הקמת התשתיות לשלב של **הוכחת נכונות, סגירת פערי עימוד ושיפור יכולת האבחון של מנוע קיים**.
 
-**עקרון ההפרדה:** כל סוכן עובד על **ענף נפרד** ועל **קבצים נפרדים**. אין חפיפה בין הסוכנים.
+לכן התוכנית הקודמת, שהתבססה על חמישה סוכנים שמקימים במקביל ממשק, כלי דיבאג, טעינת פונטים, בדיקות ותיעוד, אינה עוד תוכנית הביצוע הנכונה. רוב התשתיות שהיא מבקשת להקים כבר קיימות ב-RED. ביצוע חוזר שלהן יוצר כפילות, מסיט משאבים מהמנוע ומגדיל את הסיכון לרגרסיות.
 
----
+**סדר העדיפויות החדש:**
 
-## 🚀 Agent 1: UI/UX Integration
+1. נכונות המנוע ושימור מלא של התוכן.
+2. נאמנות העימוד לייחוס ולהוראות המשתמש, תוך הבחנה בין פער אמיתי לבין הבדל מכוון.
+3. אבחון סיבתי שקוף של כל החלטת עימוד ושל כל ממצא.
+4. בדיקות רגרסיה עצמאיות, מדויקות וניתנות לשחזור.
+5. אופטימיזציה של ביצועים וטעינת נכסים — רק לאחר מדידה.
+6. UI, תיעוד ושחרור — כתמיכה בפיתוח וכשלבי השלמה, לא כחסמים לעבודה על המנוע.
 
-**ענף עבודה:** `feature/ui-orange-integration`  
-**מטרה:** להחליף את ה-UI הנוכחי של RED בממשק הבוגר של Orange  
-**קבצים באחריותך:**
-- `index.html` (החלפה מלאה)
-- `app.js` (החלפה מלאה)
-- `style.css` (החלפה מלאה)
-- `ui/` (תיקייה חדשה לקומפוננטות UI)
-
-### צ'קליסט משימות
-
-#### שלב 1: ניתוח והכנה (יום 1-2)
-- [ ] **1.1** קרא את `docs/UI_SPEC.md` של RED
-- [ ] **1.2** קרא את `index.html` של Orange והבן את המבנה
-- [ ] **1.3** מיפה את ה-API של RED Worker:
-  ```javascript
-  // מה ה-Worker מצפה לקבל
-  worker.postMessage({
-    type: 'typeset',
-    text: string,
-    settings: Settings
-  });
-  
-  // מה ה-Worker מחזיר
-  worker.onmessage = (e) => {
-    const { type, layout, errors } = e.data;
-  };
-  ```
-- [ ] **1.4** צור קובץ `ui/adapter.js` שימיר בין ה-API של Orange ל-API של RED
-
-#### שלב 2: אינטגרציה בסיסית (יום 3-5)
-- [ ] **2.1** העתק את `index.html` מ-Orange ל-RED
-- [ ] **2.2** העתק את `app.js` מ-Orange ל-RED
-- [ ] **2.3** התאם את `app.js` לעבוד עם RED Worker:
-  ```javascript
-  // במקום הקוד הישן של Orange
-  // const result = oldTypesetter(text, settings);
-  
-  // עשה:
-  const worker = new Worker('red-worker.js');
-  worker.postMessage({ type: 'typeset', text, settings });
-  worker.onmessage = handleResult;
-  ```
-- [ ] **2.4** בדוק שה-UI טוען ורץ (אפילו אם העימוד לא עובד)
-
-#### שלב 3: חיבור מלא (יום 6-8)
-- [ ] **3.1** חבר את כל 12 הפאנלים של Orange ל-RED
-- [ ] **3.2** ודא שכל ההגדרות עוברות נכון ל-Worker
-- [ ] **3.3** בדוק שהפלט של RED מוצג נכון ב-UI
-- [ ] **3.4** הוסף loading indicator (העימוד רץ ב-Worker, ה-UI חופשי)
-
-#### שלב 4: שיפורי UX (יום 9-12)
-- [ ] **4.1** הוסף מקשי קיצור (Ctrl+S לשמירה, Ctrl+P לייצוא)
-- [ ] **4.2** הוסף drag-and-drop לקבצי טקסט
-- [ ] **4.3** הוסף search & replace עם תמיכה בעברית
-- [ ] **4.4** הוסף undo/redo להגדרות
-- [ ] **4.5** הוסף progress bar לעימודים ארוכים
-
-#### שלב 5: בדיקות ויציבות (יום 13-14)
-- [ ] **5.1** בדוק את כל 4 הלשוניות
-- [ ] **5.2** בדוק את כל 12 הפאנלים
-- [ ] **5.3** בדוק ייצוא ל-PDF דרך ה-UI החדש
-- [ ] **5.4** בדוק ייצוא ל-HTML דרך ה-UI החדש
-- [ ] **5.5** בדוק שמירת הגדרות ל-localStorage
-
-### קריטריונים להצלחה
-- ✅ ה-UI של Orange עובד עם המנוע של RED
-- ✅ כל 12 הפאנלים פונקציונליים
-- ✅ זמן תגובה של ה-UI < 100ms
-- ✅ אין regressions בייצוא PDF/HTML
-- ✅ כל הבדיקות של RED עדיין עוברות
-
-### נקודת אינטגרציה
-**מתי:** אחרי שסיימת את כל השלבים  
-**איך:** צור PR מ-`feature/ui-orange-integration` ל-`main`  
-**מה לבדוק:** שה-Worker של RED עדיין מקבל את אותם inputs ומחזיר את אותם outputs
+אין להמתין לשיפור חזותי של ה-UI, להשלמת מדריך משתמש, להחלפת ממשק Orange או להקמת מערכת טעינת פונטים חדשה כדי להמשיך לתקן את מנוע העימוד. כל עוד אפשר להריץ את המנוע, את בדיקותיו ואת כלי ההשוואה ללא תלות בשינויי UI, העבודה על המנוע ממשיכה.
 
 ---
 
-## 🐛 Agent 2: Debug Tools Integration
+## 2. עקרונות מחייבים
 
-**ענף עבודה:** `feature/debug-gold-tools`  
-**מטרה:** להוסיף כלי דיבאג ויזואליים מתקדמים מ-Gold  
-**קבצים באחריותך:**
-- `debug/` (תיקייה חדשה)
-- `debug/geometry-audit.js` (מ-Gold, מותאם)
-- `debug/visual-debugger.js` (חדש)
-- `debug/debug-panel.html` (חדש)
+### 2.1 המנוע אינו מוקפא — הוא מוגן באמצעות ראיות
 
-### צ'קליסט משימות
+הכלל הקודם, שלפיו אסור לגעת בליבת RED, מבוטל. הוא היה נכון כבלם נגד שינויים חיצוניים לא מבוקרים, אך הוא אינו יכול למנוע תיקון של באג שהוכח כי מקורו במנוע.
 
-#### שלב 1: ניתוח והכנה (יום 1-2)
-- [ ] **1.1** קרא את `geometry-audit.js` של Gold (1,980 שורות)
-- [ ] **1.2** הבן את 12+ הבדיקות הגיאומטריות
-- [ ] **1.3** הבן את מבנה ה-JSON ש-RED מייצר:
-  ```javascript
-  // הפלט של RED Worker
-  {
-    pages: [{
-      pageNumber: number,
-      columns: [{
-        blocks: [{
-          type: 'paragraph' | 'heading' | 'footnote',
-          rect: { x, y, width, height },
-          lines: [{ text, rect, words }]
-        }]
-      }]
-    }]
-  }
-  ```
-- [ ] **1.4** מיפה את ההבדלים בין DOM-based audit (Gold) ל-JSON-based audit (מה שצריך)
+במקומו יחולו הכללים הבאים:
 
-#### שלב 2: התאמת geometry-audit.js (יום 3-6)
-- [ ] **2.1** העתק את `geometry-audit.js` מ-Gold ל-`debug/`
-- [ ] **2.2** שכתוב את `extractGeometry()` לעבוד עם JSON במקום DOM:
-  ```javascript
-  // במקום:
-  function extractGeometry() {
-    const elements = document.querySelectorAll('.block');
-    // קורא bounding rects מה-DOM
-  }
-  
-  // עשה:
-  function extractGeometry(layoutJSON) {
-    // קורא ישירות מה-JSON ש-RED מייצר
-    return layoutJSON.pages.map(page => ({
-      pageNumber: page.pageNumber,
-      blocks: page.columns.flatMap(col => col.blocks)
-    }));
-  }
-  ```
-- [ ] **2.3** התאם את 12 הבדיקות לעבוד עם ה-JSON החדש:
-  - containment check
-  - sibling-overlap detection
-  - column-balance verification
-  - widow-orphan detection
-  - sparse-last-line check
-  - overflow-to-footnote detection
-  - page-overflow check
-  - ornaments placement
-  - page-fill-ratio
-  - block-gaps detection
-  - settings-verification
-  - footnote-containment
-- [ ] **2.4** הוסף פונקציות `highlightIssue()` ו-`paint()` שעובדות עם canvas/SVG overlay
+- שינוי במנוע מותר ואף נדרש כאשר קיימת ראיה שהשורש נמצא בו.
+- אין לבצע שינוי מנוע על סמך תחושה חזותית בלבד, ללא שחזור וללא זיהוי שלב סיבתי.
+- כל שינוי שמשפיע על הפריסה חייב לכלול בדיקת לפני/אחרי, בדיקת שימור תוכן ובדיקת דטרמיניזם.
+- יש להריץ לפחות את הבדיקות הממוקדות ואת הקורפוס הקנוני; שינוי בעל השפעה רחבה מחייב גם את הקורפוס הארוך ואת כלי ההשוואה לייחוס.
+- אין להחליש בדיקה, להעלות סף, לסווג ממצא כלא-רלוונטי או להסתירו כדי לקבל CI ירוק. שינוי סיווג מחייב נימוק, נתוני מדידה ובדיקת שלילה שמוכיחה שהבודק עדיין מזהה הפרה אמיתית.
+- אם התיקון אינו אפשרי תחת אילוץ מוכח (למשל מניעת אלמנה/יתום), המנוע חייב לדווח את האילוץ ואת השארית באופן מפורש; אין להציג הצלחה כוזבת.
 
-#### שלב 3: בניית visual debugger (יום 7-10)
-- [ ] **3.1** צור `debug/visual-debugger.js`:
-  ```javascript
-  class VisualDebugger {
-    constructor(canvas, layoutJSON) {
-      this.canvas = canvas;
-      this.layout = layoutJSON;
-    }
-    
-    highlightBlock(blockIndex, color) {
-      // מצייר rectangle על ה-canvas
-    }
-    
-    showGrid() {
-      // מציג grid של העמוד
-    }
-    
-    showMargins() {
-      // מציג את המרווחים
-    }
-  }
-  ```
-- [ ] **3.2** צור `debug/debug-panel.html` עם:
-  - Canvas overlay על תצוגת העמוד
-  - רשימת בעיות שנמצאו
-  - כפתורים להדגשת סוגי בעיות
-  - slider למעבר בין עמודים
-- [ ] **3.3** חבר את ה-debug panel ל-UI הראשי
+### 2.2 ה-UI כפוף למנוע
 
-#### שלב 4: אבחון שלב-אחר-שלב (יום 11-13)
-- [ ] **4.1** בקש מ-RED Worker לשלוח snapshots בכל checkpoint:
-  ```javascript
-  // ב-RED Worker, הוסף:
-  self.postMessage({
-    type: 'checkpoint',
-    stage: 'after-line-breaking',
-    snapshot: currentLayout
-  });
-  ```
-- [ ] **4.2** צור timeline viewer שמציג את 4 ה-checkpoints
-- [ ] **4.3** הוסף diff viewer שמראה מה השתנה בין checkpoints
-- [ ] **4.4** הוסף causality classifier (כמו ב-Gold):
-  - created-by-stage
-  - fixed-by-stage
-  - correction-reverted
-  - couldnt-appear-before
-  - created-at-first-checkpoint
-  - never-appeared
-  - unresolved
+- אין להחליף את ממשק RED בממשק Orange.
+- אין להקים מחדש את ארבע הלשוניות, את פאנלי ההגדרות, את Worker או את מנגנון השמירה שכבר קיימים.
+- אין לבצע שיפורי עיצוב, ארגון או נוחות שאינם נחוצים להפעלת בדיקות, להצגת ממצאים או לאבחון תקלה.
+- תיקון UI ייכנס למסלול דחוף רק אם הוא מונע שחזור, שינוי הגדרה, קבלת תוצאה נכונה, בדיקת עימוד או הצגת אבחון.
+- יש לשמר את מדיניות העבודה הקיימת: שינוי הגדרה קל אינו מפעיל עימוד כבד שלא לצורך; עימוד כבד מתבצע בפעולה מפורשת; אין להחזיר עימוד אוטומטי מכל שינוי פקד.
+- כל שינוי UI חייב להוכיח שאינו משנה את תוצאת המנוע כאשר הקלט וההגדרות זהים.
 
-#### שלב 5: בדיקות ודוקומנטציה (יום 14)
-- [ ] **5.1** בדוק את כל 12 הבדיקות על ספר לדוגמה
-- [ ] **5.2** בדוק את ה-visual debugger
-- [ ] **5.3** בדוק את ה-checkpoint viewer
-- [ ] **5.4** כתוב `debug/README.md` עם:
-  - איך להפעיל את ה-debugger
-  - מה כל בדיקה עושה
-  - איך לפרש את התוצאות
-  - דוגמאות לבעיות נפוצות
+### 2.3 הפרדה בין ארבע רמות של הוכחה
 
-### קריטריונים להצלחה
-- ✅ כל 12 הבדיקות עובדות על ה-JSON של RED
-- ✅ visual debugger מציג בעיות בצורה ברורה
-- ✅ checkpoint viewer עובד
-- ✅ אין האטה של >5% בעימוד (ה-debugger רץ בנפרד)
-- ✅ המנוע של RED לא השתנה כלל
+כל טענה במסמכי הפרויקט ובדוחות תסומן לפי סוג הראיה:
 
-### נקודת אינטגרציה
-**מתי:** אחרי שסיימת את כל השלבים  
-**איך:** צור PR מ-`feature/debug-gold-tools` ל-`main`  
-**מה לבדוק:** שה-debugger לא מאט את העימוד, ושהמנוע של RED לא השתנה
+| רמה | משמעות | דוגמה |
+|---|---|---|
+| קוד | המנגנון קיים ונקרא במסלול הפעיל | פונקציה מחוברת ל-pipeline |
+| בדיקה | תרחיש מוגדר עבר בבדיקה אוטומטית | בדיקת unit או E2E |
+| ריצה בפועל | אותה גרסה נבדקה בקורפוס/באתר/בייצוא | דוח Actions עם commit ו-artifact |
+| קבלת משתמש | המשתמש בדק את התוצאה החזותית והכריע שהיא מספקת | אישור מפורש של ספר דוגמה |
+
+אין להסיק מרמה אחת על רמה אחרת. CI ירוק אינו מוכיח שהספר נראה נכון; בדיקת עין מוצלחת של כמה עמודים אינה מוכיחה נכונות של כל הקורפוס.
+
+### 2.4 גרסאות המקור הן מקורות עיון, לא יעדי מיזוג
+
+- RED נשאר מאגר הפיתוח הראשי.
+- Gold/V21, Green/V23, Yellow/V22, Orange ו-IMUD_TORANI נשארים מקורות להשוואה, להפקת ראיות ולהעברת רכיבים נקודתית.
+- אין למזג ענפי V21 ו-V23 זה לתוך זה. אין לשנות את היסטוריית הפיתוח שלהם כדי לקדם את RED.
+- לפני העברת רכיב ממאגר מקור, יש לבדוק אם הוא כבר הועבר ל-RED דרך מאגר מאוחד אחר, אם הוא כבר ממומש בצורה שונה, ואם קיימים הבדלים או תיקוני שורש מאוחרים יותר.
+- כל רכיב שמועבר יירשם עם מקור, commit מקור, התאמות שבוצעו, בדיקות והסבר מדוע נדרש.
+
+### 2.5 דטרמיניזם ושקיפות אינם נתונים למשא ומתן
+
+- אותו קלט, אותן הגדרות, אותם נכסים ואותה גרסת מנוע חייבים להפיק אותה תוצאת פריסה.
+- שעונים, מזהי ריצה, סדר אקראי או זמן מערכת אינם רשאים להשפיע על החלטות עימוד.
+- אקראיות מותרת רק בכלי בדיקה ייעודיים, כאשר הזרע נשמר בדוח וניתן לשחזור. מסמך הבדיקה הקבוע נשאר קבוע-בתים.
+- כל החלטת עימוד משמעותית צריכה להיות ניתנת להסבר: מועמדים, אילוצים, ניקוד, סיבת בחירה, סיבת דחיית חלופה ותוצאה.
+- אין להוסיף מנגנון תצוגה או אבחון שמשנה את הגיאומטריה שאותה הוא מודד.
 
 ---
 
-## 🔤 Agent 3: Font Loading Optimization
+## 3. תמונת מצב — נקודת פתיחה ולא הצהרת סיום
 
-**ענף עבודה:** `feature/font-loading-optimization`  
-**מטרה:** לשפר את זמן הטעינה הראשוני עם טעינה דו-שלבית  
-**קבצים באחריותך:**
-- `fonts/font-loader.js` (חדש)
-- `fonts/core-fonts.json` (חדש)
-- `fonts/extended-fonts.json` (חדש)
-- `fonts/font-cache.js` (חדש)
+הנתונים הבאים נשענים על תיעוד S6.1–S6.3 ב-WORKLOG ועל מסמכי האודיט שנמצאו במאגר. יש להתייחס אליהם כאל **הבסיס המתועד האחרון**, ולא כתחליף להרצת baseline חדשה על ה-HEAD שממנו מתחילים עבודה.
 
-### צ'קליסט משימות
+### 3.1 תשתיות שכבר קיימות — אין להקים מחדש
 
-#### שלב 1: ניתוח והכנה (יום 1-2)
-- [ ] **1.1** קרא את `fonts/` של RED והבן איך הוא טוען פונטים כרגע
-- [ ] **1.2** קרא את הרעיון של Yellow: 439 פונטים מיד + 1,315 לפי דרישה
-- [ ] **1.3** מיין את הפונטים של RED לשתי קבוצות:
-  - **Core fonts** (פונטים נפוצים: David, FrankRuehl, Times New Roman, Arial, וכו')
-  - **Extended fonts** (פונטים נדירים יותר)
-- [ ] **1.4** צור רשימה של 50-100 פונטי core הכרחיים
+| תחום | מצב מתועד ב-RED | משמעות לתוכנית |
+|---|---|---|
+| מנוע | pipeline, parser, MeasureAPI, Knuth-Plass, DP planner, balancing, notes, decorations, headers, TOC ו-ledger | ממשיכים לשפר את המימוש הקיים |
+| UI | ארבע לשוניות, פאנלים דינמיים, חיפוש הגדרות, תצוגה, בדיקה וסרגל מצב | אין החלפה מלאה |
+| Worker | Worker נפרד, פרוטוקול הודעות, מזהי עבודה, progress, ביטול, רישום גופנים/נכסים וייצוא | אין להמציא API חדש |
+| שמירת הגדרות | שמירת diff ב-localStorage ושחזור מעל ברירות המחדל (S6.1) | אין לבנות persistence חדש |
+| מסמכי בדיקה | מסמך קבוע דטרמיניסטי ומסמך רנדומלי עם צירי עקה מבניים (S6.1) | להשתמש בהם ולהרחיב רק לפי פער |
+| אבחון | EventLog, Ledger, report schema, trace, דוח ממצאים, debug פר-עמוד ו-highlightIssue | להרחיב באופן ממוקד |
+| בדיקות | unit, integration, layout, E2E, negative controls, determinism, canonical ו-long-text | להרחיב את הקיים |
+| CI | workflows לבדיקות, audit, parity ו-full-math | לא להקים CI מקביל |
+| גופנים | רישום גופנים, parser למדדי SFNT, מדידה לפי מטריקות גופן וקטלוג נכסים | למדוד לפני שינוי טעינה |
 
-#### שלב 2: בניית font loader (יום 3-6)
-- [ ] **2.1** צור `fonts/font-loader.js`:
-  ```javascript
-  class FontLoader {
-    constructor() {
-      this.coreFonts = new Map();
-      this.extendedFonts = new Map();
-      this.cache = new FontCache();
-    }
-    
-    async loadCoreFonts() {
-      // טוען את 50-100 הפונטים החשובים מיד
-      const coreList = await fetch('fonts/core-fonts.json');
-      for (const fontName of coreList) {
-        const font = await this.loadFont(fontName);
-        this.coreFonts.set(fontName, font);
-      }
-    }
-    
-    async loadExtendedFonts() {
-      // טוען את שאר הפונטים ברקע
-      const extendedList = await fetch('fonts/extended-fonts.json');
-      for (const fontName of extendedList) {
-        if (!this.extendedFonts.has(fontName)) {
-          const font = await this.loadFont(fontName);
-          this.extendedFonts.set(fontName, font);
-        }
-      }
-    }
-    
-    getFont(name) {
-      return this.coreFonts.get(name) || this.extendedFonts.get(name);
-    }
-    
-    async loadFont(name) {
-      // קורא את קובץ הפונט ומפרסר אותו
-      // משתמש באותו parser ש-RED כבר משתמש בו
-    }
-  }
-  ```
-- [ ] **2.2** צור `fonts/core-fonts.json`:
-  ```json
-  {
-    "fonts": [
-      "David",
-      "FrankRuehl",
-      "Times New Roman",
-      "Arial",
-      "Calibri",
-      "David CLM",
-      "Frank Ruehl CLM",
-      "Nachlieli CLM",
-      ...
-    ]
-  }
-  ```
-- [ ] **2.3** צור `fonts/extended-fonts.json`:
-  ```json
-  {
-    "fonts": [
-      // כל שאר 1,600+ הפונטים
-    ]
-  }
-  ```
-- [ ] **2.4** צור `fonts/font-cache.js` עם IndexedDB caching:
-  ```javascript
-  class FontCache {
-    async get(fontName) {
-      // בודק אם הפונט ב-cache
-    }
-    
-    async set(fontName, fontData) {
-      // שומר את הפונט ב-cache
-    }
-  }
-  ```
+### 3.2 תוצאות אחרונות שמתועדות
 
-#### שלב 3: אינטגרציה עם RED (יום 7-9)
-- [ ] **3.1** התאם את ה-RED Worker להשתמש ב-FontLoader:
-  ```javascript
-  // בתחילת ה-worker:
-  const fontLoader = new FontLoader();
-  await fontLoader.loadCoreFonts();
-  
-  // כשצריך פונט:
-  const font = fontLoader.getFont(requestedFont);
-  if (!font) {
-    // הפונט לא ב-core, נסה לטעון אותו
-    await fontLoader.loadExtendedFonts();
-    font = fontLoader.getFont(requestedFont);
-  }
-  ```
-- [ ] **3.2** הוסף ל-UI כפתור "טען פונטים נוספים":
-  ```javascript
-  document.getElementById('load-extended-fonts').onclick = async () => {
-    showLoadingIndicator();
-    await fontLoader.loadExtendedFonts();
-    hideLoadingIndicator();
-    showSuccessMessage('נטענו פונטים נוספים');
-  };
-  ```
-- [ ] **3.3** הוסף אינדיקטור טעינה בזמן ש-Core fonts נטענים
+S6.3 מתעד, בין היתר:
 
-#### שלב 4: אופטימיזציות נוספות (יום 10-12)
-- [ ] **4.1** הוסף prefetching:
-  ```javascript
-  // כשהמשתמש פותח את בחירת הפונטים
-  fontSelect.onfocus = () => {
-    fontLoader.prefetchPopularFonts();
-  };
-  ```
-- [ ] **4.2** הוסף lazy loading לפונטים שלא בשימוש:
-  ```javascript
-  // רק טוען פונט כשהמשתמש בוחר אותו
-  fontSelect.onchange = async (e) => {
-    const fontName = e.target.value;
-    if (!fontLoader.hasFont(fontName)) {
-      await fontLoader.loadFont(fontName);
-    }
-  };
-  ```
-- [ ] **4.3** הוסף font fallback chain:
-  ```javascript
-  function getFontWithFallback(requestedFont) {
-    return fontLoader.getFont(requestedFont) 
-      || fontLoader.getFont('David')
-      || fontLoader.getFont('Times New Roman');
-  }
-  ```
-- [ ] **4.4** מדוד זמני טעינה לפני ואחרי
+- 704 עמודים בקורפוס הארוך שנבדק.
+- 43,117 שורות ו-360,326 מילים לפי הדוח המתועד באותו שלב.
+- אפס ממצאים באודיט הגיאומטרי המלא, כולל בדיקת איזון תחתיות הטורים שנוספה.
+- HARD 4/4 וציון PARITY של 88.9% — 12 מתוך 14 בדיקות התאמה לייחוס.
+- דטרמיניזם שנבדק בריצה המתועדת.
+- ארבעת workflows המתועדים עברו באותה נקודת אימות.
 
-#### שלב 5: בדיקות ודוקומנטציה (יום 13-14)
-- [ ] **5.1** בדוק שכל הפונטים עדיין עובדים
-- [ ] **5.2** בדוק ש-Core fonts נטענים תוך < 2 שניות
-- [ ] **5.3** בדוק שהכפתור "טען פונטים נוספים" עובד
-- [ ] **5.4** בדוק שה-cache עובד (טעינה שנייה מהירה יותר)
-- [ ] **5.5** מדוד שיפור בזמן הטעינה הראשוני
-- [ ] **5.6** כתוב `fonts/README.md` עם:
-  - איך עובדת הטעינה הדו-שלבית
-  - איך להוסיף פונט ל-core fonts
-  - איך לנקות את ה-cache
+**הנתונים אינם אומרים שהמנוע הושלם.** בפרט, נותר פער בין תקינות פנימית לבין התאמה מלאה לייחוס.
 
-### קריטריונים להצלחה
-- ✅ זמן טעינה ראשוני < 2 שניות (במקום 10+ שניות)
-- ✅ כל הפונטים עדיין זמינים (דרך טעינה לפי דרישה)
-- ✅ cache עובד ושומר פונטים בין סשנים
-- ✅ אין regressions בדיוק העימוד
-- ✅ המנוע של RED לא השתנה (רק הדרך שבה הוא מקבל פונטים)
+### 3.3 סתירות תיעוד שיש ליישב בשלב הבסיס
 
-### נקודת אינטגרציה
-**מתי:** אחרי שסיימת את כל השלבים  
-**איך:** צור PR מ-`feature/font-loading-optimization` ל-`main`  
-**מה לבדוק:** שכל הפונטים עדיין עובדים, ושהמנוע של RED מקבל את אותם פונטים (רק בדרך מהירה יותר)
+קיימים במאגר מספרים שאינם מסונכרנים:
+
+- README עדיין מציג 388 בדיקות וציון parity ראשוני של 16.7%.
+- WORKLOG מתעד 657 בדיקות ב-S6.1, ‏670 ב-S6.2, ושוב 657 ב-S6.3.
+- במסמכים מסוימים מופיעים 12 פאנלים ובאחרים 13.
+
+אין לבחור מספר שנראה סביר ואין לעדכן מספרים לפי הערכה. בשלב 0 יש להריץ את הפקודות בפועל, להגדיר מה בדיוק נספר (assertions, tests או suites), להצמיד את התוצאה ל-commit ולתקן את המסמכים. עד אז אין להציג ספירת בדיקות יחידה כנתון ודאי.
+
+### 3.4 פערים שדורשים טיפול ראשון
+
+על פי תיעוד ה-parity וה-WORKLOG:
+
+1. **P6 — רצף הפסקאות:** התאמה למקור, לרבות פיצול מנייה ומיפוי הפסקאות.
+2. **P7 — שקילות שבירת שורות:** איתור נקודת הסטייה הראשונה והבנת שרשרת השפעתה על המשך המסמך.
+3. **שימור תוכן במסלול הערות ענק:** S6.2 מתעד אובדן של שתי מילים — "לשון" ו"הפוסקים" — במסמך הבדיקה הקבוע. הממצא דווח כ-content-loss ב-ledger, ולא מצאתי בתיעוד S6.3 הצהרת סגירה מפורשת. חובה לאמת את המצב בקוד ובריצה הנוכחיים.
+4. **אישור חזותי של המשתמש:** מסמך CUTOVER עדיין מציב בדיקת ספר דוגמה עמוד-עמוד ואישור משתמש מפורש כשער לפני קידום למהדורה.
+
+יש לבדוק מחדש כל אחד מהפערים על ה-HEAD העדכני. אין להניח שממצא היסטורי עדיין קיים, ואין לסגור אותו ללא בדיקה חוזרת.
 
 ---
 
-## 🧪 Agent 4: Testing Infrastructure
+## 4. סדר העבודה המחייב
 
-**ענף עבודה:** `feature/testing-infrastructure`  
-**מטרה:** להוסיף מערכת בדיקות אוטומטיות מקיפה מ-Green  
-**קבצים באחריותך:**
-- `tests/` (תיקייה חדשה או הרחבה של הקיימת)
-- `tests/e2e/` (בדיקות E2E עם Playwright)
-- `tests/fixtures/` (קבצי טקסט לבדיקות)
-- `.github/workflows/` (CI/CD)
+### שלב 0 — נעילת baseline אמין (קצר, לפני שינוי קוד)
 
-### צ'קליסט משימות
+**מטרה:** לדעת בדיוק מה עובד בגרסה שממנה מתחילים, ומה כבר אינו תקף מהתיעוד הישן.
 
-#### שלב 1: ניתוח והכנה (יום 1-2)
-- [ ] **1.1** קרא את מערכת הבדיקות הקיימת של RED (388 בדיקות)
-- [ ] **1.2** קרא את מערכת הבדיקות של Green (Playwright, E2E)
-- [ ] **1.3** מיפה את הפערים:
-  - אילו בדיקות חסרות?
-  - אילו בדיקות E2E צריך?
-  - אילו fixtures צריך?
-- [ ] **1.4** צור תוכנית בדיקות מקיפה
+משימות:
 
-#### שלב 2: הרחבת בדיקות Unit (יום 3-5)
-- [ ] **2.1** העתק את `very_long_test_text.txt` מ-Green
-- [ ] **2.2** צור fixtures נוספים:
-  ```
-  tests/fixtures/
-    ├─ short-text.txt
-    ├─ long-text.txt
-    ├─ complex-footnotes.txt
-    ├─ multi-column.txt
-    ├─ headings-hierarchy.txt
-    └─ ornaments.txt
-  ```
-- [ ] **2.3** הוסף בדיקות unit חדשות:
-  ```javascript
-  // tests/unit/font-loader.test.js
-  describe('FontLoader', () => {
-    test('loads core fonts on initialization', async () => {
-      const loader = new FontLoader();
-      await loader.loadCoreFonts();
-      expect(loader.coreFonts.size).toBeGreaterThan(50);
-    });
-    
-    test('loads extended fonts on demand', async () => {
-      const loader = new FontLoader();
-      await loader.loadExtendedFonts();
-      expect(loader.extendedFonts.size).toBeGreaterThan(1000);
-    });
-  });
-  ```
-- [ ] **2.4** הוסף בדיקות ל-geometry-audit:
-  ```javascript
-  // tests/unit/geometry-audit.test.js
-  describe('GeometryAudit', () => {
-    test('detects column imbalance', () => {
-      const layout = loadFixture('imbalanced-columns.json');
-      const issues = audit(layout);
-      expect(issues).toContain('column-balance');
-    });
-  });
-  ```
+- [ ] לתעד את commit ה-HEAD של main ואת תאריך הבדיקה.
+- [ ] להריץ את npm test מתוך red-build ולשמור פלט מלא.
+- [ ] להריץ את בדיקת הדטרמיניזם.
+- [ ] להריץ את בדיקת הקורפוס הקנוני.
+- [ ] להריץ layout-parity ולשמור report מלא, כולל תתי-הבדיקות שנכשלו.
+- [ ] להריץ full-math-audit על audits/very_long_test_text.txt.
+- [ ] להריץ את בדיקת המסמך האמיתי/ההיסטורי שמוגדרת ב-fixtures, אם היא נכללת בסטטוס הנוכחי.
+- [ ] לוודא שכל artifact נושא commit, hash קלט, hash פריסה, הגדרות, גרסת Node/דפדפן וגרסת גופנים.
+- [ ] להצליב בין תוצאות מקומיות, CI והאתר החי; לסמן במפורש אם הן אינן מאותה גרסה.
+- [ ] ליישב את ספירות הבדיקות ואת ציון ה-parity ב-README ובמסמכי המצב.
 
-#### שלב 3: בדיקות E2E עם Playwright (יום 6-9)
-- [ ] **3.1** התקן Playwright:
-  ```bash
-  npm install --save-dev @playwright/test
-  npx playwright install
-  ```
-- [ ] **3.2** צור `tests/e2e/ui.spec.js`:
-  ```javascript
-  import { test, expect } from '@playwright/test';
-  
-  test('UI loads correctly', async ({ page }) => {
-    await page.goto('http://localhost:3000');
-    await expect(page.locator('#editor-panel')).toBeVisible();
-    await expect(page.locator('#settings-panel')).toBeVisible();
-  });
-  
-  test('typesetting works through UI', async ({ page }) => {
-    await page.goto('http://localhost:3000');
-    await page.fill('#text-input', 'טקסט לדוגמה');
-    await page.click('#typeset-button');
-    await expect(page.locator('.page')).toBeVisible({ timeout: 10000 });
-  });
-  
-  test('PDF export works', async ({ page }) => {
-    await page.goto('http://localhost:3000');
-    await page.fill('#text-input', 'טקסט לדוגמה');
-    await page.click('#typeset-button');
-    
-    const downloadPromise = page.waitForEvent('download');
-    await page.click('#export-pdf-button');
-    const download = await downloadPromise;
-    
-    expect(download.suggestedFilename()).toMatch(/\.pdf$/);
-  });
-  ```
-- [ ] **3.3** צור `tests/e2e/determinism.spec.js`:
-  ```javascript
-  test('same input produces same output', async ({ page }) => {
-    const text = 'טקסט ארוך לדוגמה...';
-    
-    // Run 1
-    await page.goto('http://localhost:3000');
-    await page.fill('#text-input', text);
-    await page.click('#typeset-button');
-    const output1 = await page.evaluate(() => getLayoutHash());
-    
-    // Run 2
-    await page.reload();
-    await page.fill('#text-input', text);
-    await page.click('#typeset-button');
-    const output2 = await page.evaluate(() => getLayoutHash());
-    
-    expect(output1).toBe(output2);
-  });
-  ```
-- [ ] **3.4** צור `tests/e2e/performance.spec.js`:
-  ```javascript
-  test('typesetting completes within time limit', async ({ page }) => {
-    await page.goto('http://localhost:3000');
-    await page.fill('#text-input', veryLongText);
-    
-    const start = Date.now();
-    await page.click('#typeset-button');
-    await page.waitForSelector('.page');
-    const duration = Date.now() - start;
-    
-    expect(duration).toBeLessThan(5000); // < 5 seconds
-  });
-  ```
+**שער יציאה:** baseline שניתן לשחזור, עם רשימת בדיקות שעברו, נכשלו או לא הורצו. אין צורך להמתין לתיקוני UI או לתיעוד נוסף כדי להתחיל את שלב 1.
 
-#### שלב 4: CI/CD עם GitHub Actions (יום 10-12)
-- [ ] **4.1** צור `.github/workflows/ci.yml`:
-  ```yaml
-  name: CI
-  
-  on:
-    push:
-      branches: [main, develop]
-    pull_request:
-      branches: [main]
-  
-  jobs:
-    test:
-      runs-on: ubuntu-latest
-      
-      steps:
-        - uses: actions/checkout@v3
-        
-        - name: Setup Node
-          uses: actions/setup-node@v3
-          with:
-            node-version: '18'
-        
-        - name: Install dependencies
-          run: npm ci
-        
-        - name: Run unit tests
-          run: npm test
-        
-        - name: Run E2E tests
-          run: npx playwright test
-        
-        - name: Upload test results
-          uses: actions/upload-artifact@v3
-          if: always()
-          with:
-            name: test-results
-            path: test-results/
-  ```
-- [ ] **4.2** צור `.github/workflows/nightly.yml`:
-  ```yaml
-  name: Nightly Full Test
-  
-  on:
-    schedule:
-      - cron: '0 2 * * *' # 2 AM every day
-  
-  jobs:
-    full-test:
-      runs-on: ubuntu-latest
-      
-      steps:
-        - uses: actions/checkout@v3
-        
-        - name: Setup Node
-          uses: actions/setup-node@v3
-          with:
-            node-version: '18'
-        
-        - name: Install dependencies
-          run: npm ci
-        
-        - name: Run full test suite
-          run: npm run test:full
-        
-        - name: Run performance benchmarks
-          run: npm run test:perf
-        
-        - name: Generate report
-          run: npm run test:report
-        
-        - name: Upload report
-          uses: actions/upload-artifact@v3
-          with:
-            name: nightly-report
-            path: reports/
-  ```
-- [ ] **4.3** הוסף badges ל-README:
-  ```markdown
-  ![CI](https://github.com/SUGINACH/Tora_Book_Typesetter_Red/workflows/CI/badge.svg)
-  ![Nightly](https://github.com/SUGINACH/Tora_Book_Typesetter_Red/workflows/Nightly%20Full%20Test/badge.svg)
-  ```
+### שלב 1 — סגירת פערי נכונות במנוע (העדיפות העליונה)
 
-#### שלב 5: בדיקות ודוקומנטציה (יום 13-14)
-- [ ] **5.1** הרץ את כל הבדיקות
-- [ ] **5.2** ודא שכל הבדיקות עוברות
-- [ ] **5.3** בדוק שה-CI עובד
-- [ ] **5.4** מדוד coverage:
-  ```bash
-  npm run test:coverage
-  ```
-- [ ] **5.5** כתוב `tests/README.md` עם:
-  - איך להריץ את הבדיקות
-  - איך להוסיף בדיקות חדשות
-  - איך לפרש את התוצאות
-  - מה כל בדיקה בודקת
+זהו מסלול הפיתוח הראשי. אין להקצות את רוב המשאבים ל-UI, לגופנים או לניקיון ארכיטקטוני כללי לפני התקדמות בשלב זה.
 
-### קריטריונים להצלחה
-- ✅ כל הבדיקות עוברות (unit + E2E)
-- ✅ coverage > 80%
-- ✅ CI רץ אוטומטית על כל PR
-- ✅ nightly build רץ כל לילה
-- ✅ אין regressions בפונקציונליות
-- ✅ המנוע של RED לא השתנה
+#### 1.1 שימור תוכן — קודם לכל שיפור חזותי
 
-### נקודת אינטגרציה
-**מתי:** אחרי שסיימת את כל השלבים  
-**איך:** צור PR מ-`feature/testing-infrastructure` ל-`main`  
-**מה לבדוק:** שכל הבדיקות עוברות, ושה-CI מוגדר נכון
+- [ ] לשחזר את ממצא אובדן שתי המילים במסלול הערות הענק, אם הוא עדיין קיים.
+- [ ] ליצור fixture קטן ומבודד שמכיל את מבנה ההערות שמפעיל את התקלה.
+- [ ] ליצור בדיקה על המסמך הקבוע המלא שמוודאת שלא חסרות, מוכפלות או הוזזו מילים.
+- [ ] לבדוק בנפרד את מצבי footnotes, endnotes, side-notes, inline markers, הערות רציפות והערות ארוכות מפוצלות.
+- [ ] לוודא שהערות סמוכות, סמנים חוזרים, סמני הערות אחרי פיסוק והערות בכותרות אינם מתמזגים או נבלעים.
+- [ ] לוודא שעמודי הערות, TOC, כותרות עליונות, מספור ועיטורים אינם גורמים לאיבוד או לשכפול תוכן.
+- [ ] כל כשל שימור תוכן יירשם ב-ledger עם מקור, סוג רכיב, מיקום, שלב וסיבה — לא רק ככשל כללי של המסמך.
+
+**תנאי סגירה:** התאמת מולטיסט התוכן למקור בכל מסלולי ההערות שנבדקו, או רשימת חריגים מוכחת ומאושרת במפורש. אין לסמן "תוקן" אם רק בדיקת fixture קטן עברה.
+
+#### 1.2 P6 — רצף פסקאות וטוקניזציה
+
+- [ ] להפיק דוח divergence ממוקד שמזהה את הפסקה הראשונה שאינה תואמת לייחוס.
+- [ ] להפריד בין שגיאת זיהוי גבולות פסקה, שגיאת זיהוי כותרת, שגיאת מנייה, שגיאת סמן הערה ושגיאת ייצוג/השוואה.
+- [ ] לשמר לכל יחידת מקור מזהה יציב ומיקומי מקור (source offsets), כך שניתן יהיה לקשור פסקה/כותרת/סמן אל הפלט הסופי.
+- [ ] לטפל בפיצול מנייה (א. ב. ג. וכדומה) לפי התנהגות המקור או לפי הוראת המשתמש העדכנית — לא באמצעות regex שמפרק טקסט תקין.
+- [ ] לוודא שכותרות, הערות ומקטעי סוגריים אינם משנים את זהות הפסקה או את סדר הקריאה.
+- [ ] להוסיף בדיקות unit לטוקניזציה ובדיקות end-to-end שמשוות את הרצף מול הייחוס.
+- [ ] לתעד כל הבדל מכוון מהמקור בנפרד, כולל ההוראה שמצדיקה אותו.
+
+**תנאי סגירה:** P6 עובר, או שכל סטייה שנותרה מסווגת כהבדל מכוון ומאושרת. אין לשנות את בדיקת ההשוואה כדי להתעלם מהבדל שלא הוסבר.
+
+#### 1.3 P7 — שקילות שבירת שורות
+
+- [ ] לזהות את נקודת הסטייה הראשונה במסמך, ולא להתחיל מתיקון עמודים מאוחרים שנפגעו ממנה.
+- [ ] להשתמש ב-analyze-divergence ובכלי layout-parity כדי להפיק שרשרת שינויים: פסקה, שורה, טור, עמוד והמשך המסמך.
+- [ ] לכל סטייה לבדוק בנפרד רוחב מדידה, גופן, גודל, tracking, רווחי מילים, רווחי פסקאות, אילוצי שבירה, protectors, סוגריים והערות.
+- [ ] להבחין בין סטייה שמקורה במדידה לבין סטייה שנגרמת מהחלטת DP, איזון טורים, תקציב הערות או רינדור.
+- [ ] לשנות בכל ניסוי מנגנון אחד בלבד. אין לשלב כמה תיקונים לפני שנמדדה התרומה של כל אחד.
+- [ ] להפעיל השוואה על הקורפוס הקטן בעל הייחוס ועל הקורפוסים הארוכים לצורך בדיקת השפעות לוואי.
+- [ ] אם מנגנון מועיל מקומית אך פוגע בעמודים אחרים — אין להפעילו כברירת מחדל. יש לשמור אותו ניסיוני עד שיוכח שיפור נטו.
+
+**תנאי סגירה:** P7 עובר, או שההבדלים שנותרו הוסברו, נמדדו והוגדרו כפשרה או כהבדל מכוון שאושר. יעד הציון הוא תוצאה של פתרון ההבדלים, לא תחליף לניתוח שלהם.
+
+#### 1.4 איזון טורים, אלמנה/יתום ושאריות בלתי-פתירות
+
+- [ ] לשמר את ההבחנה בין סגירת עמוד מלא לבין סגירה מוקדמת של בלוק.
+- [ ] לוודא שטור ריק לחלוטין מזוהה ומדווח.
+- [ ] לוודא שכל שארית בלתי-פתירה לאחר איזון מופיעה ב-ledger עם deltaPx, מספר עמוד, סיבת האילוץ והשלב שבו התקבלה ההחלטה.
+- [ ] לבדוק שמגבלות min-2, כותרות, פסי רוחב מלא, תקציב הערות וסוף פרק אינם יוצרים סגירות מוקדמות לא מאוזנות.
+- [ ] לשמר את בדיקת COLUMN_BOTTOMS_BALANCE ואת הרגישות החיובית/שלילית שלה.
+- [ ] אין להרחיב איזון או למתוח עמודים באופן עיוור כדי לשפר מדד. יש לשמר את התנהגות המקור ואת הוראות המשתמש, כולל האיסור למלא פרק קצר באופן מלאכותי.
+- [ ] להבדיל בין אי-איזון אמיתי, אי-איזון בלתי-פתיר וממצא שווא של האודיט.
+
+**תנאי סגירה:** כל ממצא איזון מוסבר וממופה; אין טורים ריקים או אי-איזון משמעותי שמתחמקים מהדיווח; אין רגרסיה בסדר הקריאה או בשימור התוכן.
+
+### שלב 2 — השלמת אבחון סיבתי של המנוע
+
+שלב זה נועד להבטיח שלא נידרש עוד לבדוק ידנית כל שינוי ושנוכל להבין מדוע תיקון עזר, נכשל או גרם לרגרסיה.
+
+**אין לבנות מחדש את EventLog, Ledger, report-schema או debug UI.** יש לבדוק מה קיים ולהשלים רק את הפערים.
+
+#### 2.1 חוזה אבחון אחיד
+
+לכל ממצא יש לשמור, ככל שהנתון רלוונטי וזמין:
+
+- issue_id יציב.
+- זהות רכיב המקור: token/block/paragraph/heading/note/ornament.
+- source range או מזהה מקור יציב.
+- עמוד, טור, שורה ומיקום בפריסה.
+- סוג הממצא וחומרתו.
+- השלב הראשון שבו הממצא הופיע.
+- מצבו בכל checkpoint רלוונטי.
+- השלב שבו תוקן, הוחזר, נמנע או נשאר בלתי-פתיר.
+- הסיבה להחלטה ונתוני המועמדים/האילוצים שגרמו לה.
+- זהות הרכיבים האחרים בעמוד שהשתנו מאותו רגע ועד לשלב המעורר/המבטל.
+
+#### 2.2 checkpoints ו-diff
+
+יש לבחון את מערכת Gold V21 מול ה-trace וה-ledger הקיימים ב-RED, ולבצע gap analysis לפני מימוש.
+
+אם חסרה יכולת snapshot/diff, יש להוסיף אותה באופן מדורג:
+
+1. CP1 — פענוח, טוקניזציה, scope ומיפוי מקור.
+2. CP2 — מוכנות גופנים, מדידה ושבירת שורות.
+3. CP3 — תכנון עמודים, הגנות, איזון ונסיגה.
+4. CP4 — הערות, תקציבים, עיטורים, כותרות ותוכן-עניינים.
+5. CP5 — הקרנה/רינדור ומצב סופי.
+
+בנוסף ל-checkpoints הגלובליים, יש לאפשר אבחון ממוקד לעמוד/בלוק/ממצא, כדי לזהות שינוי שנוצר בתוך לולאה או בין שתי החלטות סמוכות. אין לשכפל snapshots מלאים של הספר בכל שלב ללא צורך.
+
+#### 2.3 סיווג סיבתי
+
+יש לשמר או להשלים את קטגוריות הסיבתיות של Gold:
+
+- created-by-stage — נוצר בשלב מסוים.
+- fixed-by-stage — תוקן בשלב מסוים.
+- correction-reverted — תיקון בוטל או הוחזר.
+- couldnt-appear-before — לא יכול היה להופיע לפני שלב נתון.
+- created-at-first-checkpoint — הופיע כבר במצב הראשון שנמדד.
+- never-appeared — לא הופיע בפריסה שנצפתה.
+- unresolved — לא נמצאה סיבה מספקת.
+
+יש להוסיף הבחנה בין "נעלם כי תוקן" לבין "נעלם כי הרכיב הוסר/נדחק/הוחלף" ובין "לא נצפה" לבין "הוכח שאינו קיים".
+
+#### 2.4 תיעוד מצבם של רכיבים אחרים בעמוד
+
+כאשר ממצא נוצר או מתוקן, האבחון לא יסתפק ברכיב הבעייתי. הוא יציג גם את מצבם של רכיבים אחרים שנוספו לאותו עמוד או שינו את מיקומם מאז הופעת הרכיב הראשוני ועד לשלב שהפעיל, מנע או ביטל את התיקון.
+
+מטרה זו חשובה במיוחד לתקלות שבהן הוספת הערה, כותרת, עיטור, פס או פסקה גורמת לשינוי מאוחר באיזון, בזרימה או במיקום של טקסט קודם.
+
+#### 2.5 בטיחות וביצועים
+
+- snapshots יהיו immutable; כלי האבחון לא יוכל לשנות את המודל הנמדד.
+- שימוש באבחון מפורט יהיה opt-in או יופעל רק עבור ריצת audit.
+- יש למדוד נפח snapshots, זמן, זיכרון והשפעה על עימוד.
+- מזהים וסדר אירועים יהיו דטרמיניסטיים; אין להשתמש בזמן מערכת כנתון סיבתי.
+- כשל באיסוף אבחון לא יכשיל את העימוד הרגיל, אך יוצג בדוח ככשל אבחון ולא כ"הכול תקין".
+
+**תנאי סגירה:** ניתן לבחור ממצא ולראות את מקורו, את רצף מצבו, את השלב הסיבתי ואת השינויים ברכיבים האחרים בעמוד — בלי להריץ מחדש בדיקה ידנית ובלי לשנות את הפריסה.
 
 ---
 
-## 📚 Agent 5: Documentation & Release
+## 5. שלב 3 — ייצוב וארכיטקטורה של המנוע
 
-**ענף עבודה:** `feature/documentation-release`  
-**מטרה:** ליצור תיעוד מקיף ולהכין את הפרויקט לשחרור  
-**קבצים באחריותך:**
-- `docs/` (הרחבה)
-- `README.md` (שכתוב מלא)
-- `CONTRIBUTING.md` (חדש)
-- `CHANGELOG.md` (חדש)
-- `RELEASE_NOTES.md` (חדש)
+שלב זה יבוצע לאחר שנקודות הכשל העיקריות זוהו. אין לבצע ריפקטור רחב כתחליף לתיקון באגים.
 
-### צ'קליסט משימות
+### 5.1 מפת pipeline מחייבת
 
-#### שלב 1: ניתוח והכנה (יום 1-2)
-- [ ] **1.1** קרא את כל התיעוד הקיים ב-RED
-- [ ] **1.2** קרא את התיעוד של Orange (`docs/`)
-- [ ] **1.3** מיפה את הפערים:
-  - מה חסר בתיעוד?
-  - מה צריך להוסיף?
-  - מה צריך לעדכן?
-- [ ] **1.4** צור תוכנית תיעוד מקיפה
+יש לשמור על pipeline יחיד וברור, כפי שמוגדר בקוד ובתיעוד:
 
-#### שלב 2: תיעוד טכני (יום 3-6)
-- [ ] **2.1** צור `docs/ARCHITECTURE.md`:
-  ```markdown
-  # Architecture
-  
-  ## Overview
-  RED is a typesetting engine built from scratch with zero runtime dependencies...
-  
-  ## Core Components
-  - **Worker Engine**: Runs in Web Worker, handles all typesetting logic
-  - **Font Parser**: Reads font files directly (hmtx, cmap, kern, GPOS)
-  - **Line Breaker**: Implements Knuth-Plass algorithm
-  - **Page Planner**: Uses dynamic programming for optimal layout
-  - **PDF Generator**: Creates PDF 1.4 from scratch
-  
-  ## Data Flow
-  1. UI sends text + settings to Worker
-  2. Worker parses text and applies settings
-  3. Line breaker computes optimal line breaks
-  4. Page planner assigns content to pages
-  5. PDF generator creates output
-  
-  ## File Structure
-  ...
-  ```
-- [ ] **2.2** צור `docs/API.md`:
-  ```markdown
-  # API Reference
-  
-  ## Worker API
-  
-  ### Messages to Worker
-  
-  #### typeset
-  ```javascript
-  worker.postMessage({
-    type: 'typeset',
-    text: string,
-    settings: Settings
-  });
-  ```
-  
-  #### export-pdf
-  ```javascript
-  worker.postMessage({
-    type: 'export-pdf',
-    layout: Layout
-  });
-  ```
-  
-  ### Messages from Worker
-  
-  #### layout-complete
-  ```javascript
-  {
-    type: 'layout-complete',
-    layout: Layout,
-    stats: {
-      pageCount: number,
-      wordCount: number,
-      processingTime: number
-    }
-  }
-  ```
-  ...
-  ```
-- [ ] **2.3** צור `docs/SETTINGS.md`:
-  ```markdown
-  # Settings Reference
-  
-  ## Page Settings
-  - `page-width`: Width of the page in mm (default: 210)
-  - `page-height`: Height of the page in mm (default: 297)
-  - `margin-top`: Top margin in mm (default: 20)
-  ...
-  
-  ## Typography Settings
-  - `font-family`: Font family name (default: 'David')
-  - `font-size`: Font size in pt (default: 12)
-  - `line-height`: Line height multiplier (default: 1.5)
-  ...
-  ```
-- [ ] **2.4** צור `docs/EXTENDING.md`:
-  ```markdown
-  # Extending RED
-  
-  ## Adding a New Font
-  1. Place font file in `fonts/` directory
-  2. Add font name to `fonts/core-fonts.json` or `fonts/extended-fonts.json`
-  3. The font parser will automatically detect and parse it
-  
-  ## Adding a New Setting
-  1. Add setting to `Settings` interface in `types.ts`
-  2. Add default value to `default-settings.json`
-  3. Add UI control in `index.html`
-  4. Handle setting in Worker
-  ...
-  ```
+- Parse / scope-map / style prepass.
+- Fonts-ready / measure / line planning.
+- Page planning / protections / retreat.
+- Balancing / notes budget / re-fit.
+- Decorations / headers / folio / TOC.
+- Ledger finalize / render.
 
-#### שלב 3: תיעוד למשתמשים (יום 7-9)
-- [ ] **3.1** שכתוב את `README.md`:
-  ```markdown
-  # RED - Torah Book Typesetting Engine
-  
-  [![CI](https://github.com/SUGINACH/Tora_Book_Typesetter_Red/workflows/CI/badge.svg)](https://github.com/SUGINACH/Tora_Book_Typesetter_Red/actions)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  
-  A deterministic, high-performance typesetting engine for Hebrew religious texts.
-  
-  ## Features
-  
-  - 🚀 **Fast**: Handles 1000+ page books without breaking a sweat
-  - 🎯 **Deterministic**: Same input = exact same output, always
-  - 🔒 **Zero Dependencies**: Built from scratch, no external libraries
-  - 📄 **Perfect PDF**: Generates PDF 1.4 with embedded fonts
-  - 🌐 **Offline**: Works completely offline, no server required
-  
-  ## Quick Start
-  
-  ```bash
-  git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-  cd repo
-  npm install
-  npm start
-  ```
-  
-  Open http://localhost:3000 in your browser.
-  
-  ## Documentation
-  
-  - [Architecture](docs/ARCHITECTURE.md)
-  - [API Reference](docs/API.md)
-  - [Settings](docs/SETTINGS.md)
-  - [Contributing](CONTRIBUTING.md)
-  
-  ## Contributing
-  
-  We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-  
-  ## License
-  
-  MIT License - see [LICENSE](LICENSE) for details.
-  ```
-- [ ] **3.2** צור `CONTRIBUTING.md`:
-  ```markdown
-  # Contributing to RED
-  
-  Thank you for your interest in contributing to RED!
-  
-  ## How to Contribute
-  
-  ### Reporting Bugs
-  1. Check existing issues first
-  2. Create a new issue with:
-     - Clear description
-     - Steps to reproduce
-     - Expected vs actual behavior
-     - Sample text that triggers the issue
-  
-  ### Suggesting Features
-  1. Create an issue with the `enhancement` label
-  2. Describe the feature and its use case
-  3. Discuss with maintainers before implementing
-  
-  ### Submitting Pull Requests
-  1. Fork the repository
-  2. Create a feature branch
-  3. Make your changes
-  4. Add tests
-  5. Ensure all tests pass
-  6. Submit a PR
-  
-  ## Code Style
-  - Use TypeScript
-  - Follow existing code style
-  - Add JSDoc comments for public APIs
-  - Write tests for new features
-  
-  ## Development Setup
-  ```bash
-  git clone https://github.com/your-username/repo
-  cd repo
-  npm install
-  npm run dev
-  ```
-  
-  ## Testing
-  ```bash
-  npm test          # Unit tests
-  npm run test:e2e  # E2E tests
-  npm run test:full # All tests
-  ```
-  
-  ## Questions?
-  Open an issue or contact the maintainers.
-  ```
-- [ ] **3.3** צור `docs/TUTORIAL.md`:
-  ```markdown
-  # Tutorial: Typesetting Your First Book
-  
-  ## Step 1: Prepare Your Text
-  ...
-  
-  ## Step 2: Configure Settings
-  ...
-  
-  ## Step 3: Run Typesetting
-  ...
-  
-  ## Step 4: Review and Export
-  ...
-  ```
-- [ ] **3.4** צור `docs/TROUBLESHOOTING.md`:
-  ```markdown
-  # Troubleshooting
-  
-  ## Common Issues
-  
-  ### Fonts not loading
-  - Check that font files are in `fonts/` directory
-  - Check browser console for errors
-  - Try clearing the font cache
-  
-  ### Slow typesetting
-  - Large books (500+ pages) may take time
-  - Check that you're using the latest version
-  - Try closing other browser tabs
-  
-  ### PDF export fails
-  - Check that you have enough disk space
-  - Try a shorter text first
-  - Check browser console for errors
-  ...
-  ```
+אם סדר הפעולות משתנה, יש לעדכן את מפת התלות ואת בדיקות הסדר. אין ליצור מסלול חלופי שעוקף את מקור האמת ללא הצדקה ותיעוד.
 
-#### שלב 4: הכנה לשחרור (יום 10-12)
-- [ ] **4.1** צור `CHANGELOG.md`:
-  ```markdown
-  # Changelog
-  
-  All notable changes to this project will be documented in this file.
-  
-  ## [1.0.0] - 2026-11-XX
-  
-  ### Added
-  - Deterministic typesetting engine
-  - Knuth-Plass line breaking algorithm
-  - Direct font file parsing (hmtx, cmap, kern, GPOS)
-  - PDF 1.4 generation from scratch
-  - Web Worker architecture
-  - Offline support
-  - Geometry audit tools
-  - Visual debugger
-  - Comprehensive test suite
-  - Extensive documentation
-  
-  ### Changed
-  - Complete rewrite from scratch
-  - Zero runtime dependencies
-  
-  ### Fixed
-  - Memory issues with large books
-  - Determinism across different browsers
-  - PDF export quality
-  ```
-- [ ] **4.2** צור `RELEASE_NOTES.md`:
-  ```markdown
-  # Release Notes - v1.0.0
-  
-  ## Highlights
-  
-  This is the first official release of RED, a completely new typesetting engine built from scratch.
-  
-  ## What's New
-  
-  ### Core Engine
-  - Deterministic typesetting: same input always produces same output
-  - Handles books with 1000+ pages without issues
-  - Zero dependencies: no external libraries required
-  - Offline-first: works completely offline
-  
-  ### Typography
-  - Knuth-Plass algorithm for optimal line breaking
-  - Direct font file parsing for pixel-perfect measurements
-  - Support for complex Hebrew typography rules
-  
-  ### Export
-  - PDF 1.4 generation from scratch
-  - Embedded fonts with proper Unicode mapping
-  - HTML export with @page rules
-  
-  ## Known Issues
-  
-  - See [ISSUES.md](docs/ISSUES.md) for current known issues
-  
-  ## Upgrade Guide
-  
-  This is a completely new engine, so there's no upgrade path from previous versions.
-  See [MIGRATION.md](docs/MIGRATION.md) for guidance.
-  
-  ## Contributors
-  
-  Thanks to all contributors who made this release possible!
-  ```
-- [ ] **4.3** צור `docs/FAQ.md`:
-  ```markdown
-  # Frequently Asked Questions
-  
-  ## General
-  
-  ### What is RED?
-  RED is a typesetting engine for Hebrew religious texts...
-  
-  ### Why "RED"?
-  RED stands for...
-  
-  ### Is RED free?
-  Yes, RED is open source under the MIT license.
-  
-  ## Technical
-  
-  ### Why zero dependencies?
-  ...
-  
-  ### How does RED achieve determinism?
-  ...
-  
-  ### Can RED handle large books?
-  Yes, RED has been tested with books of 1000+ pages...
-  ```
-- [ ] **4.4** צור `LICENSE` (אם אין):
-  ```
-  MIT License
-  
-  Copyright (c) 2026 [Your Name]
-  
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction...
-  ```
+### 5.2 מקור אמת יחיד לכל מנגנון
 
-#### שלב 5: בדיקות ושחרור (יום 13-14)
-- [ ] **5.1** בדוק שכל הקישורים בתיעוד עובדים
-- [ ] **5.2** בדוק שה-README ברור ומזמין
-- [ ] **5.3** בדוק שה-CONTRIBUTING.md ברור
-- [ ] **5.4** בדוק שה-CHANGELOG.md מקיף
-- [ ] **5.5** צור tag לגרסה:
-  ```bash
-  git tag v1.0.0
-  git push origin v1.0.0
-  ```
-- [ ] **5.6** צור GitHub Release:
-  - כתוב תיאור קצר
-  - הוסף את ה-RELEASE_NOTES.md
-  - הוסף artifacts (אם יש)
-- [ ] **5.7** פרסם ברשתות חברתיות:
-  - Twitter/X
-  - Reddit (r/programming, r/webdev)
-  - Hacker News
-  - Jewish tech communities
+- מדידת רוחב/גובה תעבור דרך MeasureAPI או API מדידה ייעודי ומוצהר; אין לפזר מדידות DOM או קבועים מקומיים.
+- הגדרות ימשיכו להישען על settings-registry כמקור אמת לקשר פקד→מפתח→צרכן→בדיקת השפעה.
+- כללי הערות, סמנים, מספור, כותרות, עיטורים וייצוא יישענו על מודולים ייעודיים ולא על ממירים כפולים.
+- גיאומטריית התצוגה, ה-HTML וה-PDF תמשיך להיגזר ממקור גיאומטריה משותף.
+- אין להוסיף מנגנון שני לאותו תפקיד בלי להוכיח מדוע הקיים אינו מתאים.
 
-### קריטריונים להצלחה
-- ✅ תיעוד מקיף וברור
-- ✅ README מזמין ומקצועי
-- ✅ CONTRIBUTING.md ברור
-- ✅ CHANGELOG.md מקיף
-- ✅ GitHub Release מוכן
-- ✅ כל הקישורים עובדים
+### 5.3 כללי ריפקטור
 
-### נקודת אינטגרציה
-**מתי:** אחרי שסיימת את כל השלבים  
-**איך:** צור PR מ-`feature/documentation-release` ל-`main`  
-**מה לבדוק:** שכל התיעוד במקום, ושה-PR מוכן למיזוג
+- ריפקטור ייעשה ביחידות קטנות, עם hash/תוצאות לפני ואחרי.
+- שינוי שמות או חלוקת קבצים לא יתערבבו עם שינוי אלגוריתם.
+- קוד מת יוסר רק לאחר מיפוי קריאות ותיעוד מקור; אין למחוק קובצי audit, fixtures או ראיות היסטוריות כדי לנקות את המאגר.
+- אין לשנות פורמט תוצאה או Worker protocol בלי הצעת שינוי חוזה ובדיקות תאימות.
+- אין להפוך קבוע מכויל להגדרה חופשית רק כדי להגדיל גמישות; יש להוכיח שיש לו צרכן ויש בדיקה שמודדת את השפעתו.
+
+**תנאי סגירה:** מפת התלות משקפת את הקוד הפעיל; אין מסלולים כפולים בלתי-מוסברים או הגדרות מתות; ה-pipeline נשאר דטרמיניסטי וניתן לביקורת.
 
 ---
 
-## 🔄 פרוטוקול התקדמות מאורגן
+## 6. שלב 4 — אופטימיזציה וביצועים (לא לפני מדידה)
 
-### שלב 1: Kickoff (יום 0)
-- [ ] כל 5 הסוכנים מקבלים את התכנית הזו
-- [ ] כל סוכן יוצר את הענף שלו:
-  ```bash
-  git checkout -b feature/[agent-name]
-  ```
-- [ ] כל סוכן קורא את החלק שלו בתכנית
-- [ ] כל סוכן מתחיל בשלב 1 (ניתוח והכנה)
+אופטימיזציה אינה פרויקט נפרד שמותר לו לשנות את מדידת הטיפוגרפיה. עליה לשמר את אותה תוצאת פריסה.
 
-### שלב 2: פיתוח (יום 1-12)
-- [ ] כל סוכן עובד על המשימות שלו
-- [ ] כל סוכן מבצע commit לענף שלו:
-  ```bash
-  git add .
-  git commit -m "[Agent-X] Add feature Y"
-  git push origin feature/[agent-name]
-  ```
-- [ ] כל סוכן מעדכן את הצ'קליסט שלו
-- [ ] אם יש שאלות/חסימות, הסוכן פותח issue ב-main repo
+### 6.1 מדידות נדרשות
 
-### שלב 3: אינטגרציה (יום 13-14)
-- [ ] כל סוכן מסיים את כל המשימות שלו
-- [ ] כל סוכן בודק שהקריטריונים להצלחה מתקיימים
-- [ ] כל סוכן יוצר PR ל-main:
-  ```bash
-  # ב-GitHub UI
-  # Create Pull Request from feature/[agent-name] to main
-  ```
-- [ ] כל סוכן מוסיף תיאור ל-PR:
-  ```markdown
-  ## Summary
-  [תיאור קצר של מה נעשה]
-  
-  ## Changes
-  - [רשימת שינויים]
-  
-  ## Testing
-  - [איך נבדק]
-  
-  ## Checklist
-  - [ ] כל המשימות הושלמו
-  - [ ] כל הקריטריונים להצלחה מתקיימים
-  - [ ] אין regressions
-  - [ ] התיעוד עודכן (אם רלוונטי)
-  ```
+לפני כל שינוי יש למדוד בנפרד:
 
-### שלב 4: מיזוג (יום 15)
-- [ ] Maintainer בודק את כל 5 ה-PRs
-- [ ] Maintainer מוודא שאין קונפליקטים
-- [ ] Maintainer ממזג את ה-PRs בסדר הבא:
-  1. Agent 4 (Testing) - כדי שנוכל לבדוק את השאר
-  2. Agent 3 (Font Loading) - שיפור ביצועים
-  3. Agent 2 (Debug Tools) - כלים למפתחים
-  4. Agent 1 (UI) - שיפור חווית המשתמש
-  5. Agent 5 (Documentation) - תיעוד ושחרור
-- [ ] Maintainer מריץ את כל הבדיקות אחרי כל מיזוג
-- [ ] Maintainer יוצר tag לגרסה v1.0.0
+- זמן טעינת האפליקציה.
+- זמן טעינת נכסי CSS/WOFF2/TTF.
+- זמן רישום/פרסור הגופנים ב-Worker.
+- זמן המדידה ושבירת השורות.
+- זמן DP ותכנון העמודים.
+- זמן איזון/הערות/עיטורים.
+- זמן הקרנה וייצוא.
+- שיא זיכרון וגודל bundles.
+- זמן ריצה על מסמך קצר, קנוני, ארוך ומסמך אמיתי.
 
-### שלב 5: שחרור (יום 16)
-- [ ] Maintainer יוצר GitHub Release
-- [ ] Maintainer מפרסם ברשתות חברתיות
-- [ ] Maintainer אוסף פידבק מהקהילה
-- [ ] Maintainer מתכנן את הגרסה הבאה (v1.1.0)
+### 6.2 טעינת גופנים
+
+אין להקים את FontLoader המתואר בתוכנית הישנה כפי שהוא. לפני מימוש יש להבחין בין:
+
+- גופן שנדרש לתצוגה בלבד.
+- גופן שנדרש למדידה.
+- גופן שמוטמע ב-PDF.
+- גופן שמופיע רק בקטלוג אך אינו מוטמע.
+- פורמט הקובץ בפועל (TTF/OTF לעומת WOFF2).
+
+כללי ביצוע:
+
+- אין להעביר WOFF2 ישירות ל-parser שמצפה לבתי SFNT אם אינו תומך בפורמט.
+- אין לבצע fallback לגופן אחר בשקט כאשר הדבר משנה רוחב, שבירת שורות או גובה.
+- רשימת גופני core תיגזר משימוש מוכח בברירות המחדל ובמסמכים אמיתיים, לא מניחוש של 50–100 שמות.
+- תחילה יש לבדוק טעינה עצלה ו-cache HTTP של הדפדפן; IndexedDB ייבחן רק אם המדידה מצדיקה מורכבות נוספת.
+- טעינה מורחבת תתבצע לפי דרישה, בלי לחסום את תחילת העבודה על מסמך כאשר הגופן הנדרש כבר זמין.
+- כל שינוי טעינה חייב לשמור על parity בין מדידה, תצוגה וייצוא.
+
+**תנאי סגירה:** שיפור מדוד בזמן/זיכרון, ללא שינוי ב-hash הפריסה עבור אותו קלט, אותן הגדרות ואותם גופנים.
+
+### 6.3 ביצועי מנוע
+
+- למדוד את נקודות החום לפני הכנסת cache.
+- לכל cache להגדיר מפתח מלא, invalidation, גבול גודל ומדד hit-rate.
+- אין להכניס cache גלובלי שמערבב בין גופנים, הגדרות או מסמכים.
+- מקביליות תיבחן רק לאחר שהוכח שאין תלות סדר ושכל תוצאה נשארת דטרמיניסטית.
+- אין להגדיל timeout כדי להסתיר האטה או תלייה; יש לאתר את שלב העיכוב.
 
 ---
 
-## 📊 טבלת מעקב התקדמות
+## 7. שלב 5 — UI כתשתית שירות למנוע
 
-| Agent | שלב 1 | שלב 2 | שלב 3 | שלב 4 | שלב 5 | סטטוס |
-|-------|-------|-------|-------|-------|-------|-------|
-| Agent 1: UI | [ ] | [ ] | [ ] | [ ] | [ ] | 🔴 לא התחיל |
-| Agent 2: Debug | [ ] | [ ] | [ ] | [ ] | [ ] | 🔴 לא התחיל |
-| Agent 3: Fonts | [ ] | [ ] | [ ] | [ ] | [ ] | 🔴 לא התחיל |
-| Agent 4: Testing | [ ] | [ ] | [ ] | [ ] | [ ] | 🔴 לא התחיל |
-| Agent 5: Docs | [ ] | [ ] | [ ] | [ ] | [ ] | 🔴 לא התחיל |
+ה-UI הנוכחי יישאר בסיס העבודה. אין לבצע החלפת Orange או שכתוב כללי.
 
-**מקרא:**
-- 🔴 לא התחיל
-- 🟡 בתהליך
-- 🟢 הושלם
-- ✅ נבדק ואושר
+### 7.1 מה כן נדרש
 
----
+- [ ] לוודא שכל תוצאת עימוד מציגה hash, סטטוס שימור תוכן, מספר עמודים, זמן ריצה וממצאים.
+- [ ] לוודא שניתן לפתוח דוח פר-עמוד ולראות טורים, בלוקים, שורות, ledger ו-trace.
+- [ ] לוודא שהדגשת ממצא מובילה לעמוד ולרכיב המתאימים.
+- [ ] לוודא שהודעות שגיאה מבחינות בין כשל מנוע, כשל Worker, כשל נכס וכשל אבחון.
+- [ ] לוודא שמסמכי בדיקה קבועים/רנדומליים נשארים נגישים.
+- [ ] לוודא ששינוי הגדרות נשמר ושחזורו אינו משנה מסמך אחר או גורם לעימוד בלתי-מכוון.
+- [ ] לתקן רק חסמים שימושיים שמונעים את הפעולות האלו.
 
-## 🎯 כללי ברזל (אל תשכח!)
+### 7.2 מה נדחה במפורש
 
-### כלל 1: המנוע של RED הוא קדוש
-- **אסור** לשנות את הלוגיקה של ה-Worker
-- **אסור** לשנות את האלגוריתמים (Knuth-Plass, DP, וכו')
-- **אסור** לפגוע בדטרמיניזם
-- **מותר** רק להוסיף שכבות מעל (UI, דיבאג, טעינה, בדיקות)
+עד לסגירת שלבים 1–3 אין לבצע:
 
-### כלל 2: כל סוכן עובד בנפרד
-- **אסור** לעבוד על קבצים של סוכן אחר
-- **אסור** למזג ענפים של סוכנים אחרים
-- **מותר** רק לעבוד על הענף שלך
+- החלפה מלאה של index/app/style.
+- עיצוב מחדש של כל הלשוניות.
+- הוספת מקשי קיצור, drag-and-drop, search & replace או undo/redo להגדרות, אלא אם הוכח שהם חוסמים תהליך עבודה נדרש.
+- בניית פאנל Debug חדש במקביל לפאנל ולדוחות הקיימים.
+- שינויי UI שאין להם בדיקת קבלה ברורה.
 
-### כלל 3: בדיקות לפני מיזוג
-- **חובה** להריץ את כל הבדיקות לפני יצירת PR
-- **חובה** לוודא שאין regressions
-- **חובה** לעדכן את הצ'קליסט
+### 7.3 חוזה UI–Worker
 
-### כלל 4: תיעוד הוא חלק מהעבודה
-- **חובה** לתעד כל שינוי משמעותי
-- **חובה** לעדכן את ה-README אם צריך
-- **חובה** לכתוב comments בקוד
+הפרוטוקול הקיים ב-worker-protocol.js הוא מקור האמת. אין להשתמש בדוגמאות הישנות שבתוכנית הקודמת (typeset/export-pdf עם payload שונה) כאילו הן API פעיל.
 
-### כלל 5: תקשורת היא קריטית
-- **חובה** לעדכן אם יש חסימות
-- **חובה** לפתוח issue אם יש שאלות
-- **חובה** לעדכן את טבלת המעקב
+כל שינוי פרוטוקול מחייב:
 
----
-# חלק שני: הכנות קדם-ביצוע והגדרת סביבת עבודה
-
-> **הערה:** חלק זה מצורף כהמשך ישיר ל"תכנית עבודה אסטרטגית: שדרוג RED עם רכיבים מהגרסאות הקלאסיות" (חלק ראשון). הוא מכיל את כל ההכנות הטכניות הנדרשות לפני הגשת התכנית לחמשת הסוכנים, כולל קישורים אמיתיים לריפואים השונים.
+1. הצעת שינוי עם סיבה.
+2. תאימות לאחור או גרסת פרוטוקול מפורשת.
+3. בדיקות validation, serialization ו-structured-clone.
+4. בדיקות של ביטול עבודה, עבודה חדשה בזמן עבודה קיימת וכשל Worker.
+5. הוכחה שה-UI אינו מושך את המנוע לתוך bundle האפליקציה.
 
 ---
 
-## 📚 חלק 1: מאגר הקישורים האמיתי
+## 8. שלב 6 — מערכת הבדיקות: הרחבה ממוקדת ולא הקמה מחדש
 
-להלן כל הריפואים הרלוונטיים לפרויקט. יש להשתמש בקישורים אלו (ולא בקישורים גנריים) בכל התיעוד, ה-PRs, והתקשורת בין הסוכנים.
+### 8.1 אין יעדי כמות שרירותיים
 
-### 🎯 ריפו היעד (העבודה הראשית)
-| ריפו | קישור | תפקיד |
-|------|-------|--------|
-| **RED** | https://github.com/SUGINACH/Tora_Book_Typesetter_Red | ריפו היעד — כאן מתבצעת כל העבודה |
+היעדים הישנים של יותר מ-500 בדיקות, coverage של 85% או CI קצר מחמש דקות מבוטלים. הם אינם מדדים מספקים לאיכות מנוע עימוד ועלולים לעודד בדיקות שטחיות.
 
-### 📖 ריפואי המקור (להשוואה ולקוד לדוגמה)
-| ריפו | קישור | רלוונטי לסוכן |
-|------|-------|---------------|
-| **Orange (IMUD_TORANI)** | https://github.com/SUGINACH/IMUD_TORANI | Agent 1 (UI) + Agent 5 (Docs) |
-| **Orange Standalone** | https://github.com/SUGINACH/Tora_Book_Typesetter_Orange | Agent 1 (UI) |
-| **Gold (V21)** | https://github.com/SUGINACH/Tora_Book_Typesetter_Gold | Agent 2 (Debug Tools) |
-| **Yellow (V22)** | https://github.com/SUGINACH/Tora_Book_Typesetter_Yellow | Agent 3 (Font Loading) |
-| **Green (V23)** | https://github.com/SUGINACH/Tora_Book_Typesetter_Green | Agent 4 (Testing) |
-| **React** | https://github.com/SUGINACH/Tora_Book_Typesetter_React | עיון בלבד — לא משתמשים |
+במקום זאת:
 
----
+- כל באג מתוקן מקבל בדיקת רגרסיה שמכשילה את הקוד הישן.
+- כל בדיקת audit חשובה מקבלת negative control שמוכיח שהיא מזהה הפרה אמיתית.
+- לכל כלל גיאומטרי יש יחידות, סף, תחום תחולה והסבר לחריגים.
+- בדיקות long corpus אינן מוחלפות ב-fixtures קטנים.
+- fixtures קטנים משמשים לבידוד שורש ולמהירות; הקורפוסים המלאים מוכיחים שאין נזק מערכתי.
 
-## 🏗️ חלק 2: הכנה טכנית של הריפו (יום 0 - לפני הגשת התכנית)
+### 8.2 שכבות הבדיקה
 
-### 2.1 שלב 1: מיפוי מבנה הפרויקט הנוכחי של RED
+| שכבה | מתי מריצים | תפקיד |
+|---|---|---|
+| Unit | בכל שינוי במודול | נכונות של פונקציה/אלגוריתם |
+| Integration | בכל שינוי שחוצה מודולים | תקינות החיבור והחוזים |
+| Targeted layout | בכל תיקון עימוד | שחזור הבאג והוכחת התיקון |
+| Canonical | בכל שינוי שמשפיע על המנוע | מניעת רגרסיה בקורפוס הקבוע |
+| Long corpus | בכל שינוי בעל השפעה רחבה | עומס, שימור, איזון, דטרמיניזם |
+| Layout parity | בכל שינוי שעשוי לשנות את ההתאמה למקור | מדידת שיפור או נסיגה |
+| Full-math/browser audit | לפני סגירת שלב משמעותי וב-CI המתאים | בדיקת הגיאומטריה המרונדרת |
+| Visual acceptance | לפי שערי הקבלה | התאמה חזותית בעין המשתמש |
 
-**פקודות לביצוע:**
-```bash
-# 1. שכפול הריפו המקומי
-git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-cd Tora_Book_Typesetter_Red
+### 8.3 הפרדת CI מהירה וכבדה
 
-# 2. יצירת מפת מבנה
-tree -L 3 -I 'node_modules|.git|dist|coverage' > project-structure.txt
+- CI מהיר ייתן משוב מוקדם על parser, typography, contracts ו-unit tests.
+- CI מלא ימשיך להריץ את הקורפוסים, האודיטים, ה-parity והדטרמיניזם לפי ה-workflows הקיימים.
+- אין להגדיר את כל בדיקות העומק כחסם בכל שינוי תיעוד/UI שאינו משפיע על המנוע, אך שינוי מנוע אינו יכול לעקוף את הבדיקות הרלוונטיות.
+- לכל workflow יש לשמור artifacts גם במקרה כשל, כדי לאפשר ניתוח ולא רק סימון אדום/ירוק.
+- timeout יוגדר לפי מדידת זמן אמיתית; אין להקטינו או להגדילו ללא נתונים.
 
-# 3. ספירת שורות קוד לפי קובץ
-find . -name "*.js" -o -name "*.ts" -o -name "*.json" | \
-  grep -v node_modules | \
-  xargs wc -l > code-metrics.txt
+### 8.4 בדיקות שלילה ורגישות
 
-# 4. רשימת כל הקבצים עם hash (למעקב שינויים)
-find . -type f -not -path '*/\.*' -not -path '*/node_modules/*' | \
-  sort | \
-  xargs md5sum > files-checksums.txt
-```
+כל מנגנון audit חדש או ששונה חייב להוכיח שלושה מצבים:
 
-**תוצר נדרש:** קובץ `project-structure.txt` שיצורף לתכנית כנספח A.
+1. מקרה תקין — אין ממצא.
+2. מקרה פגום — הממצא מזוהה.
+3. מקרה גבולי/מותר — הממצא מסווג נכון ואינו הופך לאזעקת שווא.
+
+אין לכבות בדיקה רק משום שהיא מפריעה לקבלת CI ירוק.
 
 ---
 
-### 2.2 שלב 2: יצירת Backup Branch מוגן
+## 9. סדר עבודה, ענפים וסוכנים
 
-**חשוב מאוד:** לפני כל עבודה, יש ליצור נקודת חזרה בטוחה.
+### 9.1 לא מפעילים חמישה סוכנים עצמאיים במקביל
 
-```bash
-# ודא שאתה על main ועדכני
-git checkout main
-git pull origin main
+המודל הישן של חמישה סוכנים עם חמישה ענפים קבועים מבוטל. הוא יוצר חפיפות, תיאום מלאכותי ומיזוגים של עבודות שאינן באמת בלתי-תלויות.
 
-# צור backup עם תאריך
-BACKUP_BRANCH="backup/pre-5-agent-work-$(date +%Y%m%d-%H%M%S)"
-git branch "$BACKUP_BRANCH"
-git push origin "$BACKUP_BRANCH"
+העבודה תתבצע לפי משימות תחומות. בכל רגע יהיו לכל היותר שני מסלולי פיתוח מקבילים, ורק אם אין ביניהם תלות בקבצים או בחוזים.
 
-# תעד את ה-hash של main
-MAIN_HASH=$(git rev-parse HEAD)
-echo "Main branch protected at commit: $MAIN_HASH" > PROTECTION_LOG.md
-git add PROTECTION_LOG.md
-git commit -m "chore: log main branch state before 5-agent work"
-git push origin main
-```
+### 9.2 חלוקת אחריות
 
-**תוצר נדרש:** ענף backup ב-remote + תיעוד ב-`PROTECTION_LOG.md`.
+| תפקיד | אחריות | הרשאות שינוי |
+|---|---|---|
+| מוביל מנוע | תעדוף, הכרעת שורש, שינויי parser/typography/layout/notes/pipeline | קוד מנוע |
+| מאבחן/מפתח כלי אבחון | gap analysis מול Gold והשלמת snapshots/diff/causality | audit/events/ledger בלבד, לפי חוזה מאושר |
+| אחראי בדיקות | fixtures, בדיקות רגרסיה, negative controls, CI ודוחות | tests/tools/workflows; ללא שינוי אלגוריתם כדי "לתקן" בדיקה |
+| UI/נכסים | תיקונים שחוסמים הפעלה/בדיקה, מדידת טעינה, רישום נכסים | UI/font loading; ללא שינוי גיאומטריה |
+| מתעד/משחרר | סנכרון מצב, החלטות, provenance ו-CUTOVER | מסמכים בלבד |
 
----
+תפקידים יכולים להתבצע על ידי אותו אדם/סוכן בזמנים שונים. אין חובה להקצות חמישה סוכנים.
 
-### 2.3 שלב 3: הגדרת Branch Protection Rules על main
+### 9.3 ענפי עבודה
 
-**הגדרות נדרשות ב-GitHub UI:**
+יוצרים ענף רק כאשר מתחילים משימה מוגדרת. אין צורך ליצור מראש חמישה ענפים ריקים.
 
-לך אל: `https://github.com/SUGINACH/Tora_Book_Typesetter_Red/settings/branches`
+שמות מומלצים:
 
-לחץ על **"Add branch protection rule"** והזן:
+- work/engine-p6-p7
+- work/content-preservation-notes
+- work/causal-diagnostics
+- work/verification-harness
+- work/font-performance
+- work/ui-blockers
 
-| הגדרה | ערך |
-|--------|-----|
-| Branch name pattern | `main` |
-| ✅ Require a pull request before merging | מסומן |
-| → Require approvals | `1` |
-| → Dismiss stale pull request approvals | מסומן |
-| → Require review from Code Owners | לא מסומן (אין CODEOWNERS בשלב זה) |
-| ✅ Require status checks to pass before merging | מסומן |
-| → Require branches to be up to date | מסומן |
-| → Status checks required | `test`, `e2e-test` (יוגדרו ע"י Agent 4) |
-| ✅ Require conversation resolution | מסומן |
-| ✅ Do not allow bypassing the above settings | מסומן |
-| ✅ Restrict who can push to matching branches | מסומן — רק אתה |
+כללים:
 
-**שמור.**
+- כל ענף מתחיל מ-HEAD עדכני של main.
+- אין לדחוף ישירות ל-main.
+- אין לעבוד במקביל על אותו קובץ בלי תיאום מפורש.
+- שינוי חוזה בין מנוע, Worker, UI או audit מחייב הודעת שינוי אחת ומימוש מתואם.
+- PR אחד = מטרה אחת. אין לערבב ניקיון קבצים, עיצוב UI ותיקון מנוע באותו PR.
+- אין למחוק או למזג ענפי מקור V21/V23 כחלק מהעבודה על RED.
 
----
+### 9.4 סדר המיזוג
 
-### 2.4 שלב 4: יצירת 5 ענפי עבודה
+1. בדיקות/fixtures שמוכיחות את הבאג (כשאפשר לכתוב אותן לפני התיקון).
+2. תיקון מנוע תחום.
+3. הרחבת האבחון שנדרשה בעקבות הממצא.
+4. בדיקות רגרסיה מלאות.
+5. עדכון תיעוד והחלטות.
 
-```bash
-# רשימת הענפים ליצירה
-BRANCHES=(
-  "feature/agent-1-ui-orange"
-  "feature/agent-2-debug-gold"
-  "feature/agent-3-font-yellow"
-  "feature/agent-4-testing-green"
-  "feature/agent-5-docs-release"
-)
-
-# יצירה ודחיפה של כל ענף
-for branch in "${BRANCHES[@]}"; do
-  git checkout main
-  git checkout -b "$branch"
-  # הוסף README ספציפי לכל ענף
-  cat > BRANCH_README.md <<EOF
-# $branch
-
-## Agent
-[Agent number and role]
-
-## Purpose
-[מה הענף מיועד לעשות]
-
-## Status
-🔴 Not started
-
-## Last Updated
-$(date)
-EOF
-  git add BRANCH_README.md
-  git commit -m "chore: initialize $branch"
-  git push origin "$branch"
-done
-
-# חזור ל-main
-git checkout main
-```
-
-**תוצר נדרש:** 5 ענפים פעילים ב-remote, כל אחד עם `BRANCH_README.md`.
+אם נדרש שינוי משותף במנוע ובכלי האבחון, יש לקבוע בעלים אחד לחוזה ולפצל PRs רק כאשר ניתן לשמור על מצב ביניים תקין.
 
 ---
 
-### 2.5 שלב 5: יצירת מבנה התיקיות הצפוי
+## 10. שערי קבלה מחייבים
 
-```bash
-# צור תיקיות חדשות לפי התכנית
-mkdir -p debug/geometry
-mkdir -p debug/visual
-mkdir -p debug/checkpoints
-mkdir -p fonts/core
-mkdir -p fonts/extended
-mkdir -p fonts/cache
-mkdir -p ui/components
-mkdir -p ui/panels
-mkdir -p ui/adapters
-mkdir -p tests/e2e/scenarios
-mkdir -p tests/e2e/fixtures
-mkdir -p tests/unit/new
-mkdir -p docs/api
-mkdir -p docs/tutorials
-mkdir -p docs/troubleshooting
-mkdir -p docs/contributing
+| שער | מה חייב להיות נכון | מה אינו נחשב הוכחה |
+|---|---|---|
+| G0 — Baseline | commit מזוהה, כל תוצאות הבדיקות מתועדות וניתנות לשחזור | מספר בדיקות מועתק מ-README ישן |
+| G1 — Content | שימור מלא של מילים/סמנים/כותרות/הערות בנתיבים שנבדקו | הצלחת רינדור בלי השוואת תוכן |
+| G2 — Layout | P6/P7 מטופלים; אין רגרסיה באיזון, סדר קריאה או גיאומטריה | שיפור בעמוד אחד בלבד |
+| G3 — Causality | ניתן להסביר מתי/היכן/למה נוצר ממצא ומה השתנה סביבו | trace כללי בלי קשר למקור ולרכיב |
+| G4 — Determinism | hash זהה להרצות זהות; חריגות מתועדות | בדיקה חד-פעמית |
+| G5 — Performance | שיפור מדוד בלי שינוי פריסה | תחושת מהירות או timeout גדול יותר |
+| G6 — User Acceptance | המשתמש בדק את ספר הדוגמה וקיבל את התוצאה | CI ירוק או בדיקת VLM לבדה |
+| G7 — Release | כל השערים הרלוונטיים סגורים, תיעוד/רישוי/גרסה הוכרעו | תאריך יעד או מספר גרסה שהוזן מראש |
 
-# צור placeholder files
-echo "// Agent 2 will implement" > debug/geometry/.gitkeep
-echo "// Agent 3 will implement" > fonts/core/.gitkeep
-echo "// Agent 1 will implement" > ui/adapters/.gitkeep
-echo "// Agent 4 will implement" > tests/e2e/scenarios/.gitkeep
-echo "# Agent 5 will implement" > docs/api/README.md
+### תנאי קבלה ל-P6/P7
 
-# Commit
-git add .
-git commit -m "chore: prepare directory structure for 5-agent work"
-git push origin main
-```
+- יש להציג את כל תתי-הבדיקות שנכשלו, ולא רק ציון כולל.
+- הבדל שנובע מהוראת משתמש מפורשת גובר על חיקוי התנהגות המקור, אך חייב להיות מתועד ומוצג בנפרד מה-parity.
+- אין להציג 100% parity אם חלק מהבדיקות הוסרו, דולגו או שונו כדי שיתאימו לתוצאה.
+- אם בדיקה אינה ישימה עוד, יש להציג את הסיבה ולהחליף אותה בבדיקה שקולה או בהכרעה מתועדת — לא למחוק אותה בשקט.
 
 ---
 
-## 📝 חלק 3: תיעוד נדרש (להכין מראש)
+## 11. תיעוד ומקור אמת
 
-### 3.1 קובץ `docs/WORKER_API.md`
+### 11.1 מסמכים שהם מקור האמת
 
-**תבנית ליצירה:**
+- spec/01_MASTER_SPECIFICATION.md — דרישות המוצר וחוזי המערכת.
+- spec/02_MASTER_WORK_PLAN.md — שלבי ההנדסה המקוריים ומפת REQ.
+- WORKLOG.md — יומן ביצוע, תוצאות, ניסויים וממצאים.
+- ISSUE_REGISTRY.md — ממצאים פתוחים/סגורים וראיות.
+- DECISIONS.md — החלטות הנדסיות, סיבות ופשרות.
+- LAYOUT_DEPENDENCY_MAP.md — מפת תלות מנוע.
+- OPEN_QUESTIONS.md — שאלות שדורשות הכרעת משתמש.
+- CUTOVER.md — שערי קבלה והליך קידום גרסה.
+- PROVENANCE.md — מקור רכיבים והעברות בין מאגרים.
 
-```markdown
-# RED Worker API Reference
+תוכנית זו קובעת את סדר העדיפויות הנוכחי; היא אינה מחליפה את מפרט המערכת או את היסטוריית ההחלטות.
 
-> נוצר: $(date) | גרסת RED: $(git describe --tags)
+### 11.2 כללים לסנכרון תיעוד
 
-## מבוא
-כל התקשורת עם מנוע ה-RED מתבצעת דרך Web Worker באמצעות `postMessage`.
-
-## Messages TO Worker (מה-UI ל-Worker)
-
-### 1. typeset
-**מטרה:** הפעלת תהליך עימוד מלא
-
-```javascript
-worker.postMessage({
-  type: 'typeset',
-  payload: {
-    text: string,           // הטקסט הגולמי
-    settings: Settings,      // אובייקט ההגדרות המלא
-    fonts: string[]          // רשימת פונטים לשימוש
-  }
-});
-```
-
-**תגובה צפויה:** `layout-complete` או `error`
-
-### 2. export-pdf
-**מטרה:** ייצוא הפלט ל-PDF
-
-```javascript
-worker.postMessage({
-  type: 'export-pdf',
-  payload: {
-    layout: LayoutObject,
-    options: {
-      embedFonts: boolean,
-      compression: boolean,
-      addBookmarks: boolean
-    }
-  }
-});
-```
-
-### 3. get-checkpoint
-**מטרה:** בקשת snapshot של שלב ביניים (ל-Debug)
-
-```javascript
-worker.postMessage({
-  type: 'get-checkpoint',
-  payload: {
-    checkpointName: 'after-line-breaking' | 'after-page-planning' | ...
-  }
-});
-```
-
-## Messages FROM Worker (מה-Worker ל-UI)
-
-### 1. layout-complete
-```javascript
-{
-  type: 'layout-complete',
-  payload: {
-    layout: {
-      pages: Array<{
-        pageNumber: number,
-        columns: Array<{
-          blocks: Array<{
-            type: 'paragraph' | 'heading' | 'footnote' | 'ornament',
-            rect: { x, y, width, height },
-            lines: Array<{ text, rect, words }>,
-            metadata: object
-          }>
-        }>
-      }>
-    },
-    stats: {
-      pageCount: number,
-      wordCount: number,
-      processingTime: number,
-      hash: string  // FNV-1a hash לדטרמיניזם
-    }
-  }
-}
-```
-
-### 2. progress
-```javascript
-{
-  type: 'progress',
-  payload: {
-    stage: string,
-    percent: number,  // 0-100
-    message: string
-  }
-}
-```
-
-### 3. error
-```javascript
-{
-  type: 'error',
-  payload: {
-    code: 'PARSE_ERROR' | 'FONT_ERROR' | 'LAYOUT_ERROR' | ...,
-    message: string,
-    details: object
-  }
-}
-```
-
-## טיפוסי נתונים
-
-### Settings
-[יש להשלים ע"י המתאם מ-`default_settings.json`]
-
-### LayoutObject
-[כפי שמתואר ב-layout-complete]
-
-## דוגמת שימוש מלאה
-[קוד מלא של טעינה + הפעלה + קבלת פלט]
-```
+- לאחר כל שלב משמעותי יש לעדכן WORKLOG, ISSUE_REGISTRY ו-DECISIONS לפי הצורך.
+- README יציג נתונים שנבדקו על commit מזוהה בלבד.
+- אין להעתיק ספירת בדיקות, parity או מספר עמודים מדוח היסטורי בלי לציין תאריך/commit/run.
+- מסמך ישן לא יימחק רק משום שהתיישן; יש לסמן אותו כהיסטורי ולקשר למסמך העדכני.
+- אין ליצור RELEASE_NOTES שמכריזים על תכונות שלא עברו את שערי הקבלה.
+- אין להוסיף רישיון MIT או לשנות UNLICENSED לפני הכרעה מפורשת של בעל הפרויקט.
 
 ---
 
-### 3.2 קובץ `docs/SETTINGS_REFERENCE.md`
+## 12. תוכנית ביצוע מיידית — סדר המשימות הבא
 
-**הוראות:** יש להפיק אוטומטית מתוך `default_settings.json` של RED.
+המשימות הבאות הן סדר העבודה המומלץ מהמצב הנוכחי. אין צורך להמתין להשלמת UI או אופטימיזציית גופנים.
 
-**פקודה להפקה:**
-```bash
-# הפק טבלת הגדרות מ-default_settings.json
-cat default_settings.json | jq '
-  to_entries[] | 
-  "| \(.key) | \(.value | type) | \(.value) | [TODO: description] |"
-' > settings-table-temp.md
-```
+### מקבץ A — אימות מצב ופתיחת מסלול המנוע
 
-**תבנית סופית:**
+- [ ] להריץ baseline חדש על HEAD.
+- [ ] להפיק דוח P6/P7 עדכני עם הפניות לקטעי המקור.
+- [ ] לשחזר את ממצא שתי המילים במסלול הערות הענק ולבדוק אם הוא עדיין קיים.
+- [ ] להצליב את ISSUE_REGISTRY עם ממצאים שנוצרים בפועל.
+- [ ] לוודא שהקורפוס הארוך, הקורפוס ההיסטורי והמסמך הקבוע זמינים כ-fixtures.
 
-```markdown
-# RED Settings Reference
+### מקבץ B — תיקון פערי התוכן והפריסה
 
-> הופק אוטומטית מ-default_settings.json
+- [ ] לתקן תחילה כל אובדן תוכן אמיתי.
+- [ ] לבודד את P6 ולסגור את שורש הטוקניזציה/רצף הפסקאות.
+- [ ] לבודד את P7 ולסגור סטיות משבירת שורות, החל מהסטייה הראשונה.
+- [ ] להריץ מחדש את הקורפוס הקנוני והארוך לאחר כל שינוי משמעותי.
+- [ ] להציג את השפעת השינוי על איזון טורים, עמודים דלילים, הערות, סוגריים וכותרות.
 
-## הגדרות עמוד
-| מפתח | סוג | ברירת מחדל | תיאור |
-|------|------|------------|--------|
-| page-width | number | 210 | רוחב העמוד במ"מ |
-| page-height | number | 297 | גובה העמוד במ"מ |
-[... המשך הטבלה ...]
+### מקבץ C — אבחון סיבתי
 
-## הגדרות טיפוגרפיה
-[טבלה]
+- [ ] להשוות את Gold step-by-step audit מול EventLog/Ledger הנוכחיים.
+- [ ] למפות מה כבר קיים, מה חסר ומה אינו רלוונטי לארכיטקטורת RED.
+- [ ] להוסיף snapshots/diff ממוקדים רק עבור הפערים שהוכחו.
+- [ ] לוודא שהאבחון מציג גם את יתר הרכיבים בעמוד שהשתנו לאורך רצף האירועים.
+- [ ] להוסיף fixtures שמוכיחים created/fixed/reverted/unresolved.
+- [ ] למדוד את עלות האבחון כשהוא מופעל וכשהוא כבוי.
 
-## הגדרות עימוד
-[טבלה]
+### מקבץ D — סגירת איכות המנוע
 
-## הגדרות ייצוא
-[טבלה]
+- [ ] לאמת שכל הגדרה שמוצגת כפעילה משפיעה בפועל או מסומנת במפורש כ-ui-state/לא נתמכת.
+- [ ] לוודא שאין מנגנונים כפולים למדידה, סמנים, הערות, מספור או projection.
+- [ ] להשלים בדיקות negative controls לכל בדיקה גיאומטרית וסיבתית חדשה.
+- [ ] להשלים מפת תלות עדכנית ומפת שלבי pipeline.
+- [ ] להריץ מטריצת קבלה מלאה ולהציג דוח מסכם.
 
-## הערות חשובות
-- כל ההגדרות הן **immutable** בזמן עימוד
-- שינוי הגדרות דורש הפעלה מחדש של העימוד
-- כל ההגדרות עוברות JSON validation לפני שליחה ל-Worker
-```
+### מקבץ E — משימות משניות, רק לאחר שהן נחוצות
 
----
-
-### 3.3 קובץ `docs/TESTS_BASELINE.md`
-
-**הוראות:** יש להריץ את כל הבדיקות הקיימות ולתעד את התוצאות.
-
-```bash
-# הרץ את כל הבדיקות
-npm test > test-output.txt 2>&1
-
-# חלץ סטטיסטיקות
-echo "# Test Baseline" > TESTS_BASELINE.md
-echo "" >> TESTS_BASELINE.md
-echo "תאריך: $(date)" >> TESTS_BASELINE.md
-echo "Commit: $(git rev-parse --short HEAD)" >> TESTS_BASELINE.md
-echo "" >> TESTS_BASELINE.md
-echo "## סטטיסטיקות כלליות" >> TESTS_BASELINE.md
-echo "\`\`\`" >> TESTS_BASELINE.md
-grep -E "Tests|passed|failed|coverage" test-output.txt >> TESTS_BASELINE.md
-echo "\`\`\`" >> TESTS_BASELINE.md
-```
-
-**תוצר נדרש:** `TESTS_BASELINE.md` עם snapshot של כל הבדיקות לפני תחילת העבודה.
+- [ ] מדידת ביצועי טעינת גופנים.
+- [ ] אופטימיזציית טעינה רק אם נמצא צוואר בקבוק.
+- [ ] תיקוני UI שמונעים עבודה או מסתירים נתון אבחוני.
+- [ ] סנכרון README ומסמכי השחרור.
+- [ ] בדיקת ספר דוגמה וקבלת משתמש.
 
 ---
 
-## 🔗 חלק 4: קישורים מותאמים לכל סוכן
+## 13. מה לא עושים בשלב הנוכחי
 
-לכל סוכן יש ריפואים ספציפיים שהוא צריך לעבוד איתם. להלן המיפוי המדויק:
+כדי למנוע עיכוב נוסף של פיתוח המנוע, הפעולות הבאות אינן חלק מהמסלול הראשי:
 
-### 🎨 Agent 1: UI/UX Integration
-**ענף:** `feature/agent-1-ui-orange`
-
-| ריפו | קישור | למה צריך |
-|------|-------|----------|
-| RED (יעד) | https://github.com/SUGINACH/Tora_Book_Typesetter_Red | המקום שבו כותבים את הקוד |
-| IMUD_TORANI | https://github.com/SUGINACH/IMUD_TORANI | מקור ל-UI של Orange (ענף `main`) |
-| Orange Standalone | https://github.com/SUGINACH/Tora_Book_Typesetter_Orange | מקור נוסף ל-UI (31 commits עדכניים) |
-
-**קבצי מפתח לבדיקה:**
-- ב-IMUD_TORANI: `index.html`, `app.js`, `style.css`, `settings-manager.js`
-- ב-RED: `src/ui/` (ה-UI הנוכחי)
+1. לא מחליפים את ה-UI של RED ב-Orange.
+2. לא מקימים חמישה סוכנים וחמישה ענפי עבודה קבועים.
+3. לא מעתיקים מחדש את geometry-audit של Gold או את Playwright של Green לפני gap analysis.
+4. לא יוצרים FontLoader/IndexedDB cache לפני מדידת ביצועים.
+5. לא מתקינים תלויות חדשות ללא צורך מוכח; RED שומר על אפס תלויות ריצה.
+6. לא מגדירים יעד מלאכותי של 500 בדיקות, 85% coverage או CI של חמש דקות.
+7. לא מבצעים ריפקטור רחב, ניקוי מאגר או העברת קבצים יחד עם תיקון מנוע.
+8. לא מקדמים v1.0.0 ולא מכריזים על השלמה לפני שערי הקבלה ואישור המשתמש.
+9. לא מכבים אבחון, מרככים ספים או משנים בדיקות כדי להעלים ממצאים.
+10. לא ממתינים לשיפור ה-UI כדי להמשיך בעבודה שניתן לבצע דרך המנוע, Node, fixtures ו-workflows.
 
 ---
 
-### 🐛 Agent 2: Debug Tools Integration
-**ענף:** `feature/agent-2-debug-gold`
+## 14. תבנית PR מחייבת
 
-| ריפו | קישור | למה צריך |
-|------|-------|----------|
-| RED (יעד) | https://github.com/SUGINACH/Tora_Book_Typesetter_Red | המקום שבו כותבים את הקוד |
-| Gold | https://github.com/SUGINACH/Tora_Book_Typesetter_Gold | מקור ל-geometry-audit.js (V21) |
+כל PR שמשפיע על המנוע או על בדיקותיו יכלול:
 
-**קבצי מפתח לבדיקה:**
-- ב-Gold: `geometry-audit.js` (1,980 שורות), `scripts/step-by-step-audit.js`, `scripts/test-chapters-enhanced.js`
-- ב-RED: `src/worker/red-worker.js` (להבנת ה-JSON output)
+### מטרת השינוי
+- איזה ממצא/פער הוא מטפל בו?
+- מה הקלט המדויק לשחזור?
+- מה השלב הסיבתי המשוער?
 
----
+### שורש
+- איזה מנגנון יצר את הבעיה?
+- איזו ראיה מאשרת את השורש?
+- אילו השערות חלופיות נשללו?
 
-### 🔤 Agent 3: Font Loading Optimization
-**ענף:** `feature/agent-3-font-yellow`
+### שינוי
+- אילו קבצים/מודולים השתנו?
+- האם השתנה חוזה או סדר pipeline?
+- האם השינוי משנה גיאומטריה, מדידה, תוכן או רק אבחון?
 
-| ריפו | קישור | למה צריך |
-|------|-------|----------|
-| RED (יעד) | https://github.com/SUGINACH/Tora_Book_Typesetter_Red | המקום שבו כותבים את הקוד |
-| Yellow | https://github.com/SUGINACH/Tora_Book_Typesetter_Yellow | מקור לרעיון הטעינה הדו-שלבית |
+### אימות
+- בדיקה ממוקדת לפני/אחרי.
+- npm test.
+- determinism.
+- canonical.
+- long corpus/full-math לפי תחום ההשפעה.
+- layout parity לפי תחום ההשפעה.
+- negative control אם שונתה בדיקה/אבחנה.
+- artifacts וקישורי Actions.
 
-**קבצי מפתח לבדיקה:**
-- ב-Yellow: `fonts-def.css`, `fonts-extended.css`, `fonts.json`
-- ב-RED: `src/worker/font-parser.js`, תיקיית `fonts/`
+### תוצאה
+- מה תוקן בפועל?
+- מה נשאר פתוח?
+- אילו פשרות נותרו?
+- האם יש צורך בהכרעת משתמש?
 
----
-
-### 🧪 Agent 4: Testing Infrastructure
-**ענף:** `feature/agent-4-testing-green`
-
-| ריפו | קישור | למה צריך |
-|------|-------|----------|
-| RED (יעד) | https://github.com/SUGINACH/Tora_Book_Typesetter_Red | המקום שבו כותבים את הקוד |
-| Green | https://github.com/SUGINACH/Tora_Book_Typesetter_Green | מקור למערכת Playwright + CI/CD |
-
-**קבצי מפתח לבדיקה:**
-- ב-Green: `.github/workflows/geometry-audit-cli.yml`, `.github/workflows/geometry-audit-long.yml`, `tools/geometry-audit-cli.js`, `very_long_test_text.txt`
-- ב-RED: `tests/` הקיים, `package.json`
+PR ללא ראיית לפני/אחרי עבור שינוי מנוע לא ייחשב מוכן למיזוג.
 
 ---
 
-### 📚 Agent 5: Documentation & Release
-**ענף:** `feature/agent-5-docs-release`
-
-| ריפו | קישור | למה צריך |
-|------|-------|----------|
-| RED (יעד) | https://github.com/SUGINACH/Tora_Book_Typesetter_Red | המקום שבו כותבים את הקוד |
-| IMUD_TORANI | https://github.com/SUGINACH/IMUD_TORANI | מקור לתיעוד מקיף (`docs/`, `wiki/`) |
-
-**קבצי מפתח לבדיקה:**
-- ב-IMUD_TORANI: `docs/UNIFICATION_PLAN.md`, `wiki/`, `claude_v20/`, `zai_v21/`, `chatgpt_v23/`
-- ב-RED: `spec/01_MASTER_SPECIFICATION.md`, `spec/02_MASTER_WORK_PLAN.md`, `README.md` הנוכחי
-
----
-
-## 🔄 חלק 5: פרוטוקול תקשורת בין סוכנים
-
-### 5.1 ערוץ תקשורת מרכזי
-- **פורום:** GitHub Issues בריפו הראשי
-- **תג:** `cross-agent` לכל issue שנוגע ליותר מסוכן אחד
-- **תג:** `blocking` לכל חסימה שדורשת התערבות המתאם (אתה)
-
-### 5.2 נוהל דיווח יומי
-כל סוכן מחויב לעדכן את `BRANCH_README.md` בענף שלו בסוף כל יום עבודה:
-
-```markdown
-## Daily Log
-### $(date)
-- ✅ [מה הושלם]
-- 🚧 [מה בעבודה]
-- ❌ [חסימות]
-- 📊 [סטטוס צ'קליסט: X/Y]
-```
-
-### 5.3 נוהל בקשת שינוי API
-אם סוכן מגלה שהוא צריך שינוי ב-Worker API של RED (דבר האסור על פי "כללי הברזל"):
-1. פתח issue עם התג `api-change-request`
-2. תאר את הצורך
-3. המתן לאישור המתאם
-4. אם אושר — Agent 2 (Debug) יוסיף message חדש בלי לשנות messages קיימים
-
-### 5.4 נוהל מיזוג PR
-1. כל סוכן יוצר PR מ-`feature/agent-X-*` ל-`main`
-2. לפחות סוכן אחד אחר עושה code review
-3. כל status checks חייבים לעבור (יוגדרו ע"י Agent 4)
-4. המתאם (אתה) מבצע merge סופי
-
----
-
-## 📋 חלק 6: צ'קליסט סופי להכנה (למתאם)
-
-לפני הגשת התכנית לסוכנים, ודא שכל הפריטים הבאים הושלמו:
-
-### הכנה טכנית
-- [ ] הופק `project-structure.txt`
-- [ ] הופק `code-metrics.txt`
-- [ ] הופק `files-checksums.txt`
-- [ ] נוצר backup branch עם תאריך
-- [ ] עודכן `PROTECTION_LOG.md`
-- [ ] הוגדרו Branch Protection Rules על main
-- [ ] נוצרו 5 ענפי feature ב-remote
-- [ ] נוצר מבנה התיקיות המלא
-- [ ] נוספו `.gitkeep` files לתיקיות ריקות
-
-### תיעוד נדרש
-- [ ] נכתב `docs/WORKER_API.md` עם כל ה-messages
-- [ ] נכתב `docs/SETTINGS_REFERENCE.md` מתוך `default_settings.json`
-- [ ] נכתב `TESTS_BASELINE.md` עם תוצאות כל הבדיקות הקיימות
-- [ ] עודכן `README.md` הראשי עם badges
-- [ ] נכתב `CONTRIBUTING.md` בסיסי
-
-### בדיקות וודאיות
-- [ ] `npm install` עובד ללא שגיאות
-- [ ] `npm test` עובר (388 בדיקות)
-- [ ] `npm start` מריץ את האפליקציה
-- [ ] כל הקישורים לריפואים עובדים
-- [ ] לכל סוכן יש גישת push לענף שלו
-
----
-
-## 💬 חלק 7: הפרומטים הסופיים להגשה לכל סוכן
-
-להלן הפרומט המדויק שתעביר לכל אחד מחמשת הסוכנים. כל פרומט מותאם אישית לתפקיד הסוכן.
-
----
-
-### 📬 פרומט ל-Agent 1: UI/UX Integration
-
-```markdown
-# משימה: Agent 1 - UI/UX Integration
-
-## אתה
-Agent 1 - אחראי על החלפת ה-UI הנוכחי של RED בממשק הבוגר של Orange.
-
-## ענף העבודה שלך
-`feature/agent-1-ui-orange`
-
-## ריפואים לעבודה
-- **יעד:** https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-- **מקור UI:** https://github.com/SUGINACH/IMUD_TORANI (ענף main)
-- **מקור UI נוסף:** https://github.com/SUGINACH/Tora_Book_Typesetter_Orange
-
-## התכנית המלאה
-קרא את חלק א' של התכנית — "תכנית עבודה אסטרטגית: שדרוג RED" — במיוחד את הסעיף "Agent 1: UI/UX Integration".
-לאחר מכן, קרא את חלק ב' (ההכנות) כדי להבין את הסביבה.
-
-## מה אסור לך לעשות
-- אסור לגעת בקבצים ב-`src/worker/`
-- אסור לשנות את ה-API של ה-Worker
-- אסור להתקין תלויות חדשות
-- אסור לדחוף ישירות ל-main
-
-## מה מותר לך לעשות
-- להחליף את `src/ui/*` לחלוטין
-- להוסיף קבצים חדשים ב-`ui/`
-- להוסיף adapter שמתרגם בין ה-API של Orange ל-Worker של RED
-
-## תוצר סופי
-PR מענף `feature/agent-1-ui-orange` ל-`main` עם:
-- UI חדש שעובד עם RED Worker
-- כל 12 הפאנלים פונקציונליים
-- כל 4 הלשוניות פונקציונליות
-- כל הבדיקות הקיימות עוברות
-
-## נקודת התחלה
-```bash
-git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-cd Tora_Book_Typesetter_Red
-git checkout feature/agent-1-ui-orange
-# קרא BRANCH_README.md ואז את התכנית
-```
-
-## דיווח יומי
-עדכן את `BRANCH_README.md` בענף שלך בסוף כל יום.
-פתח issue עם התג `agent-1` לכל חסימה.
-
-בהצלחה!
-```
-
----
-
-### 📬 פרומט ל-Agent 2: Debug Tools Integration
-
-```markdown
-# משימה: Agent 2 - Debug Tools Integration
-
-## אתה
-Agent 2 - אחראי על הוספת כלי דיבאג ויזואליים מתקדמים מ-Gold.
-
-## ענף העבודה שלך
-`feature/agent-2-debug-gold`
-
-## ריפואים לעבודה
-- **יעד:** https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-- **מקור Debug Tools:** https://github.com/SUGINACH/Tora_Book_Typesetter_Gold
-
-## התכנית המלאה
-קרא את חלק א' של התכנית — במיוחד את הסעיף "Agent 2: Debug Tools Integration".
-לאחר מכן, קרא את חלק ב' (ההכנות) להבנת הסביבה.
-
-## מה אסור לך לעשות
-- אסור לשנות את הלוגיקה של `red-worker.js`
-- אסור לשנות את messages קיימים ב-Worker API
-- אסור להאט את העימוד ביותר מ-5%
-
-## מה מותר לך לעשות
-- להוסיף `debug/` directory
-- להוסיף message חדש ל-Worker: `get-checkpoint` (לקבלת snapshots)
-- להוסיף visual debugger שעובד עם ה-JSON של RED
-
-## תוצר סופי
-PR מענף `feature/agent-2-debug-gold` ל-`main` עם:
-- `geometry-audit.js` מותאם ל-JSON של RED
-- visual debugger פונקציונלי
-- checkpoint viewer
-- `debug/README.md` מקיף
-
-## נקודת התחלה
-```bash
-git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-cd Tora_Book_Typesetter_Red
-git checkout feature/agent-2-debug-gold
-# קרא BRANCH_README.md ואז את התכנית
-```
-
-## דיווח יומי
-עדכן את `BRANCH_README.md` בענף שלך בסוף כל יום.
-פתח issue עם התג `agent-2` לכל חסימה.
-
-בהצלחה!
-```
-
----
-
-### 📬 פרומט ל-Agent 3: Font Loading Optimization
-
-```markdown
-# משימה: Agent 3 - Font Loading Optimization
-
-## אתה
-Agent 3 - אחראי על שיפור זמן הטעינה הראשוני באמצעות טעינה דו-שלבית של פונטים.
-
-## ענף העבודה שלך
-`feature/agent-3-font-yellow`
-
-## ריפואים לעבודה
-- **יעד:** https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-- **מקור לרעיון:** https://github.com/SUGINACH/Tora_Book_Typesetter_Yellow
-
-## התכנית המלאה
-קרא את חלק א' של התכנית — במיוחד את הסעיף "Agent 3: Font Loading Optimization".
-לאחר מכן, קרא את חלק ב' להבנת הסביבה.
-
-## מה אסור לך לעשות
-- אסור לשנות את ה-font parser של RED
-- אסור לפגוע בדיוק מדידת הפונטים
-- אסור להחליף את parser הפונטים ב-CSS @font-face
-
-## מה מותר לך לעשות
-- להוסיף שכבת FontLoader מעל ה-parser הקיים
-- להוסיף `fonts/font-loader.js` חדש
-- להוסיף cache מבוסס IndexedDB
-- להוסיף ל-UI כפתור "טען פונטים נוספים"
-
-## תוצר סופי
-PR מענף `feature/agent-3-font-yellow` ל-`main` עם:
-- FontLoader עם טעינה דו-שלבית
-- זמן טעינה ראשוני < 2 שניות
-- כל הפונטים עדיין זמינים
-- `fonts/README.md` מקיף
-
-## נקודת התחלה
-```bash
-git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-cd Tora_Book_Typesetter_Red
-git checkout feature/agent-3-font-yellow
-# קרא BRANCH_README.md ואז את התכנית
-```
-
-## דיווח יומי
-עדכן את `BRANCH_README.md` בענף שלך בסוף כל יום.
-פתח issue עם התג `agent-3` לכל חסימה.
-
-בהצלחה!
-```
-
----
-
-### 📬 פרומט ל-Agent 4: Testing Infrastructure
-
-```markdown
-# משימה: Agent 4 - Testing Infrastructure
-
-## אתה
-Agent 4 - אחראי על הרחבת מערכת הבדיקות האוטומטיות והוספת CI/CD מקצועי.
-
-## ענף העבודה שלך
-`feature/agent-4-testing-green`
-
-## ריפואים לעבודה
-- **יעד:** https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-- **מקור למערכת בדיקות:** https://github.com/SUGINACH/Tora_Book_Typesetter_Green
-
-## התכנית המלאה
-קרא את חלק א' של התכנית — במיוחד את הסעיף "Agent 4: Testing Infrastructure".
-לאחר מכן, קרא את חלק ב' להבנת הסביבה.
-
-## מה אסור לך לעשות
-- אסור לשנות את הקוד של RED עצמו
-- אסור להסיר בדיקות קיימות
-- אסור לאפשר שהבדיקות יאטו את ה-CI מעבר ל-5 דקות
-
-## מה מותר לך לעשות
-- להוסיף בדיקות חדשות ב-`tests/unit/new/`
-- להוסיף בדיקות E2E ב-`tests/e2e/` עם Playwright
-- להגדיר GitHub Actions workflows
-- להגדיר את status checks הנדרשים ל-branch protection
-- להוסיף coverage reporting
-
-## תוצר סופי
-PR מענף `feature/agent-4-testing-green` ל-`main` עם:
-- >500 בדיקות סה"כ
-- coverage > 85%
-- CI שעובד אוטומטית על כל PR
-- nightly build
-- `tests/README.md` מקיף
-- status checks מוגדרים: `test`, `e2e-test`
-
-## נקודת התחלה
-```bash
-git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-cd Tora_Book_Typesetter_Red
-git checkout feature/agent-4-testing-green
-# קרא BRANCH_README.md ואז את התכנית
-```
-
-## דיווח יומי
-עדכן את `BRANCH_README.md` בענף שלך בסוף כל יום.
-פתח issue עם התג `agent-4` לכל חסימה.
-
-בהצלחה!
-```
-
----
-
-### 📬 פרומט ל-Agent 5: Documentation & Release
-
-```markdown
-# משימה: Agent 5 - Documentation & Release
-
-## אתה
-Agent 5 - אחראי על יצירת תיעוד מקיף והכנת הפרויקט לשחרור v1.0.0.
-
-## ענף העבודה שלך
-`feature/agent-5-docs-release`
-
-## ריפואים לעבודה
-- **יעד:** https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-- **מקור לתיעוד:** https://github.com/SUGINACH/IMUD_TORANI (`docs/`, `wiki/`)
-
-## התכנית המלאה
-קרא את חלק א' של התכנית — במיוחד את הסעיף "Agent 5: Documentation & Release".
-לאחר מכן, קרא את חלק ב' להבנת הסביבה.
-
-## מה אסור לך לעשות
-- אסור לשנות את הקוד של RED עצמו
-- אסור לשנות את המבנה של `src/worker/`
-- אסור ליצור release לפני אישור המתאם
-
-## מה מותר לך לעשות
-- להחליף את `README.md` הראשי
-- להוסיף תיעוד מקיף ב-`docs/`
-- ליצור `CONTRIBUTING.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`
-- להכין את ה-PR לשחרור v1.0.0
-- לכתוב tutorials ו-FAQs
-
-## תוצר סופי
-PR מענף `feature/agent-5-docs-release` ל-`main` עם:
-- README חדש ומקצועי
-- `docs/ARCHITECTURE.md`
-- `docs/API.md`
-- `docs/SETTINGS.md`
-- `docs/EXTENDING.md`
-- `docs/TUTORIAL.md`
-- `docs/TROUBLESHOOTING.md`
-- `CONTRIBUTING.md`
-- `CHANGELOG.md`
-- `RELEASE_NOTES.md` for v1.0.0
-
-## נקודת התחלה
-```bash
-git clone https://github.com/SUGINACH/Tora_Book_Typesetter_Red
-cd Tora_Book_Typesetter_Red
-git checkout feature/agent-5-docs-release
-# קרא BRANCH_README.md ואז את התכנית
-```
-
-## דיווח יומי
-עדכן את `BRANCH_README.md` בענף שלך בסוף כל יום.
-פתח issue עם התג `agent-5` לכל חסימה.
-
-בהצלחה!
-```
-
----
-
-## 🎯 סיכום פעולות אחרונות לפני ההגשה
-
-### צעד 1: ודא שכל ההכנות הושלמו
-עבור על הצ'קליסט בחלק 6 וודא שכל הפריטים מסומנים.
-
-### צעד 2: שלח לכל סוכן את הפרומט שלו
-העתק את הפרומט המתאים מחלק 7 ושלח לכל סוכן, יחד עם:
-- התכנית המלאה (חלק א' + חלק ב')
-- גישה ל-remote repo
-
-### צעד 3: הגדר monitoring
-- בדוק את ה-daily logs של כל סוכן מדי יום
-- עקוב אחר ה-issues עם תגיות הסוכנים
-- אשר/דחה PRs לפי הכללים
-
-### צעד 4: היה מוכן להתערב
-- אם סוכן נתקל בחסימה — פתור אותה במהירות
-- אם יש קונפליקט בין סוכנים — תעדוף לפי סדר המיזוג: 4 → 3 → 2 → 1 → 5
-- אם סוכן חורג מהכללים — עצור והחזר אותו למסלול
-
----
-
-**התכנית מוכנה. צא לדרך! 🚀**
+## 15. החלטה אופרטיבית
+
+החל מרגע אישור תוכנית זו:
+
+- מסלול העבודה הראשי הוא **מנוע + בדיקות + אבחון**.
+- מסלול UI נשאר תחזוקה בלבד, אלא אם נמצא חסם ממשי.
+- מסלול גופנים/ביצועים ממתין למדידה ולממצא צוואר בקבוק.
+- אין להפעיל חמישה סוכנים במקביל.
+- המשימה הראשונה היא baseline עדכני, בדיקת ממצא שתי המילים, ופתיחת ניתוח שיטתי של P6 ו-P7.
+- אין להמתין לסיום כל ההכנות כדי להתחיל ניתוח מנוע: ברגע שיש קלט שחזור ויכולת להריץ את המנוע, אפשר לפתוח ענף תיקון ממוקד.
+- כל ממצא חדש יקבל מזהה ב-ISSUE_REGISTRY, בדיקת שחזור וסטטוס lifecycle; כל החלטה הנדסית תתועד ב-DECISIONS.
+
+**יעד הפרויקט אינו מערכת עם יותר פאנלים, יותר קבצים או יותר בדיקות. היעד הוא מנוע עימוד תורני מדויק, דטרמיניסטי, שקוף, ניתן לאבחון, וקל להמשך פיתוח — כאשר כל שכבה אחרת משרתת את היעד הזה ואינה מעכבת אותו.**
