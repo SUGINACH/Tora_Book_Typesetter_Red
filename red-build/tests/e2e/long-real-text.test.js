@@ -19,17 +19,26 @@ const { describe, it, assert, assertEq, report } = require('../harness');
 
 const { typeset } = require('../../src/engine/core/pipeline');
 const { getDefaultSettings } = require('../../src/engine/core/settings-registry');
+const { DocumentStructureError } = require('../../src/engine/parser/document-structure');
+
+function assertStructurallyInvalidCorpus(raw, label) {
+  let error = null;
+  try { typeset(raw, getDefaultSettings(), { noRecommendations: true }); }
+  catch (caught) { error = caught; }
+  assert(error instanceof DocumentStructureError, label + ': must be be rejected by source preflight');
+  assertEq(error.code, 'INVALID_DOCUMENT_STRUCTURE', label + ': error code');
+  const counts = error.issues.reduce((acc, issue) => {
+    acc[issue.code] = (acc[issue.code] || 0) + 1;
+    return acc;
+  }, {});
+  assertEq(counts['heading-chain-not-increasing'] || 0, 5, label + ': five non-increasing heading transitions');
+  assertEq(counts['heading-title-no-meaningful-text'] || 0, 7, label + ': seven marker-only H6 titles');
+}
 
 const REAL_DIR = path.join(__dirname, '..', 'fixtures', 'real');
 const REAL_FILES = ['no_long_test_text.txt', 'mid_long_test_text.txt', 'long_test_text.txt'];
 
-// **04.11 (בקשת משתמש: "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"):**
-// הקורפוס הגדול מאוד — 3.4MB, 2,571 כותרות, 10 חלקים, 363K מילים. נצרך ישירות
-// מ-audits/ (בלי לשכפל 3.4MB לתוך fixtures). זה הקורפוס שחשף את שלושת באגי
-// ההערות שתוקנו ב-legacy-imud-flow (כפילות בעמוד, מיזוג הערות סמוכות,
-// בליעת הערה לתוך הערת-צד + דריסה) — ראה audits/very-long-artifacts/corpus-report.json
-// ואת הוורקפלו layout-parity.yml (job: very-long-corpus) לאימות האינווריאנטים
-// המוחלטים המלא (C1..C11) מול אותו קובץ בדיוק.
+// The 363K-word source is preserved as a D-100 negative control; it must be rejected.
 const VERY_LONG = path.join(__dirname, '..', '..', '..', 'audits', 'very_long_test_text.txt');
 const veryLongAvailable = fs.existsSync(VERY_LONG);
 
@@ -95,6 +104,11 @@ describe('D-83 — ספרי־אמת ארוכים: עימוד מלא ללא קר�
     console.log(`  [real] very_long: words=${raw.split(/\s+/).filter(Boolean).length} pages=${result.pages.length} hash=${result.layoutHash.slice(0, 12)} ${dt}ms`);
   });
 
+  (veryLongAvailable ? it : it.skip)('very_long_test_text.txt: 363K-word malformed source is rejected before layout (D-100)', () => {
+    const raw = fs.readFileSync(VERY_LONG, 'utf8');
+    assertStructurallyInvalidCorpus(raw, 'audits/very_long_test_text.txt');
+  });
+
   // **FWD-4 (05.11 — הקורפוס ההיסטורי של Orange התקבל ויובא):** הקובץ המקורי
   // מ-IMUD_TORANI/text_files_for_typesetter_tests/very_long_test_text.txt —
   // 5,702 שורות, בתים-בתים (md5 ‏d961a8cad4e31df592d80828b36a490d). שונה מהעותק
@@ -119,31 +133,18 @@ describe('D-83 — ספרי־אמת ארוכים: עימוד מלא ללא קר�
     // בעותק הנורמל שב-audits/ כל כותרת חוזרת קיבלה "מספר N" — שם "כותרת 6 - *"
     // מופיעה פעם אחת לכל היותר; כאן היא חוזרת זהה 6 פעמים (המקור ההיסטורי).
 
-    const words = raw.split(/\s+/).filter(Boolean).length;
-    // נתיב ה-DP (העימוד הכללי)
-    const t0 = Date.now();
-    const r1 = typeset(raw, getDefaultSettings(), { noRecommendations: true });
-    const dt = Date.now() - t0;
-    assert(r1.contentPreserved === true, 'שימור תוכן — הקורפוס ההיסטורי, נתיב DP');
-    assert(r1.pages.length > 1000, `ספר שלם במדדי הקורפוס ההיסטורי (קיבלנו ${r1.pages.length})`);
-    assert(dt < 120000, `זמן סביר (${dt}ms)`);
-    const r1b = typeset(raw, getDefaultSettings(), { noRecommendations: true });
-    assertEq(r1.layoutHash, r1b.layoutHash, 'דטרמיניזם — נתיב DP, הקורפוס ההיסטורי');
-    assertEq(r1.pages.length, r1b.pages.length, 'מספר עמודים יציב');
 
-    // נתיב המורשת (פרופיל המקור — importImudSettings)
+    assertStructurallyInvalidCorpus(raw, 'Orange historical source / DP');
     const { importImudSettings } = require('../../src/engine/core/legacy-settings-map');
     const { getSettingDefs } = require('../../src/engine/core/settings-registry');
     const LEGACY = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'assets', 'imud', 'default_settings.json'), 'utf8'));
     const imp = importImudSettings(LEGACY, new Set(getSettingDefs().map(r => r.id)));
-    const r2 = typeset(raw, imp.settings, { noRecommendations: true });
-    assert(r2.contentPreserved === true, 'שימור תוכן — הקורפוס ההיסטורי, פרופיל המורשת');
-    assert(r2.legacyProfile === true, 'פרופיל המורשת הופעל');
-    const r2b = typeset(raw, imp.settings, { noRecommendations: true });
-    assertEq(r2.layoutHash, r2b.layoutHash, 'דטרמיניזם — פרופיל המורשת, הקורפוס ההיסטורי');
-    console.log(`  [real] orange-historical: words=${words} DP=${r1.pages.length}pages/${r1.layoutHash.slice(0, 10)} legacy=${r2.pages.length}pages/${r2.layoutHash.slice(0, 10)} ${dt}ms`);
+    let legacyError = null;
+    try { typeset(raw, imp.settings, { noRecommendations: true }); }
+    catch (caught) { legacyError = caught; }
+    assert(legacyError instanceof DocumentStructureError, 'Legacy path must also reject malformed source');
+    assertEq(legacyError.code, 'INVALID_DOCUMENT_STRUCTURE', 'Legacy preflight error code');
   });
-
 });
 
 report('long-real-text');
