@@ -64,6 +64,11 @@ describe('D-100 source document structure', () => {
     assert(!result.ok);
     assert(result.issues.some(issue => issue.code === 'heading-title-note-only'));
   });
+  it('rejects punctuation-only heading titles separately from note-only titles', () => {
+    const result = checkBodyLines(['כותרת 5 - *', 'טקסט גוף ממשי.']);
+    assert(!result.ok);
+    assert(result.issues.some(issue => issue.code === 'heading-title-no-meaningful-text'));
+  });
   it('counts text in the same paragraph as a footnote as real body text', () => {
     const result = checkBodyLines(['כותרת 2 - סימן', 'מילים בגוף [הערת שוליים] ממשיכות.']);
     assert(result.ok);
