@@ -25,7 +25,7 @@ function assertStructurallyInvalidCorpus(raw, label) {
   let error = null;
   try { typeset(raw, getDefaultSettings(), { noRecommendations: true }); }
   catch (caught) { error = caught; }
-  assert(error instanceof DocumentStructureError, label + ': must be be rejected by source preflight');
+  assert(error instanceof DocumentStructureError, label + ': must be rejected by source preflight');
   assertEq(error.code, 'INVALID_DOCUMENT_STRUCTURE', label + ': error code');
   const counts = error.issues.reduce((acc, issue) => {
     acc[issue.code] = (acc[issue.code] || 0) + 1;
