@@ -46,6 +46,7 @@ Invalid input raises a typed `DocumentStructureError` with code `INVALID_DOCUMEN
 - `heading-chain-not-increasing`
 - `heading-chain-no-body-text`
 - `heading-title-note-only`
+- `heading-title-no-meaningful-text` (punctuation/decorative marker only)
 - `heading-level-invalid`
 
 The error identifies the offending token and levels. No automatic source repair is permitted. After the manuscript is corrected by its author/editor, the same source is submitted again.
