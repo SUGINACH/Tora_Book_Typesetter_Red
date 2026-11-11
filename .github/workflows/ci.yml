@@ -35,6 +35,11 @@ jobs:
         run: cd red-build && npm test
       - name: Determinism check
         run: cd red-build && npm run test:determinism
+      # **R-01 (סוכן 4):** בדיקות שחזור לבאגים ידועים — strict xfail: נכשלות-כצפוי עד שהתיקון נוחת
+      # (הבאג מודפס בלוג כ-KNOWN-BUG, ה-CI נשאר ירוק), ומכשילות את ה-CI ברגע שהן עוברות בלי
+      # שהמתג FIX_LANDED הופך. כך אין באג ידוע שנשכח ואין צורך להכשיל את main מראש.
+      - name: Regression repros (known bugs tracked, strict xfail)
+        run: cd red-build && npm run test:regress
 
   # **03.11(ד) — אודיט עימוד בדפדפן אמיתי (שקיפות עימוד מהקוד):** בדיקות ה-Node
   # מאמתות את המודל, אבל דיווח משתמש 3 הוכיח שהן לא תופסות ניתוקים בנתיב החי
