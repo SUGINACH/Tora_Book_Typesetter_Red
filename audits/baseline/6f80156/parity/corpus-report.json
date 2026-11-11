@@ -1,0 +1,125 @@
+{
+  "corpus": "audits/very_long_test_text.txt",
+  "model": "audits/very-long-artifacts/ours-model.json",
+  "pdf": "audits/very-long-artifacts/ours.pdf",
+  "meta": {
+    "source": "ours-red",
+    "generator": "tools/layout-parity/run-ours.js",
+    "text": "audits/very_long_test_text.txt",
+    "pages": 700,
+    "engine": "red-build legacy-imud-flow (live path: IMUD defaults + Guttman Rashi + font-metrics)",
+    "layoutHash": "legacy-3ff0bdd5f212c4a2"
+  },
+  "pages": 700,
+  "paragraphs": 3466,
+  "sourceHeadings": 2571,
+  "sourceWords": 337622,
+  "justifyMeanRatio": 0.7803,
+  "checks": [
+    {
+      "id": "C1",
+      "name": "שימור תוכן — מולטיסט מילים (גוף+מרזב) זהה למקור",
+      "ok": true,
+      "srcTotal": 337622,
+      "oursTotal": 337622,
+      "missingWords": 0,
+      "missingSample": [],
+      "extraWords": 0,
+      "extraSample": []
+    },
+    {
+      "id": "C2",
+      "name": "אפס חפיפות שורות ב-PDF",
+      "ok": true,
+      "count": 0,
+      "sample": []
+    },
+    {
+      "id": "C3",
+      "name": "כל הטקסט בתוך גבולות העמוד",
+      "ok": true,
+      "count": 0,
+      "sample": []
+    },
+    {
+      "id": "C4",
+      "name": "יישור — שיעור הגעה לשתי שפות הטור (רצפה 60%, כמקור ~69%)",
+      "ok": true,
+      "meanRatio": 0.7803,
+      "columns": 972
+    },
+    {
+      "id": "C11",
+      "name": "PDF תקין — מספר עמודים תואם למודל וגופנים מוטמעים",
+      "ok": true,
+      "pdfPages": 700,
+      "modelPages": 700,
+      "fontsNotEmbedded": []
+    },
+    {
+      "id": "C5",
+      "name": "רצף עמודונים — מונה עוקב, גימטריה תקנית, נסתר בשער-משנה/ריק",
+      "ok": true,
+      "count": 0,
+      "sample": [],
+      "detail": "אחרון: תרצח (מונה 698)"
+    },
+    {
+      "id": "C6",
+      "name": "מכונת מצבים — סדר סוגי עמודים חוקי ותואם למבנה המקור",
+      "ok": true,
+      "count": 0,
+      "sample": [],
+      "detail": "shaar-sub=10 (h1=10), chapter-open=2 (h0=2)"
+    },
+    {
+      "id": "C7",
+      "name": "תוכן-עניינים — ערכים תואמים למקור ועמודונים מצביעים נכון",
+      "ok": true,
+      "checked": 1044,
+      "count": 0,
+      "sample": [],
+      "detail": "כללי 527/527, מפורט 517/517"
+    },
+    {
+      "id": "C8",
+      "name": "כותרות עליונות — חצאי שם הספר בצדדים, סעיף h0/h2 אמיתי במרכז",
+      "ok": true,
+      "count": 0,
+      "sample": [],
+      "detail": "שם הספר: \"מקום | בינה\""
+    },
+    {
+      "id": "C9",
+      "name": "שימור כותרות — כל כותרת h0..h6 מהמקור מופיעה בפלט",
+      "ok": true,
+      "srcHeadings": 529,
+      "count": 0,
+      "sample": []
+    },
+    {
+      "id": "C10",
+      "name": "הערות שוליים — בלי כפילויות, מספור פר-פרק (S4.26), המשך בלי סמן, מקוריות ושלמות",
+      "ok": true,
+      "pagesWithNotes": 82,
+      "srcNotes": 131,
+      "splitCuts": 0,
+      "count": 0,
+      "sample": []
+    },
+    {
+      "id": "C12",
+      "name": "ייצוא HTML — עמודים/כותרות/rtl/נקיון (אותו רינדור כמו התצוגה)",
+      "ok": true,
+      "htmlKB": 26551,
+      "pagesHtml": 700,
+      "runningHeads": 683,
+      "count": 0,
+      "sample": []
+    }
+  ],
+  "passed": 12,
+  "total": 12,
+  "score": 100.0,
+  "verdict": "PASS"
+}
