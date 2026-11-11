@@ -13,6 +13,7 @@ const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
 const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
 const { decodeTextBytes } = require('./text-decode'); // **סוכן 1 (שלמות קלט):** UTF-8 קפדני + נפילה ל-Windows-1255
+const { reportBootFailure } = require('./boot-failure'); // **סוכן 1 (§7.1):** כשל אתחול גלוי, לפי השלב שנכשל
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -163,7 +164,7 @@ function boot() {
   // אחרי ההרכבה: קטלוג הפונטים מתעדכן בפיקרים ברגע שהספרייה נטענת (TDZ-safe)
   imud.loadFontCatalog().then((families) => {
     app.refreshFontCatalog && app.refreshFontCatalog(families);
-  }).catch(() => { /* ספרייה לא זמינה (למשל מקומי בלי assets) — ממשק בסיסי */ });
+  }).catch(() => { /* הכשל מדווח בשרשרת האתחול שלהלן (reportBootFailure) — לא מכפילים הודעות */ });
   // **03.11(ד) — "שום דבר מהגדרות ברירת המחדל אינו קיים" (דיווח משתמש 3):**
   // האפליקציה עולה עם ברירות המחדל הגנריות של RED. ברירות המחדל של הפרויקט
   // המקורי (264 מפתחות: גופני עיצוב, שערים, כותרות עליונות, יישורים) מוטמעות
@@ -171,7 +172,10 @@ function boot() {
   // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
   // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
   // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
+  // **סוכן 1 (§7.1):** כשל בשרשרת האתחול אינו נבלע בשקט — הודעה לפי השלב שנכשל (נכסים/החלה/שחזור/עימוד)
+  let bootStage = 'assets';
   imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(async ({ settings: imported, report }) => {
+    bootStage = 'apply';
     // **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): ערכת הנושא
     // הפעילה של המקור.** ברירת המחדל של המקור היא active-theme-select =
     // "json_theme_40" — כלומר עמודי השערים נולדים עם רקע מעוצב (שער ראשי/
@@ -196,6 +200,7 @@ function boot() {
         app.status.setNotice(`ברירות המחדל המקוריות הוחלו — גופנים, שערים וכותרות${fonts}.`);
       });
   }).then(() => {
+    bootStage = 'restore';
     // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
     // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל
     // מוחלות תמיד (כלל הברזל) ובחירות המשתמש שורדות ריענון (SRS §17.1).
@@ -204,9 +209,10 @@ function boot() {
       app.status.setNotice(`הוחלו ${restored.restored} הגדרות שמורות מהסשן הקודם.`);
     }
   }).then(() => {
+    bootStage = 'retypeset';
     // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
     if (app.getText && app.getText().trim()) retypesetWhenIdle();
-  }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
+  }).catch((e) => reportBootFailure(app, bootStage, e));
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
   }
