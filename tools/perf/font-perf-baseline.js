@@ -4,6 +4,7 @@
 //
 //   node tools/perf/font-perf-baseline.js all [--repeat 3] [--out-dir docs/perf] [--woff2-sizes f.json] [--woff2-sample f.woff2]
 //   node tools/perf/font-perf-baseline.js run <doc> <table|app>     # ריצה בודדת, מדפיסה JSON
+//   node tools/perf/font-perf-baseline.js export <doc>              # typeset + ייצוא PDF (גופן TTF רשום); זמן הייצוא-בלבד משוער
 //   node tools/perf/font-perf-baseline.js inventory | parse | b64   # מדידות בודדות
 //
 // מצבי ריצה: table = ברירות מחדל של המנוע ללא גופנים רשומים (כמו בדיקות הקורפוס);
@@ -198,6 +199,24 @@ function runDoc(name, mode) {
     pages: r.pages.length, layoutHash: r.layoutHash, contentPreserved: r.contentPreserved === true, maxRSS_MB: Math.round(process.resourceUsage().maxRSS / 1024) };
 }
 
+// ---------- 4ב. ייצוא PDF (typeset + כתיבת PDF; גופן TTF רשום) ----------
+function exportDoc(name) {
+  const found = DOCS.find(([n]) => n === name);
+  if (!found) throw new Error('doc לא קיים: ' + name);
+  const text = fs.readFileSync(found[1], 'utf8');
+  const { typeset } = require(path.join(RED, 'src/engine/core/pipeline'));
+  const { getDefaultSettings } = require(path.join(RED, 'src/engine/core/settings-registry'));
+  const { registerFont } = require(path.join(RED, 'src/engine/typography/measure-api'));
+  const { exportPdf } = require(path.join(RED, 'src/engine/output/export-api'));
+  const bytes = fs.readFileSync(path.join(FONTS, 'FrankRuhlLibre-VF.ttf'));
+  registerFont('Frank Ruhl Libre', bytes);
+  const settings = { ...getDefaultSettings(), 'body-font': 'Frank Ruhl Libre' };
+  const t0 = hr(); const r = typeset(text, settings, { noRecommendations: true }); const typesetMs = msSince(t0);
+  const t1 = hr(); const pdf = exportPdf(text, settings, bytes, 'Frank Ruhl Libre', {}); const exportTotalMs = msSince(t1);
+  return { doc: name, bytes: Buffer.byteLength(text), pages: r.pages.length, typesetMs: r1(typesetMs), exportTotalMs: r1(exportTotalMs), exportOnlyMsApprox: r1(exportTotalMs - typesetMs),
+    pdfOk: !!pdf.ok, pdfKB: pdf.bytes ? KB(pdf.bytes.length) : 0, maxRSS_MB: Math.round(process.resourceUsage().maxRSS / 1024) };
+}
+
 // ---------- 5. סיכום פרופיל CPU לפי שלב/מודול ----------
 function summarizeProfile(file) {
   const prof = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -290,6 +309,7 @@ function main() {
   const [cmd, a, b] = process.argv.slice(2);
   const emit = (o) => console.log('@@RESULT@@' + JSON.stringify(o));
   if (cmd === 'run') return emit(runDoc(a, b || 'table'));
+  if (cmd === 'export') return emit(exportDoc(a));
   if (cmd === 'inventory') return console.log(JSON.stringify(inventory(process.argv[3], process.argv[4]), null, 2));
   if (cmd === 'parse') return console.log(JSON.stringify(parseBench(), null, 2));
   if (cmd === 'b64') return console.log(JSON.stringify(b64Bench(), null, 2));
@@ -298,4 +318,4 @@ function main() {
   process.exit(2);
 }
 if (require.main === module) main();
-module.exports = { inventory, parseBench, b64Bench, runDoc, summarizeProfile, requiredFonts, loadCatalogs, FONT_KEYS };
+module.exports = { inventory, parseBench, b64Bench, runDoc, exportDoc, summarizeProfile, requiredFonts, loadCatalogs, FONT_KEYS };
