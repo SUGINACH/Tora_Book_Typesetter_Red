@@ -1,6 +1,6 @@
 # BROWSER_BOOT_REPORT — Agent 3: מדידת עלייה בדפדפן והכרעה על אופטימיזציה
 
-> **סטטוס:** משלים את `PERFORMANCE_BASELINE.md` — ה"לא נמדד" שם (סעיף 5) נמדד כאן. הדוח וכלי המדידה הם קריאה-בלבד; האופטימיזציה היחידה נמסרת ב-PR נפרד.
+> **סטטוס:** משלים את `PERFORMANCE_BASELINE.md` — ה"לא נמדד" שם (סעיף 5) נמדד כאן. הדוח וכלי המדידה הם קריאה-בלבד; האופטימיזציה היחידה נמסרת ב-PR #38 (Draft).
 > **Commit בסיס:** `6f801568c15071a27f97918ff8479def9c719c0d` (main). **דפדפן:** HeadlessChrome 153 (חבילת `@sparticuz/chromium`) · Node v22 · vCPU יחיד, 4GB.
 > **רמות ראיה:** **[ריצה]** נמדד בדפדפן בפועל · **[הדמיה]** תוצאה של שרת מדמה-מארח, לא של GitHub Pages · **[קוד]** קריאת קוד.
 
@@ -139,8 +139,8 @@ PERF_BROWSER_MODULES=<node_modules> node tools/perf/browser-boot.js --profile br
 - **Commit בסיס:** `6f80156`.
 - **מטרת העבודה:** מדידת עלייה ומסלול גופנים; אופטימיזציה רק עם צוואר בקבוק מוכח; ללא שינוי פריסה.
 - **קבצים:** PR #34 — `tools/perf/{font-perf-baseline,browser-boot,woff2-probe}.js`, `docs/perf/*` (כולל `WOFF2_EVIDENCE.md`). ענף האופטימיזציה — `red-build/ui/font-prefetch.js` (חדש), `red-build/ui/index.html` (+שורה), `red-build/tests/unit/font-prefetch.test.js` (חדש), `red-build/package.json` (שרשרת הבדיקות). ללא `src/**` וללא bundle מיוצר.
-- **נבדק:** סעיף 2 לעיל; s10-ui 43/43 (כולל טריות ה-bundle וגרסאות cache-busting), s13 12/12, הבדיקה החדשה 12/12 (הרצה מקומית בלבד — CI טרם הורץ על הענף).
-- **קישורים:** PR #34; patch האופטימיזציה `agent-3-font-prefetch.patch` (טרם נדחף — לקונקטור אין הרשאת כתיבה).
-- **פתוח:** פתיחת PR לענף האופטימיזציה; אישור סוכן 1 לשורה ב-`index.html`; מדידה ב-GitHub Pages האמיתי (דורש דפדפן אמיתי; סניפט הקונסול ב-PERFORMANCE_BASELINE.md סעיף 5).
+- **נבדק:** סעיף 2 לעיל; s10-ui 43/43 (כולל טריות ה-bundle וגרסאות cache-busting), s13 12/12, הבדיקה החדשה 12/12 (מקומית); **CI מלא ירוק על PR #38** (head `7b5411b`): `npm test` ב-Node 18/20/22, layout-parity, layout-audit, very-long-corpus, local.
+- **קישורים:** PR #34 (דוח + כלי מדידה); PR #38 (Draft — האופטימיזציה).
+- **פתוח:** אישור סוכן 1 לשורה ב-`index.html` (ואז הוצאת PR #38 מ-Draft); מדידה ב-GitHub Pages האמיתי (דורש דפדפן אמיתי; סניפט הקונסול ב-PERFORMANCE_BASELINE.md סעיף 5); חפיפה צפויה בשורת `test` ב-`package.json` מול PR #33 — מתקנים בשורה אחת (משאירים את שתי התוספות).
 - **תלות:** סוכן 1 (`index.html`, אוספי עיצוב); סוכן 2 (WOFF2 — מדידה); סוכן 4 (הוספת הבדיקה לשרשרת `npm test`).
 - **החלטות נדרשות מבעל הפרויקט:** (1) מיזוג PR האופטימיזציה; (2) מדיניות WOFF2; (3) כפילויות קטלוג (19 TTF + 26 WOFF2).
