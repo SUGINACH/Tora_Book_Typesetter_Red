@@ -648,6 +648,10 @@ function createApp(doc, opts = {}) {
     const { merged, unknownKeys, issues } = mergeWithDefaults({ ...legacySettings, ...known });
     for (const [k, v] of Object.entries(merged)) settings[k] = v;
     settingsPanel.refreshValues();
+    // **סוכן 1 (תפעול):** תבנית שמציינת גופן מהספרייה חייבת לטעון/לרשום אותו (FontFace לתצוגה + registerFont
+    // במנוע) — כמו applyLegacyDefaults ו-restorePersistedSettings. בלי זה המנוע מודד בגופן שלא נרשם והתצוגה
+    // מציגה גופן מערכת עד שהמשתמש בוחר גופן ידנית. כשל טעינה אינו חוסם (fallback מערכת, מתועד).
+    loadFontsForCurrentSettings().catch(() => { /* fallback מערכת — מתועד */ });
     markHeavyDirty(); // הגדרות השתנו — המשתמש יחליט מתי לעמד (⚡)
     schedulePersistSettings(); // **פער 2 (S6.1):** טעינת תבנית = שינוי הגדרות — נשמר (SRS §17.1)
     return { unknownKeys, issues };

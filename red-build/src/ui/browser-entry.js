@@ -12,6 +12,7 @@ const { workerTransport } = require('./worker-client');
 const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
 const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
+const { decodeTextBytes } = require('./text-decode'); // **סוכן 1 (שלמות קלט):** UTF-8 קפדני + נפילה ל-Windows-1255
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -121,7 +122,14 @@ function boot() {
     getExportFontCss: () => imud.exportFontCss(),
     // **03.11:** ספריית העיצובים — לפיקרים בפאנל הבורר
     imudLibrary: imud,
-    onRequestTxtImport: () => pickFile('.txt,text/plain', (text) => app.onDocumentAction('import-txt', text)),
+    // **סוכן 1 (שלמות קלט):** קריאה בבתים + פענוח מפורש — readAsText('utf-8') הפך עברית בקידוד ANSI ל-"����" בשקט,
+    // והמנוע היה מצהיר "שימור תוכן: שלם" על הקלט הפגום. נפילה/תווים פגומים ⇒ הודעה גלויה בפס המצב.
+    onRequestTxtImport: () => pickBinaryFile('.txt,text/plain', (bytes, name) => {
+      const d = decodeTextBytes(bytes);
+      if (d.fallback) app.status.setNotice(`«${name}» אינו בקידוד UTF-8 — פוענח כ־Windows-1255 (עברית). ודאו שהטקסט נראה תקין.`);
+      else if (d.replacementChars) app.status.setNotice(`«${name}»: ${d.replacementChars} תווים פגומים (\uFFFD) בקובץ המקור — בדקו את הקידוד במקור.`);
+      app.onDocumentAction('import-txt', d.text);
+    }),
     onRequestDocxImport: () => pickBinaryFile('.docx', (bytes, name) => app.importDocxFile(bytes, name)), // **S11**
     onRequestExtensionsImport: () => pickFile('.json,application/json', (json) => app.extensions.importFromText(json, 'הרחבות.json')), // **S11**
     onSaveExtensions: (json) => downloadJson('tora-extensions.json', json), // **S11**
