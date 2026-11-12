@@ -76,7 +76,7 @@
 1473:      const effCols = (blk) => blk.split ? [blk.split.r, blk.split.l] : [blk.cols[0], blk.cols[1]];
 2245:  function balanceBlock(block, availH) {
 ```
-אירועי legacy (שלב : label): 
+אירועי `emit(` של מסלול legacy — ראו סעיף 3 (`layout/legacy-imud-flow.js:2763–2943`).
 
 ## 5. מפת מודולים ותלויות (נוצרה אוטומטית: require יחסי → "תלוי ב-"; "נצרך ע"י" = מספר מודולים שדורשים אותו)
 | מודול (red-build/src/…) | שורות | תלוי ב- | נצרך ע"י (מס') |
