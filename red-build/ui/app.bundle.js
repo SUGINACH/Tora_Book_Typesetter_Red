@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 62 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 63 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -298,6 +298,7 @@ var __paths = {
   "src/ui/browser-entry.js|./imud-library": "src/ui/imud-library.js",
   "src/ui/browser-entry.js|./settings-persistence": "src/ui/settings-persistence.js",
   "src/ui/browser-entry.js|./text-decode": "src/ui/text-decode.js",
+  "src/ui/browser-entry.js|./boot-failure": "src/ui/boot-failure.js",
   "src/ui/browser-entry.js|../engine/output/html-export": "src/engine/output/html-export.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|../engine/output/project-io": "src/engine/output/project-io.js",
@@ -405,6 +406,7 @@ const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
 const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
 const { decodeTextBytes } = require('./text-decode'); // **סוכן 1 (שלמות קלט):** UTF-8 קפדני + נפילה ל-Windows-1255
+const { reportBootFailure } = require('./boot-failure'); // **סוכן 1 (§7.1):** כשל אתחול גלוי, לפי השלב שנכשל
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -555,7 +557,7 @@ function boot() {
   // אחרי ההרכבה: קטלוג הפונטים מתעדכן בפיקרים ברגע שהספרייה נטענת (TDZ-safe)
   imud.loadFontCatalog().then((families) => {
     app.refreshFontCatalog && app.refreshFontCatalog(families);
-  }).catch(() => { /* ספרייה לא זמינה (למשל מקומי בלי assets) — ממשק בסיסי */ });
+  }).catch(() => { /* הכשל מדווח בשרשרת האתחול שלהלן (reportBootFailure) — לא מכפילים הודעות */ });
   // **03.11(ד) — "שום דבר מהגדרות ברירת המחדל אינו קיים" (דיווח משתמש 3):**
   // האפליקציה עולה עם ברירות המחדל הגנריות של RED. ברירות המחדל של הפרויקט
   // המקורי (264 מפתחות: גופני עיצוב, שערים, כותרות עליונות, יישורים) מוטמעות
@@ -563,7 +565,10 @@ function boot() {
   // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
   // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
   // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
+  // **סוכן 1 (§7.1):** כשל בשרשרת האתחול אינו נבלע בשקט — הודעה לפי השלב שנכשל (נכסים/החלה/שחזור/עימוד)
+  let bootStage = 'assets';
   imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(async ({ settings: imported, report }) => {
+    bootStage = 'apply';
     // **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): ערכת הנושא
     // הפעילה של המקור.** ברירת המחדל של המקור היא active-theme-select =
     // "json_theme_40" — כלומר עמודי השערים נולדים עם רקע מעוצב (שער ראשי/
@@ -588,6 +593,7 @@ function boot() {
         app.status.setNotice(`ברירות המחדל המקוריות הוחלו — גופנים, שערים וכותרות${fonts}.`);
       });
   }).then(() => {
+    bootStage = 'restore';
     // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
     // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל
     // מוחלות תמיד (כלל הברזל) ובחירות המשתמש שורדות ריענון (SRS §17.1).
@@ -596,9 +602,10 @@ function boot() {
       app.status.setNotice(`הוחלו ${restored.restored} הגדרות שמורות מהסשן הקודם.`);
     }
   }).then(() => {
+    bootStage = 'retypeset';
     // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
     if (app.getText && app.getText().trim()) retypesetWhenIdle();
-  }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
+  }).catch((e) => reportBootFailure(app, bootStage, e));
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
   }
@@ -1794,6 +1801,13 @@ function buildStatusStrip(doc, opts) {
   fonts.className = 'chip chip--fonts';
   fonts.textContent = '🔤 גופנים: מוכנים';
 
+  // ---- נכסי ספרייה (סוכן 1, §7.1): מוצג רק בכשל טעינה — ברירות RED פועלות ואסור שיוצגו כברירות המקור ----
+  const assets = doc.createElement('span');
+  assets.className = 'chip chip--warn chip--assets';
+  assets.setAttribute('aria-live', 'polite');
+  assets.textContent = '';
+  assets.hidden = true;
+
   // ---- עמודים ----
   const pages = doc.createElement('span');
   pages.className = 'chip chip--pages';
@@ -1814,7 +1828,7 @@ function buildStatusStrip(doc, opts) {
   notice.textContent = '';
   let noticeTimer = null;
 
-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, run, notice]) root.appendChild(el);
+  for (const el of [engine, progress, pending, bolt, offline, fonts, assets, pages, run, notice]) root.appendChild(el);
 
   return {
     root, bolt,
@@ -1852,6 +1866,12 @@ function buildStatusStrip(doc, opts) {
       fonts.textContent = map[status] || map.ready;
     },
     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
+    /** @param {string|null} detail הסבר הכשל (נשמר ב-title); null ⇒ ניקוי */
+    setAssetsFailure(detail) {
+      assets.hidden = !detail;
+      assets.textContent = detail ? '⚠️ נכסי ספרייה: ברירות RED בלבד' : '';
+      assets.title = detail ? String(detail) : '';
+    },
     /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
     setRun(info) {
       if (!info) { run.textContent = ''; run.title = ''; run.hidden = true; return; }
@@ -20337,6 +20357,54 @@ function decodeTextBytes(input) {
 }
 
 module.exports = { decodeTextBytes };
+
+};
+__modules["src/ui/boot-failure.js"] = function (require, module, exports) {
+// src/ui/boot-failure.js — כשל אתחול אינו נבלע בשקט (סוכן 1, תוכנית האב §7.1: הודעות שגיאה מבחינות בין סוגי כשל)
+'use strict';
+
+/**
+ * **הבעיה:** שרשרת האתחול בדפדפן (קטלוג גופנים → ברירות המחדל של המקור → שחזור הגדרות שמורות → עימוד) הסתיימה
+ * ב־catch ריק. כשל בטעינת הנכסים (קובץ חסר, פתיחה מקומית, ניתוק) השאיר את האפליקציה בברירות RED בלי שום הודעה —
+ * והמשתמש חשב שחלות ברירות המקור (הצלחה כן מוצגת: "ברירות המחדל המקוריות הוחלו").
+ *
+ * **הפתרון:** הודעה לפי השלב שנכשל + שבב אזהרה קבוע לכשל נכסים. טהור: בלי DOM ובלי מנוע (F-06).
+ */
+
+/** תיאור קצר של שגיאה: הודעה בלבד (לא stack), רווחים מאוחדים, חתוך ל-140 תווים. */
+function errorDetail(err) {
+  const m = err && err.message != null ? err.message : err;
+  const s = String(m == null ? '' : m).replace(/\s+/g, ' ').trim();
+  return s.length > 140 ? `${s.slice(0, 137)}…` : s;
+}
+
+const MESSAGES = {
+  assets: (d) => `נכסי הספרייה (ברירות המחדל והגופנים של המקור) לא נטענו — פועלות ברירות המחדל של RED, והתוצאה עשויה להיות שונה מהמקור${d ? ` (${d})` : ''}.`,
+  apply: (d) => `החלת ברירות המחדל של המקור נכשלה${d ? `: ${d}` : ''} — פועלות ברירות המחדל של RED.`,
+  restore: (d) => `שחזור ההגדרות השמורות נכשל${d ? `: ${d}` : ''}.`,
+  retypeset: (d) => `עימוד האתחול נכשל${d ? `: ${d}` : ''}.`
+};
+
+/** @param {'assets'|'apply'|'restore'|'retypeset'|string} stage השלב שנכשל @param {*} err @returns {string} */
+function describeBootFailure(stage, err) {
+  const fn = MESSAGES[stage] || ((d) => `האתחול נכשל${d ? `: ${d}` : ''}.`);
+  return fn(errorDetail(err));
+}
+
+/**
+ * מדווח בפס המצב. כשל נכסים — גם שבב אזהרה קבוע (האפליקציה ממשיכה בברירות RED, ואסור שזה יוצג כברירות המקור);
+ * לכל שלב — הודעה חולפת. @returns {string} ההודעה
+ */
+function reportBootFailure(app, stage, err) {
+  const msg = describeBootFailure(stage, err);
+  const st = app && app.status;
+  if (!st) return msg;
+  if (stage === 'assets' && typeof st.setAssetsFailure === 'function') st.setAssetsFailure(msg);
+  if (typeof st.setNotice === 'function') st.setNotice(msg);
+  return msg;
+}
+
+module.exports = { errorDetail, describeBootFailure, reportBootFailure };
 
 };
 

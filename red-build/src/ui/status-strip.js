@@ -47,6 +47,13 @@ function buildStatusStrip(doc, opts) {
   fonts.className = 'chip chip--fonts';
   fonts.textContent = '🔤 גופנים: מוכנים';
 
+  // ---- נכסי ספרייה (סוכן 1, §7.1): מוצג רק בכשל טעינה — ברירות RED פועלות ואסור שיוצגו כברירות המקור ----
+  const assets = doc.createElement('span');
+  assets.className = 'chip chip--warn chip--assets';
+  assets.setAttribute('aria-live', 'polite');
+  assets.textContent = '';
+  assets.hidden = true;
+
   // ---- עמודים ----
   const pages = doc.createElement('span');
   pages.className = 'chip chip--pages';
@@ -67,7 +74,7 @@ function buildStatusStrip(doc, opts) {
   notice.textContent = '';
   let noticeTimer = null;
 
-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, run, notice]) root.appendChild(el);
+  for (const el of [engine, progress, pending, bolt, offline, fonts, assets, pages, run, notice]) root.appendChild(el);
 
   return {
     root, bolt,
@@ -105,6 +112,12 @@ function buildStatusStrip(doc, opts) {
       fonts.textContent = map[status] || map.ready;
     },
     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
+    /** @param {string|null} detail הסבר הכשל (נשמר ב-title); null ⇒ ניקוי */
+    setAssetsFailure(detail) {
+      assets.hidden = !detail;
+      assets.textContent = detail ? '⚠️ נכסי ספרייה: ברירות RED בלבד' : '';
+      assets.title = detail ? String(detail) : '';
+    },
     /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
     setRun(info) {
       if (!info) { run.textContent = ''; run.title = ''; run.hidden = true; return; }
