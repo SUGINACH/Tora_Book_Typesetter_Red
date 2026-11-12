@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 61 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 62 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -297,6 +297,7 @@ var __paths = {
   "src/ui/browser-entry.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/browser-entry.js|./imud-library": "src/ui/imud-library.js",
   "src/ui/browser-entry.js|./settings-persistence": "src/ui/settings-persistence.js",
+  "src/ui/browser-entry.js|./text-decode": "src/ui/text-decode.js",
   "src/ui/browser-entry.js|../engine/output/html-export": "src/engine/output/html-export.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|../engine/output/project-io": "src/engine/output/project-io.js",
@@ -403,6 +404,7 @@ const { workerTransport } = require('./worker-client');
 const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
 const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
+const { decodeTextBytes } = require('./text-decode'); // **סוכן 1 (שלמות קלט):** UTF-8 קפדני + נפילה ל-Windows-1255
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -512,7 +514,14 @@ function boot() {
     getExportFontCss: () => imud.exportFontCss(),
     // **03.11:** ספריית העיצובים — לפיקרים בפאנל הבורר
     imudLibrary: imud,
-    onRequestTxtImport: () => pickFile('.txt,text/plain', (text) => app.onDocumentAction('import-txt', text)),
+    // **סוכן 1 (שלמות קלט):** קריאה בבתים + פענוח מפורש — readAsText('utf-8') הפך עברית בקידוד ANSI ל-"����" בשקט,
+    // והמנוע היה מצהיר "שימור תוכן: שלם" על הקלט הפגום. נפילה/תווים פגומים ⇒ הודעה גלויה בפס המצב.
+    onRequestTxtImport: () => pickBinaryFile('.txt,text/plain', (bytes, name) => {
+      const d = decodeTextBytes(bytes);
+      if (d.fallback) app.status.setNotice(`«${name}» אינו בקידוד UTF-8 — פוענח כ־Windows-1255 (עברית). ודאו שהטקסט נראה תקין.`);
+      else if (d.replacementChars) app.status.setNotice(`«${name}»: ${d.replacementChars} תווים פגומים (\uFFFD) בקובץ המקור — בדקו את הקידוד במקור.`);
+      app.onDocumentAction('import-txt', d.text);
+    }),
     onRequestDocxImport: () => pickBinaryFile('.docx', (bytes, name) => app.importDocxFile(bytes, name)), // **S11**
     onRequestExtensionsImport: () => pickFile('.json,application/json', (json) => app.extensions.importFromText(json, 'הרחבות.json')), // **S11**
     onSaveExtensions: (json) => downloadJson('tora-extensions.json', json), // **S11**
@@ -1264,6 +1273,10 @@ function createApp(doc, opts = {}) {
     const { merged, unknownKeys, issues } = mergeWithDefaults({ ...legacySettings, ...known });
     for (const [k, v] of Object.entries(merged)) settings[k] = v;
     settingsPanel.refreshValues();
+    // **סוכן 1 (תפעול):** תבנית שמציינת גופן מהספרייה חייבת לטעון/לרשום אותו (FontFace לתצוגה + registerFont
+    // במנוע) — כמו applyLegacyDefaults ו-restorePersistedSettings. בלי זה המנוע מודד בגופן שלא נרשם והתצוגה
+    // מציגה גופן מערכת עד שהמשתמש בוחר גופן ידנית. כשל טעינה אינו חוסם (fallback מערכת, מתועד).
+    loadFontsForCurrentSettings().catch(() => { /* fallback מערכת — מתועד */ });
     markHeavyDirty(); // הגדרות השתנו — המשתמש יחליט מתי לעמד (⚡)
     schedulePersistSettings(); // **פער 2 (S6.1):** טעינת תבנית = שינוי הגדרות — נשמר (SRS §17.1)
     return { unknownKeys, issues };
@@ -2869,7 +2882,7 @@ function buildSettingsTab(doc, opts) {
     }
   }
 
-  root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־12 פאנלים` }));
+  root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־${PANELS.length} פאנלים` }));
 
   return { root, refreshValues, refreshFontCatalog, searchInput: search, getSearchHits: () => searchHits };
 }
@@ -20276,6 +20289,54 @@ function createImudLibrary(engine) {
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };
+
+};
+__modules["src/ui/text-decode.js"] = function (require, module, exports) {
+// src/ui/text-decode.js — פענוח קובץ טקסט מיובא בלי השחתה שקטה (סוכן 1, שלמות קלט)
+'use strict';
+
+/**
+ * **הבעיה:** FileReader.readAsText(file, 'utf-8') מחליף בייטים לא־תקינים ב־U+FFFD בשקט. קובץ עברית בקידוד
+ * Windows-1255 (ברירת המחדל "ANSI" של פנקס רשימות בעברית) הופך ל־"����" — והמנוע מעמד את הקלט הפגום
+ * ומצהיר "שימור תוכן: שלם" (יחסית לקלט שכבר הושחת בייבוא).
+ *
+ * **הפתרון:** BOM ⇒ הקידוד המוצהר; אחרת UTF-8 קפדני (fatal); נכשל ⇒ Windows-1255. הפונקציה מדווחת
+ * איזה קידוד נבחר, האם הייתה נפילה, וכמה תווי U+FFFD נותרו — כדי שה־UI יתריע במקום לשתוק.
+ * טהור: בלי DOM ובלי מנוע (F-06).
+ *
+ * @param {Uint8Array|ArrayBuffer} input
+ * @returns {{text:string, encoding:string, fallback:boolean, replacementChars:number}}
+ */
+function decodeTextBytes(input) {
+  const u8 = input instanceof Uint8Array ? input : new Uint8Array(input || 0);
+  const dec = (label, bytes, o) => new TextDecoder(label, o).decode(bytes);
+  let text;
+  let encoding;
+  let fallback = false;
+  if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) {
+    encoding = 'utf-8-bom';
+    text = dec('utf-8', u8.subarray(3));
+  } else if (u8.length >= 2 && u8[0] === 0xFF && u8[1] === 0xFE) {
+    encoding = 'utf-16le';
+    text = dec('utf-16le', u8.subarray(2));
+  } else if (u8.length >= 2 && u8[0] === 0xFE && u8[1] === 0xFF) {
+    encoding = 'utf-16be';
+    text = dec('utf-16be', u8.subarray(2));
+  } else {
+    try {
+      text = dec('utf-8', u8, { fatal: true });
+      encoding = 'utf-8';
+    } catch (e) {
+      text = dec('windows-1255', u8);
+      encoding = 'windows-1255';
+      fallback = true;
+    }
+  }
+  const replacementChars = (text.match(/\uFFFD/g) || []).length;
+  return { text, encoding, fallback, replacementChars };
+}
+
+module.exports = { decodeTextBytes };
 
 };
 
