@@ -26,6 +26,7 @@ const { buildTestingTab } = require('./testing-tab');
 const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
 const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
 const { buildCaretMap } = require('./caret-map');
+const { buildRunInfo } = require('./run-info'); // **סוכן 1 (§7.1):** זהות הריצה האחרונה לתצוגה
 
 const TABS = [
   { id: 'editor', label: '✍️ עורך' },
@@ -43,6 +44,7 @@ function createApp(doc, opts = {}) {
   let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
   let lightTimer = null;
   let lastLightRefreshMs = null;
+  let lastRun = null;           // **סוכן 1 (§7.1):** {n, jobId, ms, layoutHash, contentHashIn} — תצוגה בלבד
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
 
   // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
@@ -300,7 +302,7 @@ function createApp(doc, opts = {}) {
     status.setPending({ light: false, heavy: false });
     status.setEngineState('working', { label: 'מתחיל עימוד…' });
     const started = perf.now();
-    const { promise } = engine.requestTypeset({
+    const { promise, jobId } = engine.requestTypeset({
       text, settings,
       onProgress: (m) => status.setEngineState('working', m) // "עמוד X מתוך Y"
     });
@@ -308,6 +310,7 @@ function createApp(doc, opts = {}) {
       if (res && res.cancelled) return;
       result = res;
       typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
+      lastRun = buildRunInfo(res, { n: typesetGen, jobId, ms: perf.now() - started }); // **סוכן 1 (§7.1)**
       applyResultToViews();
       status.setEngineState('idle');
       status.setPages(result.pages.length);
@@ -336,6 +339,7 @@ function createApp(doc, opts = {}) {
       testing.setResult({ pages: [], report: { findings: [], counts: {} }, trace: { events: [] }, tokens: [], droppedEvents: 0 });
       editor.setPageBreaks([]);
       status.setPages(0);
+      lastRun = null; status.setRun(null); testing.setRun(null); // **סוכן 1 (§7.1):** אין hash של מסמך שנמחק
       status.setPending({ light: false, heavy: false });
       status.setEngineState('idle');
       return;
@@ -562,6 +566,7 @@ function createApp(doc, opts = {}) {
     preview.setResult(result, settings);
     testing.setResult(result);
     testing.setRecommendations(result.recommendations || null); // **S11:** המלצות עם הוכחות
+    status.setRun(lastRun); testing.setRun(lastRun); // **סוכן 1 (§7.1):** זהות הריצה — תצוגה בלבד (F-06)
     // מפת שבירות עמודים לעורך (⏎ — תצוגה בלבד, F-01)
     const breaks = [];
     for (const pg of result.pages) {

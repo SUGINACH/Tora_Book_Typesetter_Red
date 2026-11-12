@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 60 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 61 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -313,6 +313,7 @@ var __paths = {
   "src/ui/app-shell.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/app-shell.js|./retypeset-policy": "src/ui/retypeset-policy.js",
   "src/ui/app-shell.js|./caret-map": "src/ui/caret-map.js",
+  "src/ui/app-shell.js|./run-info": "src/ui/run-info.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|./inline-transport": "src/ui/inline-transport.js",
   "src/ui/app-shell.js|../engine/output/export-api": "src/engine/output/export-api.js",
@@ -641,6 +642,7 @@ const { buildTestingTab } = require('./testing-tab');
 const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
 const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
 const { buildCaretMap } = require('./caret-map');
+const { buildRunInfo } = require('./run-info'); // **סוכן 1 (§7.1):** זהות הריצה האחרונה לתצוגה
 
 const TABS = [
   { id: 'editor', label: '✍️ עורך' },
@@ -658,6 +660,7 @@ function createApp(doc, opts = {}) {
   let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
   let lightTimer = null;
   let lastLightRefreshMs = null;
+  let lastRun = null;           // **סוכן 1 (§7.1):** {n, jobId, ms, layoutHash, contentHashIn} — תצוגה בלבד
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
 
   // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
@@ -915,7 +918,7 @@ function createApp(doc, opts = {}) {
     status.setPending({ light: false, heavy: false });
     status.setEngineState('working', { label: 'מתחיל עימוד…' });
     const started = perf.now();
-    const { promise } = engine.requestTypeset({
+    const { promise, jobId } = engine.requestTypeset({
       text, settings,
       onProgress: (m) => status.setEngineState('working', m) // "עמוד X מתוך Y"
     });
@@ -923,6 +926,7 @@ function createApp(doc, opts = {}) {
       if (res && res.cancelled) return;
       result = res;
       typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
+      lastRun = buildRunInfo(res, { n: typesetGen, jobId, ms: perf.now() - started }); // **סוכן 1 (§7.1)**
       applyResultToViews();
       status.setEngineState('idle');
       status.setPages(result.pages.length);
@@ -951,6 +955,7 @@ function createApp(doc, opts = {}) {
       testing.setResult({ pages: [], report: { findings: [], counts: {} }, trace: { events: [] }, tokens: [], droppedEvents: 0 });
       editor.setPageBreaks([]);
       status.setPages(0);
+      lastRun = null; status.setRun(null); testing.setRun(null); // **סוכן 1 (§7.1):** אין hash של מסמך שנמחק
       status.setPending({ light: false, heavy: false });
       status.setEngineState('idle');
       return;
@@ -1177,6 +1182,7 @@ function createApp(doc, opts = {}) {
     preview.setResult(result, settings);
     testing.setResult(result);
     testing.setRecommendations(result.recommendations || null); // **S11:** המלצות עם הוכחות
+    status.setRun(lastRun); testing.setRun(lastRun); // **סוכן 1 (§7.1):** זהות הריצה — תצוגה בלבד (F-06)
     // מפת שבירות עמודים לעורך (⏎ — תצוגה בלבד, F-01)
     const breaks = [];
     for (const pg of result.pages) {
@@ -1780,6 +1786,13 @@ function buildStatusStrip(doc, opts) {
   pages.className = 'chip chip--pages';
   pages.textContent = '📄 0 עמודים';
 
+  // ---- זהות הריצה האחרונה (סוכן 1, §7.1): מס' ריצה · זמן · hash פריסה קצר; המלא ב-title ----
+  const run = doc.createElement('span');
+  run.className = 'chip chip--run';
+  run.setAttribute('aria-live', 'polite');
+  run.textContent = '';
+  run.hidden = true; // מוצג רק אחרי עימוד ראשון (בלי "כדור" ריק)
+
   // ---- הודעות חולפות (S11: ייבוא/סירוב פורמט/החלת המלצה — חוק 14 בלי חלונות) ----
   const notice = doc.createElement('span');
   notice.className = 'chip chip--notice';
@@ -1788,7 +1801,7 @@ function buildStatusStrip(doc, opts) {
   notice.textContent = '';
   let noticeTimer = null;
 
-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, notice]) root.appendChild(el);
+  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, run, notice]) root.appendChild(el);
 
   return {
     root, bolt,
@@ -1826,6 +1839,20 @@ function buildStatusStrip(doc, opts) {
       fonts.textContent = map[status] || map.ready;
     },
     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
+    /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
+    setRun(info) {
+      if (!info) { run.textContent = ''; run.title = ''; run.hidden = true; return; }
+      const parts = [`ריצה #${info.n}`];
+      if (info.ms != null) parts.push(info.elapsedLabel);
+      if (info.layoutHash) parts.push(`פריסה ${String(info.layoutHash).slice(0, 8)}`);
+      run.textContent = parts.join(' · ');
+      run.hidden = false;
+      run.title = [
+        info.jobId ? `מזהה ריצה: ${info.jobId}` : null,
+        info.layoutHash ? `hash פריסה: ${info.layoutHash}` : null,
+        info.contentHashIn ? `hash קלט: ${info.contentHashIn}` : null
+      ].filter(Boolean).join('\n');
+    },
     /** הודעה חולפת (8 שניות) — ייבוא, סירוב פורמט, החלת המלצה. */
     setNotice(text) {
       notice.textContent = String(text != null ? text : '');
@@ -15468,6 +15495,46 @@ function buildTestingTab(doc, opts) {
 
   let lastResult = null;
 
+  // ============ סעיף 0: פרטי הריצה האחרונה (זהות הריצה — תוכנית האב §7.1) ============
+  // תצוגה בלבד (F-06): הערכים מגיעים מה-app מ-buildRunInfo; אין כאן קריאה למנוע.
+  const runSec = doc.createElement('div');
+  runSec.className = 'testing-section run-summary';
+  runSec.setAttribute('aria-label', 'פרטי הריצה האחרונה');
+  const runHead = doc.createElement('h3');
+  runHead.textContent = 'פרטי הריצה האחרונה';
+  runSec.appendChild(runHead);
+  const runBody = doc.createElement('div');
+  runSec.appendChild(runBody);
+  root.appendChild(runSec);
+
+  /** @param {object|null} info — buildRunInfo(...); null ⇒ אין ריצה */
+  function setRun(info) {
+    runBody.textContent = '';
+    if (!info) {
+      const p = doc.createElement('p');
+      p.className = 'run-summary-empty';
+      p.textContent = 'עוד לא בוצע עימוד';
+      runBody.appendChild(p);
+      return;
+    }
+    const dl = doc.createElement('dl');
+    dl.className = 'run-summary-list';
+    const add = (field, label, value, ltr) => {
+      const dt = doc.createElement('dt'); dt.textContent = label;
+      const dd = doc.createElement('dd'); dd.dataset.field = field;
+      dd.textContent = value != null ? String(value) : '—';
+      if (ltr) dd.setAttribute('dir', 'ltr');
+      dl.appendChild(dt); dl.appendChild(dd);
+    };
+    add('jobId', 'מזהה ריצה', info.jobId, true);
+    add('run', 'ריצה מס׳ (בסשן)', info.n);
+    add('elapsed', 'זמן עימוד (צד UI, כולל העברה מה־Worker)', info.elapsedLabel);
+    add('layoutHash', 'hash פריסה (SHA-256)', info.layoutHash, true);
+    add('contentHashIn', 'hash תוכן הקלט', info.contentHashIn, true);
+    runBody.appendChild(dl);
+  }
+  setRun(null);
+
   // ============ סעיף 1: טבלת ממצאים ============
   const findingsSec = doc.createElement('div');
   findingsSec.className = 'testing-section';
@@ -15774,7 +15841,7 @@ function buildTestingTab(doc, opts) {
     }
   }
 
-  return { root, setResult, setRecommendations };
+  return { root, setResult, setRecommendations, setRun };
 }
 
 module.exports = { buildTestingTab, STATUS_HE };
@@ -18006,6 +18073,41 @@ module.exports = {
   lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS,
   ENDNOTE_CLASS_RE, METADATA_KEYS, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix
 };
+
+};
+__modules["src/ui/run-info.js"] = function (require, module, exports) {
+// src/ui/run-info.js — זהות הריצה האחרונה לתצוגה (סוכן 1, תוכנית האב §7.1)
+'use strict';
+
+/**
+ * טהור: בלי DOM ובלי מנוע (F-06). ממיר תוצאה מסוריאליזת פרוטוקול (ui-result-v1) + נתוני ריצה שבצד ה־UI
+ * לאובייקט תצוגה אחד המשמש את פס המצב ואת לשונית הבדיקה — מקור יחיד לערכים המוצגים.
+ * אין כאן שום שינוי בחוזה ה־Worker: layoutHash ו־contentHashIn כבר מוחזרים היום ב־serializeTypesetResult.
+ */
+
+/** משך לתצוגה: מתחת לשנייה — מילישניות; אחרת — שניות בשתי ספרות. */
+function formatDuration(ms) {
+  if (!(Number.isFinite(ms) && ms >= 0)) return '—';
+  return ms < 1000 ? `${Math.round(ms)} מילישניות` : `${(ms / 1000).toFixed(2)} שניות`;
+}
+
+/**
+ * @param {object} result תוצאה מסוריאליזת פרוטוקול
+ * @param {{n?:number, jobId?:string, ms?:number}} meta נתוני ריצה שבצד ה־UI (מונה, מזהה עבודה, זמן כולל)
+ */
+function buildRunInfo(result, meta) {
+  const m = meta || {};
+  return {
+    n: m.n != null ? m.n : null,
+    jobId: m.jobId || null,
+    ms: Number.isFinite(m.ms) ? m.ms : null,
+    elapsedLabel: formatDuration(m.ms),
+    layoutHash: (result && result.layoutHash) || null,
+    contentHashIn: (result && result.contentHashIn) || null
+  };
+}
+
+module.exports = { formatDuration, buildRunInfo };
 
 };
 __modules["src/ui/inline-transport.js"] = function (require, module, exports) {
