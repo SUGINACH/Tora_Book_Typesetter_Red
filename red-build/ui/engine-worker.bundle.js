@@ -7686,8 +7686,9 @@ function legacyTypeset(rawText, settings, env) {
             if (block.fill === 0 && !isH0 && !(block.cols[0].length === 0)) {
               // **S4.13:** גם כאן המקור מחזיר כותרות זנב לפני מעבר טור —
               // כותרת שנותרה אחרונה בטור הימני תיפלט עם הפסקה הבאה בשמאלי.
-              ti -= rollbackTrailingHeadings();
+              const rb = rollbackTrailingHeadings();
               block.fill = 1; // המשך בטור השמאלי
+              if (rb > 0) { ti -= rb; continue; } // עיבוד חוזר של הכותרות שהוחזרו בטור השמאלי (כמו נתיב הפסקה, שורה ~1913)
             } else if (block.cols[block.fill].length || block.cols[0].length) {
               // **S4.13:** סיום הבלוק לפני שבירת העמוד — כמו המקור (כל בלוק
               // מסתיים בהיגיון הארבעה; כאן הטוקן הבא הוא הכותרת שלא נכנסה).
