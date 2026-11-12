@@ -19,7 +19,7 @@
     "test:scan": "node ../tools/scan-control-triggers.js",
     "test:export": "node tests/e2e/s12-export.test.js",
     "test:acceptance": "node tests/e2e/s13-acceptance.test.js && node tests/audit/s13-security-a11y.test.js",
-    "test:regress": "node tests/regress/heading-rollback.test.js",
+    "test:regress": "node tests/regress/heading-rollback.test.js && node tests/regress/source-families.test.js",
     "audit:layout": "node tests/e2e/s14-layout-audit.test.js"
   },
   "license": "UNLICENSED",
