@@ -119,7 +119,7 @@ describe('S62.1 שאלה 4 — איזון טורים בזרימת המקור (ס
     }
   });
 
-  it('שימור תוכן מלא: הקורפוס האמיתי — contentPreserved=true; הפסד קיים במסמך הבדיקה מדווח ב-ledger (לא שקט)', () => {
+  it('שימור תוכן מלא: הקורפוס האמיתי — contentPreserved=true; ובמסמך הבדיקה הקבוע אפס content-loss (R-01 תוקן)', () => {
     // ההוכחה המחייבת לשימור תוכן היא על טקסט אמיתי (הקורפוס ההיסטורי —
     // long_test_text.txt; סוויטת long-real-text מריצה אותו גם כן). האיזון
     // מזיז שורות בין טורים — גם בהרצה כפולה של אותו קוד, המולטיסט של
@@ -128,12 +128,11 @@ describe('S62.1 שאלה 4 — איזון טורים בזרימת המקור (ס
     const corpus = fs.readFileSync(corpusPath, 'utf8');
     const rCorpus = legacyTypeset(corpus, imudSettings(), {});
     assertEq(rCorpus.contentPreserved, true, 'שימור תוכן על הקורפוס האמיתי');
-    // מסמך הבדיקה הקבוע מכיל הערות-ענק חוצות-עמודים — פגם 2-מילים
-    // **קיים מלפני התיקון** (נמדד גם על הקוד הקודם) ומדווח ב-ledger
-    // כ-content-loss — הדרישה: שהפגם לא התרחב בעקבות האיזון.
+    // R-01 (תוקן): אובדן "לשון"/"הפוסקים" היה rollback כותרות inline בסוף טור (legacy-imud-flow),
+    // לא הערות-ענק. מסמך הבדיקה הקבוע משומר במלואו — אפס content-loss.
     const loss = [...result.ledger.issues.values()].filter(x => x.kind === 'content-loss');
     const missing = loss.length ? (loss[0].predicate_before && loss[0].predicate_before.missing) || 0 : 0;
-    assert(missing <= 2, `הפסד המילים המדווח התרחב מעבר לקיים-מקודם (2): ${missing}`);
+    assertEq(missing, 0, `אובדן תוכן במסמך הבדיקה הקבוע (R-01 תוקן): ${missing}`);
   });
 
   it('דטרמיניזם: שתי הרצות — אותו hash ואותם מספרי עמודים ברשומות', () => {
