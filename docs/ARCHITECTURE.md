@@ -8,14 +8,14 @@ RED is a **pure function plus a UI around it**: `typeset(text, settings)` turns 
 
 ## 2. The pipeline (`engine/core/pipeline.js`)
 
-The order of operations is fixed and enforced in one place, with five named checkpoints:
+The order of operations is fixed and enforced in one place; its header comment names five checkpoints:
 
 ```mermaid
 flowchart LR
   A["Source text + settings"] --> B["CP1 · parse<br/>lexer → tokenizer → bracket scan"]
   B --> C["scope-map · style pre-pass<br/>(parentheses before measuring)"]
   C --> D["CP2 · fonts ready<br/>measure + Knuth–Plass line plan"]
-  D --> E["CP3 · page plan<br/>DP planner · protections · retreat loop"]
+  D --> E["CP3 (design label — no event is emitted)<br/>page plan: DP planner · protections · retreat loop"]
   E --> F["balance / AutoQuality<br/>notes budget · re-fit pass"]
   F --> G["CP4 · decorations<br/>(geometry-neutral)"]
   G --> H["headers · folio · TOC<br/>ledger finalize"]
@@ -25,6 +25,8 @@ flowchart LR
   J --> L["Standalone HTML"]
   J --> M["PDF 1.4"]
 ```
+
+The code emits five checkpoint events — `cp1-parsed`, `cp2-scope`, `cp2-measured`, `cp4-decoration-pass`, `cp5-render-ready` — but **no `cp3` event** (checked by `grep` on `red-build/src/engine`, and independently in Agent 2's map, open PR #35). Page planning, protections, balancing and the retreat loop emit their own events from `layout/`.
 
 Invariants that the pipeline proves on every run:
 
@@ -84,6 +86,8 @@ Three catalogs live in `red-build/ui/assets/imud/`:
 
 Loading and registration are implemented in `ui/imud-library.js`. PDF export needs a TTF for the selected body font; the Worker embeds a subset (`typography/font-subset.js`).
 
+**Format limits (measured by Agent 3, open PR #34).** The WOFF2 catalogs are display-only: `parseFont(WOFF2)` fails (`bad-sfnt-version`), so measurement falls back to the width table and `exportPdf` fails with a WOFF2 font. Only TrueType fonts can be measured with real font tables and embedded in a PDF. 1,289 of the 1,721 selectable families are WOFF2-only.
+
 ## 8. Output
 
 All visible output comes from one geometry source (`output/geometry-projector.js`): the live DOM render, the standalone HTML and the PDF are projected from the same CP5 model, and a parity check between model and raster is part of the export tests. The project ZIP stores the document, the settings, the extensions and the theme, and migrates v1 settings on import ([MIGRATION.md](../MIGRATION.md)).
@@ -92,6 +96,6 @@ All visible output comes from one geometry source (`output/geometry-projector.js
 
 `.github/workflows/` contains `ci.yml` (Node 18/20/22 test matrix with poppler-utils and DejaVu installed, a determinism check, and a real-browser layout audit), `full-math-audit.yml`, `layout-parity.yml` (comparison with the historical sample PDF — a diagnostic; open PR #33 makes it explicitly non-normative, D-98), `gh-pages-audit.yml` (audits the deployed bundle) and `deploy-pages.yml` (publishes the Pages artifact). See the workflow files for exact triggers.
 
-> **Dependency map.** `LAYOUT_DEPENDENCY_MAP.md` (03.11.2026, 66 edges) is stale. `node tools/deps.js` reports **175 edges across 84 modules** at `6f80156`; 41 of those modules do not appear in the old map. The module table above is a summary — the generated edge list is the authority. Reconciliation with the code map of Agent 2 is tracked in [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md).
+> **Dependency map.** `LAYOUT_DEPENDENCY_MAP.md` (03.11.2026, 66 edges) is stale. `node tools/deps.js` reports **175 edges across 84 modules** at `6f80156`; 41 of those modules do not appear in the old map. The module table above is a summary — the generated edge list is the authority. Agent 2's code-generated map (open PR #35, `PIPELINE_AND_MODULE_MAP.md`) covers engine and audit only (66 files); compared module-to-module by file name, the two graphs agree on every pair (123 dependency pairs). The final synchronisation happens after that PR merges (see [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md)).
 
 > **Pending (open PR #33, not merged).** `core/pipeline.js` will call a new `parser/document-structure.js` before either layout path and reject malformed heading structure with a typed error (D-100, `spec/SOURCE_DOCUMENT_STRUCTURAL_VALIDITY.md` on that branch). Sections 2 and 3 are updated after the merge.

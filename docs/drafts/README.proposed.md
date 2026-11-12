@@ -15,6 +15,7 @@
 > `red-build/package.json` is at version `0.1.0` and is marked `private` / `UNLICENSED`.
 > No release has been declared. Promotion requires the acceptance gates G0–G7 and explicit owner approval — see [CUTOVER.md](CUTOVER.md) and [docs/coordination/AGENT_TRACKING.md](docs/coordination/AGENT_TRACKING.md).
 > Correctness is judged against user requirements and engineering invariants; the old sample PDFs and the layout-parity scores are a historical diagnostic, not an acceptance target (D-98, in open PR #33).
+> Measured numbers (test counts, hashes, parity) live in the machine-readable baseline `audits/baseline/<sha7>/manifest.json` (open PR #36), not in this README.
 
 ## What it does
 
@@ -25,7 +26,7 @@
 - **Book furniture.** Title pages, themes, ornaments and dividers, running heads (3×2 independent slots, recto/verso), Hebrew-letter page numbering, general and detailed tables of contents.
 - **A settings contract, not a settings pile.** Each registry setting is tied to a UI control, the engine mechanism that consumes it and a test that proves it has an effect. See [docs/SETTINGS.md](docs/SETTINGS.md).
 - **Extensions and import.** Custom text styles (`tora-typesetter-extensions` v1), DOCX import (own ZIP/XML readers) and editing recommendations backed by a live re-layout proof.
-- **Export.** Standalone single-file HTML (offline, `@page` rules), PDF 1.4 (embedded subset TrueType font, `ToUnicode`, bookmarks, TOC links, crop marks and bleed) and a project ZIP (document + settings + extensions + theme) that migrates older settings automatically.
+- **Export.** Standalone single-file HTML (offline, `@page` rules), PDF 1.4 (embedded subset of a TrueType font — WOFF2-only families cannot be embedded — `ToUnicode`, bookmarks, TOC links, crop marks and bleed) and a project ZIP (document + settings + extensions + theme) that migrates older settings automatically.
 - **Browser UI.** Four tabs (editor / settings / testing / preview), the engine in a Web Worker with progress and cancel, per-page debug view, Hebrew search across the settings, and settings persistence in `localStorage`.
 
 ## Quick start
