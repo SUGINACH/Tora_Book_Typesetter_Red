@@ -1,4 +1,4 @@
-> **DRAFT — not adopted.** Proposed replacement for the root `README.md`. Under master plan §11.2 the README may present only data verified on an identified commit, so it is adopted after the baseline (G0) reconciles test counts and parity (see `docs/coordination/SOURCE_OF_TRUTH_MAP.md`, DOC-01…03) and after open PR #33 (which also edits the README) is merged. Facts below are code-level evidence at `6f80156`. Links are relative to the repository root, i.e. valid once the file is moved there.
+> **DRAFT — not adopted.** Proposed replacement for the root `README.md`. Under master plan §11.2 the README may present only data verified on an identified commit, so it is adopted after the baseline (G0) reconciles test counts and parity (see `docs/coordination/SOURCE_OF_TRUTH_MAP.md`, DOC-01…03) and after open PR #33 (which also edits the README) is merged. Facts below are code-level evidence at `6f80156` (the UI changed afterwards in PRs #39–#42 and was not re-verified line by line). Links are relative to the repository root, i.e. valid once the file is moved there.
 
 # RED — Torah Book Typesetter
 

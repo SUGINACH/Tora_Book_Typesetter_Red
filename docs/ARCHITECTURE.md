@@ -1,6 +1,6 @@
 # Architecture
 
-This document mirrors `main` at commit `6f80156` (the engine code is identical to `510c9d6`; the commits in between touch only workflows and documents). Statements are **code-level evidence** — read from the source at that commit (master plan §2.3) — and do not prove that the output is correct; acceptance is tracked by gates G0–G7 in [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md). Open PR #33 (not merged) adds a source-structure validator to the pipeline (D-100); see the note at the end. File paths are relative to `red-build/src/` unless stated otherwise.
+This document mirrors `main` at `a0f753d`: the engine code is identical to `510c9d6`; the UI layer includes the changes merged from PRs #39–#42 (12.11); the settings registry and the Worker protocol are unchanged since `6f80156`. Statements are **code-level evidence** — read from the source at that commit (master plan §2.3) — and do not prove that the output is correct; acceptance is tracked by gates G0–G7 in [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md). Open PR #33 (not merged) adds a source-structure validator to the pipeline (D-100); see the note at the end. File paths are relative to `red-build/src/` unless stated otherwise.
 
 ## 1. Overview
 
@@ -58,7 +58,7 @@ Invariants that the pipeline proves on every run:
 
 ## 5. UI and the Worker
 
-- **Shell** (`ui/…`): `app-shell.js` (tabs, state, export orchestration), `editor-tab.js`, `settings-panel.js`, `testing-tab.js`, `preview-tab.js`, `status-strip.js`, `extensions-panel.js`, `imud-library.js`, `settings-persistence.js`, `test-doc-generator.js`, `caret-map.js`, `retypeset-policy.js`, `browser-entry.js`.
+- **Shell** (`ui/…`): `app-shell.js` (tabs, state, export orchestration), `editor-tab.js`, `settings-panel.js`, `testing-tab.js`, `preview-tab.js`, `status-strip.js`, `extensions-panel.js`, `imud-library.js`, `settings-persistence.js`, `test-doc-generator.js`, `caret-map.js`, `retypeset-policy.js`, `browser-entry.js`. Added by Agent 1 (PRs #40–#42, merged 12.11): `run-info.js` (identity of the last run — layout hash, input hash, run id — for the status strip and the testing tab), `text-decode.js` (decodes imported text files, including Windows-1255, instead of silently corrupting them) and `boot-failure.js` (boot-time asset failures are reported instead of swallowed).
 - **Retypeset policy:** light settings update the view directly; *heavy* settings never trigger an automatic typeset — the user presses ⚡ (rule F-06, verified by a call-graph scan `tools/scan-control-triggers.js`).
 - **Worker split:** `ui/worker-client.js` (`WorkerEngineClient`: single-flight requests, progress, cancel) ↔ `ui/engine-worker-main.js` (runs `typeset()` and the export handlers) over the protocol in `ui/worker-protocol.js`. Cancelling terminates the Worker and the next request respawns it. `ui/inline-transport.js` runs the same code in-process for tests.
 - **Persistence:** only the difference from the defaults is stored in `localStorage` (key `tora-red-user-settings`); defaults are always applied first.

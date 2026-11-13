@@ -1,6 +1,6 @@
 # API Reference
 
-Mirrors `main` at `6f80156` (engine code identical to `510c9d6`) — code-level evidence only. Paths are relative to `red-build/src/`.
+Mirrors `main` at `a0f753d` (engine code identical to `510c9d6`; the Worker protocol and the settings registry are unchanged since `6f80156`) — code-level evidence only. Paths are relative to `red-build/src/`.
 
 > **Stability.** The **Worker message protocol** (section 3) is the integration surface and is versioned (`PROTOCOL_VERSION = 1`, extended by v1.1 messages). The module-level APIs in sections 1, 2, 4 and 5 are internal: they are used by the UI and the tests and may change between releases. New protocol messages must be additive and must not change existing ones.
 
