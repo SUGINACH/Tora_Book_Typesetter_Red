@@ -9,8 +9,8 @@
 | פריט | ממצא | ראיה |
 |---|---|---|
 | `main` | `a0f753d` — קוד המנוע זהה ל־`510c9d6`; נרשם רק שינוי UI (#39, #40, #41, #42 של סוכן 1, 12.11): `app-shell`, `settings-panel`, `status-strip`, `testing-tab`, `browser-entry`, מודולים חדשים `run-info`, `text-decode`, `boot-failure`, והחבילה `app.bundle.js`. רישום ההגדרות ופרוטוקול ה־Worker לא השתנו | `git log 6f80156..origin/main`, `git diff` |
-| ענפים ב־remote | `docs/reference-intent-clarification`, `feature/agent-1`, `feature/agent-1-ui-orange`, `feature/agent-1-ui-orange-asset-notice`, `feature/agent-1-ui-orange-input-integrity`, `feature/agent-1-ui-orange-run-summary`, `feature/agent-2-debug-gold`, `feature/agent-3-font-prefetch`, `feature/agent-3-font-yellow`, `feature/agent-4-heading-rollback-regress`, `feature/agent-4-source-families`, `feature/agent-4-testing-green`, `feature/agent-5-docs-release`, `gh-pages`, `main`, `plan/engine-first-roadmap-v2`, `plan/five-agent-work-allocation`, `work/engine-heading-rollback` | `git ls-remote --heads origin` |
-| PRs פתוחים | #33, #34, #35, #36, #37, #38, #43, #44, #46 (9) (כולם מחשבון בעל הפרויקט; זהות הסוכן נלמדת משם הענף) | API (קריאה) |
+| ענפים ב־remote | `docs/reference-intent-clarification`, `feature/agent-1`, `feature/agent-1-ui-orange`, `feature/agent-1-ui-orange-asset-notice`, `feature/agent-1-ui-orange-input-integrity`, `feature/agent-1-ui-orange-run-summary`, `feature/agent-2-debug-gold`, `feature/agent-3-font-prefetch`, `feature/agent-3-font-yellow`, `feature/agent-4-heading-rollback-regress`, `feature/agent-4-source-families`, `feature/agent-4-testing-green`, `feature/agent-5-docs-release`, `feature/agent-5-open-questions`, `gh-pages`, `main`, `plan/engine-first-roadmap-v2`, `plan/five-agent-work-allocation`, `work/engine-heading-rollback` | `git ls-remote --heads origin` |
+| PRs פתוחים | #33, #34, #35, #36, #37, #38, #43, #44, #46, #47 (10) (כולם מחשבון בעל הפרויקט; זהות הסוכן נלמדת משם הענף) | API (קריאה) |
 | ענף ללא PR | `feature/agent-1` · `feature/agent-1-ui-orange` · `feature/agent-1-ui-orange-asset-notice` · `feature/agent-1-ui-orange-input-integrity` · `feature/agent-1-ui-orange-run-summary` | — |
 | חפיפת קבצים בין PRs שאינם מוערמים זה על זה | #33 × #37: `red-build/package.json`; #33 × #38: `red-build/package.json`; #33 × #43: `red-build/package.json`; #33 × #44: `red-build/package.json`; #37 × #38: `red-build/package.json`; #38 × #43: `red-build/package.json`; #38 × #44: `red-build/package.json`; #43 × #44: `.github/workflows/ci.yml`, `red-build/package.json`, `red-build/tests/fixtures/regress/README.md` … | חישוב `git diff --name-only origin/main...<ענף>` |
 
@@ -23,8 +23,9 @@
 | #37 | `feature/agent-4-heading-rollback-regress` @ `86acff3` | test(regress): R-01 — שחזור אובדן "לשון/הפוסקים" (strict xfail) + מפקד כותרות  | 1 · 6 קבצים (+273 −0) · `ci.yml`, `package.json`, `README.md`, `heading-rollback-control.txt` … | הצליחו 7 · דולגו 1 | נקי |
 | #38 | `feature/agent-3-font-prefetch` @ `7b5411b` | טיוטה — Agent 3: שליפה מקדימה של גופני העלייה (טעינה ראשונה מארוח מרוחק: גופנים מוכנים | 1 · 4 קבצים (+191 −1) · `package.json`, `font-prefetch.test.js`, `font-prefetch.js`, `index.html` | הצליחו 7 · דולגו 1 | התנגשות |
 | #43 | `work/engine-heading-rollback` @ `67b6510` | תיקון מנוע (legacy-imud): rollback כותרות inline בסוף טור — אובדן/כפילות כותרו | 2 · 5 קבצים (+11 −9) · `legacy-imud-flow.js`, `s62-user-questions.test.js`, `heading-rollback.test.js`, `app.bundle.js` … | הצליחו 7 · דולגו 1 — על אותו commit, דרך PR מקביל | נקי |
-| #44 | `feature/agent-4-source-families` @ `fe6ed6f` | test(regress): אורקל מקור→פלט + משפחות R-01 / R-02 / R-03 (strict xfail; מוערם | 1 · 10 קבצים (+1013 −1) · `package.json`, `README.md`, `note-duplicate-control.txt`, `note-duplicate-parity-control.txt` … | לא רץ (בסיס ≠ main) | נקי |
-| #46 | `feature/agent-5-docs-release` @ `6fe6156` | docs(coordination): טבלת מעקב חמשת הסוכנים, מפת מקורות אמת וסתירות תיעוד, ומרא | 7 · 8 קבצים (+1128 −0) · `API.md`, `ARCHITECTURE.md`, `README.md`, `SETTINGS.md` … | בריצה 7 · דולגו 1 | CI לא ירוק |
+| #44 | `feature/agent-4-source-families` @ `50c0262` | test(regress): אורקל מקור→פלט + משפחות R-01 / R-02 / R-03 (strict xfail; מוערם | 2 · 10 קבצים (+1062 −1) · `package.json`, `README.md`, `note-duplicate-control.txt`, `note-duplicate-parity-control.txt` … | לא רץ (בסיס ≠ main) | נקי |
+| #46 | `feature/agent-5-docs-release` @ `6b52f15` | docs(coordination): טבלת מעקב חמשת הסוכנים, מפת מקורות אמת וסתירות תיעוד, ומרא | 8 · 8 קבצים (+1128 −0) · `API.md`, `ARCHITECTURE.md`, `README.md`, `SETTINGS.md` … | הצליחו 7 · דולגו 1 | נקי |
+| #47 | `feature/agent-5-open-questions` @ `94b193b` | docs(open-questions): המלצות סוכן 5 להכרעת מנהל הפרויקט — מעבר לתוכנית v2.0 (ש | 1 · 1 קבצים (+22 −0) · `OPEN_QUESTIONS.md` | בריצה 7 · דולגו 1 | CI לא ירוק |
 
 PRs מוערמים (הבסיס שלהם אינו `main`) אינם מריצים CI, כי ה־workflows מופעלים על PRs ל־`main` בלבד.
 
@@ -36,7 +37,7 @@ PRs מוערמים (הבסיס שלהם אינו `main`) אינם מריצים C
 | 2 — מנוע ואבחון | PRs #35, #43 (`feature/agent-2-debug-gold`, `work/engine-heading-rollback`) | `6f80156` | מפת pipeline; פערי אבחון מול Gold V21; שורש ותיקון "לשון/הפוסקים" (תיקון ב־`legacy-imud-flow.js`) | #43 מוערם על #37 (בדיקת הרגרסיה של סוכן 4); בונה מחדש את שתי החבילות; baseline v2 אחרי #33 | repro נכשל על HEAD ועובר עם התיקון (דוח); 0 פגיעות על 5 קורפוסים אמיתיים; ב־#43 ה־xfail הופך ל־FIX_LANDED ו־`s62` מוחמר (לפי הודעות הקומיטים); CI על ה־head של #43 ירוק דרך #45 (טיוטה מקבילה שנסגרה) | אין | IN REVIEW — תיקון הוצע כ־PR, לא מוזג |
 | 3 — גופנים וביצועים | PRs #34, #38 (`feature/agent-3-font-yellow`, `feature/agent-3-font-prefetch`) | `6f80156` | מדידה (ביצועים, עלייה בדפדפן, ראיות WOFF2) ← אופטימיזציה אחת מוצדקת: שליפה מקבילית של 12 גופני עלייה (גופנים מוכנים −44–45% בהדמיה); FontLoader/IndexedDB/core-extended — DEFERRED | הכרעת בעלים על WOFF2; #38 נוגע ב־`index.html` וב־`package.json` | הכלי רץ ×3, דטרמיניזם 3/3; עלייה: HeadlessChrome 153 מול שרת מדמה-מארח (**הדמיה**, לא GitHub Pages); בדיקת יחידה ל־#38; layout hash ללא שינוי (לפי הדוח) | אין (נדרשת הכרעה) | #34 DONE · #38 טיוטה |
 | 4 — בדיקות ואימות | PRs #36, #37, #44 (`feature/agent-4-testing-green`, `feature/agent-4-heading-rollback-regress`) | `6f80156` | G0 baseline על `6f80156` (#36); בדיקות רגרסיה strict xfail: R-01 + fixtures + מפקד כותרות (#37), אורקל מקור→פלט ומשפחות R-01/R-02/R-03 (#44) | מיזוג #33 ← baseline v2 | 672 בדיקות · 33 קבצים · 0 כשלים · 0 דילוגים; מקומי = CI (Node 18/20/22) | אין. דווח על עבודה מוקדמת שאבדה (קונטיינר אופס) | G0 DONE (על `6f80156`) · #37, #44 IN REVIEW |
-| 5 — תיעוד ואינטגרציה | `feature/agent-5-docs-release` @ `6fe6156` (נדחף; הקומיט של בעל הפרויקט + קומיטי ריענון) | `6f80156` | מפת מקורות אמת + סתירות; טבלת מעקב; מראות קוד; ריענון מול הסוכנים | מיזוג הפרויקטים לעדכוני ממשל (WORKLOG / ISSUE_REGISTRY / DECISIONS) | בדיקת קישורים/נתיבים/מודולים: 0 בעיות; דוגמאות הקוד אומתו | אין | IN PROGRESS — PR #46 |
+| 5 — תיעוד ואינטגרציה | `feature/agent-5-docs-release` @ `6b52f15` (נדחף; הקומיט של בעל הפרויקט + קומיטי ריענון) · `feature/agent-5-open-questions` | `6f80156` | מפת מקורות אמת + סתירות; טבלת מעקב; מראות קוד; ריענון מול הסוכנים | מיזוג הפרויקטים לעדכוני ממשל (WORKLOG / ISSUE_REGISTRY / DECISIONS) | בדיקת קישורים/נתיבים/מודולים: 0 בעיות; דוגמאות הקוד אומתו | אין | IN PROGRESS — PR #46 · #47 (המלצות ב־OPEN_QUESTIONS) |
 
 דיווחי מסירה בתבנית §1.4 לא התקבלו כמסמכים נפרדים; הדוחות והתיאורים של ה־PRs משמשים ראיה. ב־`BASELINE.md` של סוכן 4 קיים סעיף מסירה (§11) המופנה אליי.
 
@@ -114,6 +115,8 @@ Commit בסיס:
 ```
 
 ## 8. החלטות הנדרשות מבעל הפרויקט
+
+> הנוסח לבחינה, עם המלצת סוכן 5 לכל סעיף, נמצא ב־`OPEN_QUESTIONS.md` (שאלות 11–23, PR 47). הרשימה שלהלן היא תקציר.
 
 1. **#33** — מועד המיזוג והטיפול ב־CI האדום (R-9); baseline v2 אחריו.
 2. **WOFF2 והטמעת PDF** — המרה, הגבלת בחירה או הצהרת מגבלה (R-7).
