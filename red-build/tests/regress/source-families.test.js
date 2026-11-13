@@ -185,6 +185,16 @@ describe('אורקל מקור→פלט · בקרות שליליות (חייב ל
     line.parenFlags[k] = false;
     assert(codesOf(O.compareToSource(items, view(pages))).includes(V.PAREN_SCOPE), 'לא זוהה');
   });
+  it('מודל הסוגריים של האורקל (paraParenFlags): דגל ברמת המילה המקורית, כולל קידומת/סיומת סביב הערה (S4.19)', () => {
+    const f = (t) => O.paraParenFlags(t);
+    assertEq(f('א (ב ג) ד'), [false, true, true, false], 'בלי הערות');
+    assertEq(f('א (ב ג)[נ] ד'), [false, true, true, false], 'הערה על מילת הסגירה: הסמן אינו מילת גוף');
+    assertEq(f('א (ב ג)[נ]. ד'), [false, true, true, true, false], 'מילה)[הערה]. — הקידומת והסיומת יורשות את דגל המילה המקורית');
+    assertEq(f('א (ב ג) [נ] . ד'), [false, true, true, false, false], 'רווח לפני [ נבלע (ההערה נדבקת ל-"ג)"); ה-"." שאחרי הרווח — מילה נפרדת מחוץ לטווח');
+    assertEq(f('(א ב[נ] ג) ד'), [true, true, true, false], 'הערה על מילה בתוך הטווח');
+    assertEq(f('א ב[(נ] ג'), [false, false, false], 'סוגריים בתוך טקסט ההערה אינם נספרים');
+    assertEq(f('א (ב ג'), null, 'סוגריים לא מאוזנים — מחוץ למודל');
+  });
   it('כותרת inline שנמחקה → HEADING_LOST; וכותרת שהוכפלה → HEADING_DUP', () => {
     const lost = clonePages();
     const { col, it: h } = firstItem(lost, (x) => x.kind === 'heading');
@@ -492,14 +502,15 @@ describe('R-03 · מילה בתוך/בסוף ( ) שנושאת סמן הערה מ
     const m = O.censusOutput(r).paras.get(1);
     const flags = [...m.keys()].sort((a, b) => a - b).flatMap((k) => m.get(k).parens);
     const src = O.parseSource(trigger).filter((x) => x.kind === 'p')[0];
-    const expectedIn = O.parenScope(src.words).filter(Boolean).length;
+    const expectedIn = src.pflags.filter(Boolean).length;
     const gotIn = flags.filter((f) => f === true).length;
     assertEq(gotIn, expectedIn, `מילים מסומנות כבתוך סוגריים: בפועל ${gotIn}, בטווח ${expectedIn}`);
   }, { expect: /מילים מסומנות/ });
 
-  // משפחה: טווח של s מילים במיקום k בפסקה של 100 מילים; הערה בתוך הטווח / צמודה ל-')' (ללא הערה — נבדק בסריקות הנקיות)
+  // משפחה: טווח של s מילים במיקום k בפסקה של 100 מילים; הערה בתוך הטווח / צמודה ל-')' / צמודה ל-')' עם סיומת '.'
+  // אחריה ("מילה)[הערה]." — המנוע מפצל למילה-קידומת, סמן וסיומת, ושלושתן יורשות את דגל המילה המקורית; ללא הערה — בסריקות הנקיות)
   const famPts = [];
-  for (const f of [0, 17]) for (const s of [1, 2, 12, 40]) for (let k = 0; k <= 100; k += 4) for (const where of ['inside', 'after-close']) famPts.push({ f, s, k, where });
+  for (const f of [0, 17]) for (const s of [1, 2, 12, 40]) for (let k = 0; k <= 100; k += 4) for (const where of ['inside', 'after-close', 'after-close+suffix']) famPts.push({ f, s, k, where });
   const famV = famPts.map(({ f, s, k, where }) => {
     const g = docBuilder();
     const ws = Array.from({ length: 100 }, () => g.w(1));
@@ -507,7 +518,7 @@ describe('R-03 · מילה בתוך/בסוף ( ) שנושאת סמן הערה מ
     const parts = ws.map((w, i) => {
       let x = w;
       if (i === open) x = '(' + x;
-      if (i === close) { x += ')'; if (where === 'after-close') x += `[${g.w(2)}]`; }
+      if (i === close) { x += ')'; if (where !== 'inside') x += `[${g.w(2)}]`; if (where === 'after-close+suffix') x += '.'; }
       if (where === 'inside' && i === mid) x += `[${g.w(2)}]`;
       return x;
     });
@@ -531,7 +542,7 @@ describe('R-03 · מילה בתוך/בסוף ( ) שנושאת סמן הערה מ
       if (t.type !== 'p') return;
       total++;
       const sp = O.splitNotes(String(t.text).split(NOTE_SPACE).join(' '));
-      const want = O.parenScope(sp.body.split(/\s+/).filter(Boolean));
+      const want = O.paraParenFlags(String(t.text).split(NOTE_SPACE).join(' '));
       if (!want) return;
       if (want.some(Boolean)) { withSpans++; if (sp.notes.length) withSpansAndNote++; }
       const m = out.paras.get(i);

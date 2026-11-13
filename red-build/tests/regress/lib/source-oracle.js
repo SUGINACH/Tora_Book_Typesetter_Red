@@ -86,12 +86,13 @@ function parseSource(text) {
     const m = t.match(HEADING_RE);
     if (m) { items.push({ kind: 'h', level: +m[1], text: m[2].trim() }); continue; }
     const { body, notes } = splitNotes(t);
-    items.push({ kind: 'p', words: words(body), notes: notes.map(words) });
+    items.push({ kind: 'p', words: words(body), notes: notes.map(words), pflags: paraParenFlags(t) });
   }
   return items;
 }
 
 /**
+ * [מודל ישן, ברמת מילות-הגוף — נשמר לתאימות; ה-oracle משתמש ב-paraParenFlags]
  * דגל "בתוך סוגריים" לכל מילת גוף במקור. מילה שפותחת ב-'(' או סוגרת ב-')' או
  * נמצאת ביניהן מסומנת. אם הסוגריים בפסקה אינם מאוזנים — null (מחוץ למודל).
  */
@@ -105,6 +106,35 @@ function parenScope(ws) {
     depth += open - close;
     if (depth < 0) return null;
     flags.push(before > 0 || open > 0 || close > 0);
+  }
+  return depth === 0 ? flags : null;
+}
+
+const NOTE_SENTINEL = String.fromCharCode(1);
+
+/**
+ * דגלי "בתוך סוגריים" לכל חלק-גוף כפי שהמנוע פולט אותו, ברמת **המילה המקורית**: מילה מופרדת-ברווחים
+ * (כולל ההערה שבתוכה; רווח לפני '[' נבלע, כמו בטוקנייזר המקורי) שנוגעת בטווח סוגריים — כל חלקיה
+ * (קידומת/סיומת סביב הערה) מסומנים, כי במנוע (S4.19) "דגל הסוגריים של המילה המקורית מועבר לכל חלקיה".
+ * הסמן עצמו אינו נספר (המנוע מוציא אותו מהגוף). מחזיר מערך מקביל ל-words(body) או null אם הסוגריים
+ * אינם מאוזנים (מחוץ למודל). מילה = כל רצף ללא רווח; סוגריים בתוך טקסט ההערה אינם נספרים.
+ */
+function paraParenFlags(textWithNotes) {
+  const marked = String(textWithNotes)
+    .replace(/\[([^\]]*)\]/g, NOTE_SENTINEL)
+    .replace(new RegExp('\\s+(?=' + NOTE_SENTINEL + ')', 'g'), '');
+  const flags = [];
+  let depth = 0;
+  for (const w of marked.split(/\s+/).filter(Boolean)) {
+    const bare = w.split(NOTE_SENTINEL).join('');
+    const open = (bare.match(/\(/g) || []).length;
+    const close = (bare.match(/\)/g) || []).length;
+    const before = depth;
+    depth += open - close;
+    if (depth < 0) return null;
+    const f = before > 0 || open > 0 || close > 0;
+    const parts = w.split(NOTE_SENTINEL).filter(Boolean).length;
+    for (let k = 0; k < parts; k++) flags.push(f);
   }
   return depth === 0 ? flags : null;
 }
@@ -183,7 +213,7 @@ function compareToSource(items, result) {
       add(V.PARA_WORDS, `פסקה ${i}: מקור ${s.words.length} מילים, פלט ${got.length}; סטייה ראשונה במילה ${k}: "${s.words[k]}" ↔ "${got[k]}"`);
     }
     const pfOut = idxs.flatMap((k) => m.get(k).parens);
-    const pfSrc = parenScope(s.words);
+    const pfSrc = s.pflags !== undefined ? s.pflags : parenScope(s.words);
     if (pfSrc && pfOut.length === pfSrc.length && got.length === s.words.length) {
       const bad = pfSrc.findIndex((f, k) => pfOut[k] !== null && pfOut[k] !== f);
       if (bad >= 0) add(V.PAREN_SCOPE, `פסקה ${i}: דגל סוגריים שגוי במילה ${bad} "${s.words[bad]}" (מקור=${pfSrc[bad]}, פלט=${pfOut[bad]})`);
@@ -282,4 +312,4 @@ function docBuilder() {
   return { w, doc: (body) => META + '\n' + body };
 }
 
-module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, docBuilder, META, SHORT_HEADING_MAX_CHARS };
+module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, paraParenFlags, docBuilder, META, SHORT_HEADING_MAX_CHARS };
