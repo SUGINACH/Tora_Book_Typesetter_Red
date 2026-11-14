@@ -1,0 +1,146 @@
+{
+  "schema": "red-baseline-vs-ci-v1",
+  "baselineDir": "audits/baseline/6f80156",
+  "commit": "6f801568c15071a27f97918ff8479def9c719c0d",
+  "items": [
+    {
+      "id": "suite.node18",
+      "what": "ספירת בדיקות לכל קובץ (passed/failed/skipped) — מקומי מול job test (18)",
+      "local": {
+        "files": 33,
+        "passed": 672
+      },
+      "ci": {
+        "files": 33,
+        "passed": 672,
+        "log": "ci/logs/run42750910040-test-18.log"
+      },
+      "equalFiles": 33,
+      "diffs": [],
+      "extraInCiOnly": [],
+      "status": "EQUAL"
+    },
+    {
+      "id": "suite.node20",
+      "what": "ספירת בדיקות לכל קובץ (passed/failed/skipped) — מקומי מול job test (20)",
+      "local": {
+        "files": 33,
+        "passed": 672
+      },
+      "ci": {
+        "files": 33,
+        "passed": 672,
+        "log": "ci/logs/run42750910040-test-20.log"
+      },
+      "equalFiles": 33,
+      "diffs": [],
+      "extraInCiOnly": [],
+      "status": "EQUAL"
+    },
+    {
+      "id": "suite.node22",
+      "what": "ספירת בדיקות לכל קובץ (passed/failed/skipped) — מקומי מול job test (22)",
+      "local": {
+        "files": 33,
+        "passed": 672
+      },
+      "ci": {
+        "files": 33,
+        "passed": 672,
+        "log": "ci/logs/run42750910040-test-22.log"
+      },
+      "equalFiles": 33,
+      "diffs": [],
+      "extraInCiOnly": [],
+      "status": "EQUAL"
+    },
+    {
+      "id": "parity.compare",
+      "what": "compare.py: HARD/PARITY/ציון/בדיקות שנכשלות",
+      "local": {
+        "hard": "4/4",
+        "parity": "12/14",
+        "score": 88.9,
+        "failing": [
+          "PARITY: רצף פסקאות (מספר/שורות/מילים)",
+          "PARITY: שקילות שבירת שורות (טקסט שורה-אחר-שורה)"
+        ]
+      },
+      "ci": {
+        "hard": "4/4",
+        "parity": "12/14",
+        "score": 88.9,
+        "failing": [
+          "PARITY: רצף פסקאות (מספר/שורות/מילים)",
+          "PARITY: שקילות שבירת שורות (טקסט שורה-אחר-שורה)"
+        ],
+        "log": "ci/logs/run42750910119-layout-parity.log"
+      },
+      "status": "EQUAL"
+    },
+    {
+      "id": "very-long.node-path",
+      "what": "קורפוס 3.4MB בנתיב Node: עמודים/hash/דטרמיניזם",
+      "local": {
+        "pages": 700,
+        "hash": "legacy-3ff0b",
+        "determinismIdentical": true
+      },
+      "ci": {
+        "pages": 700,
+        "hash": "legacy-3ff0b",
+        "determinismIdentical": true,
+        "log": "ci/logs/run42750910119-very-long-corpus.log"
+      },
+      "status": "EQUAL"
+    },
+    {
+      "id": "full-math.ci-local-vs-live",
+      "what": "אודיט מתמטי מלא בדפדפן (21 משפחות, 704 עמודים): CI על ה-build ↔ האתר החי",
+      "ciLocal": {
+        "pages": "704/704",
+        "lines": "43,117",
+        "words": "360,326",
+        "problems": 0,
+        "determinism": "IDENTICAL",
+        "log": "ci/logs/run42750909721-local.log"
+      },
+      "ciLive": {
+        "pages": "704/704",
+        "lines": "43,117",
+        "words": "360,326",
+        "problems": 0,
+        "determinism": "IDENTICAL",
+        "log": "ci/logs/run42721553569-live-audit-after-deploy.log"
+      },
+      "status": "EQUAL",
+      "note": "ריצת הדפדפן קיימת רק ב-CI (ci-only) — אין ריצה מקומית לשוואה"
+    },
+    {
+      "id": "layout-audit.ci",
+      "what": "layout-audit (ci.yml) — עמודים שנבדקו ובעיות",
+      "ci": {
+        "pages": "10/10",
+        "problems": 0,
+        "log": "ci/logs/run42750910040-layout-audit.log"
+      },
+      "status": "ci-only"
+    }
+  ],
+  "measuredTotalTests": 672,
+  "docClaims": [
+    {
+      "claim": "README.md:44 — 388",
+      "measured": 672
+    },
+    {
+      "claim": "ci.yml:34 (הערה) — 670",
+      "measured": 672
+    },
+    {
+      "claim": "WORKLOG.md:2408/2575/2591 — 657 (32 קבצים)",
+      "measured": "672 (33 קבצים)"
+    }
+  ],
+  "verdict": "EQUAL"
+}

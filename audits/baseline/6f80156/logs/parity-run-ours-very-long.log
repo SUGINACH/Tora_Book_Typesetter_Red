@@ -1,0 +1,5 @@
+typeset: 700 pages in 1137ms (hash legacy-3ff0b) [profile: imud-legacy]
+determinism: run2 700 pages in 1044ms (hash legacy-3ff0b) — OK (identical)
+model: audits/very-long-artifacts/ours-model.json — 3466 paragraphs, 700 pages
+pdf: audits/very-long-artifacts/ours.pdf — 20191 KB
+html: audits/very-long-artifacts/ours.html — 26551 KB in 1319ms

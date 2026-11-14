@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 60 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 63 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -297,6 +297,8 @@ var __paths = {
   "src/ui/browser-entry.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/browser-entry.js|./imud-library": "src/ui/imud-library.js",
   "src/ui/browser-entry.js|./settings-persistence": "src/ui/settings-persistence.js",
+  "src/ui/browser-entry.js|./text-decode": "src/ui/text-decode.js",
+  "src/ui/browser-entry.js|./boot-failure": "src/ui/boot-failure.js",
   "src/ui/browser-entry.js|../engine/output/html-export": "src/engine/output/html-export.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|../engine/output/project-io": "src/engine/output/project-io.js",
@@ -313,6 +315,7 @@ var __paths = {
   "src/ui/app-shell.js|./worker-client": "src/ui/worker-client.js",
   "src/ui/app-shell.js|./retypeset-policy": "src/ui/retypeset-policy.js",
   "src/ui/app-shell.js|./caret-map": "src/ui/caret-map.js",
+  "src/ui/app-shell.js|./run-info": "src/ui/run-info.js",
   "src/ui/app-shell.js|../engine/core/settings-registry": "src/engine/core/settings-registry.js",
   "src/ui/app-shell.js|./inline-transport": "src/ui/inline-transport.js",
   "src/ui/app-shell.js|../engine/output/export-api": "src/engine/output/export-api.js",
@@ -402,6 +405,8 @@ const { workerTransport } = require('./worker-client');
 const { WorkerEngineClient } = require('./worker-client');
 const { createImudLibrary } = require('./imud-library');
 const { createSettingsPersistence } = require('./settings-persistence'); // **S6.1 (פער 2):** SRS §17.1
+const { decodeTextBytes } = require('./text-decode'); // **סוכן 1 (שלמות קלט):** UTF-8 קפדני + נפילה ל-Windows-1255
+const { reportBootFailure } = require('./boot-failure'); // **סוכן 1 (§7.1):** כשל אתחול גלוי, לפי השלב שנכשל
 const { BASE_CSS } = require('../engine/output/html-export');
 
 /** **03.11(ג) תיקון קטסטרופת התצוגה:** הזרקת BASE_CSS — מקור הכללים של העמודים
@@ -511,7 +516,14 @@ function boot() {
     getExportFontCss: () => imud.exportFontCss(),
     // **03.11:** ספריית העיצובים — לפיקרים בפאנל הבורר
     imudLibrary: imud,
-    onRequestTxtImport: () => pickFile('.txt,text/plain', (text) => app.onDocumentAction('import-txt', text)),
+    // **סוכן 1 (שלמות קלט):** קריאה בבתים + פענוח מפורש — readAsText('utf-8') הפך עברית בקידוד ANSI ל-"����" בשקט,
+    // והמנוע היה מצהיר "שימור תוכן: שלם" על הקלט הפגום. נפילה/תווים פגומים ⇒ הודעה גלויה בפס המצב.
+    onRequestTxtImport: () => pickBinaryFile('.txt,text/plain', (bytes, name) => {
+      const d = decodeTextBytes(bytes);
+      if (d.fallback) app.status.setNotice(`«${name}» אינו בקידוד UTF-8 — פוענח כ־Windows-1255 (עברית). ודאו שהטקסט נראה תקין.`);
+      else if (d.replacementChars) app.status.setNotice(`«${name}»: ${d.replacementChars} תווים פגומים (\uFFFD) בקובץ המקור — בדקו את הקידוד במקור.`);
+      app.onDocumentAction('import-txt', d.text);
+    }),
     onRequestDocxImport: () => pickBinaryFile('.docx', (bytes, name) => app.importDocxFile(bytes, name)), // **S11**
     onRequestExtensionsImport: () => pickFile('.json,application/json', (json) => app.extensions.importFromText(json, 'הרחבות.json')), // **S11**
     onSaveExtensions: (json) => downloadJson('tora-extensions.json', json), // **S11**
@@ -545,7 +557,7 @@ function boot() {
   // אחרי ההרכבה: קטלוג הפונטים מתעדכן בפיקרים ברגע שהספרייה נטענת (TDZ-safe)
   imud.loadFontCatalog().then((families) => {
     app.refreshFontCatalog && app.refreshFontCatalog(families);
-  }).catch(() => { /* ספרייה לא זמינה (למשל מקומי בלי assets) — ממשק בסיסי */ });
+  }).catch(() => { /* הכשל מדווח בשרשרת האתחול שלהלן (reportBootFailure) — לא מכפילים הודעות */ });
   // **03.11(ד) — "שום דבר מהגדרות ברירת המחדל אינו קיים" (דיווח משתמש 3):**
   // האפליקציה עולה עם ברירות המחדל הגנריות של RED. ברירות המחדל של הפרויקט
   // המקורי (264 מפתחות: גופני עיצוב, שערים, כותרות עליונות, יישורים) מוטמעות
@@ -553,7 +565,10 @@ function boot() {
   // הראשונה (David Libre/Frank Ruhl Libre/Bellefair, שער ראשי+אחורי+משנה,
   // כותרות עליונות בכל עמוד). כשל טעינה (למשל פתיחה מקומית בלי assets) —
   // נשארות ברירות RED, האפליקציה עובדת; ההודעה מתועדת במצב.
+  // **סוכן 1 (§7.1):** כשל בשרשרת האתחול אינו נבלע בשקט — הודעה לפי השלב שנכשל (נכסים/החלה/שחזור/עימוד)
+  let bootStage = 'assets';
   imud.loadFontCatalog().then(() => imud.loadLegacyDefaults()).then(async ({ settings: imported, report }) => {
+    bootStage = 'apply';
     // **S6.2 (בקשת משתמש — "האם כל העיטורים, שערים... יובאו?"): ערכת הנושא
     // הפעילה של המקור.** ברירת המחדל של המקור היא active-theme-select =
     // "json_theme_40" — כלומר עמודי השערים נולדים עם רקע מעוצב (שער ראשי/
@@ -578,6 +593,7 @@ function boot() {
         app.status.setNotice(`ברירות המחדל המקוריות הוחלו — גופנים, שערים וכותרות${fonts}.`);
       });
   }).then(() => {
+    bootStage = 'restore';
     // **S6.1 (פער 2 — SRS §17.1):** אחרי החלת ברירות המחדל (הבסיס) — שחזור
     // ההפרש השמור של המשתמש (אם קיים) לפני עימוד האתחול. כך ברירות המחדל
     // מוחלות תמיד (כלל הברזל) ובחירות המשתמש שורדות ריענון (SRS §17.1).
@@ -586,9 +602,10 @@ function boot() {
       app.status.setNotice(`הוחלו ${restored.restored} הגדרות שמורות מהסשן הקודם.`);
     }
   }).then(() => {
+    bootStage = 'retypeset';
     // עימוד מפורש רק אם כבר יש טקסט בעורך (עלייה עם מסמך שמור)
     if (app.getText && app.getText().trim()) retypesetWhenIdle();
-  }).catch(() => { /* נכסים לא זמינים — ברירות RED, מתועד */ });
+  }).catch((e) => reportBootFailure(app, bootStage, e));
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => app.status.setFonts('ready'));
   }
@@ -641,6 +658,7 @@ const { buildTestingTab } = require('./testing-tab');
 const { WorkerEngineClient, RESTART_ERROR } = require('./worker-client');
 const { classifyChange, getDebounceMs, policyTable } = require('./retypeset-policy');
 const { buildCaretMap } = require('./caret-map');
+const { buildRunInfo } = require('./run-info'); // **סוכן 1 (§7.1):** זהות הריצה האחרונה לתצוגה
 
 const TABS = [
   { id: 'editor', label: '✍️ עורך' },
@@ -658,6 +676,7 @@ function createApp(doc, opts = {}) {
   let typesetGen = 0; // **S5.2 (5):** דור עימוד — מונה תוצאות שהושלמו; חוזה: st.gen (אודיט חי בוחן שינוי)
   let lightTimer = null;
   let lastLightRefreshMs = null;
+  let lastRun = null;           // **סוכן 1 (§7.1):** {n, jobId, ms, layoutHash, contentHashIn} — תצוגה בלבד
   const perf = (typeof performance !== 'undefined' && performance.now) ? performance : { now: () => Date.now() };
 
   // ================= פער 2 (S6.1): השתמרות הגדרות — SRS §17.1 =================
@@ -915,7 +934,7 @@ function createApp(doc, opts = {}) {
     status.setPending({ light: false, heavy: false });
     status.setEngineState('working', { label: 'מתחיל עימוד…' });
     const started = perf.now();
-    const { promise } = engine.requestTypeset({
+    const { promise, jobId } = engine.requestTypeset({
       text, settings,
       onProgress: (m) => status.setEngineState('working', m) // "עמוד X מתוך Y"
     });
@@ -923,6 +942,7 @@ function createApp(doc, opts = {}) {
       if (res && res.cancelled) return;
       result = res;
       typesetGen++; // **S5.2 (5):** +1 על כל עימוד שהושלם (בדיוק במקום ההשמה ל-result) — ביטול/החלפה אינם נספרים
+      lastRun = buildRunInfo(res, { n: typesetGen, jobId, ms: perf.now() - started }); // **סוכן 1 (§7.1)**
       applyResultToViews();
       status.setEngineState('idle');
       status.setPages(result.pages.length);
@@ -951,6 +971,7 @@ function createApp(doc, opts = {}) {
       testing.setResult({ pages: [], report: { findings: [], counts: {} }, trace: { events: [] }, tokens: [], droppedEvents: 0 });
       editor.setPageBreaks([]);
       status.setPages(0);
+      lastRun = null; status.setRun(null); testing.setRun(null); // **סוכן 1 (§7.1):** אין hash של מסמך שנמחק
       status.setPending({ light: false, heavy: false });
       status.setEngineState('idle');
       return;
@@ -1177,6 +1198,7 @@ function createApp(doc, opts = {}) {
     preview.setResult(result, settings);
     testing.setResult(result);
     testing.setRecommendations(result.recommendations || null); // **S11:** המלצות עם הוכחות
+    status.setRun(lastRun); testing.setRun(lastRun); // **סוכן 1 (§7.1):** זהות הריצה — תצוגה בלבד (F-06)
     // מפת שבירות עמודים לעורך (⏎ — תצוגה בלבד, F-01)
     const breaks = [];
     for (const pg of result.pages) {
@@ -1258,6 +1280,10 @@ function createApp(doc, opts = {}) {
     const { merged, unknownKeys, issues } = mergeWithDefaults({ ...legacySettings, ...known });
     for (const [k, v] of Object.entries(merged)) settings[k] = v;
     settingsPanel.refreshValues();
+    // **סוכן 1 (תפעול):** תבנית שמציינת גופן מהספרייה חייבת לטעון/לרשום אותו (FontFace לתצוגה + registerFont
+    // במנוע) — כמו applyLegacyDefaults ו-restorePersistedSettings. בלי זה המנוע מודד בגופן שלא נרשם והתצוגה
+    // מציגה גופן מערכת עד שהמשתמש בוחר גופן ידנית. כשל טעינה אינו חוסם (fallback מערכת, מתועד).
+    loadFontsForCurrentSettings().catch(() => { /* fallback מערכת — מתועד */ });
     markHeavyDirty(); // הגדרות השתנו — המשתמש יחליט מתי לעמד (⚡)
     schedulePersistSettings(); // **פער 2 (S6.1):** טעינת תבנית = שינוי הגדרות — נשמר (SRS §17.1)
     return { unknownKeys, issues };
@@ -1775,10 +1801,24 @@ function buildStatusStrip(doc, opts) {
   fonts.className = 'chip chip--fonts';
   fonts.textContent = '🔤 גופנים: מוכנים';
 
+  // ---- נכסי ספרייה (סוכן 1, §7.1): מוצג רק בכשל טעינה — ברירות RED פועלות ואסור שיוצגו כברירות המקור ----
+  const assets = doc.createElement('span');
+  assets.className = 'chip chip--warn chip--assets';
+  assets.setAttribute('aria-live', 'polite');
+  assets.textContent = '';
+  assets.hidden = true;
+
   // ---- עמודים ----
   const pages = doc.createElement('span');
   pages.className = 'chip chip--pages';
   pages.textContent = '📄 0 עמודים';
+
+  // ---- זהות הריצה האחרונה (סוכן 1, §7.1): מס' ריצה · זמן · hash פריסה קצר; המלא ב-title ----
+  const run = doc.createElement('span');
+  run.className = 'chip chip--run';
+  run.setAttribute('aria-live', 'polite');
+  run.textContent = '';
+  run.hidden = true; // מוצג רק אחרי עימוד ראשון (בלי "כדור" ריק)
 
   // ---- הודעות חולפות (S11: ייבוא/סירוב פורמט/החלת המלצה — חוק 14 בלי חלונות) ----
   const notice = doc.createElement('span');
@@ -1788,7 +1828,7 @@ function buildStatusStrip(doc, opts) {
   notice.textContent = '';
   let noticeTimer = null;
 
-  for (const el of [engine, progress, pending, bolt, offline, fonts, pages, notice]) root.appendChild(el);
+  for (const el of [engine, progress, pending, bolt, offline, fonts, assets, pages, run, notice]) root.appendChild(el);
 
   return {
     root, bolt,
@@ -1826,6 +1866,26 @@ function buildStatusStrip(doc, opts) {
       fonts.textContent = map[status] || map.ready;
     },
     setPages(n) { pages.textContent = `📄 ${n} עמודים`; },
+    /** @param {string|null} detail הסבר הכשל (נשמר ב-title); null ⇒ ניקוי */
+    setAssetsFailure(detail) {
+      assets.hidden = !detail;
+      assets.textContent = detail ? '⚠️ נכסי ספרייה: ברירות RED בלבד' : '';
+      assets.title = detail ? String(detail) : '';
+    },
+    /** @param {object|null} info — buildRunInfo(...) מ-run-info.js; null ⇒ ניקוי (אין ריצה) */
+    setRun(info) {
+      if (!info) { run.textContent = ''; run.title = ''; run.hidden = true; return; }
+      const parts = [`ריצה #${info.n}`];
+      if (info.ms != null) parts.push(info.elapsedLabel);
+      if (info.layoutHash) parts.push(`פריסה ${String(info.layoutHash).slice(0, 8)}`);
+      run.textContent = parts.join(' · ');
+      run.hidden = false;
+      run.title = [
+        info.jobId ? `מזהה ריצה: ${info.jobId}` : null,
+        info.layoutHash ? `hash פריסה: ${info.layoutHash}` : null,
+        info.contentHashIn ? `hash קלט: ${info.contentHashIn}` : null
+      ].filter(Boolean).join('\n');
+    },
     /** הודעה חולפת (8 שניות) — ייבוא, סירוב פורמט, החלת המלצה. */
     setNotice(text) {
       notice.textContent = String(text != null ? text : '');
@@ -2842,7 +2902,7 @@ function buildSettingsTab(doc, opts) {
     }
   }
 
-  root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־12 פאנלים` }));
+  root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־${PANELS.length} פאנלים` }));
 
   return { root, refreshValues, refreshFontCatalog, searchInput: search, getSearchHits: () => searchHits };
 }
@@ -15469,6 +15529,46 @@ function buildTestingTab(doc, opts) {
 
   let lastResult = null;
 
+  // ============ סעיף 0: פרטי הריצה האחרונה (זהות הריצה — תוכנית האב §7.1) ============
+  // תצוגה בלבד (F-06): הערכים מגיעים מה-app מ-buildRunInfo; אין כאן קריאה למנוע.
+  const runSec = doc.createElement('div');
+  runSec.className = 'testing-section run-summary';
+  runSec.setAttribute('aria-label', 'פרטי הריצה האחרונה');
+  const runHead = doc.createElement('h3');
+  runHead.textContent = 'פרטי הריצה האחרונה';
+  runSec.appendChild(runHead);
+  const runBody = doc.createElement('div');
+  runSec.appendChild(runBody);
+  root.appendChild(runSec);
+
+  /** @param {object|null} info — buildRunInfo(...); null ⇒ אין ריצה */
+  function setRun(info) {
+    runBody.textContent = '';
+    if (!info) {
+      const p = doc.createElement('p');
+      p.className = 'run-summary-empty';
+      p.textContent = 'עוד לא בוצע עימוד';
+      runBody.appendChild(p);
+      return;
+    }
+    const dl = doc.createElement('dl');
+    dl.className = 'run-summary-list';
+    const add = (field, label, value, ltr) => {
+      const dt = doc.createElement('dt'); dt.textContent = label;
+      const dd = doc.createElement('dd'); dd.dataset.field = field;
+      dd.textContent = value != null ? String(value) : '—';
+      if (ltr) dd.setAttribute('dir', 'ltr');
+      dl.appendChild(dt); dl.appendChild(dd);
+    };
+    add('jobId', 'מזהה ריצה', info.jobId, true);
+    add('run', 'ריצה מס׳ (בסשן)', info.n);
+    add('elapsed', 'זמן עימוד (צד UI, כולל העברה מה־Worker)', info.elapsedLabel);
+    add('layoutHash', 'hash פריסה (SHA-256)', info.layoutHash, true);
+    add('contentHashIn', 'hash תוכן הקלט', info.contentHashIn, true);
+    runBody.appendChild(dl);
+  }
+  setRun(null);
+
   // ============ סעיף 1: טבלת ממצאים ============
   const findingsSec = doc.createElement('div');
   findingsSec.className = 'testing-section';
@@ -15775,7 +15875,7 @@ function buildTestingTab(doc, opts) {
     }
   }
 
-  return { root, setResult, setRecommendations };
+  return { root, setResult, setRecommendations, setRun };
 }
 
 module.exports = { buildTestingTab, STATUS_HE };
@@ -18009,6 +18109,41 @@ module.exports = {
 };
 
 };
+__modules["src/ui/run-info.js"] = function (require, module, exports) {
+// src/ui/run-info.js — זהות הריצה האחרונה לתצוגה (סוכן 1, תוכנית האב §7.1)
+'use strict';
+
+/**
+ * טהור: בלי DOM ובלי מנוע (F-06). ממיר תוצאה מסוריאליזת פרוטוקול (ui-result-v1) + נתוני ריצה שבצד ה־UI
+ * לאובייקט תצוגה אחד המשמש את פס המצב ואת לשונית הבדיקה — מקור יחיד לערכים המוצגים.
+ * אין כאן שום שינוי בחוזה ה־Worker: layoutHash ו־contentHashIn כבר מוחזרים היום ב־serializeTypesetResult.
+ */
+
+/** משך לתצוגה: מתחת לשנייה — מילישניות; אחרת — שניות בשתי ספרות. */
+function formatDuration(ms) {
+  if (!(Number.isFinite(ms) && ms >= 0)) return '—';
+  return ms < 1000 ? `${Math.round(ms)} מילישניות` : `${(ms / 1000).toFixed(2)} שניות`;
+}
+
+/**
+ * @param {object} result תוצאה מסוריאליזת פרוטוקול
+ * @param {{n?:number, jobId?:string, ms?:number}} meta נתוני ריצה שבצד ה־UI (מונה, מזהה עבודה, זמן כולל)
+ */
+function buildRunInfo(result, meta) {
+  const m = meta || {};
+  return {
+    n: m.n != null ? m.n : null,
+    jobId: m.jobId || null,
+    ms: Number.isFinite(m.ms) ? m.ms : null,
+    elapsedLabel: formatDuration(m.ms),
+    layoutHash: (result && result.layoutHash) || null,
+    contentHashIn: (result && result.contentHashIn) || null
+  };
+}
+
+module.exports = { formatDuration, buildRunInfo };
+
+};
 __modules["src/ui/inline-transport.js"] = function (require, module, exports) {
 throw new Error('bundle: module src/ui/inline-transport.js excluded from this bundle (by design — see tools/build-worker-bundle.js)');
 };
@@ -20175,6 +20310,102 @@ function createImudLibrary(engine) {
 }
 
 module.exports = { createImudLibrary, DESIGN_FILES };
+
+};
+__modules["src/ui/text-decode.js"] = function (require, module, exports) {
+// src/ui/text-decode.js — פענוח קובץ טקסט מיובא בלי השחתה שקטה (סוכן 1, שלמות קלט)
+'use strict';
+
+/**
+ * **הבעיה:** FileReader.readAsText(file, 'utf-8') מחליף בייטים לא־תקינים ב־U+FFFD בשקט. קובץ עברית בקידוד
+ * Windows-1255 (ברירת המחדל "ANSI" של פנקס רשימות בעברית) הופך ל־"����" — והמנוע מעמד את הקלט הפגום
+ * ומצהיר "שימור תוכן: שלם" (יחסית לקלט שכבר הושחת בייבוא).
+ *
+ * **הפתרון:** BOM ⇒ הקידוד המוצהר; אחרת UTF-8 קפדני (fatal); נכשל ⇒ Windows-1255. הפונקציה מדווחת
+ * איזה קידוד נבחר, האם הייתה נפילה, וכמה תווי U+FFFD נותרו — כדי שה־UI יתריע במקום לשתוק.
+ * טהור: בלי DOM ובלי מנוע (F-06).
+ *
+ * @param {Uint8Array|ArrayBuffer} input
+ * @returns {{text:string, encoding:string, fallback:boolean, replacementChars:number}}
+ */
+function decodeTextBytes(input) {
+  const u8 = input instanceof Uint8Array ? input : new Uint8Array(input || 0);
+  const dec = (label, bytes, o) => new TextDecoder(label, o).decode(bytes);
+  let text;
+  let encoding;
+  let fallback = false;
+  if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) {
+    encoding = 'utf-8-bom';
+    text = dec('utf-8', u8.subarray(3));
+  } else if (u8.length >= 2 && u8[0] === 0xFF && u8[1] === 0xFE) {
+    encoding = 'utf-16le';
+    text = dec('utf-16le', u8.subarray(2));
+  } else if (u8.length >= 2 && u8[0] === 0xFE && u8[1] === 0xFF) {
+    encoding = 'utf-16be';
+    text = dec('utf-16be', u8.subarray(2));
+  } else {
+    try {
+      text = dec('utf-8', u8, { fatal: true });
+      encoding = 'utf-8';
+    } catch (e) {
+      text = dec('windows-1255', u8);
+      encoding = 'windows-1255';
+      fallback = true;
+    }
+  }
+  const replacementChars = (text.match(/\uFFFD/g) || []).length;
+  return { text, encoding, fallback, replacementChars };
+}
+
+module.exports = { decodeTextBytes };
+
+};
+__modules["src/ui/boot-failure.js"] = function (require, module, exports) {
+// src/ui/boot-failure.js — כשל אתחול אינו נבלע בשקט (סוכן 1, תוכנית האב §7.1: הודעות שגיאה מבחינות בין סוגי כשל)
+'use strict';
+
+/**
+ * **הבעיה:** שרשרת האתחול בדפדפן (קטלוג גופנים → ברירות המחדל של המקור → שחזור הגדרות שמורות → עימוד) הסתיימה
+ * ב־catch ריק. כשל בטעינת הנכסים (קובץ חסר, פתיחה מקומית, ניתוק) השאיר את האפליקציה בברירות RED בלי שום הודעה —
+ * והמשתמש חשב שחלות ברירות המקור (הצלחה כן מוצגת: "ברירות המחדל המקוריות הוחלו").
+ *
+ * **הפתרון:** הודעה לפי השלב שנכשל + שבב אזהרה קבוע לכשל נכסים. טהור: בלי DOM ובלי מנוע (F-06).
+ */
+
+/** תיאור קצר של שגיאה: הודעה בלבד (לא stack), רווחים מאוחדים, חתוך ל-140 תווים. */
+function errorDetail(err) {
+  const m = err && err.message != null ? err.message : err;
+  const s = String(m == null ? '' : m).replace(/\s+/g, ' ').trim();
+  return s.length > 140 ? `${s.slice(0, 137)}…` : s;
+}
+
+const MESSAGES = {
+  assets: (d) => `נכסי הספרייה (ברירות המחדל והגופנים של המקור) לא נטענו — פועלות ברירות המחדל של RED, והתוצאה עשויה להיות שונה מהמקור${d ? ` (${d})` : ''}.`,
+  apply: (d) => `החלת ברירות המחדל של המקור נכשלה${d ? `: ${d}` : ''} — פועלות ברירות המחדל של RED.`,
+  restore: (d) => `שחזור ההגדרות השמורות נכשל${d ? `: ${d}` : ''}.`,
+  retypeset: (d) => `עימוד האתחול נכשל${d ? `: ${d}` : ''}.`
+};
+
+/** @param {'assets'|'apply'|'restore'|'retypeset'|string} stage השלב שנכשל @param {*} err @returns {string} */
+function describeBootFailure(stage, err) {
+  const fn = MESSAGES[stage] || ((d) => `האתחול נכשל${d ? `: ${d}` : ''}.`);
+  return fn(errorDetail(err));
+}
+
+/**
+ * מדווח בפס המצב. כשל נכסים — גם שבב אזהרה קבוע (האפליקציה ממשיכה בברירות RED, ואסור שזה יוצג כברירות המקור);
+ * לכל שלב — הודעה חולפת. @returns {string} ההודעה
+ */
+function reportBootFailure(app, stage, err) {
+  const msg = describeBootFailure(stage, err);
+  const st = app && app.status;
+  if (!st) return msg;
+  if (stage === 'assets' && typeof st.setAssetsFailure === 'function') st.setAssetsFailure(msg);
+  if (typeof st.setNotice === 'function') st.setNotice(msg);
+  return msg;
+}
+
+module.exports = { errorDetail, describeBootFailure, reportBootFailure };
 
 };
 

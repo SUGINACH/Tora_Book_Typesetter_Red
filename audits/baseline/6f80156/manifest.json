@@ -1,0 +1,680 @@
+{
+  "schema": "red-baseline-v1",
+  "env": {
+    "commit": "6f801568c15071a27f97918ff8479def9c719c0d",
+    "branch": "feature/agent-4-testing-green",
+    "dirtyTrackedBeforeRun": [],
+    "dateUtc": "2026-11-10T09:19:27.688Z",
+    "runner": {
+      "node": "v22.23.4",
+      "npm": "10.9.9",
+      "os": "Linux 6.18.44-fc-v338 x64",
+      "cpus": 2,
+      "memMB": 8023,
+      "ciFlag": false
+    },
+    "tools": {
+      "pdfinfo": "pdfinfo version 24.02.0",
+      "pdftotext": "pdftotext version 24.02.0",
+      "python": "Python 3.13.18",
+      "pymupdf": "1.26.7",
+      "chrome": "Google Chrome for Testing 153.0.8010.12"
+    },
+    "fonts": {
+      "dejavuSans": {
+        "path": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "bytes": 759720,
+        "sha256": "ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "path": "audits/very_long_test_text.txt",
+      "bytes": 3403990,
+      "sha256": "f6c6b3aa0422fc621fb5827533770fc6fe7b170234382670690483e89cc6a1fc"
+    },
+    {
+      "path": "audits/long_test_text.txt",
+      "bytes": 2718900,
+      "sha256": "d039b599cfc1971acc236c9bec6e4588c651a8a3429074df72214b0e6c397f7c"
+    },
+    {
+      "path": "audits/mid_long_test_text.txt",
+      "bytes": 667220,
+      "sha256": "8bbfb0ab9dc6648b3395c3da6f9cf2f42a2a2e79446b78856a4599a110fe1981"
+    },
+    {
+      "path": "audits/no_long_test_text.txt",
+      "bytes": 233739,
+      "sha256": "962d34a1ea30f306c3f52dbe79f879b349a9ec4bd3a9edc89fe1db68854b5be4"
+    },
+    {
+      "path": "audits/long_test_text_no_parentheses.txt",
+      "bytes": 2715579,
+      "sha256": "d48786f63aa6f08966dbbff772c64a3696c9cd018306cca8451a31b8335a7653"
+    },
+    {
+      "path": "audits/layout-reference.json",
+      "bytes": 990596,
+      "sha256": "9ce3b7c1b94b16aea9c3e4f9599131fc5c741687e36aa49d7c73b880b54fc1b1"
+    },
+    {
+      "path": "red-build/tests/fixtures/canonical_corpus.txt",
+      "bytes": 26957,
+      "sha256": "f58610be0a66d5cd2f5e23a9e2bb8d154570b6b2427c9265bbbd0d282566df1e"
+    },
+    {
+      "path": "red-build/tests/fixtures/imud_default_text.txt",
+      "bytes": 3098,
+      "sha256": "d5c2718ed05ebaf2c07115d0cd28a9953550e4f26832d179da0ab6eea7b78ef8"
+    },
+    {
+      "path": "red-build/tests/fixtures/imud_default_settings.json",
+      "bytes": 8562,
+      "sha256": "5ec4f40f41de5f1c8cbfcaa942b8703a0311cd30610c4346a22ab9f8d0efcc17"
+    },
+    {
+      "path": "red-build/ui/assets/imud/default_settings.json",
+      "bytes": 8600,
+      "sha256": "8d617acb962fc02b15f36f8620451bed7e1a8ba0e7c420cba0368d2131138e36"
+    },
+    {
+      "path": "red-build/tests/artifacts/parity-baseline.json",
+      "bytes": 422,
+      "sha256": "9e1f8de40cbc9906542d44b748b38f7470f7398a8f861f8525c50c599e18cfe7"
+    },
+    {
+      "path": "red-build/package.json",
+      "bytes": 3259,
+      "sha256": "936f16492a5111cca2352909684b9b10b54f662301468713da1e86d3657d073d"
+    },
+    {
+      "path": "red-build/ui/app.bundle.js",
+      "bytes": 1063138,
+      "sha256": "2a6a6f8f3aba94425a346827b26c4de0073faf129b05e8ba11dd3ebf13f204df"
+    },
+    {
+      "path": "red-build/ui/engine-worker.bundle.js",
+      "bytes": 1022977,
+      "sha256": "75c8d7db66c5cb0846c2e69373d3b6ff62c6d0f6f313d10f8b13d1b47f917e78"
+    },
+    {
+      "path": "red-build/tests/fixtures/real/long_test_text.txt",
+      "bytes": 2714279,
+      "sha256": "d456166c81a2c21480dff2fae74c6330d958c2bb1991930393a5f4e972ad167a"
+    },
+    {
+      "path": "red-build/tests/fixtures/real/mid_long_test_text.txt",
+      "bytes": 667220,
+      "sha256": "8bbfb0ab9dc6648b3395c3da6f9cf2f42a2a2e79446b78856a4599a110fe1981"
+    },
+    {
+      "path": "red-build/tests/fixtures/real/no_long_test_text.txt",
+      "bytes": 233006,
+      "sha256": "e7c405f3d0cd267b5803024c316077404efec384ac89059a827aeb4743ab7ab6"
+    },
+    {
+      "path": "red-build/tests/fixtures/real/orange_very_long_test_text.txt",
+      "bytes": 3386061,
+      "sha256": "7919f48b14779d3fb98fd19b62388b7b772e1f977c00229217dc481af5529419"
+    },
+    {
+      "path": "audits/דוגמא מגרסא ישנה - כולל סימון בלוקים ופיסקאות.pdf",
+      "bytes": 1974843,
+      "sha256": "c60557cc2a3635a67ea878052ccc47b4e4c623de1f278b15fc37da94ded59f4b"
+    },
+    {
+      "path": "audits/דוגמא מגרסא ישנה - כולל סימון בלוקים פיסקאות שורות.pdf",
+      "bytes": 8669611,
+      "sha256": "e81aa9a6f60d7821d8c4aea12a1b33650c9348e71153fb39016fe37b76b2cef6"
+    },
+    {
+      "path": "audits/דוגמא מגרסא ישנה - כולל סימון בלוקים.pdf",
+      "bytes": 1270502,
+      "sha256": "1476334ec6447e0bc658a0a27f0ef07fbba6856197b5333a827761b20c4ab206"
+    },
+    {
+      "path": "audits/דוגמא מגרסא ישנה.pdf",
+      "bytes": 1195713,
+      "sha256": "07197f7b19924ca5f2c00c3f4c1e4fdf360866306ce66d679eb78f5f402ff521"
+    }
+  ],
+  "suite": {
+    "rows": [
+      {
+        "n": 1,
+        "cmd": "tests/unit/parser.test.js",
+        "exit": 0,
+        "ms": 41,
+        "log": "logs/01-tests_unit_parser.test.js.log",
+        "title": "parser",
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 2,
+        "cmd": "tests/unit/typography.test.js",
+        "exit": 0,
+        "ms": 45,
+        "log": "logs/02-tests_unit_typography.test.js.log",
+        "title": "typography",
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 3,
+        "cmd": "tests/integration/registry.test.js",
+        "exit": 0,
+        "ms": 74,
+        "log": "logs/03-tests_integration_registry.test.js.log",
+        "title": "registry-integration",
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 4,
+        "cmd": "tests/integration/imud-migration.test.js",
+        "exit": 0,
+        "ms": 70,
+        "log": "logs/04-tests_integration_imud-migration.test.js.log",
+        "title": "imud-migration",
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 5,
+        "cmd": "tests/integration/setting-sets.test.js",
+        "exit": 0,
+        "ms": 142,
+        "log": "logs/05-tests_integration_setting-sets.test.js.log",
+        "title": "setting-sets",
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 6,
+        "cmd": "tests/integration/source-variants.test.js",
+        "exit": 0,
+        "ms": 82,
+        "log": "logs/06-tests_integration_source-variants.test.js.log",
+        "title": "source-variants",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 7,
+        "cmd": "tests/layout/s5-s6.test.js",
+        "exit": 0,
+        "ms": 84,
+        "log": "logs/07-tests_layout_s5-s6.test.js.log",
+        "title": "layout-s5-s6",
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 8,
+        "cmd": "tests/layout/ext8-optimal-balance.test.js",
+        "exit": 0,
+        "ms": 55,
+        "log": "logs/08-tests_layout_ext8-optimal-balance.test.js.log",
+        "title": "ext8-optimal-balance",
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 9,
+        "cmd": "tests/e2e/pipeline.test.js",
+        "exit": 0,
+        "ms": 136,
+        "log": "logs/09-tests_e2e_pipeline.test.js.log",
+        "title": "e2e-pipeline",
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 10,
+        "cmd": "tests/e2e/s7-notes.test.js",
+        "exit": 0,
+        "ms": 194,
+        "log": "logs/10-tests_e2e_s7-notes.test.js.log",
+        "title": "s7-gate",
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 11,
+        "cmd": "tests/e2e/s8-decoration.test.js",
+        "exit": 0,
+        "ms": 1494,
+        "log": "logs/11-tests_e2e_s8-decoration.test.js.log",
+        "title": "s8-decoration",
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 12,
+        "cmd": "tests/e2e/s9-headers.test.js",
+        "exit": 0,
+        "ms": 726,
+        "log": "logs/12-tests_e2e_s9-headers.test.js.log",
+        "title": "s9-headers",
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 13,
+        "cmd": "tests/e2e/s10-ui.test.js",
+        "exit": 0,
+        "ms": 3457,
+        "log": "logs/13-tests_e2e_s10-ui.test.js.log",
+        "title": "s10-ui",
+        "passed": 43,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 14,
+        "cmd": "tests/e2e/s11-extensions.test.js",
+        "exit": 0,
+        "ms": 10412,
+        "log": "logs/14-tests_e2e_s11-extensions.test.js.log",
+        "title": "s11-extensions",
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 15,
+        "cmd": "tests/e2e/s12-export.test.js",
+        "exit": 0,
+        "ms": 8922,
+        "log": "logs/15-tests_e2e_s12-export.test.js.log",
+        "title": "s12-export",
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 16,
+        "cmd": "tests/e2e/real-fonts.test.js",
+        "exit": 0,
+        "ms": 745,
+        "log": "logs/16-tests_e2e_real-fonts.test.js.log",
+        "title": "real-fonts",
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 17,
+        "cmd": "tests/e2e/d89-visual-fixes.test.js",
+        "exit": 0,
+        "ms": 1272,
+        "log": "logs/17-tests_e2e_d89-visual-fixes.test.js.log",
+        "title": "d89-visual-fixes",
+        "passed": 75,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": false
+      },
+      {
+        "n": 18,
+        "cmd": "tests/e2e/s15-view-justify.test.js",
+        "exit": 0,
+        "ms": 278,
+        "log": "logs/18-tests_e2e_s15-view-justify.test.js.log",
+        "title": "s15-view-justify",
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 19,
+        "cmd": "tests/e2e/s24-fullmath-fixes.test.js",
+        "exit": 0,
+        "ms": 467,
+        "log": "logs/19-tests_e2e_s24-fullmath-fixes.test.js.log",
+        "title": "s24-fullmath-fixes",
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 20,
+        "cmd": "tests/e2e/pdf-targets.test.js",
+        "exit": 0,
+        "ms": 158,
+        "log": "logs/20-tests_e2e_pdf-targets.test.js.log",
+        "title": "pdf-targets",
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 21,
+        "cmd": "tests/e2e/s13-acceptance.test.js",
+        "exit": 0,
+        "ms": 3066,
+        "log": "logs/21-tests_e2e_s13-acceptance.test.js.log",
+        "title": "s13-acceptance",
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 22,
+        "cmd": "tests/e2e/s14-layout-audit.test.js",
+        "exit": 0,
+        "ms": 178,
+        "log": "logs/22-tests_e2e_s14-layout-audit.test.js.log",
+        "title": "s14-layout-audit",
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": false
+      },
+      {
+        "n": 23,
+        "cmd": "tests/e2e/canonical.test.js",
+        "exit": 0,
+        "ms": 476,
+        "log": "logs/23-tests_e2e_canonical.test.js.log",
+        "title": "canonical",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 24,
+        "cmd": "tests/e2e/long-real-text.test.js",
+        "exit": 0,
+        "ms": 18946,
+        "log": "logs/24-tests_e2e_long-real-text.test.js.log",
+        "title": "long-real-text",
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 25,
+        "cmd": "tests/audit/negative-controls.test.js",
+        "exit": 0,
+        "ms": 133,
+        "log": "logs/25-tests_audit_negative-controls.test.js.log",
+        "title": "negative-controls",
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 26,
+        "cmd": "tests/audit/s13-security-a11y.test.js",
+        "exit": 0,
+        "ms": 126,
+        "log": "logs/26-tests_audit_s13-security-a11y.test.js.log",
+        "title": "s13-security-a11y",
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 27,
+        "cmd": "tests/e2e/s52-dp-fixes.test.js",
+        "exit": 0,
+        "ms": 79,
+        "log": "logs/27-tests_e2e_s52-dp-fixes.test.js.log",
+        "title": "s52-dp-fixes",
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 28,
+        "cmd": "tests/e2e/s52-ui-fixes.test.js",
+        "exit": 0,
+        "ms": 9199,
+        "log": "logs/28-tests_e2e_s52-ui-fixes.test.js.log",
+        "title": "s52-ui-fixes",
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 29,
+        "cmd": "tests/e2e/audit-sensitivity.test.js",
+        "exit": 0,
+        "ms": 110,
+        "log": "logs/29-tests_e2e_audit-sensitivity.test.js.log",
+        "title": "audit-sensitivity",
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 30,
+        "cmd": "tests/e2e/s53-dp-notes-export.test.js",
+        "exit": 0,
+        "ms": 300,
+        "log": "logs/30-tests_e2e_s53-dp-notes-export.test.js.log",
+        "title": "s53-dp-notes-export",
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 31,
+        "cmd": "tests/e2e/s60-monster-fixes.test.js",
+        "exit": 0,
+        "ms": 210,
+        "log": "logs/31-tests_e2e_s60-monster-fixes.test.js.log",
+        "title": "s60-monster-fixes",
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 32,
+        "cmd": "tests/e2e/s61-gap-fixes.test.js",
+        "exit": 0,
+        "ms": 8557,
+        "log": "logs/32-tests_e2e_s61-gap-fixes.test.js.log",
+        "title": "s61-gap-fixes",
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 33,
+        "cmd": "tests/e2e/s62-user-questions.test.js",
+        "exit": 0,
+        "ms": 4007,
+        "log": "logs/33-tests_e2e_s62-user-questions.test.js.log",
+        "title": "s62-user-questions",
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0,
+        "skippedReported": true
+      },
+      {
+        "n": 34,
+        "cmd": "../tools/scan-control-triggers.js",
+        "exit": 0,
+        "ms": 54,
+        "log": "logs/34-tools_scan-control-triggers.js.log",
+        "violations": 0
+      }
+    ],
+    "totals": {
+      "commands": 34,
+      "withCounter": 33,
+      "passed": 672,
+      "failed": 0,
+      "skipped": 0,
+      "nonZeroExit": 0,
+      "wallMs": 74295
+    }
+  },
+  "determinism": {
+    "officialExit": 0,
+    "officialOutput": "deterministic OK 80f9ed6c82ea3855 pages: 36",
+    "crossProcess": [
+      {
+        "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+        "pages": 36
+      },
+      {
+        "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+        "pages": 36
+      }
+    ],
+    "crossProcessIdentical": true
+  },
+  "parity": {
+    "steps": [
+      {
+        "name": "extract-reference",
+        "cmd": "python3 tools/layout-parity/extract-reference.py",
+        "exit": 0,
+        "ms": 1593,
+        "log": "logs/parity-extract-reference.log"
+      },
+      {
+        "name": "run-ours",
+        "cmd": "node tools/layout-parity/run-ours.js",
+        "exit": 0,
+        "ms": 494,
+        "log": "logs/parity-run-ours.log"
+      },
+      {
+        "name": "compare",
+        "cmd": "python3 tools/layout-parity/compare.py audits/layout-reference.json audits/layout-parity-artifacts/ours-model.json audits/layout-parity-artifacts/ours.pdf audits/layout-parity-artifacts/parity-report.json",
+        "exit": 2,
+        "ms": 1253,
+        "log": "logs/parity-compare.log"
+      },
+      {
+        "name": "run-ours-very-long",
+        "cmd": "node tools/layout-parity/run-ours.js audits/very_long_test_text.txt audits/very-long-artifacts --determinism --html",
+        "exit": 0,
+        "ms": 6589,
+        "log": "logs/parity-run-ours-very-long.log"
+      },
+      {
+        "name": "verify-corpus",
+        "cmd": "python3 tools/layout-parity/verify-corpus.py audits/very_long_test_text.txt audits/very-long-artifacts/ours-model.json audits/very-long-artifacts/ours.pdf audits/very-long-artifacts/corpus-report.json audits/very-long-artifacts/ours.html",
+        "exit": 0,
+        "ms": 4076,
+        "log": "logs/parity-verify-corpus.log"
+      }
+    ],
+    "referenceDeterministic": true,
+    "compareExit": 2,
+    "hardFail": false,
+    "parityGapsRemain": true,
+    "score": 88.9,
+    "ratchetFloor": 88.9,
+    "ratchetOk": true,
+    "summary": {
+      "hard": "4/4",
+      "parity": "12/14",
+      "score": 88.9
+    },
+    "artifacts": [
+      {
+        "path": "audits/layout-parity-artifacts/ours-model.json",
+        "bytes": 1464714,
+        "sha256": "d879febfc6430cd098e769fb7b24e17b85d8f3b0d7626cc64b08c1c16ea620c6"
+      },
+      {
+        "path": "audits/layout-parity-artifacts/ours.pdf",
+        "bytes": 1493651,
+        "sha256": "0a952bdb1390ee8751cef0da8e8704f103d2e2366efaa5ec262c0a1e229cb174"
+      },
+      {
+        "path": "audits/layout-parity-artifacts/parity-report.json",
+        "bytes": 6330,
+        "sha256": "3665765108db8b4053c9c4598db55297f048ac3050a09a33925394bd909a4ca6"
+      },
+      {
+        "path": "audits/very-long-artifacts/ours-model.json",
+        "bytes": 20411314,
+        "sha256": "0e834d59ed7a113ed892500a03b88851c65bca5a6883297bac6756376abf658f"
+      },
+      {
+        "path": "audits/very-long-artifacts/ours.pdf",
+        "bytes": 20675852,
+        "sha256": "a681d1c12bc8db07d0ec8a0e4da77fc2bf37e05f6560633d936c69b332074647"
+      },
+      {
+        "path": "audits/very-long-artifacts/ours.html",
+        "bytes": 27188469,
+        "sha256": "a9b56eeceb1760aa8256e5b52d6e0bc0bb943f29ffd704e0821559dc4a22f7bf"
+      },
+      {
+        "path": "audits/very-long-artifacts/corpus-report.json",
+        "bytes": 3599,
+        "sha256": "2347eb95ba96896fff266863c9991ac9dc7e63b69cc7de143165c75553da86ce"
+      }
+    ]
+  },
+  "trackedDrift": {
+    "changedTrackedFiles": [
+      " M red-build/tests/artifacts/s12-canonical.pdf",
+      " M red-build/tests/artifacts/s12-font-subset.json",
+      " M red-build/tests/artifacts/s13-matrix-report.json",
+      " M red-build/tests/artifacts/s13-perf.json",
+      " M red-build/tests/artifacts/s53-dp-endnotes.pdf"
+    ],
+    "numstat": [
+      "-\t-\tred-build/tests/artifacts/s12-canonical.pdf",
+      "1\t1\tred-build/tests/artifacts/s12-font-subset.json",
+      "5\t5\tred-build/tests/artifacts/s13-matrix-report.json",
+      "4\t4\tred-build/tests/artifacts/s13-perf.json",
+      "-\t-\tred-build/tests/artifacts/s53-dp-endnotes.pdf"
+    ],
+    "restored": true
+  }
+}

@@ -1,0 +1,20 @@
+=== אימות חילוץ ===
+{
+  "pages": 54,
+  "types": {
+    "shaar-main": 1,
+    "shaar-back": 1,
+    "toc-general": 3,
+    "blank": 1,
+    "shaar-sub": 1,
+    "toc-detailed": 3,
+    "chapter-open": 1,
+    "body": 43
+  },
+  "paragraphs": 278,
+  "paragraphLines": 3149,
+  "paragraphWords": 21861,
+  "headsNonEmpty": 278
+}
+
+נכתב: /home/claude/tora_book_typesetter_red/tools/layout-parity/../../audits/layout-reference.json (967 KB)
