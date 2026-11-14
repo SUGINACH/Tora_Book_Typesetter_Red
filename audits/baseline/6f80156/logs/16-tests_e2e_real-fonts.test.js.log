@@ -1,0 +1,8 @@
+  [real-fonts] catalog: 451 entries, 443 unique files, 432 unique families (19 משפחות-כפולות מקור + כפל-שמות אחד מתועד)
+  [real-fonts] parsed 450/451 in 71ms (חריג מתועד: Guttman-Logo1-Regular.ttf)
+  [real-fonts] extended catalog: 1315 families (catalog-only, woff2) + 432 embedded — סיווג אמת ללא כפילויות
+  [real-fonts] ספר-אמת בגופן Frank Ruhl Libre: pages=55 hash=legacy-086d2
+  [real-fonts] real=55 עמודים, table=63 עמודים — המדידה האמיתית פעילה
+  [real-fonts] PDF: pages=36 pdf=218KB (מקור גופן 174KB, תת-גופן מצומצם בתוך הקובץ)
+
+== real-fonts: 14/14 passed, 0 failed, 0 skipped ==

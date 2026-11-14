@@ -1,0 +1,2 @@
+scan-control-triggers: 19 files · 3 engine-call edges · 3 allowed (נתיבים מפורשים) · 0 violations
+artifact → tests/artifacts/s10-callgraph.json

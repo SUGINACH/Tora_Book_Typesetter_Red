@@ -1,0 +1,370 @@
+2026-11-10T03:40:05.8511067Z Current runner version: '2.338.2'
+2026-11-10T03:40:05.8529493Z ##[group]Runner Image Provisioner
+2026-11-10T03:40:05.8530123Z Hosted Compute Agent
+2026-11-10T03:40:05.8530490Z Version: 20261028.624
+2026-11-10T03:40:05.8530866Z Commit: 54898b74c23fde5556c9b3c3a2290865feef0dfe
+2026-11-10T03:40:05.8531396Z Build Date: 2026-10-28T21:51:42Z
+2026-11-10T03:40:05.8531857Z Worker ID: {f5ece4f7-054d-416a-a5a7-8ea2fa9c3999}
+2026-11-10T03:40:05.8532328Z Region: centralus
+2026-11-10T03:40:05.8532683Z Cloud: Azure
+2026-11-10T03:40:05.8533014Z ##[endgroup]
+2026-11-10T03:40:05.8534301Z ##[group]Operating System
+2026-11-10T03:40:05.8534677Z Ubuntu
+2026-11-10T03:40:05.8535039Z 24.04.5
+2026-11-10T03:40:05.8535376Z LTS
+2026-11-10T03:40:05.8535708Z ##[endgroup]
+2026-11-10T03:40:05.8536369Z ##[group]Runner Image
+2026-11-10T03:40:05.8536768Z Image: ubuntu-24.04
+2026-11-10T03:40:05.8537143Z Version: 20261101.360.1
+2026-11-10T03:40:05.8537927Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-10T03:40:05.8538888Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261101.360
+2026-11-10T03:40:05.8539455Z ##[endgroup]
+2026-11-10T03:40:05.8540192Z ##[group]GITHUB_TOKEN Permissions
+2026-11-10T03:40:05.8541580Z Contents: read
+2026-11-10T03:40:05.8542009Z Metadata: read
+2026-11-10T03:40:05.8542371Z Packages: read
+2026-11-10T03:40:05.8542720Z ##[endgroup]
+2026-11-10T03:40:05.8544270Z Secret source: Actions
+2026-11-10T03:40:05.8544887Z Cache mode: write
+2026-11-10T03:40:05.8545518Z Prepare workflow directory
+2026-11-10T03:40:05.8758630Z Prepare all required actions
+2026-11-10T03:40:05.8790956Z Getting action download info
+2026-11-10T03:40:06.1124259Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-10T03:40:06.2136498Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-10T03:40:06.3802806Z Complete job name: test (22)
+2026-11-10T03:40:06.4316510Z ##[group]Run actions/checkout@v4
+2026-11-10T03:40:06.4316918Z with:
+2026-11-10T03:40:06.4317186Z   repository: SUGINACH/Tora_Book_Typesetter_Red
+2026-11-10T03:40:06.4319240Z   token: ***
+2026-11-10T03:40:06.4319472Z   ssh-strict: true
+2026-11-10T03:40:06.4319706Z   ssh-user: git
+2026-11-10T03:40:06.4319950Z   persist-credentials: true
+2026-11-10T03:40:06.4320214Z   clean: true
+2026-11-10T03:40:06.4320457Z   sparse-checkout-cone-mode: true
+2026-11-10T03:40:06.4320737Z   fetch-depth: 1
+2026-11-10T03:40:06.4320975Z   fetch-tags: false
+2026-11-10T03:40:06.4321218Z   show-progress: true
+2026-11-10T03:40:06.4321462Z   lfs: false
+2026-11-10T03:40:06.4321688Z   submodules: false
+2026-11-10T03:40:06.4321933Z   set-safe-directory: true
+2026-11-10T03:40:06.4322210Z   allow-unsafe-pr-checkout: false
+2026-11-10T03:40:06.4322558Z ##[endgroup]
+2026-11-10T03:40:06.6663603Z Syncing repository: SUGINACH/Tora_Book_Typesetter_Red
+2026-11-10T03:40:06.6665127Z ##[group]Getting Git version info
+2026-11-10T03:40:06.6665938Z Working directory is '/home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red'
+2026-11-10T03:40:06.6666884Z [command]/usr/bin/git version
+2026-11-10T03:40:06.6766098Z git version 2.56.0
+2026-11-10T03:40:06.6779848Z ##[endgroup]
+2026-11-10T03:40:06.6792306Z Temporarily overriding HOME='/home/runner/work/_temp/6f4dfd2d-fdf9-4168-be0f-fd41875b2bd7' before making global git config changes
+2026-11-10T03:40:06.6793915Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-10T03:40:06.6796674Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-10T03:40:06.7205414Z Deleting the contents of '/home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red'
+2026-11-10T03:40:06.7206714Z ##[group]Initializing the repository
+2026-11-10T03:40:06.7207325Z [command]/usr/bin/git init /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-10T03:40:06.7311725Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-10T03:40:06.7312545Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-10T03:40:06.7313041Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-10T03:40:06.7313605Z hint: call:
+2026-11-10T03:40:06.7313822Z hint:
+2026-11-10T03:40:06.7314109Z hint: 	git config --global init.defaultBranch <name>
+2026-11-10T03:40:06.7314434Z hint:
+2026-11-10T03:40:06.7314738Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-10T03:40:06.7315216Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-10T03:40:06.7315595Z hint:
+2026-11-10T03:40:06.7315819Z hint: 	git branch -m <name>
+2026-11-10T03:40:06.7316070Z hint:
+2026-11-10T03:40:06.7316399Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-10T03:40:06.7322868Z Initialized empty Git repository in /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/.git/
+2026-11-10T03:40:06.7331478Z [command]/usr/bin/git remote add origin https://github.com/SUGINACH/Tora_Book_Typesetter_Red
+2026-11-10T03:40:06.7378678Z ##[endgroup]
+2026-11-10T03:40:06.7379313Z ##[group]Disabling automatic garbage collection
+2026-11-10T03:40:06.7381635Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-10T03:40:06.7416415Z ##[endgroup]
+2026-11-10T03:40:06.7417007Z ##[group]Setting up auth
+2026-11-10T03:40:06.7421431Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-10T03:40:06.7458761Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-10T03:40:06.7858059Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-10T03:40:06.7894073Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-10T03:40:06.8076731Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-10T03:40:06.8111858Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-10T03:40:06.8296970Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-10T03:40:06.8348601Z ##[endgroup]
+2026-11-10T03:40:06.8349230Z ##[group]Fetching the repository
+2026-11-10T03:40:06.8358011Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6f801568c15071a27f97918ff8479def9c719c0d:refs/remotes/origin/main
+2026-11-10T03:40:09.8317432Z From https://github.com/SUGINACH/Tora_Book_Typesetter_Red
+2026-11-10T03:40:09.8318610Z  * [new ref]         6f801568c15071a27f97918ff8479def9c719c0d -> origin/main
+2026-11-10T03:40:09.8321028Z ##[endgroup]
+2026-11-10T03:40:09.8321835Z ##[group]Determining the checkout info
+2026-11-10T03:40:09.8329753Z ##[endgroup]
+2026-11-10T03:40:09.8330238Z [command]/usr/bin/git sparse-checkout disable
+2026-11-10T03:40:09.8389861Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-10T03:40:09.8429974Z ##[group]Checking out the ref
+2026-11-10T03:40:09.8432316Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-10T03:40:10.3183945Z Switched to a new branch 'main'
+2026-11-10T03:40:10.3186163Z branch 'main' set up to track 'origin/main'.
+2026-11-10T03:40:10.3233181Z ##[endgroup]
+2026-11-10T03:40:10.3282505Z [command]/usr/bin/git log -1 --format=%H
+2026-11-10T03:40:10.3311780Z 6f801568c15071a27f97918ff8479def9c719c0d
+2026-11-10T03:40:10.3526946Z ##[group]Run actions/setup-node@v4
+2026-11-10T03:40:10.3527194Z with:
+2026-11-10T03:40:10.3527363Z   node-version: 22
+2026-11-10T03:40:10.3527543Z   always-auth: false
+2026-11-10T03:40:10.3527847Z   check-latest: false
+2026-11-10T03:40:10.3529320Z   token: ***
+2026-11-10T03:40:10.3529488Z ##[endgroup]
+2026-11-10T03:40:10.4477880Z Found in cache @ /opt/hostedtoolcache/node/22.23.4/x64
+2026-11-10T03:40:10.4481249Z (node:2097) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-10T03:40:10.4481948Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-10T03:40:10.4483442Z ##[group]Environment details
+2026-11-10T03:40:10.8467472Z node: v22.23.4
+2026-11-10T03:40:10.8467796Z npm: 10.9.9
+2026-11-10T03:40:10.8467977Z yarn: 1.22.22
+2026-11-10T03:40:10.8468919Z ##[endgroup]
+2026-11-10T03:40:10.8686269Z ##[group]Run sudo apt-get update && sudo apt-get install -y poppler-utils fonts-dejavu-core
+2026-11-10T03:40:10.8686795Z sudo apt-get update && sudo apt-get install -y poppler-utils fonts-dejavu-core
+2026-11-10T03:40:10.8714204Z shell: /usr/bin/bash -e {0}
+2026-11-10T03:40:10.8714413Z ##[endgroup]
+2026-11-10T03:40:10.9363168Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-11-10T03:40:10.9707859Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-11-10T03:40:10.9754626Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2026-11-10T03:40:10.9807178Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2026-11-10T03:40:10.9822416Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2026-11-10T03:40:10.9864602Z Get:6 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-11-10T03:40:11.0653159Z Get:7 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1442 kB]
+2026-11-10T03:40:11.0790433Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [314 kB]
+2026-11-10T03:40:11.0795080Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1711 kB]
+2026-11-10T03:40:11.0859696Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [344 kB]
+2026-11-10T03:40:11.0879317Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1879 kB]
+2026-11-10T03:40:11.0950470Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [429 kB]
+2026-11-10T03:40:11.0974057Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [50.7 kB]
+2026-11-10T03:40:11.0999813Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [14.3 kB]
+2026-11-10T03:40:11.1471709Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1158 kB]
+2026-11-10T03:40:11.1531440Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [234 kB]
+2026-11-10T03:40:11.1868980Z Get:23 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [679 kB]
+2026-11-10T03:40:11.1953003Z Get:24 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [748 kB]
+2026-11-10T03:40:11.2002059Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1228 kB]
+2026-11-10T03:40:11.2049342Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [248 kB]
+2026-11-10T03:40:11.2064637Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1725 kB]
+2026-11-10T03:40:11.2125588Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [396 kB]
+2026-11-10T03:40:11.2145113Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [45.4 kB]
+2026-11-10T03:40:11.2154009Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse Translation-en [12.4 kB]
+2026-11-10T03:40:14.4177076Z Fetched 13.0 MB in 1s (13.1 MB/s)
+2026-11-10T03:40:15.1080316Z Reading package lists...
+2026-11-10T03:40:15.1420526Z Reading package lists...
+2026-11-10T03:40:15.3051208Z Building dependency tree...
+2026-11-10T03:40:15.3056034Z Reading state information...
+2026-11-10T03:40:15.4139616Z fonts-dejavu-core is already the newest version (2.37-8).
+2026-11-10T03:40:15.4140240Z fonts-dejavu-core set to manually installed.
+2026-11-10T03:40:15.4140782Z The following additional packages will be installed:
+2026-11-10T03:40:15.4143468Z   libpoppler134 poppler-data
+2026-11-10T03:40:15.4148124Z Suggested packages:
+2026-11-10T03:40:15.4148488Z   ghostscript fonts-japanese-mincho | fonts-ipafont-mincho
+2026-11-10T03:40:15.4149031Z   fonts-japanese-gothic | fonts-ipafont-gothic fonts-arphic-ukai
+2026-11-10T03:40:15.4149377Z   fonts-arphic-uming fonts-nanum
+2026-11-10T03:40:15.4293169Z The following NEW packages will be installed:
+2026-11-10T03:40:15.4294193Z   libpoppler134 poppler-data poppler-utils
+2026-11-10T03:40:15.4464449Z 0 upgraded, 3 newly installed, 0 to remove and 32 not upgraded.
+2026-11-10T03:40:15.4464787Z Need to get 3390 kB of archives.
+2026-11-10T03:40:15.4465034Z After this operation, 17.8 MB of additional disk space will be used.
+2026-11-10T03:40:15.4465356Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-11-10T03:40:15.5128443Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 poppler-data all 0.4.12-1 [2060 kB]
+2026-11-10T03:40:15.5577444Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libpoppler134 amd64 24.02.0-1ubuntu9.11 [1118 kB]
+2026-11-10T03:40:15.5961774Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 poppler-utils amd64 24.02.0-1ubuntu9.11 [212 kB]
+2026-11-10T03:40:15.7903650Z Fetched 3390 kB in 0s (21.0 MB/s)
+2026-11-10T03:40:15.8091314Z Selecting previously unselected package poppler-data.
+2026-11-10T03:40:15.8353667Z (Reading database ... 
+2026-11-10T03:40:15.8354003Z (Reading database ... 5%
+2026-11-10T03:40:15.8354421Z (Reading database ... 10%
+2026-11-10T03:40:15.8354610Z (Reading database ... 15%
+2026-11-10T03:40:15.8359976Z (Reading database ... 20%
+2026-11-10T03:40:15.8360786Z (Reading database ... 25%
+2026-11-10T03:40:15.8361106Z (Reading database ... 30%
+2026-11-10T03:40:15.8361390Z (Reading database ... 35%
+2026-11-10T03:40:15.8361638Z (Reading database ... 40%
+2026-11-10T03:40:15.8361861Z (Reading database ... 45%
+2026-11-10T03:40:15.8362083Z (Reading database ... 50%
+2026-11-10T03:40:15.8403716Z (Reading database ... 55%
+2026-11-10T03:40:15.9838895Z (Reading database ... 60%
+2026-11-10T03:40:16.1699841Z (Reading database ... 65%
+2026-11-10T03:40:16.3742126Z (Reading database ... 70%
+2026-11-10T03:40:16.5794395Z (Reading database ... 75%
+2026-11-10T03:40:16.6832398Z (Reading database ... 80%
+2026-11-10T03:40:16.8233497Z (Reading database ... 85%
+2026-11-10T03:40:16.9439052Z (Reading database ... 90%
+2026-11-10T03:40:17.0395600Z (Reading database ... 95%
+2026-11-10T03:40:17.0398653Z (Reading database ... 100%
+2026-11-10T03:40:17.0399021Z (Reading database ... 215960 files and directories currently installed.)
+2026-11-10T03:40:17.0446265Z Preparing to unpack .../poppler-data_0.4.12-1_all.deb ...
+2026-11-10T03:40:17.0593806Z Unpacking poppler-data (0.4.12-1) ...
+2026-11-10T03:40:17.1776401Z Selecting previously unselected package libpoppler134:amd64.
+2026-11-10T03:40:17.1890746Z Preparing to unpack .../libpoppler134_24.02.0-1ubuntu9.11_amd64.deb ...
+2026-11-10T03:40:17.1905973Z Unpacking libpoppler134:amd64 (24.02.0-1ubuntu9.11) ...
+2026-11-10T03:40:17.2469309Z Selecting previously unselected package poppler-utils.
+2026-11-10T03:40:17.2580972Z Preparing to unpack .../poppler-utils_24.02.0-1ubuntu9.11_amd64.deb ...
+2026-11-10T03:40:17.2588236Z Unpacking poppler-utils (24.02.0-1ubuntu9.11) ...
+2026-11-10T03:40:17.3024471Z Setting up libpoppler134:amd64 (24.02.0-1ubuntu9.11) ...
+2026-11-10T03:40:17.3042094Z Setting up poppler-data (0.4.12-1) ...
+2026-11-10T03:40:17.3101469Z Setting up poppler-utils (24.02.0-1ubuntu9.11) ...
+2026-11-10T03:40:17.3122160Z Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+2026-11-10T03:40:17.5222536Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-11-10T03:40:17.5243956Z Not building database; man-db/auto-update is not 'true'.
+2026-11-10T03:40:17.5257095Z Processing triggers for fontconfig (2.15.0-1.1ubuntu2) ...
+2026-11-10T03:40:18.0549074Z 
+2026-11-10T03:40:18.0549678Z Running kernel seems to be up-to-date.
+2026-11-10T03:40:18.0549913Z 
+2026-11-10T03:40:18.0550049Z No services need to be restarted.
+2026-11-10T03:40:18.0550199Z 
+2026-11-10T03:40:18.0550323Z No containers need to be restarted.
+2026-11-10T03:40:18.0550473Z 
+2026-11-10T03:40:18.0550622Z No user sessions are running outdated binaries.
+2026-11-10T03:40:18.0550798Z 
+2026-11-10T03:40:18.0551102Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-11-10T03:40:18.8663162Z ##[group]Run for t in pdfinfo pdftotext pdftoppm; do
+2026-11-10T03:40:18.8663645Z for t in pdfinfo pdftotext pdftoppm; do
+2026-11-10T03:40:18.8663942Z   command -v "$t" >/dev/null 2>&1 || { echo "MISSING: $t (expected after poppler-utils install)"; exit 1; }
+2026-11-10T03:40:18.8664195Z done
+2026-11-10T03:40:18.8664524Z test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf || { echo "MISSING: DejaVuSans.ttf (expected after fonts-dejavu-core install)"; exit 1; }
+2026-11-10T03:40:18.8681766Z shell: /usr/bin/bash -e {0}
+2026-11-10T03:40:18.8681909Z ##[endgroup]
+2026-11-10T03:40:18.8739381Z ##[group]Run cd red-build && npm test
+2026-11-10T03:40:18.8739552Z cd red-build && npm test
+2026-11-10T03:40:18.8754062Z shell: /usr/bin/bash -e {0}
+2026-11-10T03:40:18.8754201Z ##[endgroup]
+2026-11-10T03:40:18.9553852Z 
+2026-11-10T03:40:18.9554424Z > tora-book-typesetter-red@0.1.0 test
+2026-11-10T03:40:18.9558628Z > node tests/unit/parser.test.js && node tests/unit/typography.test.js && node tests/integration/registry.test.js && node tests/integration/imud-migration.test.js && node tests/integration/setting-sets.test.js && node tests/integration/source-variants.test.js && node tests/layout/s5-s6.test.js && node tests/layout/ext8-optimal-balance.test.js && node tests/e2e/pipeline.test.js && node tests/e2e/s7-notes.test.js && node tests/e2e/s8-decoration.test.js && node tests/e2e/s9-headers.test.js && node tests/e2e/s10-ui.test.js && node tests/e2e/s11-extensions.test.js && node tests/e2e/s12-export.test.js && node tests/e2e/real-fonts.test.js && node tests/e2e/d89-visual-fixes.test.js && node tests/e2e/s15-view-justify.test.js && node tests/e2e/s24-fullmath-fixes.test.js && node tests/e2e/pdf-targets.test.js && node tests/e2e/s13-acceptance.test.js && node tests/e2e/s14-layout-audit.test.js && node tests/e2e/canonical.test.js && node tests/e2e/long-real-text.test.js && node tests/audit/negative-controls.test.js && node tests/audit/s13-security-a11y.test.js && node tests/e2e/s52-dp-fixes.test.js && node tests/e2e/s52-ui-fixes.test.js && node tests/e2e/audit-sensitivity.test.js && node tests/e2e/s53-dp-notes-export.test.js && node tests/e2e/s60-monster-fixes.test.js && node tests/e2e/s61-gap-fixes.test.js && node tests/e2e/s62-user-questions.test.js && node ../tools/scan-control-triggers.js
+2026-11-10T03:40:18.9561123Z 
+2026-11-10T03:40:18.9859727Z 
+2026-11-10T03:40:18.9860333Z == parser: 25/25 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.0152474Z 
+2026-11-10T03:40:19.0153133Z == typography: 16/16 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.0642094Z 
+2026-11-10T03:40:19.0643049Z == registry-integration: 8/8 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.1023794Z   dispositions: mapped=106 merged=16 ui-state=140 removed=2 (מתוך 264)
+2026-11-10T03:40:19.1226211Z 
+2026-11-10T03:40:19.1226948Z == imud-migration: 11/11 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.1603448Z   [set:תלמוד] mapped=94 merged=16 ui-state=137 removed=2
+2026-11-10T03:40:19.1609391Z   [set:פרשנות] mapped=94 merged=16 ui-state=137 removed=2
+2026-11-10T03:40:19.1614157Z   [set:קונטרס] mapped=94 merged=16 ui-state=137 removed=2
+2026-11-10T03:40:19.1815611Z   [set:תלמוד] legacy: pages=7 hash=legacy-285e3 back-shaar=0
+2026-11-10T03:40:19.1848519Z   [set:פרשנות] legacy: pages=7 hash=legacy-1d339 back-shaar=0
+2026-11-10T03:40:19.1882573Z   [set:קונטרס] legacy: pages=7 hash=legacy-1d339 back-shaar=0
+2026-11-10T03:40:19.2247281Z   [set:תלמוד] DP: pages=7 hash=241af41ea88a h0=22pt
+2026-11-10T03:40:19.2303142Z   [set:פרשנות] DP: pages=7 hash=5d67410a6fbc h0=24pt
+2026-11-10T03:40:19.2346714Z   [set:קונטרס] DP: pages=7 hash=a205e6a11fcb h0=30pt
+2026-11-10T03:40:19.2347900Z 
+2026-11-10T03:40:19.2348124Z == setting-sets: 5/5 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.3016892Z   [variant:v19-baseline] keys=250 mapped=95 merged=16 ui-state=137 removed=2
+2026-11-10T03:40:19.3022833Z   [variant:v20.4-tip] keys=242 mapped=95 merged=16 ui-state=129 removed=2
+2026-11-10T03:40:19.3030122Z   [variant:v21-glm] keys=264 mapped=106 merged=16 ui-state=140 removed=2
+2026-11-10T03:40:19.3036696Z   [variant:makom-bina-v20.5] keys=249 mapped=94 merged=16 ui-state=137 removed=2
+2026-11-10T03:40:19.3258891Z   [variant:v19-baseline] typeset: pages=7 hash=legacy-e6654
+2026-11-10T03:40:19.3341467Z   [variant:v20.4-tip] typeset: pages=10 hash=legacy-21a78
+2026-11-10T03:40:19.3404213Z   [variant:v21-glm] typeset: pages=10 hash=legacy-21a78
+2026-11-10T03:40:19.3440246Z   [variant:makom-bina-v20.5] typeset: pages=7 hash=legacy-1d339
+2026-11-10T03:40:19.3440737Z 
+2026-11-10T03:40:19.3442815Z == source-variants: 6/6 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.4227743Z 
+2026-11-10T03:40:19.4228463Z == layout-s5-s6: 17/17 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.4665534Z 
+2026-11-10T03:40:19.4667254Z == ext8-optimal-balance: 5/5 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.5612782Z 
+2026-11-10T03:40:19.5613447Z == e2e-pipeline: 14/14 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:19.6823432Z 
+2026-11-10T03:40:19.6823970Z == s7-gate: 15/15 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:20.5761337Z 
+2026-11-10T03:40:20.5762315Z == s8-decoration: 48/48 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:21.1146514Z 
+2026-11-10T03:40:21.1147231Z == s9-headers: 25/25 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:23.7294419Z 
+2026-11-10T03:40:23.7314422Z == s10-ui: 43/43 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:25.9457149Z 
+2026-11-10T03:40:25.9457858Z == s11-extensions: 50/50 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:34.5539707Z 
+2026-11-10T03:40:34.5540553Z == s12-export: 26/26 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:42.6657383Z   [real-fonts] catalog: 451 entries, 443 unique files, 432 unique families (19 משפחות-כפולות מקור + כפל-שמות אחד מתועד)
+2026-11-10T03:40:42.7158641Z   [real-fonts] parsed 450/451 in 50ms (חריג מתועד: Guttman-Logo1-Regular.ttf)
+2026-11-10T03:40:42.7218781Z   [real-fonts] extended catalog: 1315 families (catalog-only, woff2) + 432 embedded — סיווג אמת ללא כפילויות
+2026-11-10T03:40:42.9223904Z   [real-fonts] ספר-אמת בגופן Frank Ruhl Libre: pages=55 hash=legacy-086d2
+2026-11-10T03:40:43.0069399Z   [real-fonts] real=55 עמודים, table=63 עמודים — המדידה האמיתית פעילה
+2026-11-10T03:40:43.1624002Z   [real-fonts] PDF: pages=36 pdf=218KB (מקור גופן 174KB, תת-גופן מצומצם בתוך הקובץ)
+2026-11-10T03:40:43.1626737Z 
+2026-11-10T03:40:43.1626979Z == real-fonts: 14/14 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:44.0416763Z 
+2026-11-10T03:40:44.0417481Z == d89-visual-fixes: 75/75 passed, 0 failed ==
+2026-11-10T03:40:44.2625224Z 
+2026-11-10T03:40:44.2625955Z == s15-view-justify: 3/3 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:44.5667793Z 
+2026-11-10T03:40:44.5668532Z == s24-fullmath-fixes: 16/16 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:44.7115508Z 
+2026-11-10T03:40:44.7116187Z == pdf-targets: 4/4 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:47.0917811Z 
+2026-11-10T03:40:47.0918446Z == s13-acceptance: 11/11 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:47.1830576Z • A. שערים כברירת מחדל בסדר המקור: ראשי → אחורי → תוכן־עניינים → גוף (עם שער־משנה לפני החלק)
+2026-11-10T03:40:47.1958884Z • A2. תוכן השער המובנה מגיע ל-DOM (נתיב התצוגה) ולהקרנת ה-PDF
+2026-11-10T03:40:47.2018905Z • B. כותרות עליונות בכל עמודי התוכן — בנתיב החי (renderPage בלי header מפורש) ובייצוא HTML
+2026-11-10T03:40:47.2060621Z • C. יישור שורות הגוף — justify/inter-word ב-BASE_CSS (מקור ה-CSS של התצוגה והייצוא)
+2026-11-10T03:40:47.2061875Z • D. גיאומטריה מהקוד: אין חפיפות שורות בהקרנה ואף מילה לא חורגת מתיבת הטור
+2026-11-10T03:40:47.2073803Z • E. גופני ברירת המחדל של המקור מוטמעים: David Libre / Frank Ruhl Libre / Bellefair / Noto Serif Hebrew
+2026-11-10T03:40:47.2078316Z • F. ייבוא ברירות המקור: מתגי השערים ופתרון מחסניות הגופן מול הקטלוג
+2026-11-10T03:40:47.2098490Z • G. רגישות הגדרות→פלט: שינוי גוף/כותרת/שער משנה את הרינדור בפועל
+2026-11-10T03:40:47.2384689Z • H. fontStack: מחסנית מרובת־משפחות מהמקור נשמרת עם fallback עברי
+2026-11-10T03:40:47.2386606Z 
+2026-11-10T03:40:47.2386804Z == s14-layout-audit: 52 passed, 0 failed ==
+2026-11-10T03:40:47.5894118Z 
+2026-11-10T03:40:47.5894780Z == canonical: 6/6 passed, 0 failed, 0 skipped ==
+2026-11-10T03:40:47.9681100Z   [real] no_long_test_text.txt: words=24401 pages=96 hash=cc51f2d7eea1
+2026-11-10T03:40:48.6953460Z   [real] mid_long_test_text.txt: words=70716 pages=227 hash=54f052e1e761
+2026-11-10T03:40:51.7199796Z   [real] long_test_text.txt: words=291719 pages=1038 hash=010f9b35c2c3
+2026-11-10T03:40:56.0495969Z   [real] very_long: words=363232 pages=1335 hash=531f215433a8 1840ms
+2026-11-10T03:41:01.0075295Z   [real] orange-historical: words=361243 DP=1394pages/1ca3611635 legacy=836pages/legacy-7d0 1803ms
+2026-11-10T03:41:01.0075739Z 
+2026-11-10T03:41:01.0075934Z == long-real-text: 6/6 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:01.2139044Z 
+2026-11-10T03:41:01.2139763Z == negative-controls: 19/19 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:01.3201450Z 
+2026-11-10T03:41:01.3202147Z == s13-security-a11y: 12/12 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:01.3914153Z 
+2026-11-10T03:41:01.3914851Z == s52-dp-fixes: 23/23 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:02.5992484Z 
+2026-11-10T03:41:02.5993164Z == s52-ui-fixes: 18/18 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:10.5283606Z 
+2026-11-10T03:41:10.5284312Z == audit-sensitivity: 24/24 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:10.7351501Z 
+2026-11-10T03:41:10.7352334Z == s53-dp-notes-export: 18/18 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:10.8845241Z 
+2026-11-10T03:41:10.8845979Z == s60-monster-fixes: 17/17 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:12.1933754Z 
+2026-11-10T03:41:12.1964242Z == s61-gap-fixes: 27/27 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:21.7047121Z 
+2026-11-10T03:41:21.7047855Z == s62-user-questions: 13/13 passed, 0 failed, 0 skipped ==
+2026-11-10T03:41:21.7766893Z scan-control-triggers: 19 files · 3 engine-call edges · 3 allowed (נתיבים מפורשים) · 0 violations
+2026-11-10T03:41:21.7767388Z artifact → tests/artifacts/s10-callgraph.json
+2026-11-10T03:41:21.7883056Z ##[group]Run cd red-build && npm run test:determinism
+2026-11-10T03:41:21.7883531Z cd red-build && npm run test:determinism
+2026-11-10T03:41:21.7900131Z shell: /usr/bin/bash -e {0}
+2026-11-10T03:41:21.7900269Z ##[endgroup]
+2026-11-10T03:41:21.8518058Z 
+2026-11-10T03:41:21.8518467Z > tora-book-typesetter-red@0.1.0 test:determinism
+2026-11-10T03:41:21.8519823Z > node -e "const{typeset}=require('./src/engine/core/pipeline');const{getDefaultSettings}=require('./src/engine/core/settings-registry');const fs=require('fs');const t=fs.readFileSync('tests/fixtures/canonical_corpus.txt','utf8');const a=typeset(t,getDefaultSettings());const b=typeset(t,getDefaultSettings());if(a.layoutHash!==b.layoutHash){console.error('NON-DETERMINISTIC');process.exit(1)}console.log('deterministic OK',a.layoutHash.slice(0,16),'pages:',a.pages.length)"
+2026-11-10T03:41:21.8520706Z 
+2026-11-10T03:41:21.9488043Z deterministic OK 80f9ed6c82ea3855 pages: 36
+2026-11-10T03:41:21.9709267Z Post job cleanup.
+2026-11-10T03:41:22.0548670Z (node:2935) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-10T03:41:22.0567525Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-10T03:41:22.0682690Z Post job cleanup.
+2026-11-10T03:41:22.1331243Z [command]/usr/bin/git version
+2026-11-10T03:41:22.1367088Z git version 2.56.0
+2026-11-10T03:41:22.1392050Z Temporarily overriding HOME='/home/runner/work/_temp/a556a13b-a080-49a3-9ed9-76a3f5e44fce' before making global git config changes
+2026-11-10T03:41:22.1392911Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-10T03:41:22.1394139Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-10T03:41:22.1427868Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-10T03:41:22.1467607Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-10T03:41:22.1680538Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-10T03:41:22.1717372Z http.https://github.com/.extraheader
+2026-11-10T03:41:22.1725821Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-10T03:41:22.1758921Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-10T03:41:22.1971188Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-10T03:41:22.2009620Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-10T03:41:22.2327845Z Cleaning up orphan processes
+2026-11-10T03:41:22.2567937Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

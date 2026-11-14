@@ -1,0 +1,79 @@
+diff --git a/red-build/tests/artifacts/s12-font-subset.json b/red-build/tests/artifacts/s12-font-subset.json
+index b77e5b4..d5e2637 100644
+--- a/red-build/tests/artifacts/s12-font-subset.json
++++ b/red-build/tests/artifacts/s12-font-subset.json
+@@ -7,5 +7,5 @@
+   "glyphsDropped": 6204,
+   "charsMapped": 48,
+   "tofu": 0,
+-  "buildMs": 3
++  "buildMs": 5
+ }
+\ No newline at end of file
+diff --git a/red-build/tests/artifacts/s13-matrix-report.json b/red-build/tests/artifacts/s13-matrix-report.json
+index 12cb781..4d282e6 100644
+--- a/red-build/tests/artifacts/s13-matrix-report.json
++++ b/red-build/tests/artifacts/s13-matrix-report.json
+@@ -5,7 +5,7 @@
+     {
+       "config": "default",
+       "pages": 36,
+-      "ms": 58,
++      "ms": 61,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -22,7 +22,7 @@
+     {
+       "config": "ornaments",
+       "pages": 36,
+-      "ms": 25,
++      "ms": 24,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -39,7 +39,7 @@
+     {
+       "config": "aq-on",
+       "pages": 36,
+-      "ms": 21,
++      "ms": 19,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -73,7 +73,7 @@
+     {
+       "config": "verso-headers",
+       "pages": 36,
+-      "ms": 20,
++      "ms": 21,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -90,7 +90,7 @@
+     {
+       "config": "custom-styles",
+       "pages": 36,
+-      "ms": 22,
++      "ms": 33,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+diff --git a/red-build/tests/artifacts/s13-perf.json b/red-build/tests/artifacts/s13-perf.json
+index 1a0b006..a4fe1e3 100644
+--- a/red-build/tests/artifacts/s13-perf.json
++++ b/red-build/tests/artifacts/s13-perf.json
+@@ -1,9 +1,9 @@
+ {
+   "pages": 1338,
+-  "typesetMs": 733,
+-  "pagesPerSec": 1825,
+-  "heapUsedMB": 85,
+-  "rssMB": 343,
++  "typesetMs": 846,
++  "pagesPerSec": 1582,
++  "heapUsedMB": 88,
++  "rssMB": 288,
+   "budget": {
+     "typesetMaxSec": 45,
+     "memoryMaxMB": 1500
