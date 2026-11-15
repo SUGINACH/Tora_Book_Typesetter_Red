@@ -41,7 +41,7 @@ const FIXTURES = path.join(__dirname, '..', 'fixtures', 'regress');
 const CORPUS = path.join(REPO, '..', 'audits', 'long_test_text.txt');
 
 // ── מתג מחזור-חיים: להפוך ל-true בדיוק ב-PR שמנחית את תיקון ה-rollback (ראו הערת הפתיחה) ──
-const FIX_LANDED = process.env.RED_FIX_LANDED === '1' || false;
+const FIX_LANDED = process.env.RED_FIX_LANDED === '1' || true;
 
 // ── עזרים ──
 const legacyDefaults = JSON.parse(fs.readFileSync(path.join(REPO, 'ui', 'assets', 'imud', 'default_settings.json'), 'utf8'));
