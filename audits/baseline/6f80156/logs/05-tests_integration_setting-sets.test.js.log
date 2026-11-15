@@ -1,0 +1,11 @@
+  [set:תלמוד] mapped=94 merged=16 ui-state=137 removed=2
+  [set:פרשנות] mapped=94 merged=16 ui-state=137 removed=2
+  [set:קונטרס] mapped=94 merged=16 ui-state=137 removed=2
+  [set:תלמוד] legacy: pages=7 hash=legacy-285e3 back-shaar=0
+  [set:פרשנות] legacy: pages=7 hash=legacy-1d339 back-shaar=0
+  [set:קונטרס] legacy: pages=7 hash=legacy-1d339 back-shaar=0
+  [set:תלמוד] DP: pages=7 hash=241af41ea88a h0=22pt
+  [set:פרשנות] DP: pages=7 hash=5d67410a6fbc h0=24pt
+  [set:קונטרס] DP: pages=7 hash=a205e6a11fcb h0=30pt
+
+== setting-sets: 5/5 passed, 0 failed, 0 skipped ==

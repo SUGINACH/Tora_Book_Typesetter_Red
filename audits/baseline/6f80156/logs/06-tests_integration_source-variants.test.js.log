@@ -1,0 +1,10 @@
+  [variant:v19-baseline] keys=250 mapped=95 merged=16 ui-state=137 removed=2
+  [variant:v20.4-tip] keys=242 mapped=95 merged=16 ui-state=129 removed=2
+  [variant:v21-glm] keys=264 mapped=106 merged=16 ui-state=140 removed=2
+  [variant:makom-bina-v20.5] keys=249 mapped=94 merged=16 ui-state=137 removed=2
+  [variant:v19-baseline] typeset: pages=7 hash=legacy-e6654
+  [variant:v20.4-tip] typeset: pages=10 hash=legacy-21a78
+  [variant:v21-glm] typeset: pages=10 hash=legacy-21a78
+  [variant:makom-bina-v20.5] typeset: pages=7 hash=legacy-1d339
+
+== source-variants: 6/6 passed, 0 failed, 0 skipped ==

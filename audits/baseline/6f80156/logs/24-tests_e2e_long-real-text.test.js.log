@@ -1,0 +1,7 @@
+  [real] no_long_test_text.txt: words=24401 pages=96 hash=cc51f2d7eea1
+  [real] mid_long_test_text.txt: words=70716 pages=227 hash=54f052e1e761
+  [real] long_test_text.txt: words=291719 pages=1038 hash=010f9b35c2c3
+  [real] very_long: words=363232 pages=1335 hash=531f215433a8 2621ms
+  [real] orange-historical: words=361243 DP=1394pages/1ca3611635 legacy=836pages/legacy-7d0 2612ms
+
+== long-real-text: 6/6 passed, 0 failed, 0 skipped ==
