@@ -4,13 +4,17 @@
  *
  * למה אורקל נפרד: `contentPreserved` ו-ledger הם החשבונאות של המנוע עצמו.
  * `contentPreserved` סופר רק מילים שחסרות (מקור פחות פלט) — כפילות לעולם אינה
- * "חסר", ולכן הערה שמופיעה פעמיים או כותרת שנפלטת פעמיים עוברות בשקט
- * (R-01: כותרת אבדה והכותרת שאחריה הוכפלה; R-02: הערה הוכפלה בעמוד הבא).
+ * "חסר", ולכן הערה שמופיעה בעמוד שגוי או כותרת שנפלטת פעמיים עוברות בשקט
+ * (R-01: כותרת אבדה והכותרת שאחריה הוכפלה; R-04: הערה נפלטה בעמוד שאין בו שורה של הפסקה שלה).
  * האורקל כאן מנתח את טקסט המקור בעצמו (ללא הטוקנייזר של המנוע) ומשווה:
  *   · לכל פסקה: רצף המילים בפלט (לפי tokenId/lineIdx) = רצף המילים במקור, בלי
  *     סמני הערה; שורות רציפות וייחודיות (lineIdx 0..n-1 בלי כפילות);
  *   · לכל כותרת בתוך עמודה: נפלטת, ולא פעמיים (כותרות קצרות);
- *   · לכל הערה: בדיוק יחידה אחת בפלט (עם המשכי '(המשך)' מאוחדים), בסדר המקור;
+ *   · לכל הערה (S4.9 / S4.24 — legacy-imud-flow.js): היא מופיעה בכל עמוד שבו יש שורות של הפסקה
+ *     הנושאת אותה — גם בעמודי ההמשך של פסקה שנחצית (התנהגות המקור הנצפית; ה-PDF ההיסטורי מציג את אותה
+ *     הערה בשני עמודי הפסקה) — ולא בעמוד שאין בו אף שורה של הפסקה (NOTE_GHOST), ולא יותר מפעם אחת בעמוד
+ *     (NOTE_DUP); כל הערה נפלטת לפחות פעם אחת בעמוד של הפסקה (NOTE_LOST); סדר הפליטות החוקיות כסדר המקור.
+ *     (בגרסה קודמת של האורקל — "כל הערה בדיוק פעם אחת" — סומנה בטעות חזרה חוקית כבאג "R-02"; בוטל.)
  *   · גיאומטריה (אופציונלי): אין חפיפת שורות, אין מילה מחוץ לעמוד, הגוף לא חודר
  *     למרזב ההערות.
  *
@@ -41,9 +45,10 @@ const V = Object.freeze({
   PAREN_SCOPE: 'PAREN_SCOPE', // דגלי הסוגריים (parenFlags) ≠ המילים שבתוך ( ) במקור
   HEADING_LOST: 'HEADING_LOST', // כותרת (h4–h6) לא נפלטה
   HEADING_DUP: 'HEADING_DUP', // כותרת קצרה נפלטה יותר מפעם אחת
-  NOTE_LOST: 'NOTE_LOST', // הערה מהמקור לא נפלטה
-  NOTE_DUP: 'NOTE_DUP', // הערה נפלטה יותר פעמים מהמופעים שלה במקור
-  NOTE_ORDER: 'NOTE_ORDER', // אותן הערות, סדר שונה
+  NOTE_LOST: 'NOTE_LOST', // הערה מהמקור לא נפלטה (באף עמוד של הפסקה הנושאת אותה)
+  NOTE_GHOST: 'NOTE_GHOST', // הערה נפלטה בעמוד שאין בו אף שורה של הפסקה הנושאת אותה (R-04; S4.24)
+  NOTE_DUP: 'NOTE_DUP', // אותה הערה נפלטה באותו עמוד יותר פעמים ממספר הפסקאות הנושאות אותה בעמוד
+  NOTE_ORDER: 'NOTE_ORDER', // אותן הערות (פליטות חוקיות), סדר שונה מהמקור
   CONTENT_PRESERVED: 'CONTENT_PRESERVED', // contentPreserved !== true
   LEDGER_LOSS: 'LEDGER_LOSS', // ledger מדווח content-loss
   GEO_OVERLAP: 'GEO_OVERLAP', // חפיפת שורות באותו טור
@@ -181,6 +186,90 @@ function censusOutput(result) {
   return { paras, headingEmissions, units, lineDup };
 }
 
+const noteText = (ws) => (Array.isArray(ws) ? ws : words(ws)).join(' ');
+
+/** בעלי ההערות לפי פריטי המקור (parseSource): tokenId = אינדקס הפריט. מפה בסדר המסמך. */
+function ownersFromItems(items) {
+  const m = new Map();
+  items.forEach((x, i) => { if (x.kind === 'p' && x.notes.length) m.set(i, x.notes.map(noteText).filter(Boolean)); });
+  return m;
+}
+
+/**
+ * בעלי ההערות לפי טקסט הטוקנים של המנוע (`result.tokens`; הטקסט כולל את [ההערה] הגולמית) — לקורפוסים אמיתיים
+ * שמשתמשים בתחביר מחוץ לדקדוק האורקל (שורות כותרת-עמוד, 'כותרת 0/1/7', הערות-סיום). הבעלות כאן פחות בלתי-תלויה
+ * (הטוקנייזר של המנוע קובע איזו פסקה נושאת איזו הערה) אך מספיקה לבדיקת העמוד.
+ */
+function ownersFromTokens(result) {
+  const m = new Map();
+  result.tokens.forEach((t, i) => {
+    if (t.type !== 'p') return;
+    const ns = splitNotes(String(t.text)).notes.map(noteText).filter(Boolean);
+    if (ns.length) m.set(i, ns); // tokenId בפריטי הפלט = אינדקס הטוקן (כמו ב-compareToSource)
+  });
+  return m;
+}
+
+/**
+ * סיווג פליטות ההערות לפי עמודי הפסקה הבעלים (ראו כותרת הקובץ; S4.9 / S4.24 ב-legacy-imud-flow.js).
+ *   · חוקית — הפסקה הנושאת את ההערה יש לה שורות בעמוד הפליטה (כולל חזרה בעמוד המשך של פסקה שנחצית);
+ *   · רפאים (ghost) — אין לאף פסקה הנושאת את ההערה שורה בעמוד הפליטה;
+ *   · כפילות (dup) — באותו עמוד יותר פליטות ממספר הפסקאות הנושאות את ההערה שיש להן שורות בעמוד;
+ *   · אבודה (lost) — פחות פליטות חוקיות ממופעי ההערה במקור.
+ * הסיווג לפי **טקסט** ההערה: אם אותו טקסט מופיע בפסקה אחרת שיש לה שורות באותו עמוד — רפאים בעמוד הזה אינם
+ * נתפסים (שלילי-כוזב אפשרי, לעולם לא חיובי-כוזב); מסמכי הבדיקה משתמשים במילים ייחודיות ולכן אינם חשופים לכך.
+ * @param census תוצאת censusOutput
+ * @param owners Map<tokenId, string[]> — ownersFromItems / ownersFromTokens
+ * @returns {{ghost:Array,dup:Array,lost:Array,orderViolation:boolean,emissions:number,legal:number,repeats:number}}
+ *   repeats = פליטות חוקיות מעבר למופע אחד לכל הערה במקור = חזרות S4.9 בעמודי המשך (מידע; אינו הפרה)
+ */
+function classifyNotes(census, owners) {
+  const pagesOf = new Map();
+  for (const [tid, m] of census.paras) { const s = new Set(); for (const l of m.values()) s.add(l.page); pagesOf.set(tid, s); }
+  const bump = (map, a, b) => { let m = map.get(a); if (!m) map.set(a, (m = new Map())); m.set(b, (m.get(b) || 0) + 1); };
+  const allowed = new Map(); // עמוד → Map(טקסט → מספר זוגות פסקה×הערה שיש לפסקה שורות בעמוד)
+  const srcCount = new Map(); // טקסט → מספר מופעים במקור
+  const ownerPages = new Map(); // טקסט → Set(עמודי הפסקאות הנושאות)
+  const srcSeq = [];
+  for (const [tid, notes] of owners) {
+    const pgs = pagesOf.get(tid) || new Set();
+    for (const t of notes) {
+      srcSeq.push(t);
+      srcCount.set(t, (srcCount.get(t) || 0) + 1);
+      if (!ownerPages.has(t)) ownerPages.set(t, new Set());
+      for (const p of pgs) { bump(allowed, p, t); ownerPages.get(t).add(p); }
+    }
+  }
+  const emitted = new Map(); // עמוד → Map(טקסט → פליטות); יחידה נספרת בעמוד שבו היא נפתחה (המשכי '(המשך)' מאוחדים)
+  const seq = [];
+  for (const u of census.units) { const t = u.words.join(' '); if (!t) continue; bump(emitted, u.page, t); seq.push({ page: u.page, text: t }); }
+  const allowedAt = (page, t) => (allowed.get(page) || new Map()).get(t) || 0;
+  const ghost = [], dup = [];
+  let legal = 0;
+  const legalByText = new Map();
+  for (const [page, m] of emitted) {
+    for (const [t, e] of m) {
+      const a = allowedAt(page, t);
+      if (a === 0) { ghost.push({ page, text: t, count: e, ownerPages: [...(ownerPages.get(t) || [])].sort((x, y) => x - y) }); continue; }
+      if (e > a) dup.push({ page, text: t, count: e, allowed: a });
+      const ok = Math.min(e, a);
+      legal += ok;
+      legalByText.set(t, (legalByText.get(t) || 0) + ok);
+    }
+  }
+  const lost = [];
+  for (const [t, c] of srcCount) { const got = legalByText.get(t) || 0; if (got < c) lost.push({ text: t, src: c, got }); }
+  // סדר: הפליטה החוקית הראשונה של כל מופע-מקור, לפי סדר הפלט
+  const kc = new Map(), kept = [];
+  for (const e of seq) {
+    if (allowedAt(e.page, e.text) === 0) continue;
+    const c = kc.get(e.text) || 0;
+    if (c < (srcCount.get(e.text) || 0)) { kc.set(e.text, c + 1); kept.push(e.text); }
+  }
+  const orderViolation = !lost.length && kept.length === srcSeq.length && kept.some((t, i) => t !== srcSeq[i]);
+  return { ghost, dup, lost, orderViolation, emissions: seq.length, legal, repeats: Math.max(0, legal - srcSeq.length) };
+}
+
 const SHORT_HEADING_MAX_CHARS = 20; // כותרת ארוכה יכולה להיפלט בכמה שורות
 
 /**
@@ -232,21 +321,13 @@ function compareToSource(items, result) {
     else if (em.length > 1 && len <= SHORT_HEADING_MAX_CHARS) add(V.HEADING_DUP, `כותרת ${t.type}#${i} "${t.text}" נפלטה ×${em.length}`);
   });
 
-  // הערות: מולטיסט לפי טקסט (אובדן/כפילות), ואם שווה — סדר
-  const srcNotes = items.filter((x) => x.kind === 'p').flatMap((x) => x.notes).map((ws) => ws.join(' '));
-  const outNotes = out.units.map((u) => u.words.join(' '));
-  const count = (arr) => { const c = new Map(); for (const k of arr) c.set(k, (c.get(k) || 0) + 1); return c; };
-  const sc = count(srcNotes), oc = count(outNotes);
-  let multisetEqual = true;
-  for (const [k, c] of oc) {
-    const s = sc.get(k) || 0;
-    if (c > s) { multisetEqual = false; add(V.NOTE_DUP, `הערה "${k.split(' ').slice(0, 6).join(' ')}…" (${k.split(' ').length} מילים) נפלטה ×${c} ומופיעה במקור ×${s}`); }
-  }
-  for (const [k, c] of sc) {
-    const o = oc.get(k) || 0;
-    if (o < c) { multisetEqual = false; add(V.NOTE_LOST, `הערה "${k.split(' ').slice(0, 6).join(' ')}…" (${k.split(' ').length} מילים) במקור ×${c}, בפלט ×${o}`); }
-  }
-  if (multisetEqual && srcNotes.some((k, i) => k !== outNotes[i])) add(V.NOTE_ORDER, 'אותן הערות אך בסדר שונה מהמקור');
+  // הערות (S4.9 / S4.24): סיווג לפי עמודי הפסקה הבעלים — רפאים / כפילות באותו עמוד / אבודה / סדר
+  const cn = classifyNotes(out, ownersFromItems(items));
+  const snip = (t) => t.split(' ').slice(0, 6).join(' ');
+  for (const g of cn.ghost) add(V.NOTE_GHOST, `הערה "${snip(g.text)}…" (${g.text.split(' ').length} מילים) נפלטה בעמוד ${g.page + 1}${g.count > 1 ? ` ×${g.count}` : ''} ולפסקה הנושאת אותה אין שורות בעמוד זה (עמודי הפסקה: ${g.ownerPages.map((x) => x + 1).join(',') || 'אין'})`);
+  for (const d of cn.dup) add(V.NOTE_DUP, `הערה "${snip(d.text)}…" (${d.text.split(' ').length} מילים) נפלטה ×${d.count} בעמוד ${d.page + 1} (מותר ×${d.allowed})`);
+  for (const l of cn.lost) add(V.NOTE_LOST, `הערה "${snip(l.text)}…" (${l.text.split(' ').length} מילים) במקור ×${l.src}, בפלט (בעמודי הפסקה) ×${l.got}`);
+  if (cn.orderViolation) add(V.NOTE_ORDER, 'אותן הערות אך בסדר שונה מהמקור');
 
   if (result.contentPreserved !== true) add(V.CONTENT_PRESERVED, `contentPreserved=${result.contentPreserved}`);
   const loss = [...result.ledger.issues.values()].filter((x) => x.kind === 'content-loss');
@@ -312,4 +393,4 @@ function docBuilder() {
   return { w, doc: (body) => META + '\n' + body };
 }
 
-module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, paraParenFlags, docBuilder, META, SHORT_HEADING_MAX_CHARS };
+module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, paraParenFlags, ownersFromItems, ownersFromTokens, classifyNotes, docBuilder, META, SHORT_HEADING_MAX_CHARS };
