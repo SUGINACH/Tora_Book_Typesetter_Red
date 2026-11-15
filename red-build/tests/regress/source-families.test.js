@@ -47,7 +47,7 @@ const FIXTURES = path.join(__dirname, '..', 'fixtures', 'regress');
 const AUDITS = path.join(REPO, '..', 'audits');
 
 // ── מתגי מחזור-חיים: מוסיפים מזהה ב-PR שמנחית את התיקון המתאים (ראו הערת הפתיחה) ──
-const FIXED = new Set([]); // 'R-01' | 'R-03' | 'R-04'
+const FIXED = new Set(['R-01']); // 'R-01' | 'R-03' | 'R-04' — R-01 תוקן ב-#43 (rollback כותרות inline בסוף טור)
 const ENV_FIXED = String(process.env.RED_FIX_LANDED || '');
 const isFixed = (id) => FIXED.has(id) || ENV_FIXED === '1' || ENV_FIXED.split(',').includes(id);
 
