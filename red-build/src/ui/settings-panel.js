@@ -285,7 +285,7 @@ function buildSettingsTab(doc, opts) {
     }
   }
 
-  root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־12 פאנלים` }));
+  root.appendChild(Object.assign(doc.createElement('div'), { className: 'settings-count', textContent: `${BINDINGS.length} הגדרות ב־${PANELS.length} פאנלים` }));
 
   return { root, refreshValues, refreshFontCatalog, searchInput: search, getSearchHits: () => searchHits };
 }

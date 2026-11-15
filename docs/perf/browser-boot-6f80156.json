@@ -1,0 +1,1207 @@
+{
+  "baseCommit": "6f801568c15071a27f97918ff8479def9c719c0d",
+  "note": "חציונים בלבד (ללא ריצות גולמיות). whatif_* = ניסויים ללא שינוי קוד; beforeAfter = הקוד האמיתי (עץ ללא/עם ui/font-prefetch.js).",
+  "export": {
+    "canonical": {
+      "KB": 26,
+      "pages": 36,
+      "typesetMs": 121.5,
+      "exportTotalMs": 141.8,
+      "exportOnlyMsApprox": 19.9,
+      "pdfKB": 218,
+      "pdfOk": true,
+      "maxRSS_MB": 81,
+      "n": 3
+    },
+    "real_book": {
+      "KB": 228,
+      "pages": 83,
+      "typesetMs": 502,
+      "exportTotalMs": 557.8,
+      "exportOnlyMsApprox": 92.2,
+      "pdfKB": 1382,
+      "pdfOk": true,
+      "maxRSS_MB": 127,
+      "n": 3
+    },
+    "mid_long": {
+      "KB": 652,
+      "pages": 185,
+      "typesetMs": 935.9,
+      "exportTotalMs": 1422.3,
+      "exportOnlyMsApprox": 430.2,
+      "pdfKB": 3969,
+      "pdfOk": true,
+      "maxRSS_MB": 205,
+      "n": 3
+    }
+  },
+  "whatif": {
+    "broadband_whatif_1": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "broadband",
+        "rttMs": 50,
+        "mbps": 20,
+        "repeat": 3,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 2809,
+            "bundleDoneMs": 1480,
+            "catalogDoneMs": 537,
+            "fontFilesDoneMs": 2912,
+            "designsDoneMs": 2814,
+            "lastResponseMs": 2912,
+            "loadMs": 434,
+            "fcpMs": 452,
+            "tbtMs": 352,
+            "maxLongMs": 402,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 18
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetch",
+          "median": {
+            "fontsReadyMs": 1950,
+            "bundleDoneMs": 1728,
+            "catalogDoneMs": 941,
+            "fontFilesDoneMs": 1938,
+            "designsDoneMs": 2852,
+            "lastResponseMs": 2852,
+            "loadMs": 834,
+            "fcpMs": 848,
+            "tbtMs": 256,
+            "maxLongMs": 306,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 15
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlate",
+          "median": {
+            "fontsReadyMs": 1644,
+            "bundleDoneMs": 1406,
+            "catalogDoneMs": 640,
+            "fontFilesDoneMs": 1633,
+            "designsDoneMs": 2557,
+            "lastResponseMs": 2557,
+            "loadMs": 435,
+            "fcpMs": 468,
+            "tbtMs": 269,
+            "maxLongMs": 319,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 12
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+designsfast",
+          "median": {
+            "fontsReadyMs": 2445,
+            "bundleDoneMs": 1445,
+            "catalogDoneMs": 536,
+            "fontFilesDoneMs": 2543,
+            "designsDoneMs": 1124,
+            "lastResponseMs": 2543,
+            "loadMs": 424,
+            "fcpMs": 440,
+            "tbtMs": 345,
+            "maxLongMs": 395,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 23
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "warm",
+          "median": {
+            "fontsReadyMs": 1268,
+            "bundleDoneMs": 683,
+            "catalogDoneMs": 161,
+            "fontFilesDoneMs": 1246,
+            "designsDoneMs": 781,
+            "lastResponseMs": 1246,
+            "loadMs": 123,
+            "fcpMs": 140,
+            "tbtMs": 330,
+            "maxLongMs": 333,
+            "longTasks": 2,
+            "serverHits": 0,
+            "heapMB": 17
+          },
+          "transferKB": {},
+          "statuses": {},
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 1868,
+            "bundleDoneMs": 996,
+            "catalogDoneMs": 415,
+            "fontFilesDoneMs": 1910,
+            "designsDoneMs": 1135,
+            "lastResponseMs": 1910,
+            "loadMs": 326,
+            "fcpMs": 344,
+            "tbtMs": 282,
+            "maxLongMs": 330,
+            "longTasks": 2,
+            "serverHits": 25,
+            "heapMB": 21
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        },
+        {
+          "name": "reval+fontsimmutable",
+          "median": {
+            "fontsReadyMs": 1530,
+            "bundleDoneMs": 1085,
+            "catalogDoneMs": 425,
+            "fontFilesDoneMs": 1515,
+            "designsDoneMs": 1307,
+            "lastResponseMs": 1515,
+            "loadMs": 327,
+            "fcpMs": 352,
+            "tbtMs": 352,
+            "maxLongMs": 402,
+            "longTasks": 1,
+            "serverHits": 13,
+            "heapMB": 20
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 13
+          },
+          "errors": []
+        }
+      ]
+    },
+    "broadband_whatif_links": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "broadband",
+        "rttMs": 50,
+        "mbps": 20,
+        "repeat": 3,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 2651,
+            "bundleDoneMs": 1354,
+            "catalogDoneMs": 513,
+            "fontFilesDoneMs": 2744,
+            "designsDoneMs": 2652,
+            "lastResponseMs": 2744,
+            "loadMs": 415,
+            "fcpMs": 432,
+            "tbtMs": 276,
+            "maxLongMs": 326,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 18
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlate",
+          "median": {
+            "fontsReadyMs": 1556,
+            "bundleDoneMs": 1424,
+            "catalogDoneMs": 660,
+            "fontFilesDoneMs": 1558,
+            "designsDoneMs": 2509,
+            "lastResponseMs": 2509,
+            "loadMs": 437,
+            "fcpMs": 484,
+            "tbtMs": 259,
+            "maxLongMs": 309,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 12
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlink",
+          "median": {
+            "fontsReadyMs": 1881,
+            "bundleDoneMs": 1695,
+            "catalogDoneMs": 929,
+            "fontFilesDoneMs": 1875,
+            "designsDoneMs": 2798,
+            "lastResponseMs": 2798,
+            "loadMs": 825,
+            "fcpMs": 844,
+            "tbtMs": 270,
+            "maxLongMs": 320,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 12
+          },
+          "transferKB": {
+            "html/css": 4,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+preloadlink",
+          "median": {
+            "fontsReadyMs": 1979,
+            "bundleDoneMs": 1809,
+            "catalogDoneMs": 937,
+            "fontFilesDoneMs": 713,
+            "designsDoneMs": 2916,
+            "lastResponseMs": 2916,
+            "loadMs": 832,
+            "fcpMs": 852,
+            "tbtMs": 323,
+            "maxLongMs": 373,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 12
+          },
+          "transferKB": {
+            "html/css": 4,
+            "font": 946,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 1904,
+            "bundleDoneMs": 1008,
+            "catalogDoneMs": 437,
+            "fontFilesDoneMs": 1950,
+            "designsDoneMs": 1124,
+            "lastResponseMs": 1950,
+            "loadMs": 341,
+            "fcpMs": 372,
+            "tbtMs": 268,
+            "maxLongMs": 318,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 20
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        },
+        {
+          "name": "reval+prefetchlate",
+          "median": {
+            "fontsReadyMs": 1826,
+            "bundleDoneMs": 956,
+            "catalogDoneMs": 414,
+            "fontFilesDoneMs": 1866,
+            "designsDoneMs": 1052,
+            "lastResponseMs": 1866,
+            "loadMs": 313,
+            "fcpMs": 332,
+            "tbtMs": 244,
+            "maxLongMs": 278,
+            "longTasks": 1,
+            "serverHits": 37,
+            "heapMB": 17
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 37
+          },
+          "errors": []
+        },
+        {
+          "name": "reval+prefetchlink",
+          "median": {
+            "fontsReadyMs": 1860,
+            "bundleDoneMs": 1003,
+            "catalogDoneMs": 447,
+            "fontFilesDoneMs": 1910,
+            "designsDoneMs": 1099,
+            "lastResponseMs": 1910,
+            "loadMs": 355,
+            "fcpMs": 364,
+            "tbtMs": 259,
+            "maxLongMs": 309,
+            "longTasks": 1,
+            "serverHits": 37,
+            "heapMB": 20
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 37
+          },
+          "errors": []
+        }
+      ]
+    },
+    "broadband_whatif_forcecache": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "broadband",
+        "rttMs": 50,
+        "mbps": 20,
+        "repeat": 3,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 2748,
+            "bundleDoneMs": 1442,
+            "catalogDoneMs": 558,
+            "fontFilesDoneMs": 2854,
+            "designsDoneMs": 2788,
+            "lastResponseMs": 2854,
+            "loadMs": 431,
+            "fcpMs": 460,
+            "tbtMs": 358,
+            "maxLongMs": 408,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 18
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlate",
+          "median": {
+            "fontsReadyMs": 1746,
+            "bundleDoneMs": 1545,
+            "catalogDoneMs": 649,
+            "fontFilesDoneMs": 1717,
+            "designsDoneMs": 2582,
+            "lastResponseMs": 2582,
+            "loadMs": 451,
+            "fcpMs": 480,
+            "tbtMs": 328,
+            "maxLongMs": 378,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 12
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlatefc",
+          "median": {
+            "fontsReadyMs": 1586,
+            "bundleDoneMs": 1429,
+            "catalogDoneMs": 646,
+            "fontFilesDoneMs": 1581,
+            "designsDoneMs": 2501,
+            "lastResponseMs": 2501,
+            "loadMs": 458,
+            "fcpMs": 480,
+            "tbtMs": 273,
+            "maxLongMs": 323,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 12
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 1974,
+            "bundleDoneMs": 1006,
+            "catalogDoneMs": 396,
+            "fontFilesDoneMs": 2024,
+            "designsDoneMs": 1149,
+            "lastResponseMs": 2024,
+            "loadMs": 308,
+            "fcpMs": 320,
+            "tbtMs": 308,
+            "maxLongMs": 339,
+            "longTasks": 2,
+            "serverHits": 25,
+            "heapMB": 20
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        },
+        {
+          "name": "reval+prefetchlate",
+          "median": {
+            "fontsReadyMs": 1970,
+            "bundleDoneMs": 1094,
+            "catalogDoneMs": 439,
+            "fontFilesDoneMs": 2001,
+            "designsDoneMs": 1339,
+            "lastResponseMs": 2001,
+            "loadMs": 329,
+            "fcpMs": 356,
+            "tbtMs": 352,
+            "maxLongMs": 402,
+            "longTasks": 1,
+            "serverHits": 37,
+            "heapMB": 17
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 37
+          },
+          "errors": []
+        },
+        {
+          "name": "reval+prefetchlatefc",
+          "median": {
+            "fontsReadyMs": 2081,
+            "bundleDoneMs": 1143,
+            "catalogDoneMs": 450,
+            "fontFilesDoneMs": 2130,
+            "designsDoneMs": 1320,
+            "lastResponseMs": 2130,
+            "loadMs": 360,
+            "fcpMs": 380,
+            "tbtMs": 364,
+            "maxLongMs": 412,
+            "longTasks": 2,
+            "serverHits": 25,
+            "heapMB": 20
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        }
+      ]
+    },
+    "slow_whatif": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "slow",
+        "rttMs": 150,
+        "mbps": 5,
+        "repeat": 2,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 7687,
+            "bundleDoneMs": 3467,
+            "catalogDoneMs": 1548,
+            "fontFilesDoneMs": 8242,
+            "designsDoneMs": 8783,
+            "lastResponseMs": 8783,
+            "loadMs": 1211,
+            "fcpMs": 1232,
+            "tbtMs": 354,
+            "maxLongMs": 404,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 17
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlate",
+          "median": {
+            "fontsReadyMs": 4174,
+            "bundleDoneMs": 3989,
+            "catalogDoneMs": 2024,
+            "fontFilesDoneMs": 4154,
+            "designsDoneMs": 6292,
+            "lastResponseMs": 6292,
+            "loadMs": 1234,
+            "fcpMs": 1248,
+            "tbtMs": 309,
+            "maxLongMs": 359,
+            "longTasks": 2,
+            "serverHits": 25,
+            "heapMB": 10
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+designsfast",
+          "median": {
+            "fontsReadyMs": 5974,
+            "bundleDoneMs": 2996,
+            "catalogDoneMs": 1594,
+            "fontFilesDoneMs": 6331,
+            "designsDoneMs": 1517,
+            "lastResponseMs": 6331,
+            "loadMs": 1228,
+            "fcpMs": 1248,
+            "tbtMs": 333,
+            "maxLongMs": 383,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 20
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 3706,
+            "bundleDoneMs": 1948,
+            "catalogDoneMs": 1023,
+            "fontFilesDoneMs": 3846,
+            "designsDoneMs": 2042,
+            "lastResponseMs": 3846,
+            "loadMs": 737,
+            "fcpMs": 760,
+            "tbtMs": 357,
+            "maxLongMs": 407,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 21
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        },
+        {
+          "name": "reval+prefetchlate",
+          "median": {
+            "fontsReadyMs": 3549,
+            "bundleDoneMs": 1899,
+            "catalogDoneMs": 1018,
+            "fontFilesDoneMs": 3692,
+            "designsDoneMs": 3651,
+            "lastResponseMs": 3692,
+            "loadMs": 718,
+            "fcpMs": 728,
+            "tbtMs": 373,
+            "maxLongMs": 423,
+            "longTasks": 1,
+            "serverHits": 37,
+            "heapMB": 18
+          },
+          "transferKB": {
+            "design": 976
+          },
+          "statuses": {
+            "200": 1,
+            "304": 36
+          },
+          "errors": []
+        }
+      ]
+    },
+    "local_whatif": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "local",
+        "rttMs": 0,
+        "mbps": 0,
+        "repeat": 5,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 1319,
+            "bundleDoneMs": 732,
+            "catalogDoneMs": 172,
+            "fontFilesDoneMs": 1309,
+            "designsDoneMs": 886,
+            "lastResponseMs": 1309,
+            "loadMs": 135,
+            "fcpMs": 152,
+            "tbtMs": 314,
+            "maxLongMs": 357,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 20
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "cold+prefetchlate",
+          "median": {
+            "fontsReadyMs": 1269,
+            "bundleDoneMs": 832,
+            "catalogDoneMs": 221,
+            "fontFilesDoneMs": 1270,
+            "designsDoneMs": 924,
+            "lastResponseMs": 1270,
+            "loadMs": 188,
+            "fcpMs": 200,
+            "tbtMs": 362,
+            "maxLongMs": 373,
+            "longTasks": 3,
+            "serverHits": 25,
+            "heapMB": 17
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        }
+      ]
+    }
+  },
+  "beforeAfter": {
+    "broadband/before": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "broadband",
+        "rttMs": 50,
+        "mbps": 20,
+        "repeat": 3,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 2543,
+            "bundleDoneMs": 1248,
+            "catalogDoneMs": 510,
+            "fontFilesDoneMs": 2645,
+            "designsDoneMs": 2568,
+            "lastResponseMs": 2645,
+            "loadMs": 406,
+            "fcpMs": 424,
+            "tbtMs": 194,
+            "maxLongMs": 244,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 18
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "warm",
+          "median": {
+            "fontsReadyMs": 825,
+            "bundleDoneMs": 509,
+            "catalogDoneMs": 113,
+            "fontFilesDoneMs": 814,
+            "designsDoneMs": 602,
+            "lastResponseMs": 814,
+            "loadMs": 91,
+            "fcpMs": 104,
+            "tbtMs": 189,
+            "maxLongMs": 239,
+            "longTasks": 1,
+            "serverHits": 0,
+            "heapMB": 16
+          },
+          "transferKB": {},
+          "statuses": {},
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 1590,
+            "bundleDoneMs": 811,
+            "catalogDoneMs": 373,
+            "fontFilesDoneMs": 1639,
+            "designsDoneMs": 871,
+            "lastResponseMs": 1639,
+            "loadMs": 276,
+            "fcpMs": 284,
+            "tbtMs": 169,
+            "maxLongMs": 219,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 21
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        }
+      ]
+    },
+    "broadband/after": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "broadband",
+        "rttMs": 50,
+        "mbps": 20,
+        "repeat": 3,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 1435,
+            "bundleDoneMs": 1278,
+            "catalogDoneMs": 615,
+            "fontFilesDoneMs": 1423,
+            "designsDoneMs": 2404,
+            "lastResponseMs": 2404,
+            "loadMs": 413,
+            "fcpMs": 432,
+            "tbtMs": 220,
+            "maxLongMs": 270,
+            "longTasks": 1,
+            "serverHits": 26,
+            "heapMB": 16
+          },
+          "transferKB": {
+            "html/css": 3,
+            "other": 1,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "warm",
+          "median": {
+            "fontsReadyMs": 884,
+            "bundleDoneMs": 541,
+            "catalogDoneMs": 132,
+            "fontFilesDoneMs": 869,
+            "designsDoneMs": 595,
+            "lastResponseMs": 869,
+            "loadMs": 111,
+            "fcpMs": 120,
+            "tbtMs": 191,
+            "maxLongMs": 241,
+            "longTasks": 1,
+            "serverHits": 0,
+            "heapMB": 17
+          },
+          "transferKB": {},
+          "statuses": {},
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 1642,
+            "bundleDoneMs": 858,
+            "catalogDoneMs": 402,
+            "fontFilesDoneMs": 1690,
+            "designsDoneMs": 942,
+            "lastResponseMs": 1690,
+            "loadMs": 301,
+            "fcpMs": 316,
+            "tbtMs": 188,
+            "maxLongMs": 238,
+            "longTasks": 1,
+            "serverHits": 26,
+            "heapMB": 21
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 26
+          },
+          "errors": []
+        }
+      ]
+    },
+    "slow/before": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "slow",
+        "rttMs": 150,
+        "mbps": 5,
+        "repeat": 2,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 7452,
+            "bundleDoneMs": 3313,
+            "catalogDoneMs": 1510,
+            "fontFilesDoneMs": 8011,
+            "designsDoneMs": 8531,
+            "lastResponseMs": 8531,
+            "loadMs": 1166,
+            "fcpMs": 1184,
+            "tbtMs": 217,
+            "maxLongMs": 267,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 17
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 3320,
+            "bundleDoneMs": 1658,
+            "catalogDoneMs": 982,
+            "fontFilesDoneMs": 3460,
+            "designsDoneMs": 1746,
+            "lastResponseMs": 3460,
+            "loadMs": 686,
+            "fcpMs": 700,
+            "tbtMs": 167,
+            "maxLongMs": 217,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 21
+          },
+          "transferKB": {},
+          "statuses": {
+            "304": 25
+          },
+          "errors": []
+        }
+      ]
+    },
+    "slow/after": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "slow",
+        "rttMs": 150,
+        "mbps": 5,
+        "repeat": 2,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 4065,
+            "bundleDoneMs": 3933,
+            "catalogDoneMs": 1952,
+            "fontFilesDoneMs": 4055,
+            "designsDoneMs": 6212,
+            "lastResponseMs": 6212,
+            "loadMs": 1177,
+            "fcpMs": 1188,
+            "tbtMs": 233,
+            "maxLongMs": 283,
+            "longTasks": 1,
+            "serverHits": 26,
+            "heapMB": 10
+          },
+          "transferKB": {
+            "html/css": 3,
+            "other": 1,
+            "bundle": 589,
+            "font": 946,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2
+          },
+          "statuses": null,
+          "errors": []
+        },
+        {
+          "name": "reval",
+          "median": {
+            "fontsReadyMs": 3444,
+            "bundleDoneMs": 1744,
+            "catalogDoneMs": 1000,
+            "fontFilesDoneMs": 3588,
+            "designsDoneMs": 3495,
+            "lastResponseMs": 3588,
+            "loadMs": 703,
+            "fcpMs": 716,
+            "tbtMs": 225,
+            "maxLongMs": 275,
+            "longTasks": 1,
+            "serverHits": 26,
+            "heapMB": 21
+          },
+          "transferKB": {
+            "design": 976
+          },
+          "statuses": {
+            "200": 1,
+            "304": 25
+          },
+          "errors": []
+        }
+      ]
+    },
+    "local/before": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "local",
+        "rttMs": 0,
+        "mbps": 0,
+        "repeat": 5,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 963,
+            "bundleDoneMs": 569,
+            "catalogDoneMs": 138,
+            "fontFilesDoneMs": 949,
+            "designsDoneMs": 667,
+            "lastResponseMs": 949,
+            "loadMs": 114,
+            "fcpMs": 120,
+            "tbtMs": 192,
+            "maxLongMs": 242,
+            "longTasks": 1,
+            "serverHits": 25,
+            "heapMB": 17
+          },
+          "transferKB": {
+            "html/css": 3,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        }
+      ]
+    },
+    "local/after": {
+      "env": {
+        "browser": "HeadlessChrome/153.0.8010.0",
+        "node": "v22.23.4",
+        "cpus": 1,
+        "profile": "local",
+        "rttMs": 0,
+        "mbps": 0,
+        "repeat": 5,
+        "expectFonts": 11
+      },
+      "variants": [
+        {
+          "name": "cold",
+          "median": {
+            "fontsReadyMs": 999,
+            "bundleDoneMs": 614,
+            "catalogDoneMs": 149,
+            "fontFilesDoneMs": 993,
+            "designsDoneMs": 697,
+            "lastResponseMs": 993,
+            "loadMs": 116,
+            "fcpMs": 124,
+            "tbtMs": 203,
+            "maxLongMs": 253,
+            "longTasks": 1,
+            "serverHits": 26,
+            "heapMB": 17
+          },
+          "transferKB": {
+            "html/css": 3,
+            "other": 1,
+            "bundle": 589,
+            "design": 2522,
+            "catalog": 20,
+            "settings": 2,
+            "font": 946
+          },
+          "statuses": null,
+          "errors": []
+        }
+      ]
+    }
+  }
+}
