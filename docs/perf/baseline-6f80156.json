@@ -1,0 +1,801 @@
+{
+  "env": {
+    "commit": "6f801568c15071a27f97918ff8479def9c719c0d",
+    "node": "v22.23.4",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cpus": 1,
+    "ramGB": 4,
+    "platform": "linux 6.18.44-fc-v338",
+    "repeat": 3
+  },
+  "inventory": {
+    "catalogs": {
+      "imudTtf": {
+        "entries": 451,
+        "families": 432,
+        "files": 443,
+        "familiesWithMultipleFiles": 19
+      },
+      "extendedWoff2": {
+        "entries": 1315,
+        "families": 1289,
+        "files": 1315,
+        "familiesWithMultipleFiles": 26
+      },
+      "priorityWoff2": {
+        "entries": 439,
+        "families": 420,
+        "files": 439,
+        "familiesWithMultipleFiles": 19
+      }
+    },
+    "ttf": {
+      "files": 444,
+      "totalMB": 62.6,
+      "medianKB": 46,
+      "p95KB": 702,
+      "maxMB": 5.2
+    },
+    "woff2": {
+      "source": "sizes-file",
+      "files": 1315,
+      "totalMB": 114.8,
+      "medianKB": 20,
+      "maxMB": 7.2
+    },
+    "woff2Probe": {
+      "file": "sample.woff2",
+      "parseFont": {
+        "ok": false,
+        "error": "bad-sfnt-version:0x774f4632"
+      },
+      "exportPdfWoff2": {
+        "ok": false,
+        "error": "font:bad-sfnt-version:0x774f4632",
+        "pdfBytes": 0
+      },
+      "exportPdfTtfControl": {
+        "ok": true,
+        "error": null,
+        "pdfBytes": 31093
+      },
+      "measureImplUnregisteredFamily": "table"
+    },
+    "selectable": {
+      "total": 1721,
+      "ttf": 432,
+      "woff2Only": 1289
+    },
+    "ttfDuplicateFamilies": {
+      "sameBytes": 0,
+      "differentBytes": 19
+    },
+    "usage": {
+      "default_settings.json": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "setting_sets/תלמוד": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "setting_sets/פרשנות": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "setting_sets/קונטרס": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "fixtures/imud_default_settings.json": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "fixtures/imud_default_settings_makom_bina.json": [
+        "גוטמן רש\"י רגיל",
+        "פרנק ריל מודגש",
+        "פרנק רוהל ליברה רגיל",
+        "אלפא שחור",
+        "ליבורנה מודגש",
+        "אלפא מודגש",
+        "נוטו סריף עברית מודגש",
+        "הדסה פרידלנדר מודגש",
+        "ליבורנה רגיל"
+      ],
+      "fixtures/imud_default_settings_v19.json": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "fixtures/imud_default_settings_v20_4.json": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ],
+      "fixtures/imud_default_settings_v21.json": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ]
+    },
+    "usageUnion": [
+      "Guttman Rashi",
+      "FrankReal",
+      "Frank Ruhl Libre",
+      "AlphaBlack",
+      "Lia Sgula",
+      "Alpha",
+      "AlphaLight",
+      "Noto Serif Hebrew",
+      "Hadassah Friedlaender",
+      "Livorna",
+      "David Libre",
+      "גוטמן רש\"י רגיל",
+      "פרנק ריל מודגש",
+      "פרנק רוהל ליברה רגיל",
+      "אלפא שחור",
+      "ליבורנה מודגש",
+      "אלפא מודגש",
+      "נוטו סריף עברית מודגש",
+      "הדסה פרידלנדר מודגש",
+      "ליבורנה רגיל"
+    ],
+    "boot": {
+      "requests": 25,
+      "totalBytes": 11023523,
+      "byCategory": {
+        "html": 650,
+        "css": 9657,
+        "js-bundle": 1063138,
+        "worker-bundle": 1022977,
+        "catalog": 204663,
+        "settings": 8600,
+        "design-collection": 7745346,
+        "font": 968492
+      },
+      "steps": [
+        {
+          "category": "html",
+          "file": "ui/index.html",
+          "bytes": 650
+        },
+        {
+          "category": "css",
+          "file": "ui/styles.css",
+          "bytes": 9657
+        },
+        {
+          "category": "js-bundle",
+          "file": "ui/app.bundle.js",
+          "bytes": 1063138
+        },
+        {
+          "category": "worker-bundle",
+          "file": "ui/engine-worker.bundle.js",
+          "bytes": 1022977
+        },
+        {
+          "category": "catalog",
+          "file": "imud-fonts.json",
+          "bytes": 55257
+        },
+        {
+          "category": "catalog",
+          "file": "fonts-extended.json",
+          "bytes": 149406
+        },
+        {
+          "category": "settings",
+          "file": "default_settings.json",
+          "bytes": 8600
+        },
+        {
+          "category": "design-collection",
+          "file": "shaar_main.json",
+          "bytes": 213809
+        },
+        {
+          "category": "design-collection",
+          "file": "shaar_sub.json",
+          "bytes": 178020
+        },
+        {
+          "category": "design-collection",
+          "file": "shaar_back.json",
+          "bytes": 294813
+        },
+        {
+          "category": "design-collection",
+          "file": "ornaments_up_down.json",
+          "bytes": 2349513
+        },
+        {
+          "category": "design-collection",
+          "file": "ornaments_left_right.json",
+          "bytes": 1926960
+        },
+        {
+          "category": "design-collection",
+          "file": "section_dividers.json",
+          "bytes": 2782231
+        },
+        {
+          "category": "font",
+          "file": "fonts/FrankReal-Bold.ttf",
+          "bytes": 39792
+        },
+        {
+          "category": "font",
+          "file": "fonts/DavidLibre-Bold.ttf",
+          "bytes": 132840
+        },
+        {
+          "category": "font",
+          "file": "fonts/Guttman-Rashi-Normal.ttf",
+          "bytes": 48416
+        },
+        {
+          "category": "font",
+          "file": "fonts/FrankRuhlLibre-VF.ttf",
+          "bytes": 178468
+        },
+        {
+          "category": "font",
+          "file": "fonts/Alpha-Black.ttf",
+          "bytes": 40520
+        },
+        {
+          "category": "font",
+          "file": "fonts/Sgula-Regular.ttf",
+          "bytes": 55368
+        },
+        {
+          "category": "font",
+          "file": "fonts/Alpha-Regular.ttf",
+          "bytes": 36692
+        },
+        {
+          "category": "font",
+          "file": "fonts/Alpha-Light.ttf",
+          "bytes": 36520
+        },
+        {
+          "category": "font",
+          "file": "fonts/NotoSerifHebrew-VF.ttf",
+          "bytes": 183600
+        },
+        {
+          "category": "font",
+          "file": "fonts/Hadassah-Friedlaender-Regular.ttf",
+          "bytes": 49784
+        },
+        {
+          "category": "font",
+          "file": "fonts/Livorna-Regular.ttf",
+          "bytes": 38752
+        },
+        {
+          "category": "font",
+          "file": "fonts/DavidLibre-Regular.ttf",
+          "bytes": 127740
+        }
+      ],
+      "bootFamilies": [
+        "Guttman Rashi",
+        "FrankReal",
+        "Frank Ruhl Libre",
+        "AlphaBlack",
+        "Lia Sgula",
+        "Alpha",
+        "AlphaLight",
+        "Noto Serif Hebrew",
+        "Hadassah Friedlaender",
+        "Livorna",
+        "David Libre"
+      ]
+    }
+  },
+  "parse": {
+    "cold": {
+      "files": 444,
+      "totalMs": 90.5,
+      "medianMs": 0,
+      "p95Ms": 0.5,
+      "maxMs": 10.2,
+      "failed": [
+        {
+          "file": "Guttman-Logo1-Regular.ttf",
+          "error": "cmap:no-unicode-subtable"
+        }
+      ]
+    },
+    "warm": {
+      "files": 444,
+      "totalMs": 62.3,
+      "medianMs": 0,
+      "p95Ms": 0.3,
+      "maxMs": 6.5,
+      "failed": [
+        {
+          "file": "Guttman-Logo1-Regular.ttf",
+          "error": "cmap:no-unicode-subtable"
+        }
+      ]
+    },
+    "slowestCold": [
+      {
+        "file": "Almoni-Tzar-Medium.ttf",
+        "KB": 172,
+        "ms": 10.2
+      },
+      {
+        "file": "Rubik-Beastly-Regular.ttf",
+        "KB": 1134,
+        "ms": 5.1
+      },
+      {
+        "file": "Rubik-DoodleTriangles-Regular.ttf",
+        "KB": 912,
+        "ms": 4.8
+      },
+      {
+        "file": "Almoni-Regular.ttf",
+        "KB": 172,
+        "ms": 4.4
+      },
+      {
+        "file": "Hadassah-Friedlaender-Bold.ttf",
+        "KB": 49,
+        "ms": 4.3
+      }
+    ]
+  },
+  "b64": {
+    "boot": [
+      {
+        "file": "FrankReal-Bold.ttf",
+        "KB": 39,
+        "ms": 1.1,
+        "b64KB": 52
+      },
+      {
+        "file": "DavidLibre-Bold.ttf",
+        "KB": 130,
+        "ms": 1.9,
+        "b64KB": 173
+      },
+      {
+        "file": "Guttman-Rashi-Normal.ttf",
+        "KB": 47,
+        "ms": 0.3,
+        "b64KB": 63
+      },
+      {
+        "file": "FrankRuhlLibre-VF.ttf",
+        "KB": 174,
+        "ms": 3.5,
+        "b64KB": 232
+      },
+      {
+        "file": "Alpha-Black.ttf",
+        "KB": 40,
+        "ms": 0.3,
+        "b64KB": 53
+      },
+      {
+        "file": "Sgula-Regular.ttf",
+        "KB": 54,
+        "ms": 0.7,
+        "b64KB": 72
+      },
+      {
+        "file": "Alpha-Regular.ttf",
+        "KB": 36,
+        "ms": 0.6,
+        "b64KB": 48
+      },
+      {
+        "file": "Alpha-Light.ttf",
+        "KB": 36,
+        "ms": 0.6,
+        "b64KB": 48
+      },
+      {
+        "file": "NotoSerifHebrew-VF.ttf",
+        "KB": 179,
+        "ms": 2.2,
+        "b64KB": 239
+      },
+      {
+        "file": "Hadassah-Friedlaender-Regular.ttf",
+        "KB": 49,
+        "ms": 0.5,
+        "b64KB": 65
+      },
+      {
+        "file": "Livorna-Regular.ttf",
+        "KB": 38,
+        "ms": 0.4,
+        "b64KB": 50
+      },
+      {
+        "file": "DavidLibre-Regular.ttf",
+        "KB": 125,
+        "ms": 2.6,
+        "b64KB": 166
+      }
+    ],
+    "bootTotalMs": 14.7,
+    "largest": [
+      {
+        "file": "Rubik-Pixels-Regular.ttf",
+        "KB": 5090,
+        "ms": 65.3,
+        "b64KB": 6786
+      },
+      {
+        "file": "Rubik-80sFade-Regular.ttf",
+        "KB": 2415,
+        "ms": 37.3,
+        "b64KB": 3220
+      },
+      {
+        "file": "Rubik-GlitchPop-Regular.ttf",
+        "KB": 1729,
+        "ms": 18.7,
+        "b64KB": 2306
+      }
+    ]
+  },
+  "runs": [
+    {
+      "doc": "sample",
+      "mode": "table",
+      "KB": 1,
+      "medianMs": 29.2,
+      "minMs": 28.2,
+      "maxMs": 33.1,
+      "registerMs": 0,
+      "pages": 7,
+      "maxRSS_MB": 54,
+      "hash12": "e55bbf640906",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "sample",
+      "mode": "app",
+      "KB": 1,
+      "medianMs": 22.9,
+      "minMs": 18.6,
+      "maxMs": 28.1,
+      "registerMs": 7.5,
+      "pages": 8,
+      "maxRSS_MB": 57,
+      "hash12": "legacy-91c0d",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "canonical",
+      "mode": "table",
+      "KB": 26,
+      "medianMs": 89.3,
+      "minMs": 89.2,
+      "maxMs": 93.3,
+      "registerMs": 0,
+      "pages": 36,
+      "maxRSS_MB": 67,
+      "hash12": "80f9ed6c82ea",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "canonical",
+      "mode": "app",
+      "KB": 26,
+      "medianMs": 55.3,
+      "minMs": 55,
+      "maxMs": 57.6,
+      "registerMs": 3.3,
+      "pages": 38,
+      "maxRSS_MB": 66,
+      "hash12": "legacy-ef71a",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "real_book",
+      "mode": "table",
+      "KB": 228,
+      "medianMs": 371.7,
+      "minMs": 343.4,
+      "maxMs": 434.1,
+      "registerMs": 0,
+      "pages": 96,
+      "maxRSS_MB": 112,
+      "hash12": "cc51f2d7eea1",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "real_book",
+      "mode": "app",
+      "KB": 228,
+      "medianMs": 316.8,
+      "minMs": 287.4,
+      "maxMs": 351.9,
+      "registerMs": 4.6,
+      "pages": 54,
+      "maxRSS_MB": 91,
+      "hash12": "legacy-636a9",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "mid_long",
+      "mode": "table",
+      "KB": 652,
+      "medianMs": 922.6,
+      "minMs": 892.8,
+      "maxMs": 945.5,
+      "registerMs": 0,
+      "pages": 227,
+      "maxRSS_MB": 151,
+      "hash12": "54f052e1e761",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "mid_long",
+      "mode": "app",
+      "KB": 652,
+      "medianMs": 577.3,
+      "minMs": 562,
+      "maxMs": 597.8,
+      "registerMs": 5,
+      "pages": 143,
+      "maxRSS_MB": 116,
+      "hash12": "legacy-25eec",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "long",
+      "mode": "table",
+      "KB": 2651,
+      "medianMs": 3363.3,
+      "minMs": 3311.8,
+      "maxMs": 3574,
+      "registerMs": 0,
+      "pages": 1038,
+      "maxRSS_MB": 355,
+      "hash12": "010f9b35c2c3",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "long",
+      "mode": "app",
+      "KB": 2651,
+      "medianMs": 1481.8,
+      "minMs": 1225.8,
+      "maxMs": 1588.4,
+      "registerMs": 5.9,
+      "pages": 552,
+      "maxRSS_MB": 180,
+      "hash12": "legacy-cbc2c",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "very_long",
+      "mode": "table",
+      "KB": 3324,
+      "medianMs": 4676.6,
+      "minMs": 4513.3,
+      "maxMs": 4822.1,
+      "registerMs": 0,
+      "pages": 1335,
+      "maxRSS_MB": 425,
+      "hash12": "531f215433a8",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "very_long",
+      "mode": "app",
+      "KB": 3324,
+      "medianMs": 1787.3,
+      "minMs": 1701,
+      "maxMs": 1954.9,
+      "registerMs": 8.8,
+      "pages": 704,
+      "maxRSS_MB": 205,
+      "hash12": "legacy-41625",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "historical",
+      "mode": "table",
+      "KB": 3307,
+      "medianMs": 4329.4,
+      "minMs": 4001.3,
+      "maxMs": 4793.5,
+      "registerMs": 0,
+      "pages": 1394,
+      "maxRSS_MB": 409,
+      "hash12": "1ca36116359f",
+      "deterministic": true,
+      "contentPreserved": true
+    },
+    {
+      "doc": "historical",
+      "mode": "app",
+      "KB": 3307,
+      "medianMs": 2054.5,
+      "minMs": 1996.8,
+      "maxMs": 2069.3,
+      "registerMs": 5.3,
+      "pages": 704,
+      "maxRSS_MB": 212,
+      "hash12": "legacy-c4447",
+      "deterministic": true,
+      "contentPreserved": true
+    }
+  ],
+  "profile": {
+    "doc": "very_long",
+    "mode": "app",
+    "sampledMs": 2263,
+    "groups": [
+      {
+        "name": "engine/layout",
+        "ms": 1394,
+        "pct": 61.6
+      },
+      {
+        "name": "engine/typography",
+        "ms": 388,
+        "pct": 17.2
+      },
+      {
+        "name": "runtime/gc",
+        "ms": 299,
+        "pct": 13.2
+      },
+      {
+        "name": "runtime/other",
+        "ms": 171,
+        "pct": 7.6
+      },
+      {
+        "name": "engine/core",
+        "ms": 10,
+        "pct": 0.4
+      }
+    ],
+    "topFiles": [
+      {
+        "name": "src/engine/layout/legacy-imud-flow.js",
+        "ms": 1394,
+        "pct": 61.6
+      },
+      {
+        "name": "src/engine/typography/measure-api.js",
+        "ms": 359,
+        "pct": 15.9
+      },
+      {
+        "name": "(gc)",
+        "ms": 299,
+        "pct": 13.2
+      },
+      {
+        "name": "node-internal",
+        "ms": 77,
+        "pct": 3.4
+      },
+      {
+        "name": "RegExp: \\s+",
+        "ms": 30,
+        "pct": 1.3
+      },
+      {
+        "name": "src/engine/typography/font-metrics.js",
+        "ms": 29,
+        "pct": 1.3
+      },
+      {
+        "name": "(program)",
+        "ms": 14,
+        "pct": 0.6
+      },
+      {
+        "name": "RegExp: [\\s\\u00A0]+",
+        "ms": 10,
+        "pct": 0.4
+      },
+      {
+        "name": "RegExp: \\s+([,.:;!?])",
+        "ms": 9,
+        "pct": 0.4
+      },
+      {
+        "name": "RegExp: \\[[\\s\\S]*?\\]",
+        "ms": 7,
+        "pct": 0.3
+      }
+    ]
+  }
+}
