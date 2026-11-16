@@ -19,6 +19,10 @@
  *        R-03  דגלי סוגריים נשברים כשמילה בתוך/בסוף ( ) נושאת סמן הערה
  *        R-04  "הערת רפאים": הערה נפלטת בעמוד שאין בו אף שורה של הפסקה הנושאת אותה — פסקה שנדחית שלמה לעמוד
  *              הבא אחרי רצועת h3 משאירה את הערותיה בתור של העמוד שהיא לא הגיעה אליו
+ *        R-05  שורות 'הערת סיום -' רצופות: נשארת רק האחרונה, השאר אובדות בשקט בטוקניזציה (pendingEndNote נדרס);
+ *              contentPreserved של המנוע נשאר true. נמצא במסמך הבדיקה הקבוע: 40 מתוך 52 שורות אובדות
+ *   ו. מפקד הערות-צד (כותרת 7) והערות-סיום (O.noteLinesOf / censusNotes / compareNoteLines): בדיקות טהורות למודל,
+ *      בקרות שליליות, משפחות תקינות וסריקות, קורפוסים אמיתיים (no_long, mid_long, canonical), ו-R-05 (למעלה)
  *
  * מחזור חיים (strict xfail): כל עוד המזהה אינו ב-FIXED, בדיקות השחזור נדרשות *להיכשל* (ומדפיסות
  * "KNOWN-BUG R-0N") כך ש-main נשאר ירוק בלי להסתיר את הבאג; ברגע שהן עוברות הן נכשלות בהוראה מפורשת
@@ -26,9 +30,9 @@
  * מוסיפות הגנה: סוגי ההפרות בכל סריקה חייבים להיות חלק מהקבוצה המותרת לאותו באג — הפרה מסוג אחר היא כשל
  * מיידי (רגרסיה חדשה), גם בזמן שהבאג הידוע פתוח.
  *
- * מחוץ למודל (במכוון; ראו README ב-tests/fixtures/regress): כותרת 7 (הערת-צד), הערות-סיום, הערות מקוננות,
- * '[' ללא סוגר, '[]' ריק, הערה בתוך שורת כותרת — מסמכי הבדיקה נמנעים מהם. ב-README מפורטות 4 התנהגויות
- * (O-1..O-4) שמחכות לסיווג בעלים/סוכן 2 — הן מתועדות, לא נבדקות.
+ * מחוץ למודל (במכוון; ראו README ב-tests/fixtures/regress): הערות מקוננות, '[' ללא סוגר, '[]' ריק, הערה בתוך שורת
+ * כותרת — מסמכי הבדיקה נמנעים מהם. (כותרת 7 והערות-סיום נבדקות בנפרד — בלוק ו.) ב-README מפורטות
+ * ההתנהגויות (O-1..O-6) שמחכות לסיווג בעלים/סוכן 2 — הן מתועדות, לא נבדקות.
  */
 'use strict';
 
@@ -47,7 +51,7 @@ const FIXTURES = path.join(__dirname, '..', 'fixtures', 'regress');
 const AUDITS = path.join(REPO, '..', 'audits');
 
 // ── מתגי מחזור-חיים: מוסיפים מזהה ב-PR שמנחית את התיקון המתאים (ראו הערת הפתיחה) ──
-const FIXED = new Set(['R-01']); // 'R-01' | 'R-03' | 'R-04' — R-01 תוקן ב-#43 (rollback כותרות inline בסוף טור)
+const FIXED = new Set(['R-01']); // 'R-01' | 'R-03' | 'R-04' | 'R-05' — R-01 תוקן ב-#43 (rollback כותרות inline בסוף טור)
 const ENV_FIXED = String(process.env.RED_FIX_LANDED || '');
 const isFixed = (id) => FIXED.has(id) || ENV_FIXED === '1' || ENV_FIXED.split(',').includes(id);
 
@@ -685,6 +689,273 @@ describe('R-04 · הערת רפאים — פסקה שנדחית שלמה לעמ�
     assertEq(c.lost.length, 0, 'אין הערות אבודות');
     assert(c.ghost.length === 0, `הערות רפאים=${c.ghost.length} מתוך ${c.emissions} פליטות`);
   }, { loose: true, expect: /הערות רפאים/ });
+});
+
+// ═════════════════════════ ו. הערות-צד והערות-סיום — מפקד מקור→פלט (R-05) ═════════════════════════
+// מודל מקור נפרד מ-parseSource: O.noteLinesOf (מקור) + O.censusNotes (פלט) + O.compareNoteLines (השוואה).
+// הוא נחוץ כי שתי התכונות נצרכות בטוקניזציה (pendingSideNote / pendingEndNote) *לפני* ש-contentPreserved של המנוע
+// מתחיל לספור — המנוע משווה פלט לטוקנים ולא למקור, ולכן אובדן בטוקניזציה (R-05) אינו נראה לו.
+
+/** מריץ + מוודא שמודל המקור מיושר לטוקנים של המנוע (אחרת בעלות ההערות — עמוד הפסקה — אינה אמינה) + משווה. */
+function checkNotes(doc, opts) {
+  const r = run(doc);
+  const m = O.noteLinesOf(doc, opts);
+  const tail = [...m.ends, ...m.sides].some((x) => x.owner === m.tokenCount) ? 1 : 0;
+  assertEq(m.tokenCount + tail, r.tokens.length, 'מודל המקור אינו מיושר לטוקנים של המנוע (ייתכן תחביר מחוץ למודל)');
+  return { r, m, v: O.compareNoteLines(m, r) };
+}
+const cnt = (v, code) => v.filter((x) => x.code === code).length;
+
+describe('הערות-צד והערות-סיום · מודל המקור (noteLinesOf) — בדיקות טהורות', () => {
+  const doc = [
+    'כותרת 2 - פרק', 'פסקה א',
+    'הערת סיום - א1 א2', 'הערת סיום - ב1',
+    'כותרת 7 - צד1', 'כותרת 3 - ביניים', 'כותרת 7 - צד2',
+    'פסקה ב',
+    'כותרת 7 - זנב',
+  ].join('\n');
+  const m = O.noteLinesOf(doc);
+  it('כל שורת הערת-סיום היא הערה נפרדת, בסדר המקור; בעליהן הפסקה הבאה', () => {
+    assertEq(m.ends.map((e) => e.words.join(' ')).join('|'), 'א1 א2|ב1', 'טקסטי הערות הסיום');
+    assertEq(m.ends.map((e) => e.owner).join(','), '3,3', 'שתיהן נצמדות לפסקה ב (טוקן 3: פרק=0, א=1, ביניים=2, ב=3)');
+  });
+  it('כותרות 7 רצופות נצברות גם מעבר לכותרת אחרת; הערה בסוף המסמך — בעלות זנב סינתטי (owner==tokenCount)', () => {
+    assertEq(m.sides.map((s) => s.owner).join(','), '3,3,4', 'בעלים');
+    assertEq(m.tokenCount, 4, 'tokenCount (בלי הזנב)');
+  });
+  it('הערות עורך ##…## מוסרות לפני הניתוח; סוגר פותח ללא סוגר נמשך לשורה הבאה; metaAnywhere צורך שורות מטא', () => {
+    const d2 = ['כותרת 2 - פרק', 'פסקה ## הערת עורך ## א', 'פסקה [הערה שלא נסגרת', 'המשך ההערה]', 'הערת סיום - ה'].join('\n');
+    const m2 = O.noteLinesOf(d2);
+    assertEq(m2.tokenCount, 3, 'פרק, פסקה, פסקה (השורה הנמשכת אינה טוקן נפרד)');
+    assertEq(m2.ends[0].owner, 3, 'הערת הסיום בסוף המסמך — זנב');
+    const d3 = ['כותרת 2 - פרק', 'נושא - באמצע', 'פסקה'].join('\n');
+    assertEq(O.noteLinesOf(d3).tokenCount, 3, 'ברירת מחדל: שורה כזו נשארת פסקה (REQ-PAR-01)');
+    assertEq(O.noteLinesOf(d3, { metaAnywhere: true }).tokenCount, 2, 'metaAnywhere: המנוע צורך אותה כמטא-דאטה (O-6)');
+  });
+});
+
+describe('הערות-צד והערות-סיום · בקרות שליליות לאורקל (כל סוג הפרה מזוהה; הפלט האמיתי נקי)', () => {
+  const g = docBuilder();
+  const doc = g.doc(CH + g.w(30) + '\n'
+    + `כותרת 7 - ${g.w(3)}\n` + g.w(30) + '\n'
+    + `הערת סיום - ${g.w(12)}\n` + g.w(30) + '\n'
+    + `כותרת 7 - ${g.w(3)}\nכותרת 7 - ${g.w(2)}\n` + g.w(30) + '\n'
+    + `הערת סיום - ${g.w(9)}\n` + g.w(30) + '\n'
+    + g.w(900) + '\n' // מילוי: דוחף את הערת-הצד הבאה לעמוד אחר
+    + `כותרת 7 - ${g.w(3)}\n` + g.w(30) + '\n'
+    + `כותרת 7 - ${g.w(4)}\n`); // זנב סינתטי
+  const { r: base, m: model, v: baseV } = checkNotes(doc);
+  const clonePages = () => JSON.parse(JSON.stringify(base.pages));
+  const view = (pages, extra = {}) => Object.assign({}, base, { pages }, extra);
+  const codes = (pages, extra) => codesOf(O.compareNoteLines(model, view(pages, extra)));
+  const label = (it) => { const li = (it.markerIdx || [])[0]; return li == null ? null : it.words[li]; };
+  // טווחי הפריטים של כל הערת-סיום בעמודי ההערות (בתוך עמודה אחת)
+  const enSpans = (pages) => {
+    const spans = [];
+    pages.forEach((p, pi) => {
+      if (p.type !== 'endnotes') return;
+      p.columns.forEach((col, ci) => col.forEach((it, k) => {
+        if (it.kind !== 'paragraph') return;
+        const lb = label(it);
+        if (lb != null && lb !== '(המשך)') spans.push({ p: pi, ci, from: k, to: k + 1 });
+        else if (spans.length) spans[spans.length - 1].to = k + 1;
+      }));
+    });
+    return spans;
+  };
+  const marginPages = base.pages.map((p, i) => [p, i]).filter(([p]) => (p.marginNotes || []).length);
+
+  it('בסיס: הפלט האמיתי נקי מכל הפרה', () => assertClean(baseV, 'compareNoteLines'));
+  it('בסיס: תנאי הבקרות — שתי הערות-סיום בעמוד אחד, הערות-צד ביותר מעמוד אחד, והזנב נשאר פסקה סינתטית', () => {
+    assertEq(enSpans(base.pages).length, 2, 'שתי הערות סיום');
+    assert(marginPages.length >= 2, `הערות-צד בעמודים: ${marginPages.map(([, i]) => i + 1)}`);
+    assertEq(base.tokens.length, model.tokenCount + 1, 'הזנב הסינתטי קיים כטוקן אחרון (הערת-הצד האחרונה בלי פסקה אחריה)');
+  });
+
+  it('הערת-סיום שנמחקה מעמודי ההערות → ENDNOTE_LOST', () => {
+    const pages = clonePages();
+    const sp = enSpans(pages)[1];
+    pages[sp.p].columns[sp.ci].splice(sp.from, sp.to - sp.from);
+    assert(codes(pages).includes(V.ENDNOTE_LOST), 'לא זוהה: ' + codes(pages).join(','));
+  });
+  it('הערת-סיום שהוכפלה → ENDNOTE_DUP', () => {
+    const pages = clonePages();
+    const sp = enSpans(pages)[0];
+    const col = pages[sp.p].columns[sp.ci];
+    col.splice(sp.to, 0, ...JSON.parse(JSON.stringify(col.slice(sp.from, sp.to))));
+    assert(codes(pages).includes(V.ENDNOTE_DUP), 'לא זוהה: ' + codes(pages).join(','));
+  });
+  it('שתי הערות-סיום שהוחלף סדרן → ENDNOTE_ORDER ורק הוא', () => {
+    const pages = clonePages();
+    const [a, b] = enSpans(pages);
+    assert(a.p === b.p && a.ci === b.ci && a.to === b.from, 'תנאי הבקרה: ההערות סמוכות באותה עמודה');
+    const col = pages[a.p].columns[a.ci];
+    const A = col.slice(a.from, a.to), B = col.slice(b.from, b.to);
+    col.splice(a.from, b.to - a.from, ...B, ...A);
+    assertEq(codes(pages).join(','), V.ENDNOTE_ORDER, 'צפוי ENDNOTE_ORDER בלבד');
+  });
+  it('מילה שהוחלפה בתוך הערת-סיום → ENDNOTE_LOST + ENDNOTE_TEXT', () => {
+    const pages = clonePages();
+    const sp = enSpans(pages)[0];
+    const it0 = pages[sp.p].columns[sp.ci][sp.from];
+    it0.words[it0.words.length - 1] = 'זזזזז';
+    const c = codes(pages);
+    assert(c.includes(V.ENDNOTE_LOST) && c.includes(V.ENDNOTE_TEXT), 'לא זוהה: ' + c.join(','));
+  });
+  it('סמן הערת-סיום כפול → ENDNOTE_MARKER ורק הוא', () => {
+    const pages = clonePages();
+    const [a, b] = enSpans(pages);
+    const first = pages[a.p].columns[a.ci][a.from], second = pages[b.p].columns[b.ci][b.from];
+    second.words[second.markerIdx[0]] = first.words[first.markerIdx[0]];
+    assertEq(codes(pages).join(','), V.ENDNOTE_MARKER, 'צפוי ENDNOTE_MARKER בלבד');
+  });
+
+  it('הערת-צד שנמחקה מהשוליים → SIDENOTE_LOST', () => {
+    const pages = clonePages();
+    pages[marginPages[0][1]].marginNotes.shift();
+    assert(codes(pages).includes(V.SIDENOTE_LOST), 'לא זוהה: ' + codes(pages).join(','));
+  });
+  it('הערת-צד בעמוד שאינו עמוד הפסקה → SIDENOTE_PAGE ורק הוא', () => {
+    const pages = clonePages();
+    const [mp, mi] = [pages[marginPages[0][1]], marginPages[0][1]];
+    const moved = mp.marginNotes.shift();
+    const dst = pages.findIndex((p, i) => i !== mi && p.type !== 'endnotes' && !marginPages.some(([, j]) => j === i));
+    assert(dst >= 0, 'תנאי הבקרה: עמוד יעד');
+    pages[dst].marginNotes = (pages[dst].marginNotes || []).concat(moved);
+    assertEq(codes(pages).join(','), V.SIDENOTE_PAGE, 'צפוי SIDENOTE_PAGE בלבד');
+  });
+  it('הערת-צד שהוכפלה באותו עמוד → SIDENOTE_DUP ורק הוא', () => {
+    const pages = clonePages();
+    const mp = pages[marginPages[0][1]];
+    mp.marginNotes.push(JSON.parse(JSON.stringify(mp.marginNotes[0])));
+    assertEq(codes(pages).join(','), V.SIDENOTE_DUP, 'צפוי SIDENOTE_DUP בלבד');
+  });
+  it('מילה שהוחלפה בהערת-צד → SIDENOTE_LOST + SIDENOTE_TEXT', () => {
+    const pages = clonePages();
+    const ln = pages[marginPages[0][1]].marginNotes[0].lines[0];
+    ln.text = ln.text.split(' ').map((w, i) => (i === 0 ? 'זזזזז' : w)).join(' ');
+    const c = codes(pages);
+    assert(c.includes(V.SIDENOTE_LOST) && c.includes(V.SIDENOTE_TEXT), 'לא זוהה: ' + c.join(','));
+  });
+  it('הערת-צד בזנב המסמך שאינה בגוף הפסקה הסינתטית → SIDENOTE_LOST', () => {
+    const pages = clonePages();
+    const tailId = base.tokens.length - 1;
+    for (const p of pages) for (const col of p.columns || []) for (let i = col.length - 1; i >= 0; i--) if (col[i].kind === 'paragraph' && col[i].tokenId === tailId) col.splice(i, 1);
+    assert(codes(pages).includes(V.SIDENOTE_LOST), 'לא זוהה: ' + codes(pages).join(','));
+  });
+  it('contentPreserved=false של המנוע → CONTENT_PRESERVED (חשבונאות המנוע חייבת להסכים עם האורקל)', () => {
+    assert(codes(clonePages(), { contentPreserved: false }).includes(V.CONTENT_PRESERVED), 'לא זוהה');
+  });
+});
+
+describe('הערות-צד והערות-סיום · משפחות תקינות — אפס הפרות', () => {
+  const g = docBuilder();
+  const P = (n = 30) => g.w(n) + '\n';
+  const S = (n = 3) => `כותרת 7 - ${g.w(n)}\n`;
+  const E = (n = 12) => `הערת סיום - ${g.w(n)}\n`;
+  const fams = [
+    ['הערת-צד לכל פסקה, באורכים שונים (1/3/12/40/100 מילים)', CH + [1, 3, 12, 40, 100].map((n) => S(n) + P()).join('')],
+    ['שתי/שלוש/חמש כותרות 7 רצופות — נצברות להערה אחת', CH + S() + S(2) + P() + S() + S(2) + S(4) + P() + S(1) + S(1) + S(1) + S(1) + S(1) + P()],
+    ['כותרת 7, כותרת 3, כותרת 7 ואז פסקה — הצטברות מעבר לכותרת', CH + P() + S() + 'כותרת 3 - ' + g.w(2) + '\n' + S(2) + P()],
+    ['כותרת 7 מיד אחרי כותרת 4 ולפני פסקה', CH + 'כותרת 4 - ' + g.w(2) + '\n' + S() + P() + P()],
+    ['כותרת 7 בסוף המסמך — פסקה סינתטית', CH + P() + P() + S(5)],
+    ['שתי כותרות 7 בסוף המסמך — נצברות לפסקה סינתטית אחת', CH + P() + S(2) + S(3)],
+    ['הערת-סיום לכל פסקה (שש הערות, מופרדות בפסקאות)', CH + [1, 2, 3, 4, 5, 6].map(() => P() + E()).join('') + P()],
+    ['הערת-סיום ארוכה מאוד (200 מילים — חוצה שורות) וקצרות', CH + P() + E(200) + P() + E(2) + P() + E(1) + P()],
+    ['30 הערות-סיום של 40 מילים — עמודי הערות מרובים ו-(המשך) בחציית עמוד', CH + Array.from({ length: 30 }, () => P(20) + E(40)).join('') + P()],
+    ['הערת-סיום והערת-צד על אותה פסקה (שני הסדרים)', CH + P() + S() + E() + P() + E() + S() + P()],
+    ['הערת-סיום, כותרת 3 ופסקה — הכותרת אינה צורכת את ההערה', CH + P() + E() + 'כותרת 3 - ' + g.w(2) + '\n' + P() + P()],
+    ['הערת-סיום בסוף המסמך — פסקה סינתטית', CH + P() + P() + E(7)],
+    ['הערת-סיום והערת-צד בסוף המסמך', CH + P() + E(7) + S(4)],
+    ['פסקה עם הערת שוליים [..], הערת-צד והערת-סיום יחד', CH + S() + E() + g.w(10) + ` [${g.w(5)}] ` + g.w(10) + '\n' + P()],
+  ];
+  for (const [name, body] of fams) {
+    it(name, () => assertClean(checkNotes(g.doc(body)).v, name));
+  }
+
+  // סריקת היסט אנכי: הערה (צד/סיום) לפני פסקה, מוזזת לאורך העמוד כדי להגיע למצבי שבירה שונים
+  for (const [kind, mk] of [['הערת-צד', () => S(4)], ['הערת-סיום', () => E(15)]]) {
+    it(`סריקה: ${kind} + פסקה, היסט אנכי K=0..900 בצעד 45 — אפס הפרות`, () => {
+      const bad = [];
+      for (let K = 0; K <= 900; K += 45) {
+        const gg = docBuilder();
+        const wP = (n) => gg.w(n) + '\n';
+        const note = kind === 'הערת-צד' ? `כותרת 7 - ${gg.w(4)}\n` : `הערת סיום - ${gg.w(15)}\n`;
+        const v = checkNotes(gg.doc(CH + (K ? wP(K) : '') + note + wP(40) + wP(30))).v;
+        if (v.length) bad.push(`K=${K}: ${fmtV(v, 1)}`);
+      }
+      assert(bad.length === 0, `${bad.length} נקודות: ${bad.slice(0, 3).join(' | ')}`);
+    });
+  }
+});
+
+describe('R-05 · שורות הערת-סיום רצופות — נשארת רק האחרונה; השאר אובדות בשקט בטוקניזציה (contentPreserved נשאר true)', () => {
+  const trigger = readFixture('endnote-consecutive-trigger.txt');
+  const control = readFixture('endnote-consecutive-control.txt');
+
+  it('בקרה: אותן שלוש הערות, כל אחת לפני פסקה משלה — כולן נפלטות (אפס הפרות)', () => {
+    assertClean(checkNotes(control).v, 'endnote-consecutive-control.txt');
+  });
+  it('אבחון: ב-fixture הטריגר ההפרות הן ENDNOTE_LOST בלבד (כשהבאג פתוח: בדיוק 2 מתוך 3 — האחרונה בקבוצה נשמרת), והמנוע עצמו אינו מזהה', () => {
+    const { r, v } = checkNotes(trigger);
+    assertOnlyCodes(v, [V.ENDNOTE_LOST], 'endnote-consecutive-trigger.txt');
+    if (!isFixed('R-05')) assertEq(cnt(v, V.ENDNOTE_LOST), 2, 'שתי הערות אבודות (הבאג פתוח: נשמרת רק האחרונה)');
+    assertEq(r.contentPreserved, true, 'contentPreserved של המנוע נשאר true — האובדן בלתי-נראה לו (הוא משווה פלט לטוקנים)');
+  });
+  bugIt('R-05', 'fixture טריגר: כל שלוש שורות הערת-הסיום הרצופות נפלטות בעמודי ההערות (כרגע רק האחרונה)', () => {
+    assertClean(checkNotes(trigger).v, 'endnote-consecutive-trigger.txt');
+  }, { expect: /ENDNOTE_LOST/ });
+
+  // משפחה: n שורות הערת-סיום רצופות (n=2,3,4,6) בהקשרים שונים ובמילויים שונים
+  const ctx = {
+    'אחרי פסקה': (g, n, K) => CH + (K ? g.w(K) + '\n' : '') + g.w(30) + '\n' + Array.from({ length: n }, () => `הערת סיום - ${g.w(8)}\n`).join('') + g.w(30) + '\n',
+    'אחרי כותרת': (g, n, K) => CH + (K ? g.w(K) + '\n' : '') + g.w(30) + '\nכותרת 3 - ' + g.w(2) + '\n' + Array.from({ length: n }, () => `הערת סיום - ${g.w(8)}\n`).join('') + g.w(30) + '\n',
+    'בראש הטקסט': (g, n, K) => CH + Array.from({ length: n }, () => `הערת סיום - ${g.w(8)}\n`).join('') + (K ? g.w(K) + '\n' : '') + g.w(30) + '\n',
+    'בין הערות-צד': (g, n, K) => CH + (K ? g.w(K) + '\n' : '') + g.w(30) + '\n' + `הערת סיום - ${g.w(8)}\nכותרת 7 - ${g.w(3)}\n` + Array.from({ length: n - 1 }, () => `הערת סיום - ${g.w(8)}\n`).join('') + g.w(30) + '\n',
+    'בסוף המסמך': (g, n, K) => CH + (K ? g.w(K) + '\n' : '') + g.w(30) + '\n' + Array.from({ length: n }, () => `הערת סיום - ${g.w(8)}\n`).join(''),
+  };
+  const pts = [];
+  for (const [cname, build] of Object.entries(ctx)) for (const n of [2, 3, 4, 6]) for (const K of [0, 300, 700]) pts.push({ cname, n, K, build });
+  const famV = pts.map((pt) => { const g = docBuilder(); const { v } = checkNotes(g.doc(pt.build(g, pt.n, pt.K))); return { pt, v }; });
+  it('סריקת המשפחה: כל ההפרות הן ENDNOTE_LOST בלבד (כשהבאג פתוח: בדיוק n−1 בכל נקודה — נשמרת רק האחרונה)', () => {
+    const open = !isFixed('R-05'); // כשהבאג פתוח האובדן מדויק (n−1); אחרי תיקון — אפס
+    const wrong = famV.filter(({ pt, v }) => v.some((x) => x.code !== V.ENDNOTE_LOST) || (open ? cnt(v, V.ENDNOTE_LOST) !== pt.n - 1 : v.length > 0));
+    assert(wrong.length === 0, `${wrong.length}/${famV.length} נקודות חריגות: ${wrong.slice(0, 3).map(({ pt, v }) => `[${pt.cname} n=${pt.n} K=${pt.K}] ${fmtV(v, 2)}`).join(' | ')}`);
+  });
+  bugIt('R-05', `סריקת המשפחה (${famV.length} נקודות: 2–6 הערות-סיום רצופות ב-5 הקשרים): כולן נפלטות (כרגע ${famV.filter((x) => x.v.length).length} נקודות מאבדות)`, () => {
+    const bad = famV.filter((x) => x.v.length);
+    assert(bad.length === 0, `${bad.length}/${famV.length} נקודות: ${bad.slice(0, 3).map(({ pt, v }) => `[${pt.cname} n=${pt.n} K=${pt.K}] ${fmtV(v, 1)}`).join(' | ')}`);
+  }, { expect: /ENDNOTE_LOST/ });
+
+  // מסמך הבדיקה הקבוע — המחולל כותב 2–6 שורות הערת-סיום ברצף בסוף ~שליש מהפרקים (כוונה מפורשת בקוד המחולל)
+  const genDoc = generateTestDocument({ mode: 'fixed', scale: 'full' });
+  const gen = checkNotes(genDoc);
+  it('מסמך הבדיקה הקבוע: ההפרות הן ENDNOTE_LOST בלבד — הערות-הצד (>100) והערות-הסיום שנשמרו תקינות (הגנה מפני רגרסיות אחרות)', () => {
+    assert(gen.m.sides.length >= 100 && gen.m.ends.length >= 40, `המסמך השתנה: ${gen.m.sides.length} צד / ${gen.m.ends.length} סיום`);
+    assertOnlyCodes(gen.v, [V.ENDNOTE_LOST], 'generateTestDocument');
+  });
+  bugIt('R-05', `מסמך הבדיקה הקבוע (generateTestDocument fixed/full): כל ${gen.m.ends.length} שורות הערת-הסיום נפלטות — כרגע ${gen.m.ends.length - cnt(gen.v, V.ENDNOTE_LOST)} (חסרות ${cnt(gen.v, V.ENDNOTE_LOST)})`, () => {
+    assertClean(gen.v, 'generateTestDocument');
+  }, { loose: true, expect: /ENDNOTE_LOST/ });
+});
+
+describe('הערות-צד והערות-סיום · קורפוסים אמיתיים (מודל מיושר לטוקנים; אפס הפרות)', () => {
+  const corpus = (f) => fs.readFileSync(path.join(AUDITS, f), 'utf8');
+  it('no_long_test_text.txt (קורפוס ה-parity): כל הערות-הצד (מאות) בעמוד הפסקה שלהן', () => {
+    const { m, v } = checkNotes(corpus('no_long_test_text.txt'));
+    assert(m.sides.length >= 100, `הקורפוס השתנה: ${m.sides.length} הערות צד`);
+    assertClean(v, 'no_long_test_text.txt');
+  });
+  it('mid_long_test_text.txt: כל הערות-הצד בעמוד הפסקה שלהן', () => {
+    const { m, v } = checkNotes(corpus('mid_long_test_text.txt'));
+    assert(m.sides.length >= 400, `הקורפוס השתנה: ${m.sides.length} הערות צד`);
+    assertClean(v, 'mid_long_test_text.txt');
+  });
+  it('canonical_corpus.txt: 8 הערות-צד ו-8 הערות-סיום תקינות (metaAnywhere: שורת "נושא -" בשורה 2 נצרכת כמטא — O-6)', () => {
+    const { m, v } = checkNotes(fs.readFileSync(path.join(REPO, 'tests', 'fixtures', 'canonical_corpus.txt'), 'utf8'), { metaAnywhere: true });
+    assert(m.ends.length >= 8 && m.sides.length >= 8, `הקורפוס השתנה: ${m.sides.length} צד / ${m.ends.length} סיום`);
+    assertClean(v, 'canonical_corpus.txt');
+  });
 });
 
 report('source-families');

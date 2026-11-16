@@ -20,8 +20,10 @@
  *
  * מודל המקור (התנהגות המקור ש-tokenizeDoc משחזר — legacy-imud-flow.js):
  *   · שורות מטא-דאטה בראש המסמך אינן גוף;
- *   · 'כותרת N - טקסט' = כותרת. N=7 (הערת-צד), הערות-סיום, הערות מקוננות וסוגר
- *     פותח ללא סוגר — מחוץ למודל; מסמכי הבדיקה נמנעים מהם;
+ *   · 'כותרת N - טקסט' = כותרת. הערות מקוננות וסוגר פותח ללא סוגר — מחוץ למודל; מסמכי הבדיקה נמנעים מהם.
+ *     הערות-צד ('כותרת 7') והערות-סיום ('הערת סיום - …') אינן טוקנים של parseSource — ראו noteLinesOf /
+ *     censusNotes / compareNoteLines (מודל נפרד: כל שורת הערת-סיום = הערה נפרדת [D-40, block-tokenizer];
+ *     כותרות 7 רצופות נצברות ונצמדות לפסקה הבאה; הערות שנותרו בסוף המסמך = פסקה סינתטית);
  *   · שורה שמתחילה ב-'[' נדבקת לפסקה הקודמת (הדבקת בלוק-טקסט של המקור), אלא
  *     אם הקודם כותרת — אז היא פסקה עצמאית;
  *   · רווח לפני '[' נבלע; הערה = [ ... ] שטוחה (הסוגר הראשון סוגר).
@@ -30,7 +32,7 @@
  * מלבד המקרן הגיאומטרי (legacy-projector) לבדיקת הגיאומטריה.
  */
 
-const HEADER_RE = /^(שם הספר|נושא מפורט|נושא|שם המחבר|מקום ושנת הוצאה)\s*[-–—]/;
+const HEADER_RE = /^(שם הספר|נושא מפורט|נושא|פרטי מהדורא|שם המחבר|מקום ושנת הוצאה|שמירת זכויות|פרטי הוצאה לאור|פרטי קשר|פרטים נוספים)\s*[-–—]/;
 const HEADING_RE = /^כותרת\s*(\d+)\s*[-–—]\s*(.*)$/;
 const IS_HEADING_LINE = (s) => /^כותרת\s*\d/.test(s.trim());
 
@@ -53,7 +55,16 @@ const V = Object.freeze({
   LEDGER_LOSS: 'LEDGER_LOSS', // ledger מדווח content-loss
   GEO_OVERLAP: 'GEO_OVERLAP', // חפיפת שורות באותו טור
   GEO_OUTSIDE: 'GEO_OUTSIDE', // מילה/שורה מחוץ לעמוד
-  GEO_BODY_FN: 'GEO_BODY_FN' // הגוף חודר למרזב ההערות
+  GEO_BODY_FN: 'GEO_BODY_FN', // הגוף חודר למרזב ההערות
+  ENDNOTE_LOST: 'ENDNOTE_LOST', // שורת 'הערת סיום -' מהמקור לא נפלטה בעמודי הערות-הסיום (R-05)
+  ENDNOTE_DUP: 'ENDNOTE_DUP', // הערת-סיום נפלטה יותר פעמים ממופעיה במקור
+  ENDNOTE_TEXT: 'ENDNOTE_TEXT', // בעמודי הערות-הסיום יש הערה שאינה במקור (טקסט שונה/קטוע)
+  ENDNOTE_ORDER: 'ENDNOTE_ORDER', // אותן הערות-סיום, סדר שונה מהמקור
+  ENDNOTE_MARKER: 'ENDNOTE_MARKER', // סמן הערת-סיום כפול או חסר
+  SIDENOTE_LOST: 'SIDENOTE_LOST', // הערת-צד ('כותרת 7') לא נפלטה בשוליים
+  SIDENOTE_PAGE: 'SIDENOTE_PAGE', // הערת-צד נפלטה בעמוד שבו אין את תחילת הפסקה הבעלים
+  SIDENOTE_DUP: 'SIDENOTE_DUP', // הערת-צד נפלטה יותר פעמים ממספר בעליה בעמוד
+  SIDENOTE_TEXT: 'SIDENOTE_TEXT' // בשוליים יש הערה שאינה במקור
 });
 
 const words = (s) => String(s).split(/\s+/).filter(Boolean);
@@ -69,7 +80,8 @@ function splitNotes(line) {
  * ניתוח מקור → פריטים. כולל את הדבקת שורת-הערה (ראה כותרת הקובץ).
  * @returns {Array<{kind:'h',level:number,text:string}|{kind:'p',words:string[],notes:string[][]}>}
  */
-function parseSource(text) {
+/** שורות המקור אחרי הסרת הפתיח (מטא-דאטה) והדבקת שורות-הערה — הבסיס המשותף ל-parseSource ול-noteLinesOf. */
+function sourceLines(text) {
   const raw = String(text).split(/\r?\n/);
   let i = 0;
   while (i < raw.length && (!raw[i].trim() || HEADER_RE.test(raw[i].trim()))) i++;
@@ -84,6 +96,11 @@ function parseSource(text) {
     }
     lines.push(ln);
   }
+  return lines;
+}
+
+function parseSource(text) {
+  const lines = sourceLines(text);
   const items = [];
   for (const l of lines) {
     const t = l.trim();
@@ -154,7 +171,9 @@ function censusOutput(result) {
   const units = []; // [{marker, words, page}]
   let lineDup = 0;
   result.pages.forEach((p, pi) => {
-    for (const col of p.columns || []) {
+    // עמודי הערות-הסיום נושאים פריטי 'paragraph' עם tokenId של הפסקה הבעלים ו-lineIdx=null — אינם שורות גוף של
+    // אותה פסקה; ספירתם כאן שיבשה את עמודי הבעלים (כיסוי/רפאים) ואת lineDup. הם נמנים ב-censusNotes.
+    for (const col of (p.type === 'endnotes' ? [] : (p.columns || []))) {
       for (const it of col) {
         if (it.kind === 'paragraph') {
           if (!paras.has(it.tokenId)) paras.set(it.tokenId, new Map());
@@ -184,6 +203,181 @@ function censusOutput(result) {
     }
   });
   return { paras, headingEmissions, units, lineDup };
+}
+
+// ───────────────────────── הערות-סיום והערות-צד (כותרת 7) ─────────────────────────
+// מודל מקור נפרד מ-parseSource: שורות אלה אינן טוקנים של פסקה/כותרת ב-parseSource, והמנוע מטפל בהן בטוקניזציה
+// (pendingSideNote / pendingEndNote ב-tokenizeDoc) — המקום שבו מילים יכולות להיעלם *לפני* ש-contentPreserved
+// של המנוע (פלט מול טוקנים) מתחיל לספור. לכן המודל כאן נגזר מטקסט המקור בלבד:
+//   · 'הערת סיום - טקסט' — כל שורה היא הערה נפרדת, בסדר המקור (D-40; block-tokenizer: endnote לכל שורה; "הערת סיום =
+//     תוכן — שום טקסט לא נעלם בשקט");
+//   · 'כותרת 7 - טקסט' — הערת-צד של הפסקה הבאה; כותרות 7 רצופות (גם כשביניהן כותרות אחרות) נצברות להערה אחת;
+//   · הערות (צד/סיום) שנותרו בסוף המסמך ללא פסקה — המנוע פולט פסקה סינתטית בסוף (S5.2 F4): הערות-הצד כגוף הפסקה;
+//   · הערות עורך ##…## מוסרות כליל (REQ-PAR-03) לפני כל ניתוח.
+// מחוץ למודל: מקף בתוך הערת-המקור של כותרת ('כותרת 7 מספר N (מקור – x – y) - …', O-5), ושורות מטא-דאטה באמצע המסמך
+// (ברירת מחדל: נשארות פסקה כמו REQ-PAR-01; metaAnywhere:true מדמה את המנוע שצורך אותן — O-6).
+
+const DASH_ONLY = /^[-–—]+$/;
+/** כותרת כפי שמופיעה בקורפוסים האמיתיים: גם 'כותרת N מספר M - טקסט' (דריסת מספור) ו-'כותרת N (מקור: …) - טקסט' (הערת מקור) — ללא אלה זהה ל-HEADING_RE. */
+const NOTE_HEADING_RE = /^כותרת\s*(\d+)(?:\s+מספר\s+\d+)?(?:\s*\([^)]*\))?\s*[-–—]\s*(.*)$/;
+/** מפתח השוואה: מילים → טקסט; רווח לפני פיסוק נבלע (אותו נרמול ש-stripEditorialNotes של המנוע מחיל על המקור). */
+const normKey = (ws) => ws.join(' ').replace(/\s+([,.:;!?])/g, '$1').trim();
+
+/**
+ * @returns {{ends:Array<{words:string[],owner:number}>, sides:Array<{words:string[],owner:number}>, tokenCount:number, tokenLines:string[]}}
+ *   owner = אינדקס הטוקן (פריט מקור) של הפסקה שנושאת את ההערה; owner===tokenCount ⇒ זנב סינתטי.
+ *   tokenCount חייב להיות שווה למספר הטוקנים של המנוע (פחות זנב סינתטי) — אחרת המודל לא מיושר והבדיקה אינה אמינה.
+ */
+function noteLinesOf(text, { endPrefix = 'הערת סיום -', metaAnywhere = false } = {}) {
+  const lines = sourceLines(String(text).replace(/##[\s\S]*?##/g, ''));
+  const ends = [], sides = [], tokenLines = [];
+  let pendE = [], pendS = [], tok = 0;
+  const unclosed = (x) => { const o = x.indexOf('['); return o !== -1 && x.indexOf(']', o + 1) === -1; };
+  for (let i = 0; i < lines.length; i++) {
+    let t = lines[i].trim();
+    if (!t) continue;
+    if (metaAnywhere && HEADER_RE.test(t)) continue; // המנוע (parseMetadata) צורך שורות מטא-דאטה גם באמצע המסמך — O-6 ב-README
+    // הערה שנפתחה ב-'[' ולא נסגרה נמשכת לשורות הבאות (עד סגירה או שורה ריקה) — הערת שוליים חוצת-שורות במקור
+    while (unclosed(t) && i + 1 < lines.length && lines[i + 1].trim()) { i++; t += ' ' + lines[i].trim(); }
+    if (endPrefix && t.startsWith(endPrefix)) {
+      const e = { words: words(t.slice(endPrefix.length).replace(/^[:\-–—]\s*/, '')), owner: null };
+      ends.push(e); pendE.push(e);
+      continue;
+    }
+    const m = t.match(NOTE_HEADING_RE);
+    if (m && +m[1] === 7) {
+      const s = { words: words(m[2]), owner: null };
+      sides.push(s); pendS.push(s);
+      continue;
+    }
+    if (!m) { // פסקה — צורכת את ההערות הממתינות
+      for (const e of pendE) e.owner = tok;
+      for (const s of pendS) s.owner = tok;
+      pendE = []; pendS = [];
+    }
+    tokenLines.push(t);
+    tok++;
+  }
+  for (const e of pendE) e.owner = tok;
+  for (const s of pendS) s.owner = tok;
+  return { ends, sides, tokenCount: tok, tokenLines };
+}
+
+/**
+ * מפקד הערות בפלט: הערות-סיום (עמודי type 'endnotes', לפי סדר הפליטה; '(המשך)' מצטרף להערה האחרונה) והערות-צד
+ * (marginNotes לכל עמוד).
+ * @returns {{endNotes:Array<{marker:string|null,words:string[],page:number}>, margins:Array<{page:number,side:string,anchorY:number,words:string[]}>}}
+ */
+function censusNotes(result) {
+  const endNotes = [];
+  const margins = [];
+  result.pages.forEach((p, pi) => {
+    if (p.type === 'endnotes') {
+      for (const col of p.columns || []) {
+        for (const it of col) {
+          if (it.kind !== 'paragraph') continue;
+          const mk = new Set(it.markerIdx || []);
+          const ws = (it.words || []).filter((w, k) => !mk.has(k));
+          const li = (it.markerIdx || [])[0];
+          const label = li == null ? null : it.words[li];
+          if (label != null && label !== '(המשך)') endNotes.push({ marker: label, words: ws.slice(), page: pi });
+          else {
+            if (!endNotes.length) endNotes.push({ marker: null, words: [], page: pi });
+            endNotes[endNotes.length - 1].words.push(...ws);
+          }
+        }
+      }
+    }
+    for (const mn of p.marginNotes || []) {
+      margins.push({ page: pi, side: mn.side, anchorY: mn.anchorY, words: (mn.lines || []).flatMap((l) => words(l.text)) });
+    }
+  });
+  return { endNotes, margins };
+}
+
+/**
+ * משווה הערות-סיום והערות-צד שבפלט למודל המקור (noteLinesOf). מחזיר רשימת הפרות {code, detail}; ריקה = תקין.
+ *   · הערות-סיום: כל שורת מקור מופיעה בעמודי ההערות בדיוק פעם אחת, בטקסט המלא ובסדר המקור; סמנים ייחודיים;
+ *   · הערות-צד: כל קבוצה (כותרות 7 רצופות) מופיעה בשוליים של העמוד שבו שורה 0 של הפסקה הבעלים (בדיוק פעם);
+ *     קבוצה בזנב — כגוף הפסקה הסינתטית האחרונה;
+ *   · contentPreserved ו-ledger (כמו compareToSource) — חשבונאות המנוע חייבת להסכים עם האורקל.
+ * @param {object} model תוצאת noteLinesOf
+ * @param {object} result תוצאת legacyTypeset
+ */
+function compareNoteLines(model, result) {
+  const v = [];
+  const add = (code, detail) => v.push({ code, detail });
+  const snip = (t) => String(t).split(' ').slice(0, 6).join(' ');
+  const cn = censusNotes(result);
+  const co = censusOutput(result);
+  const bump = (m, k) => m.set(k, (m.get(k) || 0) + 1);
+
+  // ── הערות-סיום ──
+  const srcKeys = model.ends.map((e) => normKey(e.words));
+  const outKeys = cn.endNotes.map((e) => normKey(words(e.words.join(' '))));
+  const sc = new Map(), oc = new Map();
+  srcKeys.forEach((k) => bump(sc, k)); outKeys.forEach((k) => bump(oc, k));
+  let enBroken = false;
+  for (const [k, n] of sc) {
+    const got = oc.get(k) || 0;
+    if (got < n) { enBroken = true; add(V.ENDNOTE_LOST, `הערת-סיום "${snip(k)}…" (${k.split(' ').length} מילים) במקור ×${n}, בעמודי ההערות ×${got}`); }
+  }
+  for (const [k, n] of oc) {
+    const exp = sc.get(k) || 0;
+    if (exp === 0) { enBroken = true; add(V.ENDNOTE_TEXT, `בעמודי ההערות יש הערה "${snip(k)}…" (${k.split(' ').length} מילים) שאינה במקור`); }
+    else if (n > exp) { enBroken = true; add(V.ENDNOTE_DUP, `הערת-סיום "${snip(k)}…" נפלטה ×${n} (במקור ×${exp})`); }
+  }
+  if (!enBroken && srcKeys.some((k, i) => k !== outKeys[i])) add(V.ENDNOTE_ORDER, 'אותן הערות-סיום אך בסדר שונה מהמקור');
+  const markers = cn.endNotes.map((e) => e.marker);
+  if (markers.some((m) => m == null) || new Set(markers).size !== markers.length) add(V.ENDNOTE_MARKER, `סמני הערות-הסיום כפולים או חסרים: ${markers.slice(0, 8).join(',')}`);
+
+  // ── הערות-צד ──
+  const keyOfSide = (ws) => normKey(ws.filter((w) => !DASH_ONLY.test(w))); // המפריד שהמנוע מוסיף בצבירה (—) אינו חלק מהמקור
+  const groups = new Map(); // owner → [side]
+  for (const s of model.sides) { if (!groups.has(s.owner)) groups.set(s.owner, []); groups.get(s.owner).push(s); }
+  const expPages = new Map(); // מפתח → [עמוד]
+  for (const [owner, ss] of groups) {
+    const key = keyOfSide(ss.flatMap((s) => s.words));
+    if (!key) continue; // כותרת 7 ריקה — אין מה להציג
+    if (owner >= model.tokenCount) { // זנב סינתטי: הערות-הצד הופכות לגוף הפסקה האחרונה
+      const m = co.paras.get(owner);
+      const got = m ? normKey([...m.keys()].sort((a, b) => a - b).flatMap((k) => m.get(k).words).filter((w) => !DASH_ONLY.test(w))) : '';
+      if (got !== key) add(V.SIDENOTE_LOST, `הערת-צד בזנב המסמך "${snip(key)}…" אינה בפסקה הסינתטית האחרונה (בפלט: "${snip(got)}")`);
+      continue;
+    }
+    const m = co.paras.get(owner);
+    const first = m && m.get(0);
+    if (!first) { add(V.SIDENOTE_LOST, `הערת-צד "${snip(key)}…": לפסקה הבעלים (טוקן ${owner}) אין שורה 0 בפלט`); continue; }
+    if (!expPages.has(key)) expPages.set(key, []);
+    expPages.get(key).push(first.page);
+  }
+  const actPages = new Map();
+  for (const mg of cn.margins) {
+    const key = keyOfSide(mg.words);
+    if (!key) continue;
+    if (!actPages.has(key)) actPages.set(key, []);
+    actPages.get(key).push(mg.page);
+  }
+  const removeOnce = (arr, x) => { const i = arr.indexOf(x); if (i >= 0) arr.splice(i, 1); return i >= 0; };
+  for (const [key, exp] of expPages) {
+    const act = (actPages.get(key) || []).slice();
+    const restExp = [];
+    for (const pg of exp) if (!removeOnce(act, pg)) restExp.push(pg);
+    while (restExp.length && act.length) { // אותו טקסט קיים — בעמוד אחר
+      const e = restExp.shift(), a = act.shift();
+      add(V.SIDENOTE_PAGE, `הערת-צד "${snip(key)}…" צריכה להיות בעמוד ${e + 1} (תחילת הפסקה), נפלטה בעמוד ${a + 1}`);
+    }
+    for (const e of restExp) add(V.SIDENOTE_LOST, `הערת-צד "${snip(key)}…" (${key.split(' ').length} מילים) לא נפלטה בשוליים (עמוד הפסקה ${e + 1})`);
+    for (const a of act) add(V.SIDENOTE_DUP, `הערת-צד "${snip(key)}…" נפלטה פעם נוספת בעמוד ${a + 1}`);
+    actPages.delete(key);
+  }
+  for (const [key, pgs] of actPages) add(V.SIDENOTE_TEXT, `בשוליים יש הערה "${snip(key)}…" (עמ' ${pgs.map((x) => x + 1).join(',')}) שאינה במקור`);
+
+  // חשבונאות המנוע חייבת להסכים עם האורקל
+  if (result.contentPreserved !== true) add(V.CONTENT_PRESERVED, `contentPreserved=${result.contentPreserved}`);
+  const loss = [...result.ledger.issues.values()].filter((x) => x.kind === 'content-loss');
+  if (loss.length) add(V.LEDGER_LOSS, `ledger content-loss ×${loss.length}`);
+  return v;
 }
 
 const noteText = (ws) => (Array.isArray(ws) ? ws : words(ws)).join(' ');
@@ -394,3 +588,6 @@ function docBuilder() {
 }
 
 module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, paraParenFlags, ownersFromItems, ownersFromTokens, classifyNotes, docBuilder, META, SHORT_HEADING_MAX_CHARS };
+
+// הרחבות מפקד ההערות (סוכן 4) — הצהרה נפרדת כדי שלא תתנגש בשורת הייצוא הראשית כשענפים אחרים מוסיפים אליה.
+Object.assign(module.exports, { noteLinesOf, censusNotes, compareNoteLines, sourceLines, normKey });
