@@ -9,20 +9,19 @@
 | פריט | ממצא | ראיה |
 |---|---|---|
 | `main` | `de92fa0` — קוד המנוע השתנה בשלוש שורות בלבד, ב־`engine/layout/legacy-imud-flow.js` (תיקון #43); רישום ההגדרות, פרוטוקול ה־Worker ו־`pipeline.js` לא השתנו. ה־UI עודכן ב־#40–#42; מוזגו גם תוצרי המדידה והאבחון (`audits/baseline/`, `docs/perf/`, `docs/reports/agent-2/`) | `git diff 510c9d6 origin/main -- red-build/src/engine` |
-| CI על `main` | הצליחו: layout-audit, layout-parity, local, test (18), test (20), test (22), very-long-corpus · **נכשל: live** | API (check-runs של ה־head) |
-| ענפים ב־remote | `docs/reference-intent-clarification`, `feature/agent-1`, `feature/agent-1-ui-orange`, `feature/agent-1-ui-orange-asset-notice`, `feature/agent-1-ui-orange-input-integrity`, `feature/agent-1-ui-orange-run-summary`, `feature/agent-2-debug-gold`, `feature/agent-3-font-prefetch`, `feature/agent-3-font-yellow`, `feature/agent-4-heading-rollback-regress`, `feature/agent-4-impact-matrix`, `feature/agent-4-source-families`, `feature/agent-4-testing-green`, `feature/agent-5-docs-release`, `feature/agent-5-governance-1115`, `feature/agent-5-open-questions`, `feature/agent-5-sync-1115`, `gh-pages`, `main`, `plan/engine-first-roadmap-v2`, `plan/five-agent-work-allocation`, `work/engine-heading-rollback`, `work/engine-paren-note-flags` | `git ls-remote --heads origin` |
-| ענף ללא PR | `feature/agent-1` · `feature/agent-1-ui-orange` · `feature/agent-1-ui-orange-asset-notice` · `feature/agent-1-ui-orange-input-integrity` · `feature/agent-1-ui-orange-run-summary` · `feature/agent-2-debug-gold` · `feature/agent-3-font-yellow` · `feature/agent-4-heading-rollback-regress` · `feature/agent-4-source-families` · `feature/agent-4-testing-green` · `work/engine-heading-rollback` | — |
-| חפיפת קבצים בין ה־PRs הפתוחים | #33 × #38: `red-build/package.json`; #33 × #50: `red-build/package.json`; #33 × #52: `ISSUE_REGISTRY.md`, `WORKLOG.md`; #38 × #50: `red-build/package.json` | חישוב `git diff --name-only origin/main...<ענף>` |
+| CI על `main` | הצליחו: layout-audit, layout-parity, local, test (18), test (20), test (22), very-long-corpus | API (check-runs של ה־head) |
+| ענפים ב־remote | `docs/reference-intent-clarification`, `feature/agent-1`, `feature/agent-1-ui-orange`, `feature/agent-1-ui-orange-asset-notice`, `feature/agent-1-ui-orange-input-integrity`, `feature/agent-1-ui-orange-run-summary`, `feature/agent-2-debug-gold`, `feature/agent-3-font-inventory`, `feature/agent-3-font-prefetch`, `feature/agent-3-font-yellow`, `feature/agent-4-heading-rollback-regress`, `feature/agent-4-impact-matrix`, `feature/agent-4-source-families`, `feature/agent-4-testing-green`, `feature/agent-5-docs-release`, `feature/agent-5-governance-1115`, `feature/agent-5-open-questions`, `feature/agent-5-sync-1115`, `gh-pages`, `main`, `plan/engine-first-roadmap-v2`, `plan/five-agent-work-allocation`, `work/engine-heading-rollback`, `work/engine-paren-note-flags` | `git ls-remote --heads origin` |
+| ענף ללא PR | `docs/reference-intent-clarification` · `feature/agent-1` · `feature/agent-1-ui-orange` · `feature/agent-1-ui-orange-asset-notice` · `feature/agent-1-ui-orange-input-integrity` · `feature/agent-1-ui-orange-run-summary` · `feature/agent-2-debug-gold` · `feature/agent-3-font-inventory` · `feature/agent-3-font-yellow` · `feature/agent-4-heading-rollback-regress` · `feature/agent-4-source-families` · `feature/agent-4-testing-green` · `work/engine-heading-rollback` | — |
+| חפיפת קבצים בין ה־PRs הפתוחים | #38 × #50: `red-build/package.json` | חישוב `git diff --name-only origin/main...<ענף>` |
 
 | PR פתוח | ענף @ head | כותרת | קומיטים · קבצים | קבצים של ה־PR עצמו | CI על ה־head | מצב מיזוג |
 |---|---|---|---|---|---|---|
-| #33 | `docs/reference-intent-clarification` @ `565db1a` | docs/test: clarify historical PDF reference and acceptance gates | 53 · 32 קבצים (+1685 −394) · `full-math-audit.yml`, `layout-parity.yml`, `CUTOVER.md`, `DECISIONS.md` … | בריצה 7 · דולגו 1 | CI לא ירוק |
-| #38 | `feature/agent-3-font-prefetch` @ `f908416` | טיוטה — Agent 3: שליפה מקדימה של גופני העלייה (טעינה ראשונה מארוח מרוחק: גופנים מוכנים | 2 · 4 קבצים (+191 −1) · `package.json`, `font-prefetch.test.js`, `font-prefetch.js`, `index.html` | הצליחו 7 · דולגו 1 | נקי |
-| #47 | `feature/agent-5-open-questions` @ `d1ed41e` | docs(open-questions): המלצות סוכן 5 להכרעת מנהל הפרויקט — מעבר לתוכנית v2.0 (ש | 2 · 1 קבצים (+22 −0) · `OPEN_QUESTIONS.md` | בריצה 7 · דולגו 1 | CI לא ירוק |
+| #38 | `feature/agent-3-font-prefetch` @ `f908416` | טיוטה — Agent 3: שליפה מקדימה של גופני העלייה (טעינה ראשונה מארוח מרוחק: גופנים מוכנים | 2 · 4 קבצים (+191 −1) · `package.json`, `font-prefetch.test.js`, `font-prefetch.js`, `index.html` | הצליחו 7 · דולגו 1 | לא חושב |
+| #47 | `feature/agent-5-open-questions` @ `d1ed41e` | docs(open-questions): המלצות סוכן 5 להכרעת מנהל הפרויקט — מעבר לתוכנית v2.0 (ש | 2 · 1 קבצים (+22 −0) · `OPEN_QUESTIONS.md` | הצליחו 7 · דולגו 1 | לא חושב |
 | #48 | `work/engine-paren-note-flags` @ `37a1fcb` | תיקון מנוע (legacy-imud): R-03 — דגלי סוגריים של מילה עם סמן הערה מודבק (דליפת | 1 · 4 קבצים (+64 −10) · `legacy-imud-flow.js`, `source-families.test.js`, `app.bundle.js`, `engine-worker.bundle.js` | הצליחו 7 · דולגו 1 | נקי |
 | #50 | `feature/agent-4-impact-matrix` @ `2929f42` | tools(baseline): impact.js — השוואת השפעה של תיקון מנוע (base מול מועמד) + 16  | 1 · 5 קבצים (+465 −2) · `package.json`, `impact-tool.test.js`, `source-oracle.js`, `README.md` … | הצליחו 7 · דולגו 1 | נקי |
-| #51 | `feature/agent-5-sync-1115` @ `0ddc8db` | docs(coordination): ריענון אחרי המיזוגים — G1/R-01 תוקן, רישום CP-1 ותגובת סוכ | 1 · 4 קבצים (+117 −109) · `API.md`, `ARCHITECTURE.md`, `AGENT_TRACKING.md`, `SOURCE_OF_TRUTH_MAP.md` | הצליחו 7 · דולגו 1 | נקי |
-| #52 | `feature/agent-5-governance-1115` @ `d49bbfa` | docs(governance): תיקון אבחנת "לשון/הפוסקים" וסגירתה (R-01), סנכרון מפת התלויו | 1 · 3 קבצים (+100 −1) · `ISSUE_REGISTRY.md`, `LAYOUT_DEPENDENCY_MAP.md`, `WORKLOG.md` | הצליחו 1 · בריצה 6 · דולגו 1 | CI לא ירוק |
+| #51 | `feature/agent-5-sync-1115` @ `bccf66b` | docs(coordination): ריענון אחרי המיזוגים — G1/R-01 תוקן, רישום CP-1 ותגובת סוכ | 2 · 4 קבצים (+120 −110) · `API.md`, `ARCHITECTURE.md`, `AGENT_TRACKING.md`, `SOURCE_OF_TRUTH_MAP.md` | הצליחו 7 · דולגו 1 | נקי |
+| #52 | `feature/agent-5-governance-1115` @ `d49bbfa` | docs(governance): תיקון אבחנת "לשון/הפוסקים" וסגירתה (R-01), סנכרון מפת התלויו | 1 · 3 קבצים (+100 −1) · `ISSUE_REGISTRY.md`, `LAYOUT_DEPENDENCY_MAP.md`, `WORKLOG.md` | הצליחו 7 · דולגו 1 | נקי |
 
 מוזגו מאז הבסיס `6f80156`:
 
@@ -70,7 +69,7 @@
 | # | נושא | סוכנים | ראיה | המלצה (להכרעה) |
 |---|---|---|---|---|
 | O-1 | חבילות הדפדפן נשמרות ב־git וכוללות את המנוע; בדיקה משווה אותן ביט־לביט לבנייה חדשה. בין ה־PRs הפתוחים: `app.bundle.js` ב־#48; `engine-worker.bundle.js` ב־#48 | 2, 3 | חישוב קבצי ה־PRs | בנייה מחדש (`node tools/build-worker-bundle.js`) כצעד אחרון אחרי rebase על main; מיזוג PR אחד בכל פעם |
-| O-9 | `red-build/package.json` (שרשרת `scripts.test`) נערך ב־#33, #38, #50 — כל אחד מוסיף בדיקה לאותה שורה | 2, 3, בעלים | חישוב קבצי ה־PRs | מיזוג עוקב, rebase לכל PR |
+| O-9 | `red-build/package.json` (שרשרת `scripts.test`) נערך ב־#38, #50 — כל אחד מוסיף בדיקה לאותה שורה | 2, 3, בעלים | חישוב קבצי ה־PRs | מיזוג עוקב, rebase לכל PR |
 | O-10 | `red-build/ui/index.html` נערך ב־#38 (גם מקום מחרוזות `?v=`) | 3 | חישוב קבצי ה־PRs | rebase אחרי כל PR שמעדכן גרסת נכסים |
 | O-3 | `tools/**`: נוספו `tools/perf/` (סוכן 3) ו־`tools/baseline/` (סוכן 4); כלי הבנייה ללא בעלים בתוכנית | 2, 3, 4 | #34, #36 | להגדיר בעלים לכלי הבנייה (`OPEN_QUESTIONS.md` שאלה 17) |
 | O-4 | חוזה Worker/תוצאה: `worker-protocol.js` תחת `src/ui/**` אך מסריאל תוצאות מנוע | 1, 2, 4 | רישום חוזים (§6) | בעלים: סוכן 2; צרכן: סוכן 1 |
@@ -91,7 +90,7 @@
 
 ## 5. סדר מיזוג מומלץ לפתוחים (תוכנית §9.5, בתוספת הראיות)
 
-חפיפת קבצים ישירה בין ה־PRs הפתוחים: **#33 × #38: `red-build/package.json`; #33 × #50: `red-build/package.json`; #33 × #52: `ISSUE_REGISTRY.md`, `WORKLOG.md`; #38 × #50: `red-build/package.json`**.
+חפיפת קבצים ישירה בין ה־PRs הפתוחים: **#38 × #50: `red-build/package.json`**.
 1. **#47** (המלצות סוכן 5 ב־`OPEN_QUESTIONS.md`) — מסמך בלבד; בטוח בכל זמן.
 2. **#33** (בעלים) — rebase וטיפול ב־CI האדום (R-9); קודם ל־baseline v2 ולכל שינוי פריסה.
 3. **baseline v2** (סוכן 4) אחרי #33.
