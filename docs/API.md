@@ -1,6 +1,6 @@
 # API Reference
 
-Mirrors `main` at `a0f753d` (engine code identical to `510c9d6`; the Worker protocol and the settings registry are unchanged since `6f80156`) — code-level evidence only. Paths are relative to `red-build/src/`.
+Mirrors `main` at `de92fa0` (the engine differs from `510c9d6` only by the three-line fix of PR #43; the Worker protocol and the settings registry are unchanged since `6f80156`) — code-level evidence only. Paths are relative to `red-build/src/`.
 
 > **Stability.** The **Worker message protocol** (section 3) is the integration surface and is versioned (`PROTOCOL_VERSION = 1`, extended by v1.1 messages). The module-level APIs in sections 1, 2, 4 and 5 are internal: they are used by the UI and the tests and may change between releases. New protocol messages must be additive and must not change existing ones.
 
@@ -118,7 +118,7 @@ const exp = await engine.requestExport({ kind: 'zip', text, settings, extensions
 
 A new `requestTypeset` while one is running cancels the previous one (single-flight). `cancel()` terminates the Worker and the next post builds a fresh one; in-flight side jobs are rejected with `RESTART_ERROR`. In the browser, load the bundle built by `tools/build-worker-bundle.js` (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
-> **Contract changes.** Any change to this protocol or to the result schema needs a documented proposal (owner, backward compatibility, contract tests) — master plan §7.3 and §9.4. None is registered yet; see [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md) §7.
+> **Contract changes.** Any change to this protocol or to the result schema needs a documented proposal (owner, backward compatibility, contract tests) — master plan §7.3 and §9.4. One proposal is open — CP-1, additive diagnostics fields (`docs/reports/agent-2/proposals/CONTRACT_PROPOSAL_diagnostics.md`); it is not part of the current protocol. See [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md) §6.
 
 ## 4. Export and project API (`engine/output/export-api.js`, `project-io.js`)
 
