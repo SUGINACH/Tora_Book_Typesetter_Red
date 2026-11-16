@@ -4,7 +4,7 @@
 verify-corpus.py — אימות אינווריאנטים מוחלטים של העימוד על קורפוס כלשהו.
 
 בקשת המשתמש (04.11): "כל הבדיקות צריכות להיעשות על הקובץ ה'גדול מאוד'"
-(audits/very_long_test_text.txt — 3.4MB, 2,571 כותרות, 10 חלקים).
+(ברירת מחדל: audits/long_test_text.txt — הקורפוס התקין הגדול ביותר, 291,719 מילים; very_long_test_text.txt נדחה ב-D-100).
 
 הבדל מ-compare.py: אין כאן השוואת פלט ל-PDF הישן. בדיקות C1-C3 ו-C5-C12
 נועדו לבדוק נכונות/חוזים פנימיים של RED. C4 הוא מדד איכות ליישור, לא
@@ -157,7 +157,7 @@ def main():
             raise SystemExit(f"unknown option: {a}")
         args.append(a)
         i += 1
-    src_path = args[0] if len(args) > 0 else os.path.join(ROOT, "audits/very_long_test_text.txt")
+    src_path = args[0] if len(args) > 0 else os.path.join(ROOT, "audits/long_test_text.txt")
     model_path = args[1] if len(args) > 1 else os.path.join(ROOT, "audits/very-long-artifacts/ours-model.json")
     pdf_path = args[2] if len(args) > 2 else os.path.join(ROOT, "audits/very-long-artifacts/ours.pdf")
     out_path = args[3] if len(args) > 3 else os.path.join(os.path.dirname(model_path), "corpus-report.json")

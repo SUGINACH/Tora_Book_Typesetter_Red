@@ -86,22 +86,22 @@ describe('D-83 — ספרי־אמת ארוכים: עימוד מלא ללא קר�
     assert(result.contentPreserved === true, 'שימור תוכן גם מעל סף V8');
   });
 
-  // **04.11 — הקובץ ה"גדול מאוד" בנתיב ה-DP (הנתיב החי של העימוד הכללי):**
-  // מנוע המורשת (legacy-imud-flow) נבדק על אותו קובץ בוורקפלו layout-parity
-  // (run-ours.js --determinism + verify-corpus.py — 11/11 אינווריאנטים מוחלטים).
-  // כאן נבדק אותו בנתיב ה-DP: סקאלה מלאה, שימור, דטרמיניזם כפול.
-  (veryLongAvailable ? it : it.skip)('very_long_test_text.txt: ספר שלם (363K מילים) בנתיב DP — סקאלה, שימור, דטרמיניזם', () => {
-    const raw = fs.readFileSync(VERY_LONG, 'utf8');
+  // **04.11 — ספר שלם בנתיב ה-DP (הנתיב החי של העימוד הכללי):** סקאלה מלאה, שימור, דטרמיניזם כפול.
+  // **D-100:** הקובץ ההיסטורי very_long_test_text.txt (363K מילים) נדחה כקלט לא תקין (בקרה שלילית להלן),
+  // ולכן הסקאלה נבדקת על הקורפוס התקין long_test_text.txt (291,719 מילים) — אותן הקביעות בדיוק
+  // (מעל 900 עמודים, שימור, פחות מ-2 דק׳, hash זהה בין ריצות). מנוע המורשת נבדק בוורקפלו layout-parity.
+  it('long_test_text.txt: ספר שלם תקין (291K מילים) בנתיב DP — סקאלה, שימור, דטרמיניזם', () => {
+    const raw = fs.readFileSync(path.join(REAL_DIR, 'long_test_text.txt'), 'utf8');
     const t0 = Date.now();
     const result = typeset(raw, getDefaultSettings(), { noRecommendations: true });
     const dt = Date.now() - t0;
-    assert(result.pages.length >= 900, `ספר 363K מילים ⇒ מעל 900 עמודים (קיבלנו ${result.pages.length})`);
+    assert(result.pages.length >= 900, `ספר 291K מילים ⇒ מעל 900 עמודים (קיבלנו ${result.pages.length})`);
     assert(result.contentPreserved === true, 'שימור תוכן בסקאלה מלאה');
     assert(dt < 120000, `זמן עימוד סביר (<2 דק׳; קיבלנו ${dt}ms)`);
     const again = typeset(raw, getDefaultSettings(), { noRecommendations: true });
     assert(result.layoutHash === again.layoutHash, 'hash זהה בין ריצות גם בספר הגדול');
     assertEq(result.pages.length, again.pages.length, 'מספר עמודים יציב');
-    console.log(`  [real] very_long: words=${raw.split(/\s+/).filter(Boolean).length} pages=${result.pages.length} hash=${result.layoutHash.slice(0, 12)} ${dt}ms`);
+    console.log(`  [real] long(DP): words=${raw.split(/\s+/).filter(Boolean).length} pages=${result.pages.length} hash=${result.layoutHash.slice(0, 12)} ${dt}ms`);
   });
 
   (veryLongAvailable ? it : it.skip)('very_long_test_text.txt: 363K-word malformed source is rejected before layout (D-100)', () => {

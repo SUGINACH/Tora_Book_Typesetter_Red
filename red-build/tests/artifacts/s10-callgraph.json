@@ -5,6 +5,7 @@
   "files": [
     "app-shell.js",
     "bindings.generated.js",
+    "boot-failure.js",
     "browser-entry.js",
     "callgraph-scan.js",
     "caret-map.js",
@@ -15,11 +16,13 @@
     "inline-transport.js",
     "preview-tab.js",
     "retypeset-policy.js",
+    "run-info.js",
     "settings-panel.js",
     "settings-persistence.js",
     "status-strip.js",
     "test-doc-generator.js",
     "testing-tab.js",
+    "text-decode.js",
     "worker-client.js",
     "worker-protocol.js"
   ],
@@ -28,7 +31,7 @@
       "file": "app-shell.js",
       "fn": "onExplicitRetypeset",
       "callee": "requestTypeset",
-      "line": 280
+      "line": 282
     },
     {
       "file": "engine-worker-main.js",

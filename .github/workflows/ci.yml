@@ -70,9 +70,11 @@ jobs:
           agent-browser install --with-deps
       - name: Layout audit — smoke (small fixture, fail fast)
         run: bash tools/layout-audit/run.sh
-      - name: Layout audit — the very large corpus (849 pages, virtualization sweep)
+      # D-100: audits/very_long_test_text.txt (363K) נדחה כקלט לא תקין (negative control בלבד) —
+      # הקורפוס הקובע הוא הקורפוס התקין הגדול ביותר, long_test_text.txt (291,719 מילים).
+      - name: Layout audit — the largest structurally valid corpus (virtualization sweep)
         run: |
-          LAYOUT_AUDIT_FIXTURE="$PWD/audits/very_long_test_text.txt" \
+          LAYOUT_AUDIT_FIXTURE="$PWD/audits/long_test_text.txt" \
           LAYOUT_AUDIT_OUT=/tmp/layout-audit-report-very-long.json \
           LAYOUT_AUDIT_READY_TIMEOUT_MS=480000 \
             bash tools/layout-audit/run.sh

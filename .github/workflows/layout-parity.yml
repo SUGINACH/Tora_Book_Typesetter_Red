@@ -104,7 +104,7 @@ jobs:
       - name: Corpus invariants + informational alignment metric (C1..C12 — כולל ייצוא HTML)
         run: |
           python3 tools/layout-parity/verify-corpus.py \
-            audits/very_long_test_text.txt \
+            audits/long_test_text.txt \
             audits/very-long-artifacts/ours-model.json \
             audits/very-long-artifacts/ours.pdf \
             audits/very-long-artifacts/corpus-report.json \
