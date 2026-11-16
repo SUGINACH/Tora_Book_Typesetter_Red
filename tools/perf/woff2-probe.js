@@ -4,6 +4,7 @@
 //   node tools/perf/woff2-probe.js <תיקיית .ttf/.otf שהומרו> [--meta rows.json] [--out f.json]
 // ההמרה (מחוץ ל-repo; דורשת fonttools + brotli):
 //   python3 -c "from fontTools.ttLib import TTFont; f=TTFont('x.woff2'); f.flavor=None; f.save('x.ttf')"   # CFF נשמר כ-OTF (OTTO)
+// --scan: פלט של tools/perf/font-license-scan.py (outlines/hebrew לפי הקובץ — נחוץ ל-CFF שנשמר בסיומת .ttf). --no-layout: בלי השוואת עימוד (מהיר; בדיקת parse/ייצוא בלבד).
 // --meta: JSON של שורות {{file,family,woff2,sfnt,outlines,hebrew,out}} (אופציונלי; מוסיף עמודות מקור/כיסוי עברית).
 'use strict';
 
@@ -21,6 +22,8 @@ const argv = process.argv.slice(2);
 const dir = argv[0];
 const opt = (k) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : null; };
 if (!dir || !fs.existsSync(dir)) { console.error('שימוש: node tools/perf/woff2-probe.js <dir> [--meta rows.json] [--out f.json]'); process.exit(2); }
+const noLayout = argv.includes('--no-layout');
+const scanMeta = opt('--scan') ? new Map(JSON.parse(fs.readFileSync(opt('--scan'), 'utf8')).rows.map((r) => [r[0], { outlines: r[6], hebrew: r[7] }])) : new Map();
 const meta = opt('--meta') ? new Map(JSON.parse(fs.readFileSync(opt('--meta'), 'utf8')).map((r) => [path.basename(r.out), r])) : new Map();
 
 const corpus = fs.readFileSync(path.join(RED, 'tests/fixtures/canonical_corpus.txt'), 'utf8');
@@ -32,12 +35,12 @@ const median = (a) => { const s = a.slice().sort((x, y) => x - y); return s.leng
 
 const rows = [];
 fs.readdirSync(dir).filter((f) => /\.(ttf|otf)$/i.test(f)).sort().forEach((f, i) => {
-  const bytes = fs.readFileSync(path.join(dir, f)); const m = meta.get(f) || {};
+  const bytes = fs.readFileSync(path.join(dir, f)); const m = meta.get(f) || scanMeta.get(f) || {};
   const row = { file: f, KB: Math.round(bytes.length / 1024), outlines: m.outlines || (/\.otf$/i.test(f) ? 'CFF' : 'glyf'), hebrew: m.hebrew == null ? null : !!m.hebrew };
   const p = fm.parseFont(bytes); row.parse = p.ok ? 'ok' : String(p.error || 'fail');
   if (p.ok) {
     const name = 'probe-' + i; const reg = registerFont(name, bytes); row.register = reg.ok ? 'ok' : String(reg.error || 'fail');
-    if (reg.ok) {
+    if (reg.ok && !noLayout) {
       const real = lay(name), tab = lay(name + '-unregistered'); // שם לא-רשום ⇒ מדידת table
       row.pagesReal = real.pages.length; row.pagesTable = tab.pages.length; row.linesReal = linesOf(real); row.linesTable = linesOf(tab); row.hashEqual = real.layoutHash === tab.layoutHash; row.contentPreserved = real.contentPreserved === true && tab.contentPreserved === true;
     }
@@ -50,7 +53,7 @@ const okRows = rows.filter((r) => r.parse === 'ok');
 const dev = rows.filter((r) => r.linesReal != null).map((r) => Math.abs(r.linesReal - r.linesTable) / r.linesTable * 100);
 const sum = {
   fonts: rows.length, parsed: okRows.length, parseFailed: rows.filter((r) => r.parse !== 'ok').map((r) => ({ file: r.file, outlines: r.outlines, error: r.parse })),
-  pdfOk: rows.filter((r) => r.pdf === 'ok').length, layoutDeviationLinesPct: { n: dev.length, hashEqual: rows.filter((r) => r.hashEqual).length, median: dev.length ? +median(dev).toFixed(1) : null, max: dev.length ? +Math.max(...dev).toFixed(1) : null, nonZero: dev.filter((d) => d > 0).length },
+  pdfOk: rows.filter((r) => r.pdf === 'ok').length, pdfErrors: rows.filter((r) => r.pdf && r.pdf !== 'ok').reduce((a, r) => { const k = r.pdf.split(':').slice(0, 2).join(':'); a[k] = (a[k] || 0) + 1; return a; }, {}), layoutDeviationLinesPct: { n: dev.length, hashEqual: rows.filter((r) => r.hashEqual).length, median: dev.length ? +median(dev).toFixed(1) : null, max: dev.length ? +Math.max(...dev).toFixed(1) : null, nonZero: dev.filter((d) => d > 0).length },
   byOutlines: ['glyf', 'CFF'].map((k) => ({ outlines: k, fonts: rows.filter((r) => r.outlines === k).length, parsed: rows.filter((r) => r.outlines === k && r.parse === 'ok').length, pdfOk: rows.filter((r) => r.outlines === k && r.pdf === 'ok').length }))
 };
 for (const r of rows) console.log(r.file.slice(0, 34).padEnd(35), r.outlines.padEnd(5), String(r.KB).padStart(5) + 'KB', 'heb=' + String(r.hebrew).padEnd(5), 'parse=' + r.parse.slice(0, 26).padEnd(27), 'lines table→real ' + (r.linesTable != null ? r.linesTable + '→' + r.linesReal : '-').padEnd(10), 'pdf=' + (r.pdf || '-').slice(0, 26));
