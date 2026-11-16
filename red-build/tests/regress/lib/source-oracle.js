@@ -240,13 +240,17 @@ function noteLinesOf(text, { endPrefix = 'הערת סיום -', metaAnywhere = f
     // הערה שנפתחה ב-'[' ולא נסגרה נמשכת לשורות הבאות (עד סגירה או שורה ריקה) — הערת שוליים חוצת-שורות במקור
     while (unclosed(t) && i + 1 < lines.length && lines[i + 1].trim()) { i++; t += ' ' + lines[i].trim(); }
     if (endPrefix && t.startsWith(endPrefix)) {
-      const e = { words: words(t.slice(endPrefix.length).replace(/^[:\-–—]\s*/, '')), owner: null };
+      const ws = words(t.slice(endPrefix.length).replace(/^[:\-–—]\s*/, ''));
+      if (!ws.length) continue; // הערה ריקה אינה הערה: אין בה מה לשמר, המנוע אינו פולט אותה ואינו יוצר ממנה זנב סינתטי
+      const e = { words: ws, owner: null };
       ends.push(e); pendE.push(e);
       continue;
     }
     const m = t.match(NOTE_HEADING_RE);
     if (m && +m[1] === 7) {
-      const s = { words: words(m[2]), owner: null };
+      const ws = words(m[2]);
+      if (!ws.length) continue; // כותרת 7 ריקה — כנ"ל
+      const s = { words: ws, owner: null };
       sides.push(s); pendS.push(s);
       continue;
     }
