@@ -20,7 +20,7 @@
  *        R-04  "הערת רפאים": הערה נפלטת בעמוד שאין בו אף שורה של הפסקה הנושאת אותה — פסקה שנדחית שלמה לעמוד
  *              הבא אחרי רצועת h3 משאירה את הערותיה בתור של העמוד שהיא לא הגיעה אליו
  *        R-05  שורות 'הערת סיום -' רצופות: נשארת רק האחרונה, השאר אובדות בשקט בטוקניזציה (pendingEndNote נדרס);
- *              contentPreserved של המנוע נשאר true. נמצא במסמך הבדיקה הקבוע: 40 מתוך 52 שורות אובדות
+ *              contentPreserved של המנוע נשאר true. נמצא במסמך הבדיקה הקבוע: 52 מתוך 69 שורות אובדות (אחרי D-100; לפניו 40 מתוך 52)
  *   ו. מפקד הערות-צד (כותרת 7) והערות-סיום (O.noteLinesOf / censusNotes / compareNoteLines): בדיקות טהורות למודל,
  *      בקרות שליליות, משפחות תקינות וסריקות, קורפוסים אמיתיים (no_long, mid_long, canonical), ו-R-05 (למעלה)
  *
@@ -32,7 +32,7 @@
  *
  * מחוץ למודל (במכוון; ראו README ב-tests/fixtures/regress): הערות מקוננות, '[' ללא סוגר, '[]' ריק, הערה בתוך שורת
  * כותרת — מסמכי הבדיקה נמנעים מהם. (כותרת 7 והערות-סיום נבדקות בנפרד — בלוק ו.) ב-README מפורטות
- * ההתנהגויות (O-1..O-6) שמחכות לסיווג בעלים/סוכן 2 — הן מתועדות, לא נבדקות.
+ * ההתנהגויות (O-1..O-7) שמחכות לסיווג בעלים/סוכן 2 — הן מתועדות, לא נבדקות.
  */
 'use strict';
 
@@ -603,7 +603,7 @@ describe('R-03 · מילה בתוך/בסוף ( ) שנושאת סמן הערה מ
     const c = parenCensus(fs.readFileSync(path.join(AUDITS, 'long_test_text.txt'), 'utf8'));
     assert(c.bad === 0, `פסקאות עם דגלי סוגריים שגויים (PAREN_SCOPE): ${c.bad} מתוך ${c.withSpansAndNote} פסקאות עם סוגריים והערה (${c.total} פסקאות בקורפוס)`);
   }, { expect: /PAREN_SCOPE/ });
-  bugIt('R-03', 'מסמך הבדיקה הקבוע (generateTestDocument fixed/full): דגלי הסוגריים נכונים בכל הפסקאות — כרגע ≈145 פסקאות שגויות', () => {
+  bugIt('R-03', 'מסמך הבדיקה הקבוע (generateTestDocument fixed/full): דגלי הסוגריים נכונים בכל הפסקאות — כרגע כמחצית מהפסקאות עם סוגריים והערה שגויות (המספר המדויק בהודעת הכשל; תלוי במחולל)', () => {
     const c = parenCensus(generateTestDocument({ mode: 'fixed', scale: 'full' }));
     assert(c.bad === 0, `פסקאות עם דגלי סוגריים שגויים (PAREN_SCOPE): ${c.bad} מתוך ${c.withSpansAndNote} פסקאות עם סוגריים והערה (${c.total} פסקאות במסמך)`);
   }, { loose: true, expect: /PAREN_SCOPE/ });
@@ -676,7 +676,7 @@ describe('R-04 · הערת רפאים — פסקה שנדחית שלמה לעמ�
   });
 
   // קורפוסים אמיתיים — אותו סיווג כמו בבלוק S4.9 (בעלות מטקסט הטוקנים). הרצה בלי גופנים (כמו שאר הקובץ);
-  // עם גופנים (אומת ידנית — README) מסמך הבדיקה מפיק 9 רפאים, וקורפוס ה-parity 0.
+  // עם גופנים (אומת ידנית — README) מסמך הבדיקה מפיק פחות רפאים וקורפוס ה-parity 0; המספרים תלויים במחולל (D-100 שינה אותו ב-#33).
   const noteClasses = (text) => { const r = run(text); return O.classifyNotes(O.censusOutput(r), O.ownersFromTokens(r)); };
   bugIt('R-04', 'קורפוס ה-parity (no_long_test_text.txt; בלי גופנים): אין הערת רפאים — כרגע הערה בת 65 מילים נפלטת בעמ\' 12 ולפסקה שלה שורות רק בעמ\' 13', () => {
     const c = noteClasses(fs.readFileSync(path.join(AUDITS, 'no_long_test_text.txt'), 'utf8'));
@@ -684,14 +684,14 @@ describe('R-04 · הערת רפאים — פסקה שנדחית שלמה לעמ�
     assertEq(c.dup.length, 0, 'אין כפולות באותו עמוד');
     assert(c.ghost.length === 0, `הערות רפאים=${c.ghost.length}: ${c.ghost.slice(0, 2).map((g) => `עמ' ${g.page + 1} (עמודי הפסקה: ${g.ownerPages.map((x) => x + 1)})`).join('; ')}`);
   }, { expect: /הערות רפאים/ });
-  bugIt('R-04', 'מסמך הבדיקה הקבוע (generateTestDocument fixed/full; בלי גופנים): אין הערות רפאים — כרגע 15 (9 עם גופנים)', () => {
+  bugIt('R-04', 'מסמך הבדיקה הקבוע (generateTestDocument fixed/full; בלי גופנים): אין הערות רפאים (המספר המדויק בהודעת הכשל; תלוי במחולל)', () => {
     const c = noteClasses(generateTestDocument({ mode: 'fixed', scale: 'full' }));
     assertEq(c.lost.length, 0, 'אין הערות אבודות');
     assert(c.ghost.length === 0, `הערות רפאים=${c.ghost.length} מתוך ${c.emissions} פליטות`);
   }, { loose: true, expect: /הערות רפאים/ });
 });
 
-// ═════════════════════════ ו. הערות-צד והערות-סיום — מפקד מקור→פלט (R-05) ═════════════════════════
+// ═════════════════════════ ח. הערות-צד והערות-סיום — מפקד מקור→פלט (R-05) ═════════════════════════
 // מודל מקור נפרד מ-parseSource: O.noteLinesOf (מקור) + O.censusNotes (פלט) + O.compareNoteLines (השוואה).
 // הוא נחוץ כי שתי התכונות נצרכות בטוקניזציה (pendingSideNote / pendingEndNote) *לפני* ש-contentPreserved של המנוע
 // מתחיל לספור — המנוע משווה פלט לטוקנים ולא למקור, ולכן אובדן בטוקניזציה (R-05) אינו נראה לו.
