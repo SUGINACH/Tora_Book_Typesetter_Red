@@ -112,7 +112,8 @@ describe('S6.0 — הבדיקה המפלצתית: רגרסיות תיקוני ש
 
   it('F6 — נוסחת מתיחת ה-TOC: naturalGap מנכה את גובה השורה האחרונה (הענף אינו מת עוד)', () => {
     // בדיקת יחידה על הנוסחה: עמוד דליל (5 שורות בנפח של 40) — המתיחה ממלאת עד התחתית
-    const doc = 'כותרת 1 - חלק\n\n' + Array.from({ length: 3 }, (_, i) => 'כותרת 2 - פרק ' + i).join('\n\n') + '\n\nתוכן.';
+    // D-100: בין כותרות חייב להופיע גוף — לכל פרק פסקת תוכן קצרה (הבדיקה היא על נוסחת מתיחת ה-TOC, לא על מבנה המסמך)
+    const doc = 'כותרת 1 - חלק\n\nפתיחה.\n\n' + Array.from({ length: 3 }, (_, i) => 'כותרת 2 - פרק ' + i + '\n\nתוכן פרק ' + i + '.').join('\n\n');
     const r = typeset(doc, legacySettings(), { noRecommendations: true });
     let stretched = 0;
     for (const p of r.pages) {
@@ -209,12 +210,17 @@ describe('S6.0 — רגרסיות ייצוא/PDF (תצוגה=ייצוא)', () =>
 
 describe('S6.0 — רגרסיות נתיב DP', () => {
 
-  it('R3-C1 — flush זנב: מסמך המסתיים בכותרת חוצה-טורים (H3) אינו מאבד אותה', () => {
+  it('R3-C1 — flush זנב: כותרת חוצה-טורים (H3) בסוף המסמך אינה אובדת בשקט (D-100: כותרת בלי גוף נדחית במפורש; עם פסקת סיום — נשמרת)', () => {
     const doc = Array.from({ length: 24 }, (_, i) => 'שורת גוף מספר ' + i + ' עם עוד כמה מילים למילוי טורים בעמוד.').join(' ')
       + '\n\nכותרת 3 - כותרת חוצה טורים בסוף המסמך';
     const settings = getDefaultSettings();
     settings['heading-3-mode'] = 'full-width';
-    const r = typeset(doc, settings, { noRecommendations: true });
+    // D-100: מסמך שמסתיים בכותרת בלבד נדחה במפורש לפני העימוד — לעולם לא נגנז בשקט
+    let rejected = null;
+    try { typeset(doc, settings, { noRecommendations: true }); } catch (e) { rejected = e; }
+    assert(rejected && rejected.code === 'INVALID_DOCUMENT_STRUCTURE', 'כותרת זנב בלי גוף ⇒ דחייה מפורשת (D-100), לא אובדן שקט');
+    // הווריאנט התקין: אותה כותרת חוצה-טורים + פסקת סיום קצרה — חייבת להישמר בפלט
+    const r = typeset(doc + '\n\nפסקת סיום קצרה.', settings, { noRecommendations: true });
     const texts = [];
     for (const p of r.pages) {
       for (const ln of (p.spanning && p.spanning.lines) || []) texts.push(ln.words ? ln.words.map(w => w.t || w).join(' ') : '');

@@ -396,7 +396,7 @@ describe('S5.2 (11) — הדבקה ריקה אינה מוחקת מסמך', () =>
     assertEq(app.getState().gen, genBefore, 'לא הופעל עימוד ריק');
     assert(app.getState().hasResult, 'התוצאה לא אופסה');
     // הדבקה אמיתית עדיין מחליפה (הנתיב התקין לא נפגע)
-    fire(app.editor.textarea, 'paste', { clipboardData: { getData: () => 'ספר - חדש\n\nכותרת 1 - חלק' } });
+    fire(app.editor.textarea, 'paste', { clipboardData: { getData: () => 'ספר - חדש\n\nכותרת 1 - חלק\n\nפסקת פתיחה.' } });
     await settle();
     assert(app.getText().includes('חדש'), 'הדבקה אמיתית מוחלפת כרגיל');
     assert(app.getState().gen === genBefore + 1, 'עימוד אחד בלבד נוסף');

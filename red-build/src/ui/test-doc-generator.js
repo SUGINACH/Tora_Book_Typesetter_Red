@@ -37,6 +37,10 @@ function mulberry32(seed) {
 /** הזרע הקבוע של מצב "קבוע" — אף פעם לא משתנה (נעילת הדטרמיניזם בין גרסאות פריסה). */
 const FIXED_SEED = 0x54F2A17;
 
+const { lexDocument } = require('../engine/parser/dfa-lexer');
+const { tokenize } = require('../engine/parser/block-tokenizer');
+const { assertHeadingStructure } = require('../engine/parser/document-structure');
+
 /** מאגרי מילים — עברית אמיתית באורכים מגוונים (2–11 תווים) לריאליזם טיפוגרפי. */
 const WORDS = [
   'תורה', 'הלכה', 'סוגיה', 'שיעור', 'דין', 'טעם', 'פשט', 'דרש', 'רמז', 'סוד',
@@ -171,6 +175,34 @@ function chapterTitle(rng, idx) {
  * בלוק כותרת-משנה (ציר 3) — טקסט כותרת מגוון.
  * @param {number} level 3..7
  */
+/** Ensure synthetic heading-only runs are completed before a same/shallower heading or chapter end. */
+function ensureGeneratedHeadingRunsHaveBody(lines, rng) {
+  const tokens = tokenize(lines);
+  const out = [];
+  let pendingLevel = null;
+
+  for (const token of tokens) {
+    if (token.type === 'heading') {
+      if (pendingLevel != null && Number(token.level) <= pendingLevel) {
+        out.push(paragraphText(rng, randInt(rng, 5, 9)) + '.');
+        pendingLevel = null;
+      }
+      out.push(token.raw || ('כותרת ' + token.level + ' - ' + token.text));
+      pendingLevel = Number(token.level);
+      continue;
+    }
+
+    out.push(token.raw || token.text || '');
+    if (token.type === 'paragraph' && Array.isArray(token.parts) &&
+        token.parts.some(part => part.kind === 'text' && /[\\p{L}\\p{N}]/u.test(part.value))) {
+      pendingLevel = null;
+    }
+  }
+
+  if (pendingLevel != null) out.push(paragraphText(rng, randInt(rng, 5, 9)) + '.');
+  return out;
+}
+
 function subHeadingText(rng, level) {
   const h3 = ['כללים והגדרות', 'מחלוקת הראשונים', 'שיטת הרמב"ם', 'דעת השולחן ערוך', 'ביאור הסוגיה', 'השלכות מעשיות'];
   const h456 = ['טעם הדין', 'גדרי הדין', 'מקור הדין', 'חילוקי דינים', 'דין נוסף', 'לשון הפוסקים', 'שאלה נפרדת', 'ראיה מהגמרא'];
@@ -230,7 +262,7 @@ function chapterLines(rng, opts, chapterIdx) {
     if (i === guaranteedAt) {
       lines.push(`כותרת ${guaranteedLvl} - ${subHeadingText(rng, guaranteedLvl)}`);
       if (chance(rng, 0.25)) { // רצף כותרות — עקת escort
-        lines.push(`כותרת ${Math.min(6, guaranteedLvl + 1)} - ${subHeadingText(rng, Math.min(6, guaranteedLvl + 1))}`);
+        lines.push(`כותרת ${Math.min(7, guaranteedLvl + 1)} - ${subHeadingText(rng, Math.min(7, guaranteedLvl + 1))}`);
       }
       blocksSinceHeading = 0;
       continue;
@@ -241,7 +273,7 @@ function chapterLines(rng, opts, chapterIdx) {
       const lvl = isTop ? randInt(rng, 4, 5) : isBottom ? randInt(rng, 5, 6) : randInt(rng, 4, 6);
       lines.push(`כותרת ${lvl} - ${subHeadingText(rng, lvl)}`);
       if (chance(rng, 0.25)) { // רצף כותרות — עקת escort
-        lines.push(`כותרת ${Math.min(6, lvl + 1)} - ${subHeadingText(rng, lvl + 1)}`);
+        lines.push(`כותרת ${Math.min(7, lvl + 1)} - ${subHeadingText(rng, lvl + 1)}`);
       }
       blocksSinceHeading = 0;
       continue;
@@ -260,6 +292,11 @@ function chapterLines(rng, opts, chapterIdx) {
     lines.push(bodyParagraph(rng, kind));
     blocksSinceHeading++;
   }
+
+  // Complete any trailing/invalid heading-only run with genuine generated prose.
+  const validLines = ensureGeneratedHeadingRunsHaveBody(lines, rng);
+  lines.length = 0;
+  lines.push(...validLines);
 
   // הערות סיום בחלק מהפרקים
   if (chance(rng, opts.compact ? 0.5 : 0.33)) {
@@ -313,7 +350,10 @@ function generateTestDocument(opts = {}) {
   out.push('הערות סיום - הערות המחבר');
   out.push(paragraphText(rng, randInt(rng, 10, 20)));
 
-  return out.join('\n');
+  const document = out.join('\n');
+  const parsed = lexDocument(document);
+  assertHeadingStructure(tokenize(parsed.bodyLines));
+  return document;
 }
 
 module.exports = { generateTestDocument, FIXED_SEED, mulberry32 };

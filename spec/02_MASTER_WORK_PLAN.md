@@ -98,7 +98,7 @@ archive/*← legacy lines (V20.x, old_ver, debug/) — read-only
 ---
 
 # שלב S2 — שכבה 1: פיענוח וטוקניזציה (DFA Parser + Bracket Scope)
-**מטרה:** eliminate at root the metadata-misparse and paren family that spawned the entire V23 investigation. **סוגר:** REQ-PAR-01..05, REQ-PAR-ST-01..04, U-E items.
+**מטרה:** eliminate at root the metadata-misparse and paren family, ולוודא שמקור המסמך תקין מבנית עוד לפני מדידה ועימוד. **סוגר:** REQ-PAR-01..05, REQ-PAR-ST-01..04, D-100/U-G.
 
 ### S2.1 משימות
 1. Implement `dfa-lexer.js`: metadata recognition **only** in preamble (until blank line or first heading); mid-document `נושא - …` remains paragraph (Z.ai original bug class).
@@ -108,6 +108,7 @@ archive/*← legacy lines (V20.x, old_ver, debug/) — read-only
 5. Character hygiene: U+E000 internal spaces protected for measuring only then scrubbed pre-render; PUA per-char policy checklist; gershayim/quote normalization (Z.ai fixes).
 6. Content-preservation invariant: token multiset hash input==output (text-completeness kind with punctuation/bracket-content skip rule from Z.ai fix).
 7. Wire everything to decision-ledger events (CP1/CP2 emitted through S1 machinery).
+8. Add document-structure.js preflight before both DP and Legacy typesetting. Heading-only runs must descend strictly; deepest heading needs real prose; footnote-only paragraphs and note-only heading titles do not satisfy this requirement. Reject with actionable error; never auto-repair source.
 
 ### S2.2 Gate S2
 - [ ] Unit suite: 12+ metadata vectors incl. `mid-doc-metadata-like-line.txt` — 0 misclassifications.
@@ -115,6 +116,8 @@ archive/*← legacy lines (V20.x, old_ver, debug/) — read-only
 - [ ] Nested-parens fixture: depth map correct; cross-boundary styling consistent measure-vs-render (counterfactual captureParenFont: 0 divergence).
 - [ ] Consecutive notes fixture: 2 notes extracted, markers preserved, nothing swallowed.
 - [ ] Text-completeness = 0 findings on canonical (post-skip-rules); U+E000 absent from final DOM.
+- [ ] D-100 fixtures: H1→H7 with terminal prose passes; repeated/same-or-shallower heading before prose fails; note-only paragraph/title fails; prose plus note passes.
+- [ ] Fixed generator and 180 explicit random seeds pass the same validator; invalid input is rejected before measurement.
 - [ ] Canonical audit deltas attributable: any finding-count change explained item-by-item in registry (no silent drops).
 - [ ] Layout hash changed ONLY where expected (styling-before-measure legitimately alters breaks) — diff report reviewed & approved.
 
