@@ -270,6 +270,34 @@ function classifyNotes(census, owners) {
   return { ghost, dup, lost, orderViolation, emissions: seq.length, legal, repeats: Math.max(0, legal - srcSeq.length) };
 }
 
+/**
+ * כיסוי הערות לפי עמוד הפסקה (S4.9): בכל עמוד שיש בו שורות של פסקה נושאת-הערה, צריכה להופיע יחידה של כל אחת מהערותיה
+ * (שלמה או חלק — המשך/קטע של הערה ארוכה). המשלים של 'רפאים' (הערה בלי פסקה) — כאן פסקה בלי הערה.
+ * מדידה **אינפורמטיבית** (לא נבדקת כהפרה): במסמכים עם הערות ענקיות (מעל עמוד) או בעמוד ההערות-הסיום יש חסרים גם בבסיס
+ * (very_long: 1; מסמך הבדיקה: 17 בעמוד האחרון) — לכן משווים בין עצים (tools/baseline/impact.js), לא קובעים סף מוחלט.
+ * ההשוואה לפי טקסט: יחידה "מכסה" הערה אם הטקסט שלה מוכל בטקסט ההערה או להפך (שלילי-כוזב אפשרי, חיובי-כוזב לא).
+ * @param census תוצאת censusOutput
+ * @param owners Map<tokenId, string[]> — ownersFromItems / ownersFromTokens
+ * @returns {{pairs:number, missing:Array<{tokenId:number,page:number,words:number}>}} page הוא אינדקס עמוד מבוסס-0
+ */
+function ownerPageCoverage(census, owners) {
+  const unitsBy = new Map();
+  for (const u of census.units) { const t = u.words.join(' '); if (!t) continue; if (!unitsBy.has(u.page)) unitsBy.set(u.page, []); unitsBy.get(u.page).push(t); }
+  let pairs = 0;
+  const missing = [];
+  for (const [tid, notes] of owners) {
+    const m = census.paras.get(tid);
+    if (!m) continue;
+    const pgs = new Set(); for (const l of m.values()) pgs.add(l.page);
+    for (const p of pgs) for (const t of notes) {
+      pairs++;
+      const us = unitsBy.get(p) || [];
+      if (!us.some((u) => t.includes(u) || u.includes(t))) missing.push({ tokenId: tid, page: p, words: t.split(' ').length });
+    }
+  }
+  return { pairs, missing };
+}
+
 const SHORT_HEADING_MAX_CHARS = 20; // כותרת ארוכה יכולה להיפלט בכמה שורות
 
 /**
@@ -393,4 +421,4 @@ function docBuilder() {
   return { w, doc: (body) => META + '\n' + body };
 }
 
-module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, paraParenFlags, ownersFromItems, ownersFromTokens, classifyNotes, docBuilder, META, SHORT_HEADING_MAX_CHARS };
+module.exports = { V, parseSource, censusOutput, compareToSource, geometryViolations, splitNotes, parenScope, paraParenFlags, ownersFromItems, ownersFromTokens, classifyNotes, ownerPageCoverage, docBuilder, META, SHORT_HEADING_MAX_CHARS };
