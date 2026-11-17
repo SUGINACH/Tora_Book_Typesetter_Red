@@ -894,6 +894,48 @@ describe('הערות-צד והערות-סיום · משפחות תקינות —
   }
 });
 
+// עמוד הערות-סיום נושא פריטי 'paragraph' עם tokenId של הפסקה שאחריה נכתבה ההערה ו-lineIdx=null. בגרסה הקודמת של האורקל (main עד 5449b1f)
+// הם נספרו כשורות גוף של אותה פסקה, ולכן ownerPageCoverage (impact.js) ראה את עמוד ההערות כ"עמוד של הפסקה" וסימן את הערות-השוליים שלה
+// כחסרות שם: במסמך הבדיקה הקבוע 21 "כיסוי-חסר" — כולם בעמוד האחרון (עמוד הערות-הסיום), אפס בעמודי גוף. אין פער אמיתי שהוסתר; הבדיקה
+// נועלת את התיקון (ובקרה מראה שבלעדיו המדד אכן מנופח), כדי שהשוואת impact.js לפני/אחרי המיזוג תהיה מוסברת ולא שקטה.
+describe('מפקד הפלט · עמוד הערות-הסיום אינו עמוד גוף של הפסקה הבעלים (כיסוי-הערות לפי עמוד אינו מנופח)', () => {
+  const g = docBuilder();
+  // הפסקה השנייה: בעלת הערת-סיום (השורה שלפניה) וגם הערת שוליים [..] — לכן היא ב-owners, ויש לה שורות רק בעמוד גוף
+  const doc = g.doc(CH + g.w(20) + ` [${g.w(4)}] ` + g.w(5) + '\n'
+    + `הערת סיום - ${g.w(8)}\n`
+    + g.w(20) + ` [${g.w(4)}] ` + g.w(5) + '\n');
+  const { r, v } = checkNotes(doc);
+  const owners = O.ownersFromTokens(r);
+  const ownerId = r.tokens.length - 1;
+  const endItems = r.pages.filter((p) => p.type === 'endnotes')
+    .flatMap((p) => p.columns.flat()).filter((it) => it.kind === 'paragraph' && it.tokenId === ownerId);
+
+  it('תנאי הבדיקה: המנוע פולט עמוד הערות-סיום עם פריט של הפסקה הבעלים (tokenId שלה, lineIdx=null), והמסמך נקי באורקל', () => {
+    assert(endItems.length >= 1, 'אין פריט הערת-סיום של הפסקה הבעלים — התנאי לא התקיים');
+    assert(endItems.every((it) => it.lineIdx == null), 'lineIdx של פריט עמוד-הערות אינו null: ' + endItems.map((it) => it.lineIdx));
+    assertEq(owners.size, 2, 'שתי הפסקאות נושאות הערת שוליים');
+    assertClean(v, 'compareNoteLines');
+  });
+  it('המפקד אינו מייחס לפסקה הבעלים שורות בעמוד הערות-הסיום; lineDup=0; ownerPageCoverage — 2 זוגות ואפס חסרים', () => {
+    const cen = O.censusOutput(r);
+    const lines = [...cen.paras.get(ownerId).values()];
+    assert(lines.length >= 1 && lines.every((l) => r.pages[l.page].type !== 'endnotes'), 'שורה של הפסקה הבעלים נספרה בעמוד הערות-סיום');
+    assertEq(cen.lineDup, 0, 'lineDup');
+    const cov = O.ownerPageCoverage(cen, owners);
+    assertEq(cov.pairs, 2, 'זוגות (עמוד גוף, הערה): פסקה × עמוד גוף אחד');
+    assertEq(cov.missing.length, 0, 'חסרים: ' + JSON.stringify(cov.missing));
+    const c = O.classifyNotes(cen, owners);
+    assertEq([c.ghost.length, c.dup.length, c.lost.length, c.orderViolation ? 1 : 0].join(','), '0,0,0,0', 'רפאים,כפילות,אבודות,סדר');
+  });
+  it('בקרה שלילית: אם עמוד הערות-הסיום נספר כעמוד גוף (כמו האורקל הישן) — הכיסוי מנופח: 3 זוגות, חסר אחד בעמוד ההערות', () => {
+    const asBody = Object.assign({}, r, { pages: r.pages.map((p) => (p.type === 'endnotes' ? Object.assign({}, p, { type: 'regular' }) : p)) });
+    const cov = O.ownerPageCoverage(O.censusOutput(asBody), owners);
+    assertEq(cov.pairs, 3, 'זוגות כשעמוד ההערות נספר כגוף');
+    assertEq(cov.missing.length, 1, 'חסרים כשעמוד ההערות נספר כגוף: ' + JSON.stringify(cov.missing));
+    assertEq(r.pages[cov.missing[0].page].type, 'endnotes', 'החסר הוא בעמוד הערות-הסיום');
+  });
+});
+
 describe('R-05 · שורות הערת-סיום רצופות — נשארת רק האחרונה; השאר אובדות בשקט בטוקניזציה (contentPreserved נשאר true)', () => {
   const trigger = readFixture('endnote-consecutive-trigger.txt');
   const control = readFixture('endnote-consecutive-control.txt');
