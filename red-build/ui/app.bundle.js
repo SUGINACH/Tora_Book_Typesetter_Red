@@ -1,6 +1,6 @@
 // ui/app.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת מעטפת ה־UI (המנוע רץ ב־Worker הנפרד)
-// מודולים: 63 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 66 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -323,6 +323,12 @@ var __paths = {
   "src/ui/app-shell.js|../engine/core/legacy-settings-map": "src/engine/core/legacy-settings-map.js",
   "src/ui/app-shell.js|../engine/layout/page-templates": "src/engine/layout/page-templates.js",
   "src/engine/output/project-io.js|../core/settings-registry": "src/engine/core/settings-registry.js",
+  "src/ui/test-doc-generator.js|../engine/parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
+  "src/ui/test-doc-generator.js|../engine/parser/block-tokenizer": "src/engine/parser/block-tokenizer.js",
+  "src/ui/test-doc-generator.js|../engine/parser/document-structure": "src/engine/parser/document-structure.js",
+  "src/engine/parser/block-tokenizer.js|./dfa-lexer": "src/engine/parser/dfa-lexer.js",
+  "src/engine/parser/block-tokenizer.js|./bracket-scanner": "src/engine/parser/bracket-scanner.js",
+  "src/engine/parser/document-structure.js|./bracket-scanner": "src/engine/parser/bracket-scanner.js",
   "src/ui/editor-tab.js|../engine/decoration/folio": "src/engine/decoration/folio.js",
   "src/ui/settings-panel.js|./bindings.generated": "src/ui/bindings.generated.js",
   "src/ui/extensions-panel.js|../engine/extensions/extensions-io": "src/engine/extensions/extensions-io.js",
@@ -1939,6 +1945,10 @@ function mulberry32(seed) {
 /** הזרע הקבוע של מצב "קבוע" — אף פעם לא משתנה (נעילת הדטרמיניזם בין גרסאות פריסה). */
 const FIXED_SEED = 0x54F2A17;
 
+const { lexDocument } = require('../engine/parser/dfa-lexer');
+const { tokenize } = require('../engine/parser/block-tokenizer');
+const { assertHeadingStructure } = require('../engine/parser/document-structure');
+
 /** מאגרי מילים — עברית אמיתית באורכים מגוונים (2–11 תווים) לריאליזם טיפוגרפי. */
 const WORDS = [
   'תורה', 'הלכה', 'סוגיה', 'שיעור', 'דין', 'טעם', 'פשט', 'דרש', 'רמז', 'סוד',
@@ -2073,6 +2083,34 @@ function chapterTitle(rng, idx) {
  * בלוק כותרת-משנה (ציר 3) — טקסט כותרת מגוון.
  * @param {number} level 3..7
  */
+/** Ensure synthetic heading-only runs are completed before a same/shallower heading or chapter end. */
+function ensureGeneratedHeadingRunsHaveBody(lines, rng) {
+  const tokens = tokenize(lines);
+  const out = [];
+  let pendingLevel = null;
+
+  for (const token of tokens) {
+    if (token.type === 'heading') {
+      if (pendingLevel != null && Number(token.level) <= pendingLevel) {
+        out.push(paragraphText(rng, randInt(rng, 5, 9)) + '.');
+        pendingLevel = null;
+      }
+      out.push(token.raw || ('כותרת ' + token.level + ' - ' + token.text));
+      pendingLevel = Number(token.level);
+      continue;
+    }
+
+    out.push(token.raw || token.text || '');
+    if (token.type === 'paragraph' && Array.isArray(token.parts) &&
+        token.parts.some(part => part.kind === 'text' && /[\\p{L}\\p{N}]/u.test(part.value))) {
+      pendingLevel = null;
+    }
+  }
+
+  if (pendingLevel != null) out.push(paragraphText(rng, randInt(rng, 5, 9)) + '.');
+  return out;
+}
+
 function subHeadingText(rng, level) {
   const h3 = ['כללים והגדרות', 'מחלוקת הראשונים', 'שיטת הרמב"ם', 'דעת השולחן ערוך', 'ביאור הסוגיה', 'השלכות מעשיות'];
   const h456 = ['טעם הדין', 'גדרי הדין', 'מקור הדין', 'חילוקי דינים', 'דין נוסף', 'לשון הפוסקים', 'שאלה נפרדת', 'ראיה מהגמרא'];
@@ -2132,7 +2170,7 @@ function chapterLines(rng, opts, chapterIdx) {
     if (i === guaranteedAt) {
       lines.push(`כותרת ${guaranteedLvl} - ${subHeadingText(rng, guaranteedLvl)}`);
       if (chance(rng, 0.25)) { // רצף כותרות — עקת escort
-        lines.push(`כותרת ${Math.min(6, guaranteedLvl + 1)} - ${subHeadingText(rng, Math.min(6, guaranteedLvl + 1))}`);
+        lines.push(`כותרת ${Math.min(7, guaranteedLvl + 1)} - ${subHeadingText(rng, Math.min(7, guaranteedLvl + 1))}`);
       }
       blocksSinceHeading = 0;
       continue;
@@ -2143,7 +2181,7 @@ function chapterLines(rng, opts, chapterIdx) {
       const lvl = isTop ? randInt(rng, 4, 5) : isBottom ? randInt(rng, 5, 6) : randInt(rng, 4, 6);
       lines.push(`כותרת ${lvl} - ${subHeadingText(rng, lvl)}`);
       if (chance(rng, 0.25)) { // רצף כותרות — עקת escort
-        lines.push(`כותרת ${Math.min(6, lvl + 1)} - ${subHeadingText(rng, lvl + 1)}`);
+        lines.push(`כותרת ${Math.min(7, lvl + 1)} - ${subHeadingText(rng, lvl + 1)}`);
       }
       blocksSinceHeading = 0;
       continue;
@@ -2162,6 +2200,11 @@ function chapterLines(rng, opts, chapterIdx) {
     lines.push(bodyParagraph(rng, kind));
     blocksSinceHeading++;
   }
+
+  // Complete any trailing/invalid heading-only run with genuine generated prose.
+  const validLines = ensureGeneratedHeadingRunsHaveBody(lines, rng);
+  lines.length = 0;
+  lines.push(...validLines);
 
   // הערות סיום בחלק מהפרקים
   if (chance(rng, opts.compact ? 0.5 : 0.33)) {
@@ -2215,10 +2258,558 @@ function generateTestDocument(opts = {}) {
   out.push('הערות סיום - הערות המחבר');
   out.push(paragraphText(rng, randInt(rng, 10, 20)));
 
-  return out.join('\n');
+  const document = out.join('\n');
+  const parsed = lexDocument(document);
+  assertHeadingStructure(tokenize(parsed.bodyLines));
+  return document;
 }
 
 module.exports = { generateTestDocument, FIXED_SEED, mulberry32 };
+
+};
+__modules["src/engine/parser/dfa-lexer.js"] = function (require, module, exports) {
+// src/engine/parser/dfa-lexer.js — Layer 1: metadata recognition ONLY in preamble (REQ-PAR-01, S4.5)
+'use strict';
+
+/**
+ * **S4.5 (ביקורת 03.11, סקירה 2):** מזהי הטקסט של הפרויקט המקורי — רשימה מלאה.
+ * המקור: default_settings.json + טקסט ברירת המחדל של IMUD_TORANI (app.js):
+ *   שם הספר - … / נושא - … / נושא מפורט - … / פרטי מהדורא - … / שם המחבר - … /
+ *   מקום ושנת הוצאה - … / שמירת זכויות - … / פרטי הוצאה לאור - … /
+ *   פרטי קשר - … / פרטים נוספים - …
+ * ולצדם המפתחות הקצרים שנתמכו תמיד (ספר, מחבר, מהדורא, מקום, שנה, מהדורה,
+ * editors, title). הפתיח נסגר רק בשורה ריקה/כותרת/הערת סיום — לא בשורת מטא־נתון.
+ */
+const METADATA_KEYS = [
+  // ארוכים (טקסט ברירת המחדל המקורי)
+  'שם הספר', 'נושא', 'נושא מפורט', 'פרטי מהדורא', 'שם המחבר', 'מקום ושנת הוצאה',
+  'שמירת זכויות', 'פרטי הוצאה לאור', 'פרטי קשר', 'פרטים נוספים',
+  // קצרים (תמיכה היסטורית)
+  'ספר', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'
+];
+
+const HEADING_RE = /^(כותרת\s*([0-7])|חלק\s+([א-ת]+)|הקדמה)\s*[-–—]\s*(.+)$/;
+
+/** ברירת המחדל ההיסטורית של קידומת הערת הסיום (en-line-prefix, default_settings.json). */
+const DEFAULT_ENDNOTE_PREFIX = 'הערת סיום -';
+
+/**
+ * **S4.5 (תיקון סיווג):** בניית ביטוי קידומת הערת סיום מהגדרת המשתמש.
+ * קלט ריק/רווחים ⇒ null (זיהוי מבוטל — שורות נשארות פסקאות; החלטה מפורשת
+ * של המשתמש, לא כשל שקט). הקידומת חייבת להסתיים במקף/מקף-ארוך/קו — אחרת
+ * מוסיפים את המקף בעצמנו (ערך ההגדרה "הערת סיום" שקול ל-"הערת סיום -").
+ */
+function compileEndnotePrefix(prefix) {
+  const p = String(prefix == null ? DEFAULT_ENDNOTE_PREFIX : prefix).trim();
+  if (!p) return null;
+  const withDash = /[-–—]$/.test(p) ? p : p + ' -';
+  const esc = withDash.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*').replace(/[-–—]/g, '[-–—]');
+  return new RegExp('^' + esc + '\\s*(.*)$');
+}
+
+/** **S4.5:** הוראת כותרת עמודי ההערות — צורת רבים בלבד («הערות סיום - כותרת»).
+ * הצורה הבסיסית של D-40 (/^הערת\s*סיום…/) התנגשה עם מזהה התוכן ההיסטורי
+ * («הערת סיום - טקסט» = הערה) וגרמה להיעלמות תוכן. רבים (העערות/הערות) = מקטע;
+ * יחיד (הערת) = תמיד תוכן. */
+const ENDNOTE_CLASS_RE = /^הערות\s*סיום\s*[-–—]\s*(.+)$/;
+
+/** ביטויי ברירת המחדל (תאימות לאחור לייבוא ישיר; tokenize מקבל opts ומזהה משם). */
+const ENDNOTE_PREFIX = compileEndnotePrefix(DEFAULT_ENDNOTE_PREFIX);
+const ENDNOTE_NUMBERED = /^הערת\s*סיום\s*[-–—]?\s*([0-9]{1,4})\s*[-–—]\s*(.+)$/;
+const ENDNOTE_CLASS = ENDNOTE_CLASS_RE;
+
+/**
+ * DFA states: PREAMBLE -> BODY. יציאה מ‑PREAMBLE: שורה ריקה או כותרת ראשונה.
+ * שורה כמו `נושא - דין סוכה ישנה` באמצע המסמך נשארת פסקה (REQ-PAR-01 / לקח Z.ai).
+ * @param {string} rawText
+ * @param {object} [opts] — { endnotePrefix: string } (S4.5: מזהה מוגדר; '' = מבוטל)
+ */
+function lexDocument(rawText, opts = {}) {
+  const endnoteRe = opts.endnotePrefixRe instanceof RegExp
+    ? opts.endnotePrefixRe
+    : compileEndnotePrefix(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX);
+  const lines = String(rawText).replace(/\r\n?/g, '\n').split('\n');
+  const state = { phase: 'PREAMBLE' };
+  const metadata = {};
+  const body = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (state.phase === 'PREAMBLE') {
+      if (trimmed === '') { state.phase = 'BODY'; continue; }
+      if (HEADING_RE.test(trimmed) || (endnoteRe && endnoteRe.test(trimmed)) || ENDNOTE_CLASS_RE.test(trimmed)) {
+        state.phase = 'BODY'; body.push(line); continue;
+      }
+      const m = trimmed.split(/\s+[-–—]\s+/);
+      if (m.length >= 2 && METADATA_KEYS.includes(m[0].toLowerCase())) {
+        metadata[m[0]] = m.slice(1).join(' - ');
+        continue;
+      }
+      // שורה שאינה metadata → גם היא סוגרת את הפתיח
+      state.phase = 'BODY';
+      body.push(line);
+      continue;
+    }
+    body.push(line);
+  }
+  return { metadata, bodyLines: body };
+}
+
+module.exports = {
+  lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS,
+  ENDNOTE_CLASS_RE, METADATA_KEYS, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix
+};
+
+};
+__modules["src/engine/parser/block-tokenizer.js"] = function (require, module, exports) {
+// src/engine/parser/block-tokenizer.js — H0–H7 / P / endnote / editorial tokens (REQ-PAR-03/04, CP1)
+'use strict';
+
+const crypto = require('crypto');
+const { HEADING_RE, ENDNOTE_CLASS_RE, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix } = require('./dfa-lexer');
+const { scanBrackets } = require('./bracket-scanner');
+
+const ATOMIC_SPACE = '\uE000'; // V3/V4 breakthrough: רווח אטומי בתוך הערה — למדידה בלבד
+
+// **S5.2 (תיקון 12 — תיעוד, ללא שינוי התנהגות):** הנרמול שלהלן (״→׳ ו-‘ ’→") הוא
+// **מכוון** — כלל one-way לפי Z.ai fix (ראה protectors.glueNoteMarkers) — אין לשנותו.
+/** נרמול גרשים/מרכאות + ניקוי PUA פנימי (REQ-PAR-05; Z.ai fixes). */
+function normalizeText(s) {
+  return s
+    .replace(/[\u2018\u2019]/g, '"')            // חילוף מרכאות לועזיות
+    .replace(/\u05F4/g, '\u05F3')               // גרשיים → גרש (כלל one-way לפי Z.ai fix)
+    .replace(/[\uE000-\uF8FF]/g, (ch) => ch);   // PUA נשמר לבדיקה per-char; U+E000 מוסר לפני render בשלב output
+}
+
+let tokenSeq = 0;
+function mkToken(type, payload) {
+  return { id: `t${++tokenSeq}`, type, ...payload };
+}
+
+/**
+ * Tokenizer: שורות → טוקנים.
+ * - כותרת N - … (N∈0..7) → heading (מקף חובה; בלי מקף = פסקה בשקט)
+ * - `##…##` → editorial — מוסר לחלוטין מהפלט אך נרשם ל‑audit
+ * - `הערת סיום - …` → **endnote (תוכן!)** — הסמנטיקה המקורית (S4.5, תיקון D-40):
+ *   הקידומת מגדירה את הטקסט שאחריה כהערת סיום. במסמך המודפס הקידומת עצמה
+ *   אינה מופיעה (כלל פענוח, לא עיטור — מסמך chat-v20.3 ההיסטורי).
+ * - `הערת סיום-1 - טקסט` → endnote ממוספרת (D-40; עוגן סמן).
+ * - `הערות סיום - כותרת` (רבים!) → הוראת כותרת עמודי ההערות — הצורה היחידה
+ *   שאינה מתנגשת עם מזהה התוכן (ביקורת 03.11: הצורה הקודמת בלעה הערות אמיתיות).
+ * - תוחמי הערות השוליים מוגדרים: opts.fnOpen/fnClose (ברירת מחדל [ ]).
+ * - `[a][b]` רצופים → הערות נפרדות (REQ-PAR-04)
+ * - בתוך `[...]`: רווחים → \uE000 (אטומי, REQ-LB-04)
+ * @param {string[]} bodyLines
+ * @param {object} [opts] — { endnotePrefix, endnotePrefixRe, fnOpen, fnClose } (S4.5)
+ */
+function tokenize(bodyLines, opts = {}) {
+  tokenSeq = 0;
+  // מזהה הערת הסיום: ביטוי מוכן (מה-lexer) או בנוי מהקידומת; '' ⇒ מבוטל
+  const endnoteRe = opts.endnotePrefixRe instanceof RegExp
+    ? opts.endnotePrefixRe
+    : compileEndnotePrefix(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX);
+  const endnoteNumRe = (() => {
+    // ממוספרת: `הערת סיום-1 - טקסט` — נבנית מאותה קידומת (ללא המקף האחרון) + מספר + מקף
+    const p = String(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX).trim() || DEFAULT_ENDNOTE_PREFIX;
+    const base = p.replace(/[-–—]\s*$/, '').trim();
+    if (!base) return null;
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+    return new RegExp('^' + esc + '\\s*[-–—]?\\s*([0-9]{1,4})\\s*[-–—]\\s*(.+)$');
+  })();
+  const fnOpen = opts.fnOpen != null ? String(opts.fnOpen) : '[';
+  const fnClose = opts.fnClose != null ? String(opts.fnClose) : ']';
+  // S4.5: תוחם ריק/רווחים ⇒ הזיהוי מבוטל — scanBrackets מקבל את הערך הגולמי
+  // (לא fallback ל-[) כדי שביטול מפורש לא ייהפך בטעות לזיהוי ברירת מחדל.
+  const fnEnabled = fnOpen.trim().length > 0 && fnClose.trim().length > 0;
+  const tokens = [];
+  for (const raw of bodyLines) {
+    let line = normalizeText(raw.trim()); // editable: editorial ##…## מוסר מהשורה (Spec §7)
+    if (!line) continue;
+
+    let m = line.match(HEADING_RE);
+    if (m) {
+      const level = m[2] !== undefined ? Number(m[2]) : (m[1] === 'הקדמה' ? 0 : 1);
+      tokens.push(mkToken('heading', { level, text: m[4] || m[0], raw: line }));
+      continue;
+    }
+    // **S4.5 (תיקון D-40 — ביקורת 03.11):** סדר הבדיקות שהוחזר לסמנטיקה המקורית:
+    // 1) ממוספרת (עוגן) 2) תוכן (כל שורה המתחילה בקידומת = הערה!) 3) הוראת
+    // כותרת — רק בצורת הרבים «הערות סיום - …» שאינה יכולה להתנגש עם הקידומת.
+    if (endnoteNumRe) {
+      const mNum = line.match(endnoteNumRe);
+      if (mNum) {
+        tokens.push(mkToken('endnote', { num: Number(mNum[1]), text: mNum[2].trim(), raw: line }));
+        continue;
+      }
+    }
+    if (endnoteRe) {
+      const mEnd = line.match(endnoteRe);
+      if (mEnd && mEnd[1] && mEnd[1].trim()) {
+        tokens.push(mkToken('endnote', { text: mEnd[1].trim(), raw: line }));
+        continue;
+      }
+    }
+    const mCls = line.match(ENDNOTE_CLASS_RE);
+    if (mCls) {
+      tokens.push(mkToken('endnote-class', { title: mCls[1].trim(), raw: line }));
+      continue;
+    }
+    // editorial ##…## — הסרה מלאה (נרשם; לעולם לא נגלה בפלט — Spec §7)
+    const editorial = line.match(/##(.+?)##/g);
+    if (editorial) {
+      for (const e of editorial) tokens.push(mkToken('editorial', { text: e.slice(2, -2), removed: true }));
+      line = line.replace(/##.+?##/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!line) continue;
+    }
+
+    // חילוץ הערות [..] עם מחסנית; זוגות רצופים → הערות נפרדות; תוחמים מוגדרים (S4.5)
+    const segs = scanBrackets([{ text: line, paraIndex: tokens.length }], { open: fnOpen, close: fnClose });
+    let cursor = 0;
+    const parts = [];
+    const notes = [];
+    // בנייה לפי pairs משמאל לימין (outermost first)
+    const outer = segs.pairs.filter(p => p.depth === 1).sort((a, b) => a.open - b.open); // חיצוניים בלבד (depth 1)
+    const openCh = fnEnabled ? fnOpen : '[';
+    const closeCh = fnEnabled ? fnClose : ']';
+    for (const p of outer) {
+      const before = line.slice(cursor, p.open).trim();
+      if (before) parts.push({ kind: 'text', value: before });
+      // **S4.6 (ביקורת 3):** חיתוך לפי תחילת הסוגר + אורכו בפועל (closeStart/closeLen
+      // מהסורק) — נכון גם לתוחמים מרובי-תווים (']]'/END) ולצורה העברית ]ם. בעבר
+      // נוסף אורך התוחם המוגדר למיקום התו האחרון — קיצוץ/דילוג תווים בתוחם ארוך.
+      const cs = p.closeStart != null ? p.closeStart : p.close;
+      const cl = p.closeLen != null ? p.closeLen : closeCh.length;
+      const noteText = line.slice(p.open + openCh.length, cs).trim().replace(/ +/g, ATOMIC_SPACE);
+      notes.push(noteText);
+      parts.push({ kind: 'note-ref', noteIndex: notes.length - 1 });
+      cursor = cs + cl;
+    }
+    const tail = line.slice(cursor).trim();
+    if (tail) parts.push({ kind: 'text', value: tail });
+
+    tokens.push(mkToken('paragraph', { parts, notes, unmatchedClosers: segs.unmatchedClosers, raw: line }));
+  }
+  return tokens;
+}
+
+/** CP1: hash של מולטיסט הטוקנים — עקרון שימור תוכן (BRZ-15).
+ * **S4.5 (ביקורת 03.11):** כותרת הוראת ההערות (endnote-class) נכנסת לחשיבון —
+ * היא טקסט שמופיע בפלט (כותרת עמודי ההערות); השמטתה איפשרה בעבר לתוכן
+ * שסווג בטעות כהוראה להיעלם בלי שה-hash יתריע. */
+function contentHash(tokens) {
+  const stable = JSON.stringify(tokens.flatMap(t => {
+    if (t.type === 'paragraph') return [['P', ...t.parts.map(p => p.kind === 'text' ? p.value : `⟦${t.notes[p.noteIndex]}⟧`), String(t.notes.length)]];
+    if (t.type === 'heading') return [['H', String(t.level), t.text]];
+    if (t.type === 'endnote') return [['EN', String(t.num || ''), t.text]];
+    if (t.type === 'endnote-class') return [['ENH', t.title]]; // directive — כותרתו תוכן מוצג (S4.5)
+    return [];
+  }));
+  return crypto.createHash('sha256').update(stable, 'utf8').digest('hex');
+}
+
+module.exports = { tokenize, contentHash, normalizeText, ATOMIC_SPACE };
+
+};
+__modules["src/engine/parser/bracket-scanner.js"] = function (require, module, exports) {
+// src/engine/parser/bracket-scanner.js — Balanced stack scanner for [...] footnotes (REQ-PAR-02, REQ-PAR-ST-01)
+'use strict';
+
+/**
+ * Close form registry: every accepted closing spelling of a footnote bracket.
+ * Keyed by the FIRST character of the closer; `len` = characters consumed in the source text.
+ *   ']'      → plain ASCII closer                     (len 1)
+ *   ']' + U+05DD → Hebrew-style "‏]ם" closer          (len 2)
+ * Openers are always '['. Matching is done against this table so future
+ * historical variants (e.g. gershayim-closers) can be added without touching the loop.
+ */
+const CLOSER_FORMS = [
+  { first: ']', len: 1, name: 'ascii' },
+  { first: ']', len: 2, next: '\u05DD', name: 'hebrew-mem-sofit' },
+];
+
+/**
+ * Return the closer form matching at text[i], or null.
+ * Deterministic longest-match: we scan the whole registry, keep every form
+ * whose characters actually match at position i, and return the one consuming
+ * the most characters. Registry order can never change the outcome.
+ */
+function matchCloser(text, i) {
+  let best = null;
+  for (const f of CLOSER_FORMS) {
+    if (text[i] !== f.first) continue;
+    // Verify all trailing characters declared by the form (if any).
+    let ok = true;
+    if (f.next !== undefined) {
+      const lastIdx = i + f.len - 1;
+      ok = lastIdx < text.length && text[lastIdx] === f.next;
+    }
+    if (ok && (!best || f.len > best.len)) best = f;
+  }
+  return best;
+}
+
+/**
+ * Stack scanner: detects `[...]` pairs including nesting, ranges spanning
+ * paragraphs/columns/pages, and depth at every position. Unmatched closers and
+ * openers are REPORTED, never auto-fixed (source-fidelity doctrine).
+ *
+ * **S4.5 (03.11):** התוחמים מוגדרים — opts { open, close } (ברירת מחדל [ ]).
+ * הצורה העברית "]ם" נבדקת רק בתוחם ברירת המחדל; תוחם מותאם מותאם בדיוק
+ * (מחרוזת, בדרך כלל תו בודד). תוחם ריק ⇒ הזיהוי מבוטל (פסקאות טהורות).
+ *
+ * @param {Array<{text:string, paraIndex:number}>} segments - text runs tagged with paragraph index
+ * @param {object} [opts] — { open: string, close: string }
+ * @returns {{pairs:Array, unmatchedClosers:Array, unmatchedOpeners:Array, depthAt:(pos)=>number, scopeMap:Object}}
+ */
+function scanBrackets(segments, opts = {}) {
+  const openTok = String(opts.open != null ? opts.open : '[').trim();
+  const closeTok = String(opts.close != null ? opts.close : ']').trim();
+  const useDefault = openTok === '[' && closeTok === ']';
+  const enabled = openTok.length > 0 && closeTok.length > 0;
+  /** תואם פותח במיקום i (מחרוזת מלאה). */
+  const matchOpen = (text, i) => {
+    if (!enabled) return 0;
+    if (text.startsWith(openTok, i)) return openTok.length;
+    return 0;
+  };
+  /** תואם סוגר במיקום i — {len, name} או null. בברירת המחדל: טבלת הצורות
+   * (כולל "]ם" העברי); בתוחם מותאם: התאמה מדויקת בלבד. */
+  const matchClose = (text, i) => {
+    if (!enabled) return null;
+    if (useDefault) return matchCloser(text, i);
+    if (text.startsWith(closeTok, i)) return { len: closeTok.length, name: 'custom' };
+    return null;
+  };
+  const stack = [];
+  const pairs = [];
+  const unmatchedClosers = [];
+  const depthMarks = []; // {pos, depth} sampled after processing each consumed char-run
+  let globalPos = 0;
+
+  for (const seg of segments) {
+    const text = seg.text;
+    const para = Number.isInteger(seg.paraIndex) ? seg.paraIndex : 0;
+    let i = 0;
+    while (i < text.length) {
+      const openLen = matchOpen(text, i);
+      if (openLen > 0) {
+        const gp = globalPos + i;
+        stack.push({ openPos: gp, para });
+        depthMarks.push({ pos: gp, depth: stack.length });
+        i += openLen;
+      } else {
+        const form = matchClose(text, i);
+        if (!form) {
+          depthMarks.push({ pos: globalPos + i, depth: stack.length });
+          i += 1;
+        } else if (stack.length === 0) {
+          // Doctrine: report, never silently repair. Extra chars of the closer
+          // are still consumed so positions stay consistent for downstream mappers.
+          const gp = globalPos + i;
+          unmatchedClosers.push({
+            pos: gp,
+            end: gp + form.len - 1,
+            para,
+            form: form.name,
+            note: 'דורש אימות מול מקור — אין לתקן אוטומטית'
+          });
+          depthMarks.push({ pos: gp, depth: 0 });
+          i += form.len;
+        } else {
+          const gp = globalPos + i;
+          const o = stack.pop();
+          pairs.push({
+            open: o.openPos,
+            close: gp + form.len - 1, // last character of the closer (חוזה היסטורי — נשמר)
+            // **S4.6 (ביקורת 3):** חוזה משלים לתוחמים מרובי-תווים — תחילת הסוגר
+            // ואורכו בפועל. בעבר הצרכן (block-tokenizer) התייחס ל-close כאילו היה
+            // תחילת התוחם והוסיף שוב את אורך התוחם המוגדר — חיתוך שגוי ב-']]'/END.
+            closeStart: gp,
+            closeLen: form.len,
+            depth: stack.length + 1,  // 1 = outermost pair (matches block-tokenizer convention)
+            startPara: o.para,
+            endPara: para,
+            crossParagraph: o.para !== para,
+            closerForm: form.name
+          });
+          depthMarks.push({ pos: gp, depth: stack.length });
+          i += form.len;
+        }
+      }
+    }
+    globalPos += text.length;
+  }
+
+  // Unclosed openers are reported too (same doctrine: flag, don't fix).
+  const unmatchedOpeners = stack.map(o => ({
+    pos: o.openPos,
+    para: o.para,
+    note: 'פותח ללא סוגר — דורש אימות מול מקור'
+  }));
+
+  return {
+    pairs,
+    unmatchedClosers,
+    unmatchedOpeners,
+    /** Nesting depth active at a global position (0 = outside any note). */
+    depthAt(pos) {
+      let best = 0;
+      for (const m of depthMarks) if (m.pos <= pos) best = m.depth; else break;
+      return best;
+    },
+    scopeMap: {
+      totalPairs: pairs.length,
+      crossParagraphCount: pairs.filter(p => p.crossParagraph).length,
+      hebrewClosers: pairs.filter(p => p.closerForm === 'hebrew-mem-sofit').length,
+      delimiters: enabled ? { open: openTok, close: closeTok } : null // S4.5: מה בפועל נסרק
+    }
+  };
+}
+
+module.exports = { scanBrackets, matchCloser, CLOSER_FORMS };
+
+};
+__modules["src/engine/parser/document-structure.js"] = function (require, module, exports) {
+// src/engine/parser/document-structure.js — source-level heading validity (D-100)
+'use strict';
+
+const { scanBrackets } = require('./bracket-scanner');
+
+function hasMeaningfulText(value) {
+  return /[\p{L}\p{N}]/u.test(String(value == null ? '' : value));
+}
+
+function withoutFootnotes(value, opts = {}) {
+  const source = String(value == null ? '' : value);
+  if (!source) return source;
+  const scan = scanBrackets([{ text: source, paraIndex: 0 }], {
+    open: opts.fnOpen,
+    close: opts.fnClose
+  });
+  const ranges = scan.pairs.filter(pair => pair.depth === 1).sort((a, b) => b.open - a.open);
+  let visible = source;
+  for (const pair of ranges) visible = visible.slice(0, pair.open) + visible.slice(pair.close + 1);
+  return visible;
+}
+
+function paragraphHasBodyText(token) {
+  const parts = Array.isArray(token.parts)
+    ? token.parts
+    : [{ kind: 'text', value: token.raw != null ? token.raw : token.text }];
+  return parts.some(part => part && part.kind === 'text' && hasMeaningfulText(part.value));
+}
+
+function validateHeadingStructure(tokens, opts = {}) {
+  const input = Array.isArray(tokens) ? tokens : [];
+  const issues = [];
+  let pending = [];
+  let headingCount = 0;
+
+  for (let index = 0; index < input.length; index++) {
+    const token = input[index] || {};
+    if (token.type === 'heading') {
+      headingCount++;
+      const level = Number(token.level);
+      const info = {
+        level,
+        tokenId: token.id || null,
+        tokenIndex: index + 1,
+        title: String(token.text == null ? '' : token.text)
+      };
+      if (!Number.isInteger(level) || level < 0 || level > 7) {
+        issues.push({ code: 'heading-level-invalid', ...info });
+        pending = [info];
+        continue;
+      }
+      const titleWithoutNotes = withoutFootnotes(info.title, opts);
+      if (!hasMeaningfulText(titleWithoutNotes)) {
+        const containsNoteMarkup = info.title.trim() !== titleWithoutNotes.trim();
+        issues.push({
+          code: containsNoteMarkup ? 'heading-title-note-only' : 'heading-title-no-meaningful-text',
+          ...info
+        });
+      }
+      if (pending.length) {
+        const previous = pending[pending.length - 1];
+        if (!(level > previous.level)) {
+          issues.push({
+            code: 'heading-chain-not-increasing',
+            previousLevel: previous.level,
+            previousTokenId: previous.tokenId,
+            previousTokenIndex: previous.tokenIndex,
+            level,
+            tokenId: info.tokenId,
+            tokenIndex: info.tokenIndex
+          });
+          pending = [info];
+          continue;
+        }
+      }
+      pending.push(info);
+      continue;
+    }
+    if (token.type === 'paragraph' && paragraphHasBodyText(token)) pending = [];
+  }
+
+  if (pending.length) {
+    const last = pending[pending.length - 1];
+    issues.push({
+      code: 'heading-chain-no-body-text',
+      level: last.level,
+      tokenId: last.tokenId,
+      tokenIndex: last.tokenIndex,
+      chain: pending.map(item => item.level)
+    });
+  }
+  return { ok: issues.length === 0, issues, headingCount };
+}
+
+function formatHeadingStructureIssues(issues) {
+  return (Array.isArray(issues) ? issues : []).map(issue => {
+    const at = issue.tokenId ? ' [' + issue.tokenId + ']' : '';
+    switch (issue.code) {
+      case 'heading-title-note-only':
+        return 'כותרת H' + issue.level + at + ' מכילה הערת שוליים בלבד ואינה כוללת טקסט כותרת עצמאי.';
+      case 'heading-title-no-meaningful-text':
+        return 'כותרת H' + issue.level + at + ' אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.';
+      case 'heading-chain-not-increasing':
+        return 'רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H' + issue.previousLevel +
+          ' מופיעה H' + issue.level + at +
+          '. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.';
+      case 'heading-chain-no-body-text':
+        return 'שרשרת הכותרות ' + issue.chain.map(level => 'H' + level).join(' → ') +
+          ' מסתיימת ללא פסקת גוף בעלת טקסט ממשי; הערות שוליים לבדן אינן נחשבות תוכן.';
+      case 'heading-level-invalid':
+        return 'נמצאה כותרת ברמה שאינה נתמכת (' + issue.level + ')' + at + '; הרמות התקינות הן H0–H7.';
+      default:
+        return 'נמצאה הפרת מבנה כותרות (' + (issue.code || 'unknown') + ')' + at + '.';
+    }
+  }).join('\n');
+}
+
+class DocumentStructureError extends Error {
+  constructor(issues) {
+    const detail = formatHeadingStructureIssues(issues);
+    super('מבנה מסמך לא תקין; העימוד נעצר לפני שלב המדידה:\n' + detail);
+    this.name = 'DocumentStructureError';
+    this.code = 'INVALID_DOCUMENT_STRUCTURE';
+    this.issues = Array.isArray(issues) ? issues : [];
+  }
+}
+
+function assertHeadingStructure(tokens, opts = {}) {
+  const result = validateHeadingStructure(tokens, opts);
+  if (!result.ok) throw new DocumentStructureError(result.issues);
+  return result;
+}
+
+module.exports = {
+  validateHeadingStructure,
+  assertHeadingStructure,
+  formatHeadingStructureIssues,
+  DocumentStructureError
+};
 
 };
 __modules["src/ui/settings-persistence.js"] = function (require, module, exports) {
@@ -18012,101 +18603,6 @@ function buildCaretMap(rawText, serializedResult) {
 }
 
 module.exports = { buildCaretMap };
-
-};
-__modules["src/engine/parser/dfa-lexer.js"] = function (require, module, exports) {
-// src/engine/parser/dfa-lexer.js — Layer 1: metadata recognition ONLY in preamble (REQ-PAR-01, S4.5)
-'use strict';
-
-/**
- * **S4.5 (ביקורת 03.11, סקירה 2):** מזהי הטקסט של הפרויקט המקורי — רשימה מלאה.
- * המקור: default_settings.json + טקסט ברירת המחדל של IMUD_TORANI (app.js):
- *   שם הספר - … / נושא - … / נושא מפורט - … / פרטי מהדורא - … / שם המחבר - … /
- *   מקום ושנת הוצאה - … / שמירת זכויות - … / פרטי הוצאה לאור - … /
- *   פרטי קשר - … / פרטים נוספים - …
- * ולצדם המפתחות הקצרים שנתמכו תמיד (ספר, מחבר, מהדורא, מקום, שנה, מהדורה,
- * editors, title). הפתיח נסגר רק בשורה ריקה/כותרת/הערת סיום — לא בשורת מטא־נתון.
- */
-const METADATA_KEYS = [
-  // ארוכים (טקסט ברירת המחדל המקורי)
-  'שם הספר', 'נושא', 'נושא מפורט', 'פרטי מהדורא', 'שם המחבר', 'מקום ושנת הוצאה',
-  'שמירת זכויות', 'פרטי הוצאה לאור', 'פרטי קשר', 'פרטים נוספים',
-  // קצרים (תמיכה היסטורית)
-  'ספר', 'מחבר', 'מהדורא', 'מקום', 'שנה', 'מהדורה', 'editors', 'title'
-];
-
-const HEADING_RE = /^(כותרת\s*([0-7])|חלק\s+([א-ת]+)|הקדמה)\s*[-–—]\s*(.+)$/;
-
-/** ברירת המחדל ההיסטורית של קידומת הערת הסיום (en-line-prefix, default_settings.json). */
-const DEFAULT_ENDNOTE_PREFIX = 'הערת סיום -';
-
-/**
- * **S4.5 (תיקון סיווג):** בניית ביטוי קידומת הערת סיום מהגדרת המשתמש.
- * קלט ריק/רווחים ⇒ null (זיהוי מבוטל — שורות נשארות פסקאות; החלטה מפורשת
- * של המשתמש, לא כשל שקט). הקידומת חייבת להסתיים במקף/מקף-ארוך/קו — אחרת
- * מוסיפים את המקף בעצמנו (ערך ההגדרה "הערת סיום" שקול ל-"הערת סיום -").
- */
-function compileEndnotePrefix(prefix) {
-  const p = String(prefix == null ? DEFAULT_ENDNOTE_PREFIX : prefix).trim();
-  if (!p) return null;
-  const withDash = /[-–—]$/.test(p) ? p : p + ' -';
-  const esc = withDash.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*').replace(/[-–—]/g, '[-–—]');
-  return new RegExp('^' + esc + '\\s*(.*)$');
-}
-
-/** **S4.5:** הוראת כותרת עמודי ההערות — צורת רבים בלבד («הערות סיום - כותרת»).
- * הצורה הבסיסית של D-40 (/^הערת\s*סיום…/) התנגשה עם מזהה התוכן ההיסטורי
- * («הערת סיום - טקסט» = הערה) וגרמה להיעלמות תוכן. רבים (העערות/הערות) = מקטע;
- * יחיד (הערת) = תמיד תוכן. */
-const ENDNOTE_CLASS_RE = /^הערות\s*סיום\s*[-–—]\s*(.+)$/;
-
-/** ביטויי ברירת המחדל (תאימות לאחור לייבוא ישיר; tokenize מקבל opts ומזהה משם). */
-const ENDNOTE_PREFIX = compileEndnotePrefix(DEFAULT_ENDNOTE_PREFIX);
-const ENDNOTE_NUMBERED = /^הערת\s*סיום\s*[-–—]?\s*([0-9]{1,4})\s*[-–—]\s*(.+)$/;
-const ENDNOTE_CLASS = ENDNOTE_CLASS_RE;
-
-/**
- * DFA states: PREAMBLE -> BODY. יציאה מ‑PREAMBLE: שורה ריקה או כותרת ראשונה.
- * שורה כמו `נושא - דין סוכה ישנה` באמצע המסמך נשארת פסקה (REQ-PAR-01 / לקח Z.ai).
- * @param {string} rawText
- * @param {object} [opts] — { endnotePrefix: string } (S4.5: מזהה מוגדר; '' = מבוטל)
- */
-function lexDocument(rawText, opts = {}) {
-  const endnoteRe = opts.endnotePrefixRe instanceof RegExp
-    ? opts.endnotePrefixRe
-    : compileEndnotePrefix(opts.endnotePrefix != null ? opts.endnotePrefix : DEFAULT_ENDNOTE_PREFIX);
-  const lines = String(rawText).replace(/\r\n?/g, '\n').split('\n');
-  const state = { phase: 'PREAMBLE' };
-  const metadata = {};
-  const body = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (state.phase === 'PREAMBLE') {
-      if (trimmed === '') { state.phase = 'BODY'; continue; }
-      if (HEADING_RE.test(trimmed) || (endnoteRe && endnoteRe.test(trimmed)) || ENDNOTE_CLASS_RE.test(trimmed)) {
-        state.phase = 'BODY'; body.push(line); continue;
-      }
-      const m = trimmed.split(/\s+[-–—]\s+/);
-      if (m.length >= 2 && METADATA_KEYS.includes(m[0].toLowerCase())) {
-        metadata[m[0]] = m.slice(1).join(' - ');
-        continue;
-      }
-      // שורה שאינה metadata → גם היא סוגרת את הפתיח
-      state.phase = 'BODY';
-      body.push(line);
-      continue;
-    }
-    body.push(line);
-  }
-  return { metadata, bodyLines: body };
-}
-
-module.exports = {
-  lexDocument, HEADING_RE, ENDNOTE_PREFIX, ENDNOTE_NUMBERED, ENDNOTE_CLASS,
-  ENDNOTE_CLASS_RE, METADATA_KEYS, DEFAULT_ENDNOTE_PREFIX, compileEndnotePrefix
-};
 
 };
 __modules["src/ui/run-info.js"] = function (require, module, exports) {

@@ -207,8 +207,9 @@ function runParity() {
     floor = JSON.parse(fs.readFileSync(path.join(RED, 'tests', 'artifacts', 'parity-baseline.json'), 'utf8')).score * 100;
   } catch (e) { /* ידווח כ-null */ }
 
-  step('run-ours-very-long', 'node tools/layout-parity/run-ours.js audits/very_long_test_text.txt audits/very-long-artifacts --determinism --html');
-  step('verify-corpus', 'python3 tools/layout-parity/verify-corpus.py audits/very_long_test_text.txt audits/very-long-artifacts/ours-model.json audits/very-long-artifacts/ours.pdf audits/very-long-artifacts/corpus-report.json audits/very-long-artifacts/ours.html');
+  // D-100: very_long_test_text.txt נדחה כקלט לא תקין — הקורפוס התקין הגדול ביותר הוא long_test_text.txt (שם הצעד והתיקייה נשמרו להשוואה בין baselines)
+  step('run-ours-very-long', 'node tools/layout-parity/run-ours.js audits/long_test_text.txt audits/very-long-artifacts --determinism --html');
+  step('verify-corpus', 'python3 tools/layout-parity/verify-corpus.py audits/long_test_text.txt audits/very-long-artifacts/ours-model.json audits/very-long-artifacts/ours.pdf audits/very-long-artifacts/corpus-report.json audits/very-long-artifacts/ours.html');
   copyJson(path.join(V, 'corpus-report.json'), 'corpus-report.json');
 
   const artifacts = [
