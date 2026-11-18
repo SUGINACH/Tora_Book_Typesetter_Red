@@ -10,8 +10,9 @@
 #      אותו אודיט מול https://suginach.github.io/Tora_Book_Typesetter_Red/
 #      עם הזרקת ה-fixture ב-base64 — מאמת גם את הפריסה בפועל, לא רק את
 #      הקוד.
-# יציאה 0 **רק** על 0 בעיות + כיסוי מלא + דטרמיניזם זהה — תוצאה מקובלת
-# אחת: 0 בעיות עימוד.
+# audits/very_long_test_text.txt נשאר negative control של D-100 ואינו מועמד לעימוד
+# עד לתיקון עריכתי. האודיט רץ על audits/long_test_text.txt התקין.
+# יציאה 0 **רק** על 0 בעיות + כיסוי מלא + דטרמיניזם זהה.
 name: full-math-audit
 
 on:
@@ -50,12 +51,16 @@ jobs:
           node-version: 22
       # **S5.2 (P-11):** נעילת גרסה — 0.41.2 היא הגרסה האחרונה ב-npm (אין 1.x);
       # שדרוג לא מבוקר של ה-CLI יכול לשבור את חוזה ה-eval/פלט של האודיט.
+      - name: D-100 negative control — malformed 363K source must be rejected
+        run: node tools/validate-source-structure.js audits/very_long_test_text.txt --expect-invalid
+      - name: Validate largest structurally valid stress corpus
+        run: node tools/validate-source-structure.js audits/long_test_text.txt
       - name: Install agent-browser + headless browser
         run: |
           npm install -g agent-browser@0.41.2
           agent-browser install --with-deps
-      - name: Full math audit — the very large corpus (~700 pages, ink-level)
-        run: node tools/layout-audit/run-full-math.js --tag local --fixture audits/very_long_test_text.txt
+      - name: Full math audit — largest structurally valid corpus (291,719 words, ~1,038 pages)
+        run: node tools/layout-audit/run-full-math.js --tag local --fixture audits/long_test_text.txt --min-pages 525
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,7 +90,7 @@ jobs:
         run: |
           node tools/layout-audit/run-full-math.js --tag live \
             --url https://suginach.github.io/Tora_Book_Typesetter_Red/ \
-            --fixture audits/very_long_test_text.txt
+            --fixture audits/long_test_text.txt --min-pages 525
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4

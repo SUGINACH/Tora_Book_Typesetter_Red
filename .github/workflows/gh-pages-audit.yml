@@ -89,7 +89,7 @@ jobs:
         run: |
           node tools/layout-audit/run-full-math.js --tag live \
             --url https://suginach.github.io/Tora_Book_Typesetter_Red/ \
-            --fixture audits/very_long_test_text.txt
+            --fixture audits/long_test_text.txt   # D-100: הקורפוס התקין הגדול ביותר (רצפת עמודים ברירת מחדל 525)
 
       - name: Upload reports
         if: always()

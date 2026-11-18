@@ -1,6 +1,6 @@
 // ui/engine-worker.bundle.js — **נוצר אוטומטית** ע"י tools/build-worker-bundle.js (אין לערוך ידנית)
 // חבילת ה־Worker (המנוע המלא — אין לטעון בחוט ה־UI)
-// מודולים: 63 · בלי חותמות זמן (דטרמיניזם)
+// מודולים: 64 · בלי חותמות זמן (דטרמיניזם)
 'use strict';
 
 var __crypto = (function () {
@@ -300,6 +300,7 @@ var __paths = {
   "src/engine/core/pipeline.js|./settings-registry": "src/engine/core/settings-registry.js",
   "src/engine/core/pipeline.js|../parser/dfa-lexer": "src/engine/parser/dfa-lexer.js",
   "src/engine/core/pipeline.js|../parser/block-tokenizer": "src/engine/parser/block-tokenizer.js",
+  "src/engine/core/pipeline.js|../parser/document-structure": "src/engine/parser/document-structure.js",
   "src/engine/core/pipeline.js|../parser/bracket-scanner": "src/engine/parser/bracket-scanner.js",
   "src/engine/core/pipeline.js|../typography/measure-api": "src/engine/typography/measure-api.js",
   "src/engine/core/pipeline.js|../typography/protectors": "src/engine/typography/protectors.js",
@@ -331,6 +332,7 @@ var __paths = {
   "src/engine/core/pipeline.js|../decoration/toc-builder": "src/engine/decoration/toc-builder.js",
   "src/engine/parser/block-tokenizer.js|./dfa-lexer": "src/engine/parser/dfa-lexer.js",
   "src/engine/parser/block-tokenizer.js|./bracket-scanner": "src/engine/parser/bracket-scanner.js",
+  "src/engine/parser/document-structure.js|./bracket-scanner": "src/engine/parser/bracket-scanner.js",
   "src/engine/typography/measure-api.js|./measure-table": "src/engine/typography/measure-table.js",
   "src/engine/typography/measure-api.js|./font-metrics": "src/engine/typography/font-metrics.js",
   "src/engine/typography/measure-api.js|./kp-linebreak": "src/engine/typography/kp-linebreak.js",
@@ -571,6 +573,7 @@ __modules["src/engine/core/pipeline.js"] = function (require, module, exports) {
 const { getDefaultSettings, derivePlacementFlags } = require('./settings-registry');
 const { lexDocument } = require('../parser/dfa-lexer');
 const { tokenize, contentHash, normalizeText } = require('../parser/block-tokenizer');
+const { assertHeadingStructure } = require('../parser/document-structure');
 const { scanBrackets } = require('../parser/bracket-scanner');
 const { MeasureAPI, resolveMeasureImpl } = require('../typography/measure-api');
 const { protectWords } = require('../typography/protectors');
@@ -660,6 +663,17 @@ function offsetInSpans(at, spans) {
  *   אסור לו לגעת בפריסה — no-op proof נאכף בבדיקה (hash זהה עם ובלי המזליף).
  */
 function typeset(rawText, settingsIn, env = {}) {
+  // D-100: reject malformed heading structure before either the DP or legacy layout path.
+  // This is source validation, not a pagination heuristic or an automatic repair.
+  const structuralParseOpts = {
+    endnotePrefix: settingsIn && settingsIn['en-line-prefix'],
+    fnOpen: settingsIn && settingsIn['fn-delim-open'],
+    fnClose: settingsIn && settingsIn['fn-delim-close']
+  };
+  const structuralBody = lexDocument(String(rawText == null ? '' : rawText), structuralParseOpts).bodyLines;
+  const structuralTokens = tokenize(structuralBody, structuralParseOpts);
+  assertHeadingStructure(structuralTokens, structuralParseOpts);
+
   // **S4.9 (פרופיל העימוד המקורי):** הגדרות שמקורן ב-default_settings.json של
   // התוכנה המקורית (importImudSettings מסמן layout-profile='imud' ומצרף
   // את ה-JSON הגולמי) ⇒ הפעלת הפורט הנאמן של מנוע המקור. התנהגות המקור
@@ -2415,6 +2429,148 @@ function scanBrackets(segments, opts = {}) {
 }
 
 module.exports = { scanBrackets, matchCloser, CLOSER_FORMS };
+
+};
+__modules["src/engine/parser/document-structure.js"] = function (require, module, exports) {
+// src/engine/parser/document-structure.js — source-level heading validity (D-100)
+'use strict';
+
+const { scanBrackets } = require('./bracket-scanner');
+
+function hasMeaningfulText(value) {
+  return /[\p{L}\p{N}]/u.test(String(value == null ? '' : value));
+}
+
+function withoutFootnotes(value, opts = {}) {
+  const source = String(value == null ? '' : value);
+  if (!source) return source;
+  const scan = scanBrackets([{ text: source, paraIndex: 0 }], {
+    open: opts.fnOpen,
+    close: opts.fnClose
+  });
+  const ranges = scan.pairs.filter(pair => pair.depth === 1).sort((a, b) => b.open - a.open);
+  let visible = source;
+  for (const pair of ranges) visible = visible.slice(0, pair.open) + visible.slice(pair.close + 1);
+  return visible;
+}
+
+function paragraphHasBodyText(token) {
+  const parts = Array.isArray(token.parts)
+    ? token.parts
+    : [{ kind: 'text', value: token.raw != null ? token.raw : token.text }];
+  return parts.some(part => part && part.kind === 'text' && hasMeaningfulText(part.value));
+}
+
+function validateHeadingStructure(tokens, opts = {}) {
+  const input = Array.isArray(tokens) ? tokens : [];
+  const issues = [];
+  let pending = [];
+  let headingCount = 0;
+
+  for (let index = 0; index < input.length; index++) {
+    const token = input[index] || {};
+    if (token.type === 'heading') {
+      headingCount++;
+      const level = Number(token.level);
+      const info = {
+        level,
+        tokenId: token.id || null,
+        tokenIndex: index + 1,
+        title: String(token.text == null ? '' : token.text)
+      };
+      if (!Number.isInteger(level) || level < 0 || level > 7) {
+        issues.push({ code: 'heading-level-invalid', ...info });
+        pending = [info];
+        continue;
+      }
+      const titleWithoutNotes = withoutFootnotes(info.title, opts);
+      if (!hasMeaningfulText(titleWithoutNotes)) {
+        const containsNoteMarkup = info.title.trim() !== titleWithoutNotes.trim();
+        issues.push({
+          code: containsNoteMarkup ? 'heading-title-note-only' : 'heading-title-no-meaningful-text',
+          ...info
+        });
+      }
+      if (pending.length) {
+        const previous = pending[pending.length - 1];
+        if (!(level > previous.level)) {
+          issues.push({
+            code: 'heading-chain-not-increasing',
+            previousLevel: previous.level,
+            previousTokenId: previous.tokenId,
+            previousTokenIndex: previous.tokenIndex,
+            level,
+            tokenId: info.tokenId,
+            tokenIndex: info.tokenIndex
+          });
+          pending = [info];
+          continue;
+        }
+      }
+      pending.push(info);
+      continue;
+    }
+    if (token.type === 'paragraph' && paragraphHasBodyText(token)) pending = [];
+  }
+
+  if (pending.length) {
+    const last = pending[pending.length - 1];
+    issues.push({
+      code: 'heading-chain-no-body-text',
+      level: last.level,
+      tokenId: last.tokenId,
+      tokenIndex: last.tokenIndex,
+      chain: pending.map(item => item.level)
+    });
+  }
+  return { ok: issues.length === 0, issues, headingCount };
+}
+
+function formatHeadingStructureIssues(issues) {
+  return (Array.isArray(issues) ? issues : []).map(issue => {
+    const at = issue.tokenId ? ' [' + issue.tokenId + ']' : '';
+    switch (issue.code) {
+      case 'heading-title-note-only':
+        return 'כותרת H' + issue.level + at + ' מכילה הערת שוליים בלבד ואינה כוללת טקסט כותרת עצמאי.';
+      case 'heading-title-no-meaningful-text':
+        return 'כותרת H' + issue.level + at + ' אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.';
+      case 'heading-chain-not-increasing':
+        return 'רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H' + issue.previousLevel +
+          ' מופיעה H' + issue.level + at +
+          '. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.';
+      case 'heading-chain-no-body-text':
+        return 'שרשרת הכותרות ' + issue.chain.map(level => 'H' + level).join(' → ') +
+          ' מסתיימת ללא פסקת גוף בעלת טקסט ממשי; הערות שוליים לבדן אינן נחשבות תוכן.';
+      case 'heading-level-invalid':
+        return 'נמצאה כותרת ברמה שאינה נתמכת (' + issue.level + ')' + at + '; הרמות התקינות הן H0–H7.';
+      default:
+        return 'נמצאה הפרת מבנה כותרות (' + (issue.code || 'unknown') + ')' + at + '.';
+    }
+  }).join('\n');
+}
+
+class DocumentStructureError extends Error {
+  constructor(issues) {
+    const detail = formatHeadingStructureIssues(issues);
+    super('מבנה מסמך לא תקין; העימוד נעצר לפני שלב המדידה:\n' + detail);
+    this.name = 'DocumentStructureError';
+    this.code = 'INVALID_DOCUMENT_STRUCTURE';
+    this.issues = Array.isArray(issues) ? issues : [];
+  }
+}
+
+function assertHeadingStructure(tokens, opts = {}) {
+  const result = validateHeadingStructure(tokens, opts);
+  if (!result.ok) throw new DocumentStructureError(result.issues);
+  return result;
+}
+
+module.exports = {
+  validateHeadingStructure,
+  assertHeadingStructure,
+  formatHeadingStructureIssues,
+  DocumentStructureError
+};
 
 };
 __modules["src/engine/typography/measure-api.js"] = function (require, module, exports) {
