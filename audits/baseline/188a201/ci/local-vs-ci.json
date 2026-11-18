@@ -1,0 +1,124 @@
+{
+  "schema": "red-baseline-vs-ci-v1",
+  "baselineDir": "audits/baseline/188a201",
+  "commit": "188a20199ac9725883377a79e78a6a83996ec998",
+  "items": [
+    {
+      "id": "suite.node18",
+      "what": "ספירת בדיקות לכל קובץ (passed/failed/skipped) — מקומי מול job test (18)",
+      "local": {
+        "files": 39,
+        "passed": 797
+      },
+      "ci": {
+        "files": 39,
+        "passed": 797,
+        "log": "ci/logs/run43917551730-test-18.log"
+      },
+      "equalFiles": 39,
+      "diffs": [],
+      "extraInCiOnly": [],
+      "status": "EQUAL"
+    },
+    {
+      "id": "suite.node20",
+      "what": "ספירת בדיקות לכל קובץ (passed/failed/skipped) — מקומי מול job test (20)",
+      "local": {
+        "files": 39,
+        "passed": 797
+      },
+      "ci": {
+        "files": 39,
+        "passed": 797,
+        "log": "ci/logs/run43917551730-test-20.log"
+      },
+      "equalFiles": 39,
+      "diffs": [],
+      "extraInCiOnly": [],
+      "status": "EQUAL"
+    },
+    {
+      "id": "suite.node22",
+      "what": "ספירת בדיקות לכל קובץ (passed/failed/skipped) — מקומי מול job test (22)",
+      "local": {
+        "files": 39,
+        "passed": 797
+      },
+      "ci": {
+        "files": 39,
+        "passed": 797,
+        "log": "ci/logs/run43917551730-test-22.log"
+      },
+      "equalFiles": 39,
+      "diffs": [],
+      "extraInCiOnly": [],
+      "status": "EQUAL"
+    },
+    {
+      "id": "parity.compare",
+      "what": "compare.py: HARD/PARITY/ציון/בדיקות שנכשלות",
+      "local": {
+        "hard": "3/3",
+        "parity": "12/14",
+        "score": 88.2,
+        "failing": [
+          "PARITY: רצף פסקאות (מספר/שורות/מילים)",
+          "PARITY: שקילות שבירת שורות (טקסט שורה-אחר-שורה)"
+        ]
+      },
+      "ci": {
+        "hard": "3/3",
+        "parity": "12/14",
+        "score": 88.2,
+        "failing": [
+          "PARITY: רצף פסקאות (מספר/שורות/מילים)",
+          "PARITY: שקילות שבירת שורות (טקסט שורה-אחר-שורה)"
+        ],
+        "log": "ci/logs/run43917551759-layout-parity.log"
+      },
+      "status": "EQUAL"
+    },
+    {
+      "id": "very-long.node-path",
+      "what": "קורפוס 3.4MB בנתיב Node: עמודים/hash/דטרמיניזם",
+      "local": {
+        "pages": 548,
+        "hash": "legacy-5aeaa",
+        "determinismIdentical": true
+      },
+      "ci": {
+        "pages": 548,
+        "hash": "legacy-5aeaa",
+        "determinismIdentical": true,
+        "log": "ci/logs/run43917551759-very-long-corpus.log"
+      },
+      "status": "EQUAL"
+    },
+    {
+      "id": "layout-audit.ci",
+      "what": "layout-audit (ci.yml) — עמודים שנבדקו ובעיות",
+      "ci": {
+        "pages": "10/10",
+        "problems": 0,
+        "log": "ci/logs/run43917551730-layout-audit.log"
+      },
+      "status": "ci-only"
+    }
+  ],
+  "measuredTotalTests": 797,
+  "docClaims": [
+    {
+      "claim": "README.md:44 — 388",
+      "measured": 797
+    },
+    {
+      "claim": "ci.yml:34 (הערה) — 670",
+      "measured": 797
+    },
+    {
+      "claim": "WORKLOG.md:2408/2575/2591 — 657 (32 קבצים)",
+      "measured": "797 (39 קבצים)"
+    }
+  ],
+  "verdict": "EQUAL"
+}

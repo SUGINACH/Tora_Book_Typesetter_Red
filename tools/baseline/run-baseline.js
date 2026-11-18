@@ -18,7 +18,8 @@
 // שימוש (משורש הריפו):
 //   node tools/baseline/run-baseline.js [--parity] [--out <dir>] [--keep-artifacts] [--skip-suite]
 // ברירת מחדל ליעד: audits/baseline/<sha7>/   (manifest.json + logs/ + parity/)
-// יציאה: 0 הכול תקין | 1 כשל בדיקה/דילוג/אי-דטרמיניזם/כשל HARD/ירידה מתחת לרצפת ה-parity.
+// יציאה: 0 הכול תקין | 1 כשל בדיקה/דילוג/אי-דטרמיניזם/כשל HARD/צעד parity שנכשל. רצפת ה-parity ההיסטורית (88.9) אינה נאכפת מאז #33
+// (ratchet הוסר; ציוני PARITY אבחוניים) — מדווחת כעובדה בלבד ב-manifest.parity.ratchetFloor/ratchetOk.
 'use strict';
 
 const { spawnSync } = require('child_process');
@@ -115,7 +116,8 @@ const SUMMARY = /== (.+?): (\d+)(?:\/(\d+))? passed, (\d+) failed(?:, (\d+) skip
 
 function runSuite() {
   const pkg = JSON.parse(fs.readFileSync(path.join(RED, 'package.json'), 'utf8'));
-  const cmds = pkg.scripts.test.split(' && ');
+  // CI מריץ את שרשרת `npm test` ואחריה צעד נפרד "Regression repros" (`npm run test:regress`, מ-#37) — נכלל כאן כדי שהמונה המקומי יהיה = CI.
+  const cmds = [...pkg.scripts.test.split(' && '), ...(pkg.scripts['test:regress'] ? pkg.scripts['test:regress'].split(' && ') : [])];
   const rows = [];
   cmds.forEach((cmd, i) => {
     const t0 = Date.now();
@@ -200,10 +202,13 @@ function runParity() {
   const cmp = step('compare', 'python3 tools/layout-parity/compare.py audits/layout-reference.json audits/layout-parity-artifacts/ours-model.json audits/layout-parity-artifacts/ours.pdf audits/layout-parity-artifacts/parity-report.json');
   copyJson(path.join(A, 'parity-report.json'), 'parity-report.json');
 
-  let score = null; let floor = null; let summary = null;
+  let score = null; let floor = null; let summary = null; let layers = null; let referenceAuthority = null;
   try {
-    summary = JSON.parse(fs.readFileSync(path.join(A, 'parity-report.json'), 'utf8')).summary;
+    const report = JSON.parse(fs.readFileSync(path.join(A, 'parity-report.json'), 'utf8'));
+    summary = report.summary;
     score = summary.score;
+    layers = (report.checks || []).map((c) => ({ id: c.id, layer: c.layer, pass: c.pass })); // כולל סיווג שכבה (#33 העביר את H4 ל-LEGACY)
+    referenceAuthority = (report.meta && report.meta.referenceAuthority) || null;
     floor = JSON.parse(fs.readFileSync(path.join(RED, 'tests', 'artifacts', 'parity-baseline.json'), 'utf8')).score * 100;
   } catch (e) { /* ידווח כ-null */ }
 
@@ -222,7 +227,7 @@ function runParity() {
   const ratchetOk = score != null && floor != null ? score >= floor : null;
   return {
     steps, referenceDeterministic, compareExit: cmp.exit, hardFail, parityGapsRemain: cmp.exit === 2 || cmp.exit === 3,
-    score, ratchetFloor: floor, ratchetOk, summary, artifacts,
+    score, ratchetFloor: floor, ratchetOk, ratchetEnforced: false, referenceAuthority, layers, summary, artifacts,
   };
 }
 
@@ -236,7 +241,12 @@ function trackedDrift() {
 }
 
 // ───────────────────────── main ─────────────────────────
-const manifest = { schema: 'red-baseline-v1', env: collectEnv(), inputs: collectInputs() };
+const manifest = {
+  schema: 'red-baseline-v2',
+  policy: { source: 'PR #33 / D-100', ratchetEnforced: false, note: 'רצפת ה-parity ההיסטורית מדווחת כעובדה בלבד; HARD נאכף; ציוני PARITY אבחוניים; הקורפוס הארוך = long_test_text.txt' },
+  env: collectEnv(),
+  inputs: collectInputs(),
+};
 console.log(`baseline @ ${manifest.env.commit.slice(0, 7)} (${manifest.env.branch}) — node ${manifest.env.runner.node} — ${manifest.env.dateUtc}`);
 if (manifest.env.dirtyTrackedBeforeRun.length) console.warn(`⚠ העץ אינו נקי לפני ההרצה: ${manifest.env.dirtyTrackedBeforeRun.join(', ')}`);
 
@@ -258,8 +268,8 @@ if (manifest.suite) {
 }
 if (manifest.parity) {
   const p = manifest.parity;
-  console.log(`PARITY: score=${p.score} floor=${p.ratchetFloor} hardFail=${p.hardFail} gapsRemain=${p.parityGapsRemain} referenceDeterministic=${p.referenceDeterministic}`);
-  if (p.hardFail || p.ratchetOk === false || !p.referenceDeterministic || p.steps.some((s) => s.name !== 'compare' && s.exit !== 0)) bad.push('parity');
+  console.log(`PARITY: score=${p.score} (אבחוני) · רצפה היסטורית=${p.ratchetFloor} (לא נאכפת מאז #33; ratchetOk=${p.ratchetOk}) hardFail=${p.hardFail} gapsRemain=${p.parityGapsRemain} referenceDeterministic=${p.referenceDeterministic}`);
+  if (p.hardFail || !p.referenceDeterministic || p.steps.some((s) => s.name !== 'compare' && s.exit !== 0)) bad.push('parity');
 }
 console.log(`manifest → ${rel(path.join(OUT, 'manifest.json'))}${bad.length ? `  | ✗ ${bad.join(', ')}` : ''}`);
 process.exitCode = bad.length ? 1 : 0;

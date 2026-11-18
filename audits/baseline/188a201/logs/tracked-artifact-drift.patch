@@ -1,0 +1,197 @@
+diff --git a/red-build/tests/artifacts/s10-callgraph.json b/red-build/tests/artifacts/s10-callgraph.json
+index 18cd6e0..8664384 100755
+--- a/red-build/tests/artifacts/s10-callgraph.json
++++ b/red-build/tests/artifacts/s10-callgraph.json
+@@ -5,6 +5,7 @@
+   "files": [
+     "app-shell.js",
+     "bindings.generated.js",
++    "boot-failure.js",
+     "browser-entry.js",
+     "callgraph-scan.js",
+     "caret-map.js",
+@@ -15,11 +16,13 @@
+     "inline-transport.js",
+     "preview-tab.js",
+     "retypeset-policy.js",
++    "run-info.js",
+     "settings-panel.js",
+     "settings-persistence.js",
+     "status-strip.js",
+     "test-doc-generator.js",
+     "testing-tab.js",
++    "text-decode.js",
+     "worker-client.js",
+     "worker-protocol.js"
+   ],
+@@ -28,7 +31,7 @@
+       "file": "app-shell.js",
+       "fn": "onExplicitRetypeset",
+       "callee": "requestTypeset",
+-      "line": 280
++      "line": 282
+     },
+     {
+       "file": "engine-worker-main.js",
+diff --git a/red-build/tests/artifacts/s12-font-subset.json b/red-build/tests/artifacts/s12-font-subset.json
+index b77e5b4..d5e2637 100644
+--- a/red-build/tests/artifacts/s12-font-subset.json
++++ b/red-build/tests/artifacts/s12-font-subset.json
+@@ -7,5 +7,5 @@
+   "glyphsDropped": 6204,
+   "charsMapped": 48,
+   "tofu": 0,
+-  "buildMs": 3
++  "buildMs": 5
+ }
+\ No newline at end of file
+diff --git a/red-build/tests/artifacts/s13-matrix-report.json b/red-build/tests/artifacts/s13-matrix-report.json
+index 12cb781..0080668 100644
+--- a/red-build/tests/artifacts/s13-matrix-report.json
++++ b/red-build/tests/artifacts/s13-matrix-report.json
+@@ -5,7 +5,7 @@
+     {
+       "config": "default",
+       "pages": 36,
+-      "ms": 58,
++      "ms": 69,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -22,7 +22,7 @@
+     {
+       "config": "ornaments",
+       "pages": 36,
+-      "ms": 25,
++      "ms": 38,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -39,7 +39,7 @@
+     {
+       "config": "aq-on",
+       "pages": 36,
+-      "ms": 21,
++      "ms": 20,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -56,7 +56,7 @@
+     {
+       "config": "continuous-notes",
+       "pages": 36,
+-      "ms": 21,
++      "ms": 23,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "ca43334c55f989593026cbc1e1fa89c809a7f80fb9db3388bf706d57757a633f",
+@@ -73,7 +73,7 @@
+     {
+       "config": "verso-headers",
+       "pages": 36,
+-      "ms": 20,
++      "ms": 22,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+@@ -90,7 +90,7 @@
+     {
+       "config": "custom-styles",
+       "pages": 36,
+-      "ms": 22,
++      "ms": 20,
+       "contentPreserved": true,
+       "geometryNeutral": true,
+       "layoutHash": "80f9ed6c82ea3855b6786bebd552aa5058109f40f671644c0e284e0e5681c314",
+diff --git a/red-build/tests/artifacts/s13-perf.json b/red-build/tests/artifacts/s13-perf.json
+index 1a0b006..86443a0 100644
+--- a/red-build/tests/artifacts/s13-perf.json
++++ b/red-build/tests/artifacts/s13-perf.json
+@@ -1,9 +1,9 @@
+ {
+   "pages": 1338,
+-  "typesetMs": 733,
+-  "pagesPerSec": 1825,
+-  "heapUsedMB": 85,
+-  "rssMB": 343,
++  "typesetMs": 874,
++  "pagesPerSec": 1531,
++  "heapUsedMB": 92,
++  "rssMB": 287,
+   "budget": {
+     "typesetMaxSec": 45,
+     "memoryMaxMB": 1500
+diff --git a/tools/baseline/run-baseline.js b/tools/baseline/run-baseline.js
+index 42bcc83..d2cd36e 100644
+--- a/tools/baseline/run-baseline.js
++++ b/tools/baseline/run-baseline.js
+@@ -18,7 +18,8 @@
+ // שימוש (משורש הריפו):
+ //   node tools/baseline/run-baseline.js [--parity] [--out <dir>] [--keep-artifacts] [--skip-suite]
+ // ברירת מחדל ליעד: audits/baseline/<sha7>/   (manifest.json + logs/ + parity/)
+-// יציאה: 0 הכול תקין | 1 כשל בדיקה/דילוג/אי-דטרמיניזם/כשל HARD/ירידה מתחת לרצפת ה-parity.
++// יציאה: 0 הכול תקין | 1 כשל בדיקה/דילוג/אי-דטרמיניזם/כשל HARD/צעד parity שנכשל. רצפת ה-parity ההיסטורית (88.9) אינה נאכפת מאז #33
++// (ratchet הוסר; ציוני PARITY אבחוניים) — מדווחת כעובדה בלבד ב-manifest.parity.ratchetFloor/ratchetOk.
+ 'use strict';
+ 
+ const { spawnSync } = require('child_process');
+@@ -115,7 +116,8 @@ const SUMMARY = /== (.+?): (\d+)(?:\/(\d+))? passed, (\d+) failed(?:, (\d+) skip
+ 
+ function runSuite() {
+   const pkg = JSON.parse(fs.readFileSync(path.join(RED, 'package.json'), 'utf8'));
+-  const cmds = pkg.scripts.test.split(' && ');
++  // CI מריץ את שרשרת `npm test` ואחריה צעד נפרד "Regression repros" (`npm run test:regress`, מ-#37) — נכלל כאן כדי שהמונה המקומי יהיה = CI.
++  const cmds = [...pkg.scripts.test.split(' && '), ...(pkg.scripts['test:regress'] ? pkg.scripts['test:regress'].split(' && ') : [])];
+   const rows = [];
+   cmds.forEach((cmd, i) => {
+     const t0 = Date.now();
+@@ -200,10 +202,13 @@ function runParity() {
+   const cmp = step('compare', 'python3 tools/layout-parity/compare.py audits/layout-reference.json audits/layout-parity-artifacts/ours-model.json audits/layout-parity-artifacts/ours.pdf audits/layout-parity-artifacts/parity-report.json');
+   copyJson(path.join(A, 'parity-report.json'), 'parity-report.json');
+ 
+-  let score = null; let floor = null; let summary = null;
++  let score = null; let floor = null; let summary = null; let layers = null; let referenceAuthority = null;
+   try {
+-    summary = JSON.parse(fs.readFileSync(path.join(A, 'parity-report.json'), 'utf8')).summary;
++    const report = JSON.parse(fs.readFileSync(path.join(A, 'parity-report.json'), 'utf8'));
++    summary = report.summary;
+     score = summary.score;
++    layers = (report.checks || []).map((c) => ({ id: c.id, layer: c.layer, pass: c.pass })); // כולל סיווג שכבה (#33 העביר את H4 ל-LEGACY)
++    referenceAuthority = (report.meta && report.meta.referenceAuthority) || null;
+     floor = JSON.parse(fs.readFileSync(path.join(RED, 'tests', 'artifacts', 'parity-baseline.json'), 'utf8')).score * 100;
+   } catch (e) { /* ידווח כ-null */ }
+ 
+@@ -222,7 +227,7 @@ function runParity() {
+   const ratchetOk = score != null && floor != null ? score >= floor : null;
+   return {
+     steps, referenceDeterministic, compareExit: cmp.exit, hardFail, parityGapsRemain: cmp.exit === 2 || cmp.exit === 3,
+-    score, ratchetFloor: floor, ratchetOk, summary, artifacts,
++    score, ratchetFloor: floor, ratchetOk, ratchetEnforced: false, referenceAuthority, layers, summary, artifacts,
+   };
+ }
+ 
+@@ -236,7 +241,12 @@ function trackedDrift() {
+ }
+ 
+ // ───────────────────────── main ─────────────────────────
+-const manifest = { schema: 'red-baseline-v1', env: collectEnv(), inputs: collectInputs() };
++const manifest = {
++  schema: 'red-baseline-v2',
++  policy: { source: 'PR #33 / D-100', ratchetEnforced: false, note: 'רצפת ה-parity ההיסטורית מדווחת כעובדה בלבד; HARD נאכף; ציוני PARITY אבחוניים; הקורפוס הארוך = long_test_text.txt' },
++  env: collectEnv(),
++  inputs: collectInputs(),
++};
+ console.log(`baseline @ ${manifest.env.commit.slice(0, 7)} (${manifest.env.branch}) — node ${manifest.env.runner.node} — ${manifest.env.dateUtc}`);
+ if (manifest.env.dirtyTrackedBeforeRun.length) console.warn(`⚠ העץ אינו נקי לפני ההרצה: ${manifest.env.dirtyTrackedBeforeRun.join(', ')}`);
+ 
+@@ -258,8 +268,8 @@ if (manifest.suite) {
+ }
+ if (manifest.parity) {
+   const p = manifest.parity;
+-  console.log(`PARITY: score=${p.score} floor=${p.ratchetFloor} hardFail=${p.hardFail} gapsRemain=${p.parityGapsRemain} referenceDeterministic=${p.referenceDeterministic}`);
+-  if (p.hardFail || p.ratchetOk === false || !p.referenceDeterministic || p.steps.some((s) => s.name !== 'compare' && s.exit !== 0)) bad.push('parity');
++  console.log(`PARITY: score=${p.score} (אבחוני) · רצפה היסטורית=${p.ratchetFloor} (לא נאכפת מאז #33; ratchetOk=${p.ratchetOk}) hardFail=${p.hardFail} gapsRemain=${p.parityGapsRemain} referenceDeterministic=${p.referenceDeterministic}`);
++  if (p.hardFail || !p.referenceDeterministic || p.steps.some((s) => s.name !== 'compare' && s.exit !== 0)) bad.push('parity');
+ }
+ console.log(`manifest → ${rel(path.join(OUT, 'manifest.json'))}${bad.length ? `  | ✗ ${bad.join(', ')}` : ''}`);
+ process.exitCode = bad.length ? 1 : 0;

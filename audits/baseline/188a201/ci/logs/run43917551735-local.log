@@ -1,0 +1,410 @@
+﻿2026-11-16T17:21:45.1813351Z Current runner version: '2.338.2'
+2026-11-16T17:21:45.1831295Z ##[group]Runner Image Provisioner
+2026-11-16T17:21:45.1831940Z Hosted Compute Agent
+2026-11-16T17:21:45.1832426Z Version: 20261103.629
+2026-11-16T17:21:45.1832888Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-16T17:21:45.1833433Z Build Date: 2026-11-03T17:26:59Z
+2026-11-16T17:21:45.1833979Z Worker ID: {059d2bd8-8319-43f1-9402-c6ca3bbe2329}
+2026-11-16T17:21:45.1834510Z Region: us-east-1
+2026-11-16T17:21:45.1834910Z Cloud: AWS
+2026-11-16T17:21:45.1835309Z ##[endgroup]
+2026-11-16T17:21:45.1836848Z ##[group]Operating System
+2026-11-16T17:21:45.1837630Z Ubuntu
+2026-11-16T17:21:45.1838013Z 26.04.1
+2026-11-16T17:21:45.1838386Z LTS
+2026-11-16T17:21:45.1838785Z ##[endgroup]
+2026-11-16T17:21:45.1839165Z ##[group]Runner Image
+2026-11-16T17:21:45.1839679Z Image: ubuntu-26.04
+2026-11-16T17:21:45.1840085Z Version: 20261111.82.6
+2026-11-16T17:21:45.1841122Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.82/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-16T17:21:45.1842473Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.82
+2026-11-16T17:21:45.1843256Z ##[endgroup]
+2026-11-16T17:21:45.1844149Z ##[group]GITHUB_TOKEN Permissions
+2026-11-16T17:21:45.1845896Z Contents: read
+2026-11-16T17:21:45.1846304Z Metadata: read
+2026-11-16T17:21:45.1846752Z Packages: read
+2026-11-16T17:21:45.1847358Z ##[endgroup]
+2026-11-16T17:21:45.1849126Z Secret source: Actions
+2026-11-16T17:21:45.1849912Z Cache mode: write
+2026-11-16T17:21:45.1850615Z Prepare workflow directory
+2026-11-16T17:21:45.2072517Z Prepare all required actions
+2026-11-16T17:21:45.2108799Z Getting action download info
+2026-11-16T17:21:45.3610682Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-16T17:21:47.7670157Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-16T17:21:47.9922789Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-16T17:21:48.3430572Z Complete job name: local
+2026-11-16T17:21:48.4133352Z ##[group]Run actions/checkout@v4
+2026-11-16T17:21:48.4134446Z with:
+2026-11-16T17:21:48.4135390Z   repository: SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:48.4143660Z   token: ***
+2026-11-16T17:21:48.4144509Z   ssh-strict: true
+2026-11-16T17:21:48.4145488Z   ssh-user: git
+2026-11-16T17:21:48.4146288Z   persist-credentials: true
+2026-11-16T17:21:48.4147307Z   clean: true
+2026-11-16T17:21:48.4148218Z   sparse-checkout-cone-mode: true
+2026-11-16T17:21:48.4149252Z   fetch-depth: 1
+2026-11-16T17:21:48.4150060Z   fetch-tags: false
+2026-11-16T17:21:48.4150892Z   show-progress: true
+2026-11-16T17:21:48.4151615Z   lfs: false
+2026-11-16T17:21:48.4152276Z   submodules: false
+2026-11-16T17:21:48.4152996Z   set-safe-directory: true
+2026-11-16T17:21:48.4153798Z   allow-unsafe-pr-checkout: false
+2026-11-16T17:21:48.4155121Z ##[endgroup]
+2026-11-16T17:21:52.4897642Z Syncing repository: SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:52.4899680Z ##[group]Getting Git version info
+2026-11-16T17:21:52.4900590Z Working directory is '/home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red'
+2026-11-16T17:21:52.4901565Z [command]/usr/bin/git version
+2026-11-16T17:21:52.4905885Z git version 2.56.1
+2026-11-16T17:21:52.4923658Z ##[endgroup]
+2026-11-16T17:21:52.4928884Z Temporarily overriding HOME='/home/runner/work/_temp/51f3d947-ee44-4f7f-9ea3-6700ca3131e7' before making global git config changes
+2026-11-16T17:21:52.4929562Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-16T17:21:52.4932873Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-16T17:21:52.5006536Z Deleting the contents of '/home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red'
+2026-11-16T17:21:52.5009049Z ##[group]Initializing the repository
+2026-11-16T17:21:52.5013189Z [command]/usr/bin/git init /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-16T17:21:52.5915773Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-16T17:21:52.5916374Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-16T17:21:52.5916958Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-16T17:21:52.5917537Z hint: call:
+2026-11-16T17:21:52.5917792Z hint:
+2026-11-16T17:21:52.5918151Z hint: 	git config --global init.defaultBranch <name>
+2026-11-16T17:21:52.5918464Z hint:
+2026-11-16T17:21:52.5918787Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-16T17:21:52.5919248Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-16T17:21:52.5919637Z hint:
+2026-11-16T17:21:52.5919902Z hint: 	git branch -m <name>
+2026-11-16T17:21:52.5920161Z hint:
+2026-11-16T17:21:52.5939357Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-16T17:21:52.5940058Z Initialized empty Git repository in /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/.git/
+2026-11-16T17:21:52.5946012Z [command]/usr/bin/git remote add origin https://github.com/SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:52.5999923Z ##[endgroup]
+2026-11-16T17:21:52.6000396Z ##[group]Disabling automatic garbage collection
+2026-11-16T17:21:52.6002802Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-16T17:21:52.6022141Z ##[endgroup]
+2026-11-16T17:21:52.6022794Z ##[group]Setting up auth
+2026-11-16T17:21:52.6026771Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-16T17:21:52.6047023Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-16T17:21:52.8801364Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-16T17:21:52.8821643Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-16T17:21:52.8990848Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-16T17:21:52.9010925Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-16T17:21:52.9179656Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-16T17:21:52.9202882Z ##[endgroup]
+2026-11-16T17:21:52.9203518Z ##[group]Fetching the repository
+2026-11-16T17:21:52.9209411Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +188a20199ac9725883377a79e78a6a83996ec998:refs/remotes/origin/main
+2026-11-16T17:21:54.6030452Z From https://github.com/SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:54.6031253Z  * [new ref]         188a20199ac9725883377a79e78a6a83996ec998 -> origin/main
+2026-11-16T17:21:54.6042099Z ##[endgroup]
+2026-11-16T17:21:54.6042732Z ##[group]Determining the checkout info
+2026-11-16T17:21:54.6043129Z ##[endgroup]
+2026-11-16T17:21:54.6043456Z [command]/usr/bin/git sparse-checkout disable
+2026-11-16T17:21:54.6089510Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-16T17:21:54.6115391Z ##[group]Checking out the ref
+2026-11-16T17:21:54.6118508Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-16T17:21:55.1668526Z Switched to a new branch 'main'
+2026-11-16T17:21:55.1675831Z branch 'main' set up to track 'origin/main'.
+2026-11-16T17:21:55.1699859Z ##[endgroup]
+2026-11-16T17:21:55.1742258Z [command]/usr/bin/git log -1 --format=%H
+2026-11-16T17:21:55.1760049Z 188a20199ac9725883377a79e78a6a83996ec998
+2026-11-16T17:21:55.1973266Z ##[group]Run actions/setup-node@v4
+2026-11-16T17:21:55.1973627Z with:
+2026-11-16T17:21:55.1973842Z   node-version: 22
+2026-11-16T17:21:55.1974065Z   always-auth: false
+2026-11-16T17:21:55.1974262Z   check-latest: false
+2026-11-16T17:21:55.1976064Z   token: ***
+2026-11-16T17:21:55.1976267Z ##[endgroup]
+2026-11-16T17:21:55.5233173Z (node:2358) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:21:55.5233890Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:21:55.5234806Z Found in cache @ /opt/hostedtoolcache/node/22.23.4/x64
+2026-11-16T17:21:55.5235294Z ##[group]Environment details
+2026-11-16T17:22:00.6702632Z node: v22.23.4
+2026-11-16T17:22:00.6703110Z npm: 10.9.9
+2026-11-16T17:22:00.6703404Z yarn: 1.22.22
+2026-11-16T17:22:00.6704528Z ##[endgroup]
+2026-11-16T17:22:00.6802937Z ##[group]Run node tools/validate-source-structure.js audits/very_long_test_text.txt --expect-invalid
+2026-11-16T17:22:00.6803594Z [36;1mnode tools/validate-source-structure.js audits/very_long_test_text.txt --expect-invalid[0m
+2026-11-16T17:22:00.6834768Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:22:00.6835116Z ##[endgroup]
+2026-11-16T17:22:00.8711010Z Source: audits/very_long_test_text.txt
+2026-11-16T17:22:00.8711860Z Headings: 1454
+2026-11-16T17:22:00.8712299Z Structural status: INVALID
+2026-11-16T17:22:00.8712760Z Issues: 12
+2026-11-16T17:22:00.8714015Z רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H7 מופיעה H3 [t4404]. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.
+2026-11-16T17:22:00.8715149Z רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H7 מופיעה H3 [t4429]. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.
+2026-11-16T17:22:00.8716420Z רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H7 מופיעה H1 [t4859]. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.
+2026-11-16T17:22:00.8717653Z רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H7 מופיעה H3 [t5067]. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.
+2026-11-16T17:22:00.8718747Z רצף כותרות ללא טקסט גוף אינו היררכי: אחרי H7 מופיעה H3 [t5186]. יש להשלים תוכן במקטע הקודם לפני מעבר לרמה זהה או גבוהה יותר.
+2026-11-16T17:22:00.8719591Z כותרת H6 [t5656] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8720395Z כותרת H6 [t5661] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8721111Z כותרת H6 [t5665] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8721875Z כותרת H6 [t5670] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8722610Z כותרת H6 [t5673] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8723381Z כותרת H6 [t5677] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8724228Z כותרת H6 [t5680] אינה מכילה טקסט כותרת ממשי; סימני פיסוק או קישוט בלבד אינם כותרת.
+2026-11-16T17:22:00.8724863Z Expected rejection confirmed (negative-control fixture).
+2026-11-16T17:22:00.8842953Z ##[group]Run node tools/validate-source-structure.js audits/long_test_text.txt
+2026-11-16T17:22:00.8843432Z [36;1mnode tools/validate-source-structure.js audits/long_test_text.txt[0m
+2026-11-16T17:22:00.8858641Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:22:00.8858900Z ##[endgroup]
+2026-11-16T17:22:01.0133617Z Source: audits/long_test_text.txt
+2026-11-16T17:22:01.0134288Z Headings: 0
+2026-11-16T17:22:01.0134619Z Structural status: VALID
+2026-11-16T17:22:01.0134877Z Issues: 0
+2026-11-16T17:22:01.0135170Z D-100 source validation passed.
+2026-11-16T17:22:01.0220145Z ##[group]Run npm install -g agent-browser@0.41.2
+2026-11-16T17:22:01.0220464Z [36;1mnpm install -g agent-browser@0.41.2[0m
+2026-11-16T17:22:01.0220755Z [36;1magent-browser install --with-deps[0m
+2026-11-16T17:22:01.0234909Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:22:01.0235167Z ##[endgroup]
+2026-11-16T17:22:02.5658622Z npm warn EBADENGINE Unsupported engine {
+2026-11-16T17:22:02.5659249Z npm warn EBADENGINE   package: 'agent-browser@0.41.2',
+2026-11-16T17:22:02.5660035Z npm warn EBADENGINE   required: { node: '>=24.0.0', pnpm: '>=11.0.0' },
+2026-11-16T17:22:02.5660640Z npm warn EBADENGINE   current: { node: 'v22.23.4', npm: '10.9.9' }
+2026-11-16T17:22:02.5661095Z npm warn EBADENGINE }
+2026-11-16T17:22:03.5179897Z 
+2026-11-16T17:22:03.5180706Z added 1 package in 2s
+2026-11-16T17:22:03.5363343Z Installing system dependencies...
+2026-11-16T17:22:03.5370318Z Running: sudo apt-get update
+2026-11-16T17:22:03.6003340Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [152 B]
+2026-11-16T17:22:03.6307992Z Get:5 https://packages.microsoft.com/ubuntu/26.04/prod resolute InRelease [3964 B]
+2026-11-16T17:22:03.7192984Z Hit:2 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute InRelease
+2026-11-16T17:22:03.7348135Z Get:3 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute-updates InRelease [137 kB]
+2026-11-16T17:22:03.7664424Z Get:6 https://packages.microsoft.com/ubuntu/26.04/prod resolute/main amd64 Packages [158 kB]
+2026-11-16T17:22:03.7982067Z Get:4 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute-backports InRelease [137 kB]
+2026-11-16T17:22:03.8222669Z Get:11 https://packages.microsoft.com/ubuntu/26.04/prod resolute/main arm64 Packages [143 kB]
+2026-11-16T17:22:03.8264012Z Get:7 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute-updates/main amd64v3 Packages [873 kB]
+2026-11-16T17:22:03.8731927Z Get:12 http://security.ubuntu.com/ubuntu resolute-security InRelease [137 kB]
+2026-11-16T17:22:03.8965901Z Get:8 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute-updates/main Translation-en [195 kB]
+2026-11-16T17:22:03.9214977Z Get:9 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute-updates/universe amd64v3 Packages [386 kB]
+2026-11-16T17:22:03.9336929Z Get:13 http://security.ubuntu.com/ubuntu resolute-security/main amd64v3 Packages [719 kB]
+2026-11-16T17:22:03.9462391Z Get:10 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute-updates/universe Translation-en [122 kB]
+2026-11-16T17:22:03.9915944Z Get:14 http://security.ubuntu.com/ubuntu resolute-security/main Translation-en [157 kB]
+2026-11-16T17:22:04.0060531Z Get:15 http://security.ubuntu.com/ubuntu resolute-security/universe amd64v3 Packages [221 kB]
+2026-11-16T17:22:04.0209133Z Get:16 http://security.ubuntu.com/ubuntu resolute-security/universe Translation-en [72.6 kB]
+2026-11-16T17:22:14.1267059Z Fetched 3461 kB in 0s (7511 kB/s)
+2026-11-16T17:22:14.6197601Z Reading package lists...
+2026-11-16T17:22:14.9755933Z Checking for conflicts...
+2026-11-16T17:22:15.5368194Z Running: sudo apt-get install -y libxcb-shm0 libx11-xcb1 libx11-6 libxcb1 libxext6 libxrandr2 libxcomposite1 libxcursor1 libxdamage1 libxfixes3 libxi6 libgtk-3-0t64 libpangocairo-1.0-0 libpango-1.0-0 libatk1.0-0t64 libcairo-gobject2 libcairo2 libgdk-pixbuf-2.0-0 libxrender1 libasound2t64 libfreetype6 libfontconfig1 libdbus-1-3 libnss3 libnss3-tools libnspr4 libatk-bridge2.0-0t64 libdrm2 libxkbcommon0 libatspi2.0-0t64 libcups2t64 libxshmfence1 libgbm1 fonts-noto-color-emoji fonts-noto-cjk fonts-freefont-ttf
+2026-11-16T17:22:15.5508758Z Reading package lists...
+2026-11-16T17:22:15.6370562Z Building dependency tree...
+2026-11-16T17:22:15.6374346Z Reading state information...
+2026-11-16T17:22:15.6622225Z libxcb-shm0 is already the newest version (1.17.0-2ubuntu1).
+2026-11-16T17:22:15.6622889Z libxcb-shm0 set to manually installed.
+2026-11-16T17:22:15.6623601Z libx11-xcb1 is already the newest version (2:1.8.13-1ubuntu0.1).
+2026-11-16T17:22:15.6624224Z libx11-xcb1 set to manually installed.
+2026-11-16T17:22:15.6625059Z libx11-6 is already the newest version (2:1.8.13-1ubuntu0.1).
+2026-11-16T17:22:15.6625652Z libx11-6 set to manually installed.
+2026-11-16T17:22:15.6626179Z libxcb1 is already the newest version (1.17.0-2ubuntu1).
+2026-11-16T17:22:15.6626718Z libxcb1 set to manually installed.
+2026-11-16T17:22:15.6627487Z libxext6 is already the newest version (2:1.3.4-1build3).
+2026-11-16T17:22:15.6628019Z libxext6 set to manually installed.
+2026-11-16T17:22:15.6628621Z libxrandr2 is already the newest version (2:1.5.4-1build1).
+2026-11-16T17:22:15.6629544Z libxrandr2 set to manually installed.
+2026-11-16T17:22:15.6630139Z libxcomposite1 is already the newest version (1:0.4.6-1build1).
+2026-11-16T17:22:15.6630667Z libxcomposite1 set to manually installed.
+2026-11-16T17:22:15.6631249Z libxcursor1 is already the newest version (1:1.2.3-1build1).
+2026-11-16T17:22:15.6631743Z libxcursor1 set to manually installed.
+2026-11-16T17:22:15.6632619Z libxdamage1 is already the newest version (1:1.1.7-1).
+2026-11-16T17:22:15.6633167Z libxdamage1 set to manually installed.
+2026-11-16T17:22:15.6633687Z libxfixes3 is already the newest version (1:6.0.0-2build2).
+2026-11-16T17:22:15.6634223Z libxfixes3 set to manually installed.
+2026-11-16T17:22:15.6634707Z libxi6 is already the newest version (2:1.8.2-2).
+2026-11-16T17:22:15.6635148Z libxi6 set to manually installed.
+2026-11-16T17:22:15.6635690Z libgtk-3-0t64 is already the newest version (3.24.52-0ubuntu1).
+2026-11-16T17:22:15.6636203Z libgtk-3-0t64 set to manually installed.
+2026-11-16T17:22:15.6636748Z libpangocairo-1.0-0 is already the newest version (1.57.0-1).
+2026-11-16T17:22:15.6637551Z libpangocairo-1.0-0 set to manually installed.
+2026-11-16T17:22:15.6638123Z libpango-1.0-0 is already the newest version (1.57.0-1).
+2026-11-16T17:22:15.6638653Z libpango-1.0-0 set to manually installed.
+2026-11-16T17:22:15.6639180Z libatk1.0-0t64 is already the newest version (2.60.4-0ubuntu0.1).
+2026-11-16T17:22:15.6639780Z libatk1.0-0t64 set to manually installed.
+2026-11-16T17:22:15.6640311Z libcairo-gobject2 is already the newest version (1.18.4-3).
+2026-11-16T17:22:15.6640919Z libcairo-gobject2 set to manually installed.
+2026-11-16T17:22:15.6641486Z libcairo2 is already the newest version (1.18.4-3).
+2026-11-16T17:22:15.6641940Z libcairo2 set to manually installed.
+2026-11-16T17:22:15.6642526Z libgdk-pixbuf-2.0-0 is already the newest version (2.44.5+dfsg-4ubuntu1).
+2026-11-16T17:22:15.6643121Z libgdk-pixbuf-2.0-0 set to manually installed.
+2026-11-16T17:22:15.6643733Z libxrender1 is already the newest version (1:0.9.12-1build1).
+2026-11-16T17:22:15.6644186Z libxrender1 set to manually installed.
+2026-11-16T17:22:15.6644712Z libasound2t64 is already the newest version (1.2.15.3-1ubuntu1.1).
+2026-11-16T17:22:15.6645246Z libasound2t64 set to manually installed.
+2026-11-16T17:22:15.6645784Z libfreetype6 is already the newest version (2.14.2+dfsg-1ubuntu0.2).
+2026-11-16T17:22:15.6646381Z libfreetype6 set to manually installed.
+2026-11-16T17:22:15.6646915Z libfontconfig1 is already the newest version (2.17.1-3ubuntu1).
+2026-11-16T17:22:15.6647868Z libfontconfig1 set to manually installed.
+2026-11-16T17:22:15.6648409Z libdbus-1-3 is already the newest version (1.16.2-2ubuntu4).
+2026-11-16T17:22:15.6648889Z libdbus-1-3 set to manually installed.
+2026-11-16T17:22:15.6649449Z libnss3 is already the newest version (2:3.120-1ubuntu2.2).
+2026-11-16T17:22:15.6650027Z libnss3 set to manually installed.
+2026-11-16T17:22:15.6650544Z libnss3-tools is already the newest version (2:3.120-1ubuntu2.2).
+2026-11-16T17:22:15.6651186Z libnspr4 is already the newest version (2:4.38.2-1ubuntu1).
+2026-11-16T17:22:15.6651675Z libnspr4 set to manually installed.
+2026-11-16T17:22:15.6652288Z libatk-bridge2.0-0t64 is already the newest version (2.60.4-0ubuntu0.1).
+2026-11-16T17:22:15.6652822Z libatk-bridge2.0-0t64 set to manually installed.
+2026-11-16T17:22:15.6653296Z libdrm2 is already the newest version (2.4.131-1).
+2026-11-16T17:22:15.6653768Z libdrm2 set to manually installed.
+2026-11-16T17:22:15.6654237Z libxkbcommon0 is already the newest version (1.13.1-1).
+2026-11-16T17:22:15.6654894Z libxkbcommon0 set to manually installed.
+2026-11-16T17:22:15.6655521Z libatspi2.0-0t64 is already the newest version (2.60.4-0ubuntu0.1).
+2026-11-16T17:22:15.6656044Z libatspi2.0-0t64 set to manually installed.
+2026-11-16T17:22:15.6656597Z libcups2t64 is already the newest version (2.4.16-1ubuntu1.3).
+2026-11-16T17:22:15.6657309Z libcups2t64 set to manually installed.
+2026-11-16T17:22:15.6658052Z libxshmfence1 is already the newest version (1.3.3-1build1).
+2026-11-16T17:22:15.6658751Z libxshmfence1 set to manually installed.
+2026-11-16T17:22:15.6659243Z libgbm1 is already the newest version (26.0.8-1ubuntu0.3).
+2026-11-16T17:22:15.6659747Z libgbm1 set to manually installed.
+2026-11-16T17:22:15.6660321Z fonts-noto-color-emoji is already the newest version (2.051-1build1).
+2026-11-16T17:22:15.6968664Z Solving dependencies...
+2026-11-16T17:22:15.7735635Z Suggested packages:
+2026-11-16T17:22:15.7736041Z   fonts-noto-cjk-extra
+2026-11-16T17:22:15.7834077Z The following NEW packages will be installed:
+2026-11-16T17:22:15.7840124Z   fonts-freefont-ttf fonts-noto-cjk
+2026-11-16T17:22:15.7986106Z 0 upgraded, 2 newly installed, 0 to remove and 17 not upgraded.
+2026-11-16T17:22:15.7986659Z Need to get 66.8 MB of archives.
+2026-11-16T17:22:15.7987026Z After this operation, 108 MB of additional disk space will be used.
+2026-11-16T17:22:15.7987641Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [152 B]
+2026-11-16T17:22:15.8702739Z Get:2 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute/main amd64v3 fonts-freefont-ttf all 20211204+svn4273-4build1 [5656 kB]
+2026-11-16T17:22:16.2321065Z Get:3 http://us-east-2.ec2.archive.ubuntu.com/ubuntu resolute/main amd64v3 fonts-noto-cjk all 1:20240730+repack1-1build1 [61.2 MB]
+2026-11-16T17:22:18.5429278Z Fetched 66.8 MB in 1s (45.0 MB/s)
+2026-11-16T17:22:18.6273994Z Selecting previously unselected package fonts-freefont-ttf.
+2026-11-16T17:22:19.0453477Z (Reading database ... 
+2026-11-16T17:22:19.0453927Z (Reading database ... 5%
+2026-11-16T17:22:19.0454244Z (Reading database ... 10%
+2026-11-16T17:22:19.0454532Z (Reading database ... 15%
+2026-11-16T17:22:19.0454768Z (Reading database ... 20%
+2026-11-16T17:22:19.0454996Z (Reading database ... 25%
+2026-11-16T17:22:19.0455249Z (Reading database ... 30%
+2026-11-16T17:22:19.0455479Z (Reading database ... 35%
+2026-11-16T17:22:19.0455771Z (Reading database ... 40%
+2026-11-16T17:22:19.0456002Z (Reading database ... 45%
+2026-11-16T17:22:19.0456363Z (Reading database ... 50%
+2026-11-16T17:22:19.5745826Z (Reading database ... 55%
+2026-11-16T17:22:19.7931100Z (Reading database ... 60%
+2026-11-16T17:22:20.4378387Z (Reading database ... 65%
+2026-11-16T17:22:20.6454546Z (Reading database ... 70%
+2026-11-16T17:22:20.8489161Z (Reading database ... 75%
+2026-11-16T17:22:22.1462511Z (Reading database ... 80%
+2026-11-16T17:22:23.7072955Z (Reading database ... 85%
+2026-11-16T17:22:24.6853788Z (Reading database ... 90%
+2026-11-16T17:22:25.8861264Z (Reading database ... 95%
+2026-11-16T17:22:25.8861667Z (Reading database ... 100%
+2026-11-16T17:22:25.8862072Z (Reading database ... 213647 files and directories currently installed.)
+2026-11-16T17:22:25.8901172Z Preparing to unpack .../fonts-freefont-ttf_20211204+svn4273-4build1_all.deb ...
+2026-11-16T17:22:25.8922618Z Unpacking fonts-freefont-ttf (20211204+svn4273-4build1) ...
+2026-11-16T17:22:26.0863424Z Selecting previously unselected package fonts-noto-cjk.
+2026-11-16T17:22:26.0959025Z Preparing to unpack .../fonts-noto-cjk_1%3a20240730+repack1-1build1_all.deb ...
+2026-11-16T17:22:26.1025461Z Unpacking fonts-noto-cjk (1:20240730+repack1-1build1) ...
+2026-11-16T17:22:26.4992187Z Setting up fonts-noto-cjk (1:20240730+repack1-1build1) ...
+2026-11-16T17:22:26.5044256Z Setting up fonts-freefont-ttf (20211204+svn4273-4build1) ...
+2026-11-16T17:22:26.5059889Z Processing triggers for fontconfig (2.17.1-3ubuntu1) ...
+2026-11-16T17:22:27.7171017Z 
+2026-11-16T17:22:27.7171931Z Running kernel seems to be up-to-date.
+2026-11-16T17:22:27.7172203Z 
+2026-11-16T17:22:27.7172347Z Restarting services...
+2026-11-16T17:22:27.7242014Z 
+2026-11-16T17:22:27.7242353Z Service restarts being deferred:
+2026-11-16T17:22:27.7246469Z  systemctl restart hosted-compute-agent.service
+2026-11-16T17:22:27.7246752Z 
+2026-11-16T17:22:27.7248354Z No containers need to be restarted.
+2026-11-16T17:22:27.7248658Z 
+2026-11-16T17:22:27.7248883Z No user sessions are running outdated binaries.
+2026-11-16T17:22:27.7249094Z 
+2026-11-16T17:22:27.7249426Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-11-16T17:22:28.3290748Z ✓ System dependencies installed
+2026-11-16T17:22:28.3291237Z Installing Chrome...
+2026-11-16T17:22:28.3391213Z   Downloading Chrome 157.0.8103.78 for linux64
+2026-11-16T17:22:28.3391753Z   https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.78/linux64/chrome-linux64.zip
+2026-11-16T17:22:28.4626143Z 
+2026-11-16T17:22:28.5077686Z   10/194 MB (5%)
+2026-11-16T17:22:28.5537590Z   19/194 MB (10%)
+2026-11-16T17:22:28.5882148Z   29/194 MB (15%)
+2026-11-16T17:22:28.6265625Z   39/194 MB (20%)
+2026-11-16T17:22:28.6739224Z   48/194 MB (25%)
+2026-11-16T17:22:28.7221783Z   58/194 MB (30%)
+2026-11-16T17:22:28.7923226Z   68/194 MB (35%)
+2026-11-16T17:22:28.8682771Z   78/194 MB (40%)
+2026-11-16T17:22:28.9207884Z   87/194 MB (45%)
+2026-11-16T17:22:28.9802612Z   97/194 MB (50%)
+2026-11-16T17:22:29.0239888Z   107/194 MB (55%)
+2026-11-16T17:22:29.0712097Z   116/194 MB (60%)
+2026-11-16T17:22:29.1127517Z   126/194 MB (65%)
+2026-11-16T17:22:29.1462934Z   136/194 MB (70%)
+2026-11-16T17:22:29.1953181Z   145/194 MB (75%)
+2026-11-16T17:22:29.2511107Z   155/194 MB (80%)
+2026-11-16T17:22:29.2894138Z   165/194 MB (85%)
+2026-11-16T17:22:29.3224539Z   174/194 MB (90%)
+2026-11-16T17:22:29.3552979Z   184/194 MB (95%)
+2026-11-16T17:22:29.3553412Z   194/194 MB (100%)
+2026-11-16T17:22:30.5622999Z ✓ Chrome 157.0.8103.78 installed successfully
+2026-11-16T17:22:30.5623589Z   Location: /home/runner/.agent-browser/browsers/chrome-157.0.8103.78
+2026-11-16T17:22:30.5657790Z ##[group]Run node tools/layout-audit/run-full-math.js --tag local --fixture audits/long_test_text.txt --min-pages 525
+2026-11-16T17:22:30.5658461Z [36;1mnode tools/layout-audit/run-full-math.js --tag local --fixture audits/long_test_text.txt --min-pages 525[0m
+2026-11-16T17:22:30.5676072Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:22:30.5676335Z ##[endgroup]
+2026-11-16T17:22:39.5713980Z אתר: http://127.0.0.1:8932/index.html | app: http://127.0.0.1:8932/app.bundle.js?v=2026-11-10-s6.3
+2026-11-16T17:22:40.1590977Z fixture (מקומי): long_test_text.txt — 2,718,900 בתים
+2026-11-16T17:22:40.1630007Z הרצה-1: מונה דור (gen) =0
+2026-11-16T17:22:44.8493734Z עימוד הרצה-1: 552 עמודים
+2026-11-16T17:22:47.3623056Z האודיט המתמטי המלא רץ — סריקת גלילה של כל הספר...
+2026-11-16T17:23:02.4647899Z רצפת נפח ✓: 552 עמודים (≥525) | 286,048 מילים (≥285,885)
+2026-11-16T17:23:02.4648553Z ──────────────────────────────────────────────────────────────
+2026-11-16T17:23:02.4649180Z עמודים: 552/552 | שורות: 35,724 | וירטואלי: true | סריקה: 13167ms
+2026-11-16T17:23:02.4649540Z בעיות (סה"כ): 0 | לפי סוג: {}
+2026-11-16T17:23:02.4649819Z גופנים בפועל: "Guttman Rashi"
+2026-11-16T17:23:02.4650228Z פער דיו שמאל: {"n":30623,"min":0.01,"max":0.02,"mean":0.014,"std":0.005}
+2026-11-16T17:23:02.4650687Z פער דיו ימין: {"n":30623,"min":-0.14,"max":0.14,"mean":-0.041,"std":0.032}
+2026-11-16T17:23:02.4651141Z חלון מימין: {"n":2478,"min":-0.12,"max":0.02,"mean":-0.041,"std":0.025}
+2026-11-16T17:23:02.4651604Z ──────────────────────────────────────────────────────────────
+2026-11-16T17:23:02.4652168Z דטרמיניזם: מריץ עימוד מחדש...
+2026-11-16T17:23:02.4677285Z הרצה-2: מונה דור (gen) =1
+2026-11-16T17:23:07.1590177Z עימוד הרצה-2: 552 עמודים
+2026-11-16T17:23:19.7358603Z דטרמיניזם: זהה לחלוטין ✔ (עמודים 552/552)
+2026-11-16T17:23:19.8421397Z 
+2026-11-16T17:23:19.8424106Z ════════ סיכום האודיט המתמטי המלא ════════
+2026-11-16T17:23:19.8424926Z pages: 552/552 | lines: 35,724 | words: 286,048 | problems: 0
+2026-11-16T17:23:19.8425516Z counts: {}
+2026-11-16T17:23:19.8425967Z determinism: IDENTICAL
+2026-11-16T17:23:19.8428018Z reports: /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/red-build/tests/artifacts/full-math-audit
+2026-11-16T17:23:19.8428982Z ✓ PASS — 0 בעיות + דטרמיניזם מלא
+2026-11-16T17:23:19.8519849Z ##[group]Run actions/upload-artifact@v4
+2026-11-16T17:23:19.8520132Z with:
+2026-11-16T17:23:19.8520350Z   name: full-math-audit-local
+2026-11-16T17:23:19.8520613Z   path: red-build/tests/artifacts/full-math-audit/
+2026-11-16T17:23:19.8520928Z   if-no-files-found: ignore
+2026-11-16T17:23:19.8521209Z   compression-level: 6
+2026-11-16T17:23:19.8521435Z   overwrite: false
+2026-11-16T17:23:19.8521665Z   include-hidden-files: false
+2026-11-16T17:23:19.8521903Z ##[endgroup]
+2026-11-16T17:23:19.9702801Z (node:3040) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:23:19.9703450Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:23:19.9759621Z With the provided path, there will be 16 files uploaded
+2026-11-16T17:23:19.9763067Z Artifact name is valid!
+2026-11-16T17:23:19.9763474Z Root directory input is valid!
+2026-11-16T17:23:20.1723068Z Beginning upload of artifact content to blob storage
+2026-11-16T17:23:20.4725524Z (node:3040) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-16T17:23:20.6888315Z Uploaded bytes 1149075
+2026-11-16T17:23:20.7154073Z Finished uploading artifact content to blob storage!
+2026-11-16T17:23:20.7154818Z SHA256 digest of uploaded artifact zip is 603a1664c9ebd2d8ef43d69aed2bebdf844b7af6eeeab60b43ade7e9c2f3e109
+2026-11-16T17:23:20.7155382Z Finalizing artifact upload
+2026-11-16T17:23:21.0960119Z Artifact full-math-audit-local.zip successfully finalized. Artifact ID 14251352378
+2026-11-16T17:23:21.0960788Z Artifact full-math-audit-local has been successfully uploaded! Final size is 1149075 bytes. Artifact ID is 14251352378
+2026-11-16T17:23:21.0965241Z Artifact download URL: https://github.com/SUGINACH/Tora_Book_Typesetter_Red/actions/runs/43917551735/artifacts/14251352378
+2026-11-16T17:23:21.1100393Z Post job cleanup.
+2026-11-16T17:23:21.1994761Z (node:3052) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:23:21.1995561Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:23:21.2122382Z Post job cleanup.
+2026-11-16T17:23:21.2725866Z [command]/usr/bin/git version
+2026-11-16T17:23:21.2757583Z git version 2.56.1
+2026-11-16T17:23:21.2786935Z Temporarily overriding HOME='/home/runner/work/_temp/b0a7fed1-ba45-466d-904b-fa5abc39f4d0' before making global git config changes
+2026-11-16T17:23:21.2788170Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-16T17:23:21.2791916Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-16T17:23:21.2821155Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-16T17:23:21.2845143Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-16T17:23:21.3036207Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-16T17:23:21.3068276Z http.https://github.com/.extraheader
+2026-11-16T17:23:21.3069426Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-16T17:23:21.3095289Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-16T17:23:21.3281705Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-16T17:23:21.3322652Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-16T17:23:21.3641604Z Cleaning up orphan processes
+2026-11-16T17:23:21.3896311Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

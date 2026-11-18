@@ -2,7 +2,7 @@
 
 | כלי | מטרה |
 |---|---|
-| `run-baseline.js` | **Baseline G0:** זיהוי סביבה, טביעת אצבע (SHA-256) לקלטים, כל פקודה בשרשרת `npm test` בנפרד, דטרמיניזם, ועם `--parity` — צינור layout-parity וקורפוס very-long; שומר `manifest.json` ולוגים (`audits/baseline/<sha>/`). `--skip-suite --parity --out <dir>` להרצה חלקית |
+| `run-baseline.js` | **Baseline G0:** זיהוי סביבה, טביעת אצבע (SHA-256) לקלטים, כל פקודה בשרשרת `npm test` **ובצעד `test:regress`** בנפרד (כמו ה-CI — המונה המקומי שווה ל-CI), דטרמיניזם, ועם `--parity` — צינור layout-parity והקורפוס הארוך (`audits/long_test_text.txt`; `very_long_test_text.txt` הוא קלט פסול מאז #33); שומר `manifest.json` (סכמה `red-baseline-v2`; רצפת ה-parity ההיסטורית **אינה נאכפת** מאז #33 ומדווחת כעובדה בלבד) ולוגים (`audits/baseline/<sha>/`). `--skip-suite --parity --out <dir>` להרצה חלקית |
 | `compare-with-ci.js` | השוואה מכונתית "מקומי ↔ CI" של תיקיית baseline (`manifest.json` + לוגי CI שהועתקו אליה) |
 | `impact.js` | **השפעה של תיקון מנוע:** אותו מסמך בשני עצים (base מול מועמד) — עמודים, `layoutHash`, כמה עמודים השתנו, רפאים/כפילות/אבודות/סדר של הערות, כיסוי הערות לפי עמוד, שמירת תוכן |
 
@@ -26,3 +26,10 @@ node tools/baseline/impact.js --base /tmp/red-base --cand /tmp/red-cand --detail
 **למה זה קיים:** הסוויטה (700 בדיקות), ה-hash הקנוני וה-parity לא תפסו תיקון R-04 ראשון שהוציא גם הערות חוקיות של פסקה שנחתכה בין עמודים (very-long 836→838 עמ', כיסוי 1→46). הכלי תופס זאת (נבדק; ראו `tests/regress/impact-tool.test.js`, כולל בקרה שלילית מקצה לקצה על עץ מוטנט).
 
 **הגדרות המצבים** משוכפלות מ-`tools/layout-parity/run-ours.js` (הנתיב החי) ב-`workerRun` — אם הצינור החי משתנה יש לעדכן גם שם. המסמכים והאורקל נלקחים תמיד מהעץ שבו הכלי יושב; רק המנוע נטען מכל עץ.
+
+## חבילות baseline שמורות
+
+| תיקייה | commit | הערה |
+|---|---|---|
+| `audits/baseline/6f80156/` | `6f80156` | **v1** — לפני #33; סכמה `red-baseline-v1`; נשמרה כמות שהיא |
+| `audits/baseline/188a201/` | `188a201` (מיזוג #33) | **v2** — `BASELINE.md` + `manifest.json` + `ci/` (לוגי CI ו-`local-vs-ci.json`); המנוע ב-`main` זהה לו (ראו §8 שם) |
