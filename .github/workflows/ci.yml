@@ -31,7 +31,10 @@ jobs:
           test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf || { echo "MISSING: DejaVuSans.ttf (expected after fonts-dejavu-core install)"; exit 1; }
       # **S5.3:** הסוויטות של S5.2 (s52-dp/s52-ui/audit-sensitivity) נוספו לשרשרת —
       # עד כאן היו קיימות בעץ אך לא הורצו בשום workflow (מוקש שנתפס בסקירת S5.3).
-      - name: Run full test suite (670 tests · 33 files + scan-control-triggers, zero deps)
+      # **D-110 (סוכן 4):** מאז `npm test` מריץ את tools/run-tests.js — הוא מגלה בעצמו כל tests/**/*.test.js (חוץ מ-regress/, שרץ בצעד נפרד
+      # למטה), בלי שרשרת ידנית לערוך; בדיקה שנראית כבדיקה אך אינה *.test.js נכשלת (שומר-כיסוי). המוקש של S5.3 נסגר בבנייה, ואין עוד
+      # התנגשויות scripts.test בין PR-ים.
+      - name: Run full test suite (auto-discovered tests/**/*.test.js + scan-control-triggers, zero deps)
         run: cd red-build && npm test
       - name: Determinism check
         run: cd red-build && npm run test:determinism
