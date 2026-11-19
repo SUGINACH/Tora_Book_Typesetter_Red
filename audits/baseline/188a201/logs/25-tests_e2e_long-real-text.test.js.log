@@ -1,0 +1,6 @@
+  [real] no_long_test_text.txt: words=24401 pages=96 hash=cc51f2d7eea1
+  [real] mid_long_test_text.txt: words=70716 pages=227 hash=54f052e1e761
+  [real] long_test_text.txt: words=291719 pages=1038 hash=010f9b35c2c3
+  [real] long(DP): words=291719 pages=1038 hash=010f9b35c2c3 2319ms
+
+== long-real-text: 7/7 passed, 0 failed, 0 skipped ==
