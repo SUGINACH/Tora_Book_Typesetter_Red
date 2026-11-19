@@ -12444,9 +12444,27 @@ class LineBreaker {
         // הגוף/הסוגריים).
         if (dispW && dispW[i] != null) {
           wordWs[i] = dispW[i];
-          wordParen[i] = false;
-          startsInParen[i] = false;
-          endsInParen[i] = false;
+          if (out[i].startsWith(cfg.fnOpen) && out[i].endsWith(cfg.fnClose)) {
+            // הערה עצמאית (כל המילה היא הערה) — אין בה סוגריים של הגוף: דגלים כבעבר
+            wordParen[i] = false;
+            startsInParen[i] = false;
+            endsInParen[i] = false;
+            continue;
+          }
+          // **R-03 (תיקון שורש):** מילה עם סמן מודבק ('רשות)[הערה]' / 'הלכה[הערה]') נושאת גם תווי סוגריים
+          // של הגוף. בעבר 'continue' כאן דילג על מונה העומק: ')' שלפני הסמן לא הוריד אותו (ההדלפה סימנה את
+          // כל שאר הפסקה כ"בתוך סוגריים"), ומילה בתוך הטווח קיבלה דגלים כבויים. הרוחב המדויק (dispW) נשמר.
+          let anyParen = false;
+          for (let c = 0; c < wd.length; c++) {
+            const ch = wd[c];
+            if (ch === '(') depth++;
+            const inParen = depth > 0;
+            if (inParen) anyParen = true;
+            if (c === 0) startsInParen[i] = inParen;
+            endsInParen[i] = inParen;
+            if (ch === ')' && depth > 0) depth--;
+          }
+          wordParen[i] = anyParen;
           continue;
         }
         let w = 0, seg = '', segParen = false;
