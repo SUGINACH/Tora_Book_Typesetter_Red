@@ -1,0 +1,280 @@
+﻿2026-11-16T17:21:45.4370223Z Current runner version: '2.338.2'
+2026-11-16T17:21:45.4394103Z ##[group]Runner Image Provisioner
+2026-11-16T17:21:45.4395449Z Hosted Compute Agent
+2026-11-16T17:21:45.4396175Z Version: 20261103.629
+2026-11-16T17:21:45.4397137Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-16T17:21:45.4398040Z Build Date: 2026-11-03T17:26:59Z
+2026-11-16T17:21:45.4398838Z Worker ID: {072c840e-af60-4f22-b8d4-f96b81f4d5af}
+2026-11-16T17:21:45.4399820Z Region: eastus
+2026-11-16T17:21:45.4400468Z Cloud: Azure
+2026-11-16T17:21:45.4401229Z ##[endgroup]
+2026-11-16T17:21:45.4402726Z ##[group]Operating System
+2026-11-16T17:21:45.4403505Z Ubuntu
+2026-11-16T17:21:45.4404227Z 26.04.1
+2026-11-16T17:21:45.4405046Z LTS
+2026-11-16T17:21:45.4405740Z ##[endgroup]
+2026-11-16T17:21:45.4406433Z ##[group]Runner Image
+2026-11-16T17:21:45.4407116Z Image: ubuntu-26.04
+2026-11-16T17:21:45.4407851Z Version: 20261111.196.1
+2026-11-16T17:21:45.4409404Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-16T17:21:45.4411341Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.196
+2026-11-16T17:21:45.4412609Z ##[endgroup]
+2026-11-16T17:21:45.4414101Z ##[group]GITHUB_TOKEN Permissions
+2026-11-16T17:21:45.4416700Z Contents: read
+2026-11-16T17:21:45.4417449Z Metadata: read
+2026-11-16T17:21:45.4418105Z Packages: read
+2026-11-16T17:21:45.4418933Z ##[endgroup]
+2026-11-16T17:21:45.4421059Z Secret source: Actions
+2026-11-16T17:21:45.4422191Z Cache mode: write
+2026-11-16T17:21:45.4422995Z Prepare workflow directory
+2026-11-16T17:21:45.4794305Z Prepare all required actions
+2026-11-16T17:21:45.4850185Z Getting action download info
+2026-11-16T17:21:45.6583218Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-16T17:21:45.8130279Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-16T17:21:45.9329285Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-16T17:21:46.1419896Z Complete job name: layout-parity
+2026-11-16T17:21:46.2146713Z ##[group]Run actions/checkout@v4
+2026-11-16T17:21:46.2147428Z with:
+2026-11-16T17:21:46.2147852Z   repository: SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:46.2151055Z   token: ***
+2026-11-16T17:21:46.2151456Z   ssh-strict: true
+2026-11-16T17:21:46.2151862Z   ssh-user: git
+2026-11-16T17:21:46.2152255Z   persist-credentials: true
+2026-11-16T17:21:46.2152683Z   clean: true
+2026-11-16T17:21:46.2153072Z   sparse-checkout-cone-mode: true
+2026-11-16T17:21:46.2153531Z   fetch-depth: 1
+2026-11-16T17:21:46.2153909Z   fetch-tags: false
+2026-11-16T17:21:46.2154298Z   show-progress: true
+2026-11-16T17:21:46.2154942Z   lfs: false
+2026-11-16T17:21:46.2155312Z   submodules: false
+2026-11-16T17:21:46.2155705Z   set-safe-directory: true
+2026-11-16T17:21:46.2156154Z   allow-unsafe-pr-checkout: false
+2026-11-16T17:21:46.2156843Z ##[endgroup]
+2026-11-16T17:21:46.4566058Z Syncing repository: SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:46.4568250Z ##[group]Getting Git version info
+2026-11-16T17:21:46.4569053Z Working directory is '/home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red'
+2026-11-16T17:21:46.4570038Z [command]/usr/bin/git version
+2026-11-16T17:21:46.4591526Z git version 2.56.1
+2026-11-16T17:21:46.4613393Z ##[endgroup]
+2026-11-16T17:21:46.4628808Z Temporarily overriding HOME='/home/runner/work/_temp/631c536a-6e21-49d7-800d-84c8ffa36a3f' before making global git config changes
+2026-11-16T17:21:46.4630566Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-16T17:21:46.4635520Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-16T17:21:46.4700551Z Deleting the contents of '/home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red'
+2026-11-16T17:21:46.4705585Z ##[group]Initializing the repository
+2026-11-16T17:21:46.4711688Z [command]/usr/bin/git init /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-16T17:21:46.4831751Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-16T17:21:46.4833378Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-16T17:21:46.4835925Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-16T17:21:46.4836963Z hint: call:
+2026-11-16T17:21:46.4837597Z hint:
+2026-11-16T17:21:46.4838544Z hint: 	git config --global init.defaultBranch <name>
+2026-11-16T17:21:46.4839647Z hint:
+2026-11-16T17:21:46.4845458Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-16T17:21:46.4848547Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-16T17:21:46.4849803Z hint:
+2026-11-16T17:21:46.4850862Z hint: 	git branch -m <name>
+2026-11-16T17:21:46.4851802Z hint:
+2026-11-16T17:21:46.4853087Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-16T17:21:46.4855247Z Initialized empty Git repository in /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/.git/
+2026-11-16T17:21:46.4860717Z [command]/usr/bin/git remote add origin https://github.com/SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:46.4915823Z ##[endgroup]
+2026-11-16T17:21:46.4916981Z ##[group]Disabling automatic garbage collection
+2026-11-16T17:21:46.4919580Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-16T17:21:46.4951518Z ##[endgroup]
+2026-11-16T17:21:46.4952554Z ##[group]Setting up auth
+2026-11-16T17:21:46.4956746Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-16T17:21:46.4987262Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-16T17:21:46.5428388Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-16T17:21:46.5458121Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-16T17:21:46.5714087Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-16T17:21:46.5743004Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-16T17:21:46.5975598Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-16T17:21:46.6010196Z ##[endgroup]
+2026-11-16T17:21:46.6010872Z ##[group]Fetching the repository
+2026-11-16T17:21:46.6017697Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +188a20199ac9725883377a79e78a6a83996ec998:refs/remotes/origin/main
+2026-11-16T17:21:49.1310178Z From https://github.com/SUGINACH/Tora_Book_Typesetter_Red
+2026-11-16T17:21:49.1312580Z  * [new ref]         188a20199ac9725883377a79e78a6a83996ec998 -> origin/main
+2026-11-16T17:21:49.1317052Z ##[endgroup]
+2026-11-16T17:21:49.1318605Z ##[group]Determining the checkout info
+2026-11-16T17:21:49.1320308Z ##[endgroup]
+2026-11-16T17:21:49.1321932Z [command]/usr/bin/git sparse-checkout disable
+2026-11-16T17:21:49.1367704Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-16T17:21:49.1399513Z ##[group]Checking out the ref
+2026-11-16T17:21:49.1401977Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-16T17:21:49.7025794Z Switched to a new branch 'main'
+2026-11-16T17:21:49.7030250Z branch 'main' set up to track 'origin/main'.
+2026-11-16T17:21:49.7073618Z ##[endgroup]
+2026-11-16T17:21:49.7119415Z [command]/usr/bin/git log -1 --format=%H
+2026-11-16T17:21:49.7141350Z 188a20199ac9725883377a79e78a6a83996ec998
+2026-11-16T17:21:49.7453419Z ##[group]Run actions/setup-node@v4
+2026-11-16T17:21:49.7453861Z with:
+2026-11-16T17:21:49.7454027Z   node-version: 22
+2026-11-16T17:21:49.7454209Z   always-auth: false
+2026-11-16T17:21:49.7454599Z   check-latest: false
+2026-11-16T17:21:49.7456378Z   token: ***
+2026-11-16T17:21:49.7456556Z ##[endgroup]
+2026-11-16T17:21:49.8600384Z Found in cache @ /opt/hostedtoolcache/node/22.23.4/x64
+2026-11-16T17:21:49.8604260Z (node:2188) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:21:49.8605130Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:21:49.8606519Z ##[group]Environment details
+2026-11-16T17:21:52.7121878Z node: v22.23.4
+2026-11-16T17:21:52.7122298Z npm: 10.9.9
+2026-11-16T17:21:52.7122564Z yarn: 1.22.22
+2026-11-16T17:21:52.7123686Z ##[endgroup]
+2026-11-16T17:21:52.7270164Z ##[group]Run actions/setup-python@v5
+2026-11-16T17:21:52.7270449Z with:
+2026-11-16T17:21:52.7270633Z   python-version: 3.12
+2026-11-16T17:21:52.7270832Z   check-latest: false
+2026-11-16T17:21:52.7272571Z   token: ***
+2026-11-16T17:21:52.7272760Z   update-environment: true
+2026-11-16T17:21:52.7272969Z   allow-prereleases: false
+2026-11-16T17:21:52.7273167Z   freethreaded: false
+2026-11-16T17:21:52.7273353Z ##[endgroup]
+2026-11-16T17:21:52.8333731Z ##[group]Installed versions
+2026-11-16T17:21:52.8444233Z (node:2224) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:21:52.8445529Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:21:52.8446229Z Successfully set up CPython (3.12.16)
+2026-11-16T17:21:52.8446904Z ##[endgroup]
+2026-11-16T17:21:52.8591612Z ##[group]Run pip install pymupdf==1.26.7
+2026-11-16T17:21:52.8591949Z [36;1mpip install pymupdf==1.26.7[0m
+2026-11-16T17:21:52.8669438Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:21:52.8669736Z env:
+2026-11-16T17:21:52.8670001Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:52.8670431Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-16T17:21:52.8670806Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:52.8671129Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:52.8671444Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:52.8671760Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-16T17:21:52.8672037Z ##[endgroup]
+2026-11-16T17:21:54.2745626Z Collecting pymupdf==1.26.7
+2026-11-16T17:21:54.2959294Z   Downloading pymupdf-1.26.7-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (3.4 kB)
+2026-11-16T17:21:54.3025953Z Downloading pymupdf-1.26.7-cp310-abi3-manylinux_2_28_x86_64.whl (24.1 MB)
+2026-11-16T17:21:54.5063465Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 24.1/24.1 MB 123.7 MB/s  0:00:00
+2026-11-16T17:21:54.5669517Z Installing collected packages: pymupdf
+2026-11-16T17:21:55.2937695Z Successfully installed pymupdf-1.26.7
+2026-11-16T17:21:55.3407107Z ##[group]Run python3 tools/layout-parity/extract-reference.py
+2026-11-16T17:21:55.3407549Z [36;1mpython3 tools/layout-parity/extract-reference.py[0m
+2026-11-16T17:21:55.3407914Z [36;1mgit diff --exit-code -- audits/layout-reference.json || {[0m
+2026-11-16T17:21:55.3408441Z [36;1m  echo "✗ audits/layout-reference.json אינו תואם לחילוץ מקובצי ה-PDF — הרץ extract-reference.py והחלף ב-commit"; exit 1; }[0m
+2026-11-16T17:21:55.3454002Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:21:55.3454213Z env:
+2026-11-16T17:21:55.3454527Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:55.3454893Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-16T17:21:55.3455234Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:55.3455534Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:55.3455848Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:55.3456204Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-16T17:21:55.3456638Z ##[endgroup]
+2026-11-16T17:21:56.7550210Z === אימות חילוץ ===
+2026-11-16T17:21:56.7550498Z {
+2026-11-16T17:21:56.7550705Z   "pages": 54,
+2026-11-16T17:21:56.7551036Z   "types": {
+2026-11-16T17:21:56.7551316Z     "shaar-main": 1,
+2026-11-16T17:21:56.7551601Z     "shaar-back": 1,
+2026-11-16T17:21:56.7551822Z     "toc-general": 3,
+2026-11-16T17:21:56.7552007Z     "blank": 1,
+2026-11-16T17:21:56.7552187Z     "shaar-sub": 1,
+2026-11-16T17:21:56.7552375Z     "toc-detailed": 3,
+2026-11-16T17:21:56.7552574Z     "chapter-open": 1,
+2026-11-16T17:21:56.7552755Z     "body": 43
+2026-11-16T17:21:56.7552925Z   },
+2026-11-16T17:21:56.7553095Z   "paragraphs": 278,
+2026-11-16T17:21:56.7553356Z   "paragraphLines": 3149,
+2026-11-16T17:21:56.7553569Z   "paragraphWords": 21861,
+2026-11-16T17:21:56.7553779Z   "headsNonEmpty": 278
+2026-11-16T17:21:56.7553960Z }
+2026-11-16T17:21:56.7554045Z 
+2026-11-16T17:21:56.7554894Z נכתב: /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/tools/layout-parity/../../audits/layout-reference.json (967 KB)
+2026-11-16T17:21:57.3041844Z ##[group]Run node tools/layout-parity/run-ours.js
+2026-11-16T17:21:57.3042175Z [36;1mnode tools/layout-parity/run-ours.js[0m
+2026-11-16T17:21:57.3087525Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:21:57.3087753Z env:
+2026-11-16T17:21:57.3087988Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.3088357Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-16T17:21:57.3088704Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.3089012Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.3089319Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.3089628Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-16T17:21:57.3089895Z ##[endgroup]
+2026-11-16T17:21:57.5220191Z typeset: 54 pages in 154ms (hash legacy-61aec) [profile: imud-legacy]
+2026-11-16T17:21:57.5480996Z model: /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/audits/layout-parity-artifacts/ours-model.json — 285 paragraphs, 54 pages
+2026-11-16T17:21:57.7851641Z pdf: /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red/audits/layout-parity-artifacts/ours.pdf — 1459 KB
+2026-11-16T17:21:57.8013503Z ##[group]Run set +e
+2026-11-16T17:21:57.8013745Z [36;1mset +e[0m
+2026-11-16T17:21:57.8013965Z [36;1mpython3 tools/layout-parity/compare.py \[0m
+2026-11-16T17:21:57.8014250Z [36;1m  audits/layout-reference.json \[0m
+2026-11-16T17:21:57.8014770Z [36;1m  audits/layout-parity-artifacts/ours-model.json \[0m
+2026-11-16T17:21:57.8015074Z [36;1m  audits/layout-parity-artifacts/ours.pdf \[0m
+2026-11-16T17:21:57.8015374Z [36;1m  audits/layout-parity-artifacts/parity-report.json[0m
+2026-11-16T17:21:57.8015633Z [36;1mec=$?[0m
+2026-11-16T17:21:57.8015804Z [36;1mset -e[0m
+2026-11-16T17:21:57.8016070Z [36;1m# קודי יציאה של compare.py: 0 תקין | 1 כשל HARD | 2 כשל PARITY | 3 שניהם.[0m
+2026-11-16T17:21:57.8016486Z [36;1m# D-100: audits/very_long_test_text.txt (363K מילים) מכיל מקור פגום ולכן נשמר[0m
+2026-11-16T17:21:57.8061194Z shell: /usr/bin/bash -e {0}
+2026-11-16T17:21:57.8061448Z env:
+2026-11-16T17:21:57.8061691Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.8062100Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-16T17:21:57.8062442Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.8062756Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.8063089Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-16T17:21:57.8063402Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-16T17:21:57.8063664Z ##[endgroup]
+2026-11-16T17:21:58.9908915Z ════════════════════════════════════════════════════════════════
+2026-11-16T17:21:58.9909629Z   דוח השוואת עימוד מתמטית — RED מול הגרסה הישנה (הייחוס)
+2026-11-16T17:21:58.9910541Z ════════════════════════════════════════════════════════════════
+2026-11-16T17:21:58.9911006Z   ✓ [HARD] שימור תוכן — מולטיסט מילים זהה למקור
+2026-11-16T17:21:58.9911463Z   ✓ [HARD] אפס חפיפות שורות ב-PDF
+2026-11-16T17:21:58.9911822Z   ✓ [HARD] כל הטקסט בתוך גבולות העמוד
+2026-11-16T17:21:58.9912319Z   ✓ [LEGACY] מדד יישור ביחס לדוגמת ה-PDF הישנה (אבחוני בלבד)
+2026-11-16T17:21:58.9912715Z   ✓ [PARITY] מספר עמודים
+2026-11-16T17:21:58.9913013Z   ✓ [PARITY] רצף סוגי עמודים
+2026-11-16T17:21:58.9913429Z   ✓ [PARITY] פורמט עמודון — גימטריה יחידה בלי גרשיים (כמקור)
+2026-11-16T17:21:58.9913870Z   ✓ [PARITY] רצף ערכי עמודונים (מ־1 ואילך ברצף)
+2026-11-16T17:21:58.9914295Z   ✓ [PARITY] כותרות עליונות בעמודי גוף (ימין/מרכז/שמאל)
+2026-11-16T17:21:58.9914888Z   ✓ [PARITY] תוכן-עניינים כפול (כללי + מפורט)
+2026-11-16T17:21:58.9915288Z   ✗ [PARITY] רצף פסקאות (מספר/שורות/מילים)
+2026-11-16T17:21:58.9915618Z         refCount: 278
+2026-11-16T17:21:58.9915886Z         oursCount: 285
+2026-11-16T17:21:58.9916155Z         refTotalLines: 3149
+2026-11-16T17:21:58.9916486Z         oursTotalLines: 3160
+2026-11-16T17:21:58.9916944Z         · replace: ref[['נפש כלל מעשה']] ours[['וכדלעיל שאם לא']]
+2026-11-16T17:21:58.9917505Z         · replace: ref[['ובהקדם ביאור גדרי']] ours[['וזה יהיה ביאור']]
+2026-11-16T17:21:58.9918237Z         · replace: ref[['שייך לחלק ולהוסיף', 'מעות לדעת סוף']] ours[['לאחד והשלישי הוא', 'מטרות האחת הספירה']]
+2026-11-16T17:21:58.9918828Z   ✗ [PARITY] שקילות שבירת שורות (טקסט שורה-אחר-שורה)
+2026-11-16T17:21:58.9919163Z         ratio: 0.8098
+2026-11-16T17:21:58.9919601Z         · ref: 'ביחס המעשה ל למציאות קיימת' ≠ ours: 'ביחס המעשה לא למציאות קיימת'
+2026-11-16T17:21:58.9920079Z         · ref: 'מג מתעסק' ≠ ours: 'מד מתעסק'
+2026-11-16T17:21:58.9920546Z         · ref: 'גדרי הוצאה מח מלאכת' ≠ ours: 'גדרי הוצאה מט מלאכת'
+2026-11-16T17:21:58.9920979Z   ✓ [PARITY] תיבות הטורים (pt)
+2026-11-16T17:21:58.9921339Z   ✓ [PARITY] פס הכותרת העליונה (y)
+2026-11-16T17:21:58.9921697Z   ✓ [PARITY] מיקום העמודון (מרכז תחתון)
+2026-11-16T17:21:58.9922087Z   ✓ [PARITY] גופן וגודל גוף הטקסט
+2026-11-16T17:21:58.9922451Z   ✓ [PARITY] פס שורות (מרווח בסיס-בסיס)
+2026-11-16T17:21:58.9922861Z   ✓ [PARITY] כותרות פתיחה קומפקטיות (בלי מתיחת מילים)
+2026-11-16T17:21:58.9923405Z ────────────────────────────────────────────────────────────────
+2026-11-16T17:21:58.9924128Z   HARD: 3/3  |  PARITY: 12/14  |  ציון: 88.2%
+2026-11-16T17:21:58.9924618Z   פסק־דין: PARITY_FAIL
+2026-11-16T17:21:58.9925049Z   דוח מלא: audits/layout-parity-artifacts/parity-report.json
+2026-11-16T17:21:58.9925660Z ════════════════════════════════════════════════════════════════
+2026-11-16T17:21:59.0273284Z Post job cleanup.
+2026-11-16T17:21:59.1259156Z (node:2282) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:21:59.1259812Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:21:59.1389463Z Post job cleanup.
+2026-11-16T17:21:59.2422209Z (node:2290) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-16T17:21:59.2423461Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-16T17:21:59.2577069Z Post job cleanup.
+2026-11-16T17:21:59.3301526Z [command]/usr/bin/git version
+2026-11-16T17:21:59.3338139Z git version 2.56.1
+2026-11-16T17:21:59.3368532Z Temporarily overriding HOME='/home/runner/work/_temp/282a8af8-0f96-4159-9a74-768529016aec' before making global git config changes
+2026-11-16T17:21:59.3369685Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-16T17:21:59.3373546Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Tora_Book_Typesetter_Red/Tora_Book_Typesetter_Red
+2026-11-16T17:21:59.3409225Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-16T17:21:59.3447936Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-16T17:21:59.3712357Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-16T17:21:59.3739638Z http.https://github.com/.extraheader
+2026-11-16T17:21:59.3751754Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-16T17:21:59.3784283Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-16T17:21:59.4040103Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-16T17:21:59.4068993Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-16T17:21:59.4444771Z Cleaning up orphan processes
+2026-11-16T17:21:59.4819546Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

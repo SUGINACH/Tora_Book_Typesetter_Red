@@ -51,7 +51,7 @@ const FIXTURES = path.join(__dirname, '..', 'fixtures', 'regress');
 const AUDITS = path.join(REPO, '..', 'audits');
 
 // ── מתגי מחזור-חיים: מוסיפים מזהה ב-PR שמנחית את התיקון המתאים (ראו הערת הפתיחה) ──
-const FIXED = new Set(['R-01', 'R-04']); // 'R-01' | 'R-03' | 'R-04' | 'R-05' — R-01 תוקן ב-#43 (rollback כותרות inline בסוף טור)
+const FIXED = new Set(['R-01', 'R-03', 'R-04']); // 'R-01' | 'R-03' | 'R-04' | 'R-05' — R-01 (#43), R-03 (#48), R-04 (#55) תוקנו; R-05 פתוח
 const ENV_FIXED = String(process.env.RED_FIX_LANDED || '');
 const isFixed = (id) => FIXED.has(id) || ENV_FIXED === '1' || ENV_FIXED.split(',').includes(id);
 
@@ -672,6 +672,45 @@ describe('R-04 · הערת רפאים — פסקה שנדחית שלמה לעמ�
   it('בקרה: אותה סריקה בלי רצועת h3 (פסקה עם הערה בכל מילוי) נקייה — הרפאים תלויים ברצועה', () => {
     const bad = [];
     grid.filter((_, i) => i % 2 === 0).forEach((pt) => { const v = check(buildG(pt, false)).v; if (v.length) bad.push({ label: `P=${pt.P} L=${pt.L} K=${pt.K}`, v }); });
+    assert(bad.length === 0, `${bad.length} נקודות: ${bad.slice(0, 3).map((x) => `[${x.label}] ${fmtV(x.v, 1)}`).join(' | ')}`);
+  });
+
+  // ── הרחבה: הרפאים אינם רק h3 בודד אלא כל שרשרת כותרות שכוללת h3 לפני הפסקה ──
+  // נמצא בסריקה רחבה (7,344 נקודות; PR #55 — דוח האימות): על main — h3→h4: 31/459 נקודות, h3→h4→h5: 28/459, ובווריאנט "פסקה קודמת עם
+  // הערה" 3/459 לכל שרשרת. רצועות h4 / h5 / h6 בלבד (בלי h3) נקיות — המשותף הוא h3. השרשראות תקינות לפי D-100 (כל כותרת עמוקה מקודמתה).
+  const STRIPS = {
+    h3h4: 'כותרת 3 - רצועה\nכותרת 4 - תת-רצועה\n', h3h4h5: 'כותרת 3 - א\nכותרת 4 - ב\nכותרת 5 - ג\n',
+    h4: 'כותרת 4 - רצועה\n', h5: 'כותרת 5 - רצועה\n', h6: 'כותרת 6 - רצועה\n',
+  };
+  const gridX = (step) => { const a = []; for (const P of [20, 60, 150]) for (const L of [10, 65, 200]) for (let K = 0; K <= 900; K += step) a.push({ P, L, K }); return a; };
+  const buildX = ({ P, L, K }, strip, prevNote) => {
+    const g = docBuilder();
+    const ws = Array.from({ length: P }, () => g.w(1));
+    const para = ws.slice(0, 5).join(' ') + `[${g.w(L)}] ` + ws.slice(5).join(' ');
+    let pre = K ? g.w(K) + '\n' : '';
+    if (prevNote) { const w2 = Array.from({ length: 12 }, () => g.w(1)); pre += w2.slice(0, 3).join(' ') + `[${g.w(8)}] ` + w2.slice(3).join(' ') + '\n'; }
+    return g.doc(CH + pre + STRIPS[strip] + para + '\n' + g.w(30) + '\n');
+  };
+  const scanX = (grid2, strip, prevNote) => {
+    const bad = [];
+    for (const pt of grid2) { const v = check(buildX(pt, strip, prevNote)).v; if (v.length) bad.push({ label: `${strip}${prevNote ? '+הערה-קודמת' : ''} P=${pt.P} L=${pt.L} K=${pt.K}`, v }); }
+    return { n: grid2.length, bad };
+  };
+  const gridChain = gridX(18);                       // 3×3×51 = 459 נקודות לשרשרת
+  const chainScans = [['h3h4', false], ['h3h4h5', false], ['h3h4', true], ['h3h4h5', true]].map(([s, p]) => ({ s, p, ...scanX(gridChain, s, p) }));
+  const chainName = (c) => `${c.s === 'h3h4' ? 'h3→h4' : 'h3→h4→h5'}${c.p ? ' אחרי פסקה עם הערה' : ''}`;
+  it('סריקה מורחבת (שרשראות h3→h4 / h3→h4→h5, עם וגם בלי פסקה קודמת עם הערה): כל ההפרות הן NOTE_GHOST בלבד', () => {
+    assertOnlyCodes(chainScans.flatMap((c) => c.bad.flatMap((x) => x.v)), [V.NOTE_GHOST], 'סריקה מורחבת');
+  });
+  for (const c of chainScans) {
+    bugIt('R-04', `סריקה מורחבת — שרשרת ${chainName(c)} לפני הפסקה (${c.n} נקודות): אין הערת רפאים באף מילוי (כרגע ${c.bad.length} נכשלות)`, () => {
+      assert(c.bad.length === 0, `${c.bad.length}/${c.n} נקודות: ${c.bad.slice(0, 3).map((x) => `[${x.label}] ${fmtV(x.v, 1)}`).join(' | ')}`);
+    }, { expect: /NOTE_GHOST/ });
+  }
+  it('בקרה: רצועת h4 / h5 / h6 בלבד (בלי h3), עם וגם בלי פסקה קודמת עם הערה — נקייה; הרפאים תלויים בשרשרת שכוללת h3', () => {
+    const g36 = gridX(36);
+    const bad = [];
+    for (const s of ['h4', 'h5', 'h6']) for (const p of [false, true]) bad.push(...scanX(g36, s, p).bad);
     assert(bad.length === 0, `${bad.length} נקודות: ${bad.slice(0, 3).map((x) => `[${x.label}] ${fmtV(x.v, 1)}`).join(' | ')}`);
   });
 
