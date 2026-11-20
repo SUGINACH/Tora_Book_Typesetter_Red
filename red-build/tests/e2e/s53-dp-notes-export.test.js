@@ -8,7 +8,7 @@
 // ומפרידי הטורים לא הוקרנו כלל. כאן ננעלים התיקונים קצה-לקצה.
 'use strict';
 
-const { describe, it, assert, assertEq, report } = require('../harness');
+const { describe, it, assert, assertEq, report, artifactsDir } = require('../harness');
 
 const { typeset } = require('../../src/engine/core/pipeline');
 const { getDefaultSettings } = require('../../src/engine/core/settings-registry');
@@ -18,8 +18,7 @@ const { MeasureAPI } = require('../../src/engine/typography/measure-api');
 const fs = require('fs');
 const path = require('path');
 
-const ART = path.join(__dirname, '..', 'artifacts');
-if (!fs.existsSync(ART)) fs.mkdirSync(ART, { recursive: true });
+const ART = artifactsDir(); // R-4: tests/artifacts כברירת מחדל; ה-runner מפנה לתיקייה זמנית (RED_ARTIFACTS_DIR) — ראו tests/harness.js
 
 /** מסמך גוף עם הערות-שוליים רבות וארוכות — רבות-שורות במרזב, ומספיק נפח
  *  לעמודי גוף דו-טוריים (REGULAR) אחרי עמוד הפתיחה החד-טורי. */

@@ -10,13 +10,15 @@
 //   4. דטרמיניזם: הסקריפט הרשמי + שתי ריצות בתהליכים נפרדים על הקורפוס הקנוני.
 //   5. (--parity) צנרת layout-parity כמו ב-workflow: חילוץ ייחוס, RED בנתיב החי, השוואה,
 //      ורצפת ה-ratchet; והקורפוס הארוך מאוד עם דטרמיניזם כפול + C1..C12.
-//   6. סחף artifacts שהבדיקות עצמן כותבות לתוך עץ ה-git (נרשם ואז משוחזר, אלא אם --keep-artifacts).
+//   6. סחף artifacts שהבדיקות עצמן כותבות לתוך עץ ה-git (נרשם ואז משוחזר, אלא אם --keep-artifacts). מאז R-4 הסוויטה רצה עם
+//      RED_ARTIFACTS_DIR=<תיקייה זמנית> והעדויות אינן נכתבות לעץ — הסחף צפוי להיות ריק; הבדיקה נשארת רשת ביטחון (עץ ישן / בדיקה שכותבת ישירות).
 //
 // אינו משנה קוד מנוע. אפס תלויות (Node בלבד). full-math-audit דורש דפדפן ורץ רק ב-Actions —
 // ראיית ה-CI שלו נרשמת ב-BASELINE.md, לא כאן.
 //
 // שימוש (משורש הריפו):
 //   node tools/baseline/run-baseline.js [--parity] [--out <dir>] [--keep-artifacts] [--skip-suite]
+//   --keep-artifacts: מכבה את ההפניה (R-4) — הבדיקות כותבות ל-red-build/tests/artifacts כמו קודם, והסחף נשאר בעץ לבדיקה
 // ברירת מחדל ליעד: audits/baseline/<sha7>/   (manifest.json + logs/ + parity/)
 // יציאה: 0 הכול תקין | 1 כשל בדיקה/דילוג/אי-דטרמיניזם/כשל HARD/צעד parity שנכשל. רצפת ה-parity ההיסטורית (88.9) אינה נאכפת מאז #33
 // (ratchet הוסר; ציוני PARITY אבחוניים) — מדווחת כעובדה בלבד ב-manifest.parity.ratchetFloor/ratchetOk.
@@ -132,29 +134,38 @@ function runSuite() {
   const pkg = JSON.parse(fs.readFileSync(path.join(RED, 'package.json'), 'utf8'));
   const cmds = suiteCommands(pkg);
   const rows = [];
-  cmds.forEach((cmd, i) => {
-    const t0 = Date.now();
-    const r = sh(cmd, { cwd: RED, env: { ...process.env, CI: 'true' } });
-    const out = (r.stdout || '') + (r.stderr || '');
-    const logName = `${String(i + 1).padStart(2, '0')}-${cmd.replace(/^node (\.\.\/)?/, '').replace(/[\\/]/g, '_')}.log`;
-    writeLog(logName, out);
-    const all = [...out.matchAll(SUMMARY)];
-    const last = all.length ? all[all.length - 1] : null;
-    const row = { n: i + 1, cmd: cmd.replace(/^node /, ''), exit: r.status, ms: Date.now() - t0, log: `logs/${logName}` };
-    if (last) {
-      Object.assign(row, {
-        title: last[1], passed: +last[2], failed: +last[4],
-        skipped: last[5] != null ? +last[5] : 0, skippedReported: last[5] != null,
-      });
-    } else {
-      const v = out.match(/(\d+) violations/);
-      if (v) row.violations = +v[1];
-    }
-    if (r.status !== 0) row.failLines = out.split('\n').filter((l) => /FAIL|✗|Error/.test(l)).slice(0, 10);
-    rows.push(row);
-    const counts = last ? `${row.passed}p/${row.failed}f/${row.skipped}s` : (row.violations != null ? `${row.violations} violations` : 'n/a');
-    console.log(`${r.status === 0 ? 'OK  ' : 'FAIL'} ${String(row.ms).padStart(7)}ms ${counts.padStart(14)}  ${row.cmd}`);
-  });
+  // R-4: הבדיקות כותבות עדויות (PDF/JSON) ל-tests/artifacts שבמעקב git, ובכל ריצה הן משתנות (תזמון, חותמות PDF) — baseline שמלכלך את העץ
+  // שבו נמדד. לכן העדויות מופנות לתיקייה זמנית (RED_ARTIFACTS_DIR; tests/harness.js: artifactsDir()); --keep-artifacts מחזיר את ההתנהגות הישנה.
+  // בעץ שקדם ל-R-4 המשתנה אינו נקרא והסחף נרשם ומשוחזר כמו קודם (סעיף 6).
+  const artDir = flag('--keep-artifacts') ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'red-baseline-artifacts-'));
+  const env = { ...process.env, CI: 'true', ...(artDir ? { RED_ARTIFACTS_DIR: artDir } : {}) };
+  try {
+    cmds.forEach((cmd, i) => {
+      const t0 = Date.now();
+      const r = sh(cmd, { cwd: RED, env });
+      const out = (r.stdout || '') + (r.stderr || '');
+      const logName = `${String(i + 1).padStart(2, '0')}-${cmd.replace(/^node (\.\.\/)?/, '').replace(/[\\/]/g, '_')}.log`;
+      writeLog(logName, out);
+      const all = [...out.matchAll(SUMMARY)];
+      const last = all.length ? all[all.length - 1] : null;
+      const row = { n: i + 1, cmd: cmd.replace(/^node /, ''), exit: r.status, ms: Date.now() - t0, log: `logs/${logName}` };
+      if (last) {
+        Object.assign(row, {
+          title: last[1], passed: +last[2], failed: +last[4],
+          skipped: last[5] != null ? +last[5] : 0, skippedReported: last[5] != null,
+        });
+      } else {
+        const v = out.match(/(\d+) violations/);
+        if (v) row.violations = +v[1];
+      }
+      if (r.status !== 0) row.failLines = out.split('\n').filter((l) => /FAIL|✗|Error/.test(l)).slice(0, 10);
+      rows.push(row);
+      const counts = last ? `${row.passed}p/${row.failed}f/${row.skipped}s` : (row.violations != null ? `${row.violations} violations` : 'n/a');
+      console.log(`${r.status === 0 ? 'OK  ' : 'FAIL'} ${String(row.ms).padStart(7)}ms ${counts.padStart(14)}  ${row.cmd}`);
+    });
+  } finally {
+    if (artDir) fs.rmSync(artDir, { recursive: true, force: true });
+  }
   const counted = rows.filter((r) => r.passed != null);
   return {
     rows,

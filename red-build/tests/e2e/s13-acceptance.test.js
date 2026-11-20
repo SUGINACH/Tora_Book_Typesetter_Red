@@ -4,15 +4,14 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { describe, it, assert, assertEq, report } = require('../harness');
+const { describe, it, assert, assertEq, report, artifactsDir } = require('../harness');
 
 const { typeset } = require('../../src/engine/core/pipeline');
 const { getDefaultSettings } = require('../../src/engine/core/settings-registry');
 const { exportHtml, exportPdf, exportProjectZip } = require('../../src/engine/output/export-api');
 const { renderPage } = require('../../src/engine/output/dom-renderer');
 
-const ART = path.join(__dirname, '..', 'artifacts');
-if (!fs.existsSync(ART)) fs.mkdirSync(ART, { recursive: true });
+const ART = artifactsDir(); // R-4: tests/artifacts כברירת מחדל; ה-runner מפנה לתיקייה זמנית (RED_ARTIFACTS_DIR) — ראו tests/harness.js
 const CORPUS = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'canonical_corpus.txt'), 'utf8');
 const DEJAVU = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
 const HAS_DEJAVU = fs.existsSync(DEJAVU);
