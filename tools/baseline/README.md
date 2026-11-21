@@ -2,9 +2,17 @@
 
 | כלי | מטרה |
 |---|---|
-| `run-baseline.js` | **Baseline G0:** זיהוי סביבה, טביעת אצבע (SHA-256) לקלטים, כל פקודה בשרשרת `npm test` **ובצעד `test:regress`** בנפרד (כמו ה-CI — המונה המקומי שווה ל-CI), דטרמיניזם, ועם `--parity` — צינור layout-parity והקורפוס הארוך (`audits/long_test_text.txt`; `very_long_test_text.txt` הוא קלט פסול מאז #33); שומר `manifest.json` (סכמה `red-baseline-v2`; רצפת ה-parity ההיסטורית **אינה נאכפת** מאז #33 ומדווחת כעובדה בלבד) ולוגים (`audits/baseline/<sha>/`). `--skip-suite --parity --out <dir>` להרצה חלקית |
+| `run-baseline.js` | **Baseline G0:** זיהוי סביבה, טביעת אצבע (SHA-256) לקלטים, כל צעד של `npm test` **ושל `test:regress`** בנפרד (רשימת הצעדים מ-`tools/run-tests.js`, D-110 — כמו ה-CI, המונה המקומי שווה ל-CI), דטרמיניזם, ועם `--parity` — צינור layout-parity והקורפוס הארוך (`audits/long_test_text.txt`; `very_long_test_text.txt` הוא קלט פסול מאז #33); שומר `manifest.json` (סכמה `red-baseline-v2`; רצפת ה-parity ההיסטורית **אינה נאכפת** מאז #33 ומדווחת כעובדה בלבד) ולוגים (`audits/baseline/<sha>/`). `--skip-suite --parity --out <dir>` להרצה חלקית |
 | `compare-with-ci.js` | השוואה מכונתית "מקומי ↔ CI" של תיקיית baseline (`manifest.json` + לוגי CI שהועתקו אליה) |
 | `impact.js` | **השפעה של תיקון מנוע:** אותו מסמך בשני עצים (base מול מועמד) — עמודים, `layoutHash`, כמה עמודים השתנו, רפאים/כפילות/אבודות/סדר של הערות, כיסוי הערות לפי עמוד, שמירת תוכן |
+
+## tools/run-tests.js — runner גילוי הבדיקות (D-110)
+
+`npm test` ו-`npm run test:regress` מפעילים אותו (במקום שרשרת `node a && node b` ב-`red-build/package.json`). הוא מגלה כל `red-build/tests/**/*.test.js`,
+מריץ כל קובץ כ-`node <נתיב>` מתוך `red-build/` (אותה סביבה, אותן שורות סיכום ל-CI), וכושל על בדיקה שקטה (בלי שורת סיכום), על "כשל שקט"
+ועל בדיקה יתומה (קובץ שנראה כבדיקה אך אינו `*.test.js`). **הוספת בדיקה = יצירת קובץ `*.test.js`, בלי לערוך package.json או workflow.**
+`--list`/`--list-json` (התכנית), `--only <תת-מחרוזת>` (פיתוח), `--bail` (עצירה בכשל ראשון), `--json <file>`, `--check` (שומר-כיסוי בלבד) — ראו `--help`.
+`run-baseline.js` לוקח ממנו את רשימת הצעדים; בעץ ישן, לפני ה-runner, הוא חוזר לפירוק השרשרת הידנית.
 
 ## impact.js — אימות תיקון מנוע בפקודה אחת
 

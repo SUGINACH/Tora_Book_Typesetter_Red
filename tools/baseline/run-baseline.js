@@ -5,7 +5,7 @@
 // פלט מלא לכל פקודה גם כשהיא נכשלת:
 //   1. זיהוי: commit, ענף, תאריך, גרסאות Node/npm/poppler/Python/PyMuPDF/Chrome, גופנים.
 //   2. טביעת אצבע (sha256) לכל קובץ קלט מרכזי (קורפוסים, ייחוס, הגדרות, חבילות UI).
-//   3. כל פקודה בשרשרת `npm test` בנפרד (בלי עצירה בכשל ראשון), עם CI=true — כמו ב-CI:
+//   3. כל צעד של `npm test` + `npm run test:regress` בנפרד (בלי עצירה בכשל ראשון; הרשימה מ-tools/run-tests.js), עם CI=true — כמו ב-CI:
 //      דילוג = כשל. ספירה לפי הסיכום שכל קובץ מדפיס (ראו "מה נספר" ב-BASELINE.md).
 //   4. דטרמיניזם: הסקריפט הרשמי + שתי ריצות בתהליכים נפרדים על הקורפוס הקנוני.
 //   5. (--parity) צנרת layout-parity כמו ב-workflow: חילוץ ייחוס, RED בנתיב החי, השוואה,
@@ -114,10 +114,23 @@ function collectInputs() {
 // "P/N passed, F failed" (d89) ו-"P passed, F failed" (s14).
 const SUMMARY = /== (.+?): (\d+)(?:\/(\d+))? passed, (\d+) failed(?:, (\d+) skipped)? ==/g;
 
+// רשימת פקודות הסוויטה (`npm test` ואחריה `npm run test:regress`), כל אחת תירשם ללוג נפרד.
+// אחרי D-110 `scripts.test` מפעיל את tools/run-tests.js (גילוי אוטומטי) — הרשימה נלקחת ממנו (`--list-json --suite all`),
+// כך שהמונה המקומי = מה ש-CI מריץ. בעץ ישן (לפני ה-runner; baseline שנמדד בהעתקת הסקריפט הזה לעץ קודם) — פירוק השרשרת הידנית.
+function suiteCommands(pkg) {
+  const runner = path.join(ROOT, 'tools', 'run-tests.js');
+  if (fs.existsSync(runner) && /run-tests\.js/.test(pkg.scripts.test)) {
+    const r = spawnSync(process.execPath, [runner, '--list-json', '--suite', 'all'], { cwd: ROOT, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`run-tests.js --list-json נכשל (קוד ${r.status}): ${(r.stderr || r.stdout || '').trim()}`);
+    return JSON.parse(r.stdout).steps.map((s) => `node ${s.file}`);
+  }
+  // CI מריץ את שרשרת `npm test` ואחריה צעד נפרד "Regression repros" (`npm run test:regress`, מ-#37) — נכלל כאן כדי שהמונה המקומי יהיה = CI.
+  return [...pkg.scripts.test.split(' && '), ...(pkg.scripts['test:regress'] ? pkg.scripts['test:regress'].split(' && ') : [])];
+}
+
 function runSuite() {
   const pkg = JSON.parse(fs.readFileSync(path.join(RED, 'package.json'), 'utf8'));
-  // CI מריץ את שרשרת `npm test` ואחריה צעד נפרד "Regression repros" (`npm run test:regress`, מ-#37) — נכלל כאן כדי שהמונה המקומי יהיה = CI.
-  const cmds = [...pkg.scripts.test.split(' && '), ...(pkg.scripts['test:regress'] ? pkg.scripts['test:regress'].split(' && ') : [])];
+  const cmds = suiteCommands(pkg);
   const rows = [];
   cmds.forEach((cmd, i) => {
     const t0 = Date.now();
