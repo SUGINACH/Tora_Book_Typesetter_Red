@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { describe, it, assert, assertEq, report } = require('../harness');
+const { describe, it, assert, assertEq, report, artifactsDir } = require('../harness');
 
 const fm = require('../../src/engine/typography/font-metrics');
 const { MeasureAPI, registerFont, unregisterFont, clearRegisteredFonts, resolveMeasureImpl } = require('../../src/engine/typography/measure-api');
@@ -33,8 +33,7 @@ const { getDefaultSettings, getSettingDefs } = require('../../src/engine/core/se
 const { importImudSettings } = require('../../src/engine/core/legacy-settings-map');
 const { exportPdf } = require('../../src/engine/output/export-api');
 
-const ART = path.join(__dirname, '..', 'artifacts');
-if (!fs.existsSync(ART)) fs.mkdirSync(ART, { recursive: true });
+const ART = artifactsDir(); // R-4: tests/artifacts כברירת מחדל; ה-runner מפנה לתיקייה זמנית (RED_ARTIFACTS_DIR) — ראו tests/harness.js
 
 const ASSETS = path.join(__dirname, '..', '..', 'ui', 'assets', 'imud');
 const FONT_DIR = path.join(ASSETS, 'fonts');

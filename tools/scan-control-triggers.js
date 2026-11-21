@@ -14,7 +14,8 @@ const UI_SRC = path.join(RED, 'src', 'ui');
 // מדווחת בכפילות על אותן קריאות. שלמות ה־bundle עצמו נבדקת נפרד בבדיקת s10
 // (הפרדת מנוע, אי־הכללת worker-main, offline).
 const res = scanControlTriggers(UI_SRC, null);
-const outDir = path.join(RED, 'tests', 'artifacts');
+// R-4: RED_ARTIFACTS_DIR (שה-runner מגדיר) מפנה את הכתיבה מחוץ ל-tests/artifacts שבמעקב; בלעדיו — כמו תמיד.
+const outDir = process.env.RED_ARTIFACTS_DIR ? path.resolve(process.env.RED_ARTIFACTS_DIR) : path.join(RED, 'tests', 'artifacts');
 fs.mkdirSync(outDir, { recursive: true });
 const artifact = {
   schema: 's10-callgraph-v1',
@@ -31,5 +32,5 @@ console.log(`scan-control-triggers: ${res.files.length} files · ${res.edges.len
 for (const v of res.violations) {
   console.error(`  VIOLATION ${v.file} ${v.fn} → ${v.callee}: ${v.reason}`);
 }
-console.log(`artifact → tests/artifacts/s10-callgraph.json`);
+console.log(`artifact → ${process.env.RED_ARTIFACTS_DIR ? path.join(outDir, 's10-callgraph.json') : 'tests/artifacts/s10-callgraph.json'}`);
 process.exit(res.violations.length ? 1 : 0);

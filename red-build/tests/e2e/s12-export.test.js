@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { describe, it, assert, assertEq, report } = require('../harness');
+const { describe, it, assert, assertEq, report, artifactsDir } = require('../harness');
 
 const { typeset } = require('../../src/engine/core/pipeline');
 const { getDefaultSettings } = require('../../src/engine/core/settings-registry');
@@ -19,8 +19,7 @@ const { assertOfflineSafe } = require('../../src/engine/output/html-export');
 const { parseCustomStyles } = require('../../src/engine/extensions/style-schema');
 const { buildTtfFixture } = require('../fixtures/gen_ttf_fixture');
 
-const ART = path.join(__dirname, '..', 'artifacts');
-if (!fs.existsSync(ART)) fs.mkdirSync(ART, { recursive: true });
+const ART = artifactsDir(); // R-4: tests/artifacts כברירת מחדל; ה-runner מפנה לתיקייה זמנית (RED_ARTIFACTS_DIR) — ראו tests/harness.js
 
 const CORPUS = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'canonical_corpus.txt'), 'utf8');
 const DEJAVU = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
