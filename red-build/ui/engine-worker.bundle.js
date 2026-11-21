@@ -7405,6 +7405,26 @@ function legacyTypeset(rawText, settings, env) {
         }
         fnReserved = fnReserveFor(fnQueue);
       };
+      // **R-04 (תיקון שורש — הערת רפאים):** הערות הפסקה מוזרמות לתור לפני חישוב ה-fit (S4.9). כשהפסקה נדחית אחר כך
+      // שלמה לעמוד הבא (fit=0 — בעיקר אחרי רצועת h3, שעוקפת את שער התקציב fn-budget-gate) הערותיה נשארו בתור של
+      // עמוד שאין בו אף שורה שלה — בניגוד ל-S4.24. נשלפות רק כשלפסקה אין שורה בעמוד הזה: בלי הבדיקה הזאת הקוד
+      // מוציא הערות חוקיות של פסקה שנחתכה בעמוד (שורה 0 בטור הימני, fit=0 בשמאלי) — מלכודת שזוהתה ע"י סוכן 4.
+      const dropParaNotes = (tokenId) => {
+        const notes = paraNotes.get(tokenId);
+        if (!notes) return;
+        for (const sg of stack) {
+          if (!sg || !sg.cols) continue;
+          for (const col of sg.cols) for (const it of col) if (it && it.kind === 'para' && it.tokenId === tokenId) return;
+        }
+        const keys = new Set();
+        for (const n of notes) if (n.key != null) keys.add(n.key);
+        let dropped = 0;
+        for (let qi = fnQueue.length - 1; qi >= 0; qi--) {
+          const q = fnQueue[qi];
+          if (q && q.key != null && keys.has(q.key)) { fnQueue.splice(qi, 1); dropped++; }
+        }
+        if (dropped) fnReserved = fnQueue.length ? fnReserveFor(fnQueue) : 0;
+      };
 
       // ---- מבנה העמוד: מחסנית של פסים ובלוקים; מילוי דו-טורי (ימני ואז שמאלי) ----
       const stack = [];
@@ -8036,10 +8056,11 @@ function legacyTypeset(rawText, settings, env) {
             // **S6.2:** pageClose — בדרך כלל העמוד מלא (איזון = no-op); המסלול
             // כאן גם כשהכלל "אלמנה בודדת ⇒ דחיפה" (fit=1→0) או rollback
             // כותרות-זנב פינו את הטור — אז סעיף 3 של המקור מאזן את השארית.
+            dropParaNotes(tok.id);
             finalizeBlock(block, pending ? pending.token : toks[ti], ti >= toks.length && !pending, true, 'fit0');
             break fillPage;
           }
-          else break fillPage;
+          else { dropParaNotes(tok.id); break fillPage; }
         }
 
         // סמני הערות בשורות המוצבות — חילוץ משותף עם נתיב משיכת הזנב (S4.17).
