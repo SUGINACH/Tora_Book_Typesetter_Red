@@ -236,7 +236,7 @@ it('D-89/3+5 (PDF בפועל): הטלפון נחלץ קריא; מאזן סוגר
   const S = { ...legacySettings(), 'body-font': 'Frank Ruhl Libre', 'measure-impl': 'font-metrics' };
   const res = exportPdf(BOOK, S, FONT, 'Frank Ruhl Libre');
   assert(res.ok, 'ייצוא עבר: ' + (res.error || ''));
-  const tmp = path.join(__dirname, '..', 'artifacts', 'd89-check.pdf');
+  const tmp = path.join(require('../harness').artifactsDir(), 'd89-check.pdf'); // R-4: ראו tests/harness.js
   fs.writeFileSync(tmp, res.bytes);
   const txt = execFileSync('pdftotext', [tmp, '-'], { encoding: 'utf8' });
   assert(txt.includes('052-7666666'), 'מספר הטלפון קריא ב-PDF (052-7666666)');

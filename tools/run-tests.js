@@ -16,6 +16,8 @@
 //   --list | --list-json    הדפסת התכנית (הקבצים לפי סדר ההרצה) בלי להריץ
 //   --check          שומר-כיסוי בלבד: קבצי JS ב-tests/ שנראים כבדיקה (משתמשים ב-harness / describe) אך אינם `*.test.js` —
 //                    "בדיקה יתומה" שלא תרוץ בשום מקום; קוד יציאה 1 אם נמצא כזה. השומר רץ גם בראש כל הרצה מלאה (בלי --only)
+//   --write-artifacts   רענון מכוון של העדויות שבמעקב (tests/artifacts): בלי הפניה ובלי שומר-סחף (ברירת מחדל — ראו "עדויות" למטה)
+//   --keep-artifacts    לא למחוק את תיקיית העדויות הזמנית בסוף ההרצה (מודפס נתיבה) — לבדיקת עדויות שהריצה הפיקה
 //   --root <dir>     שורש red-build חלופי (לבדיקות של הכלי עצמו) · --no-extra  בלי צעדי הכלי
 //
 // סדר ההרצה: לפי קבוצה (unit → integration → layout → e2e → audit, ואחריהן קבוצות אחרות לפי שם), בתוך קבוצה — סדר טבעי
@@ -25,13 +27,21 @@
 // (שורות הסיכום `== כותרת: N passed, F failed ==` שה-CI ו-compare-with-ci.js קוראים נשארות זהות). קוד היציאה = 0 רק אם כל
 // הצעדים הצליחו.
 //
+// עדויות (R-4): בדיקות כותבות PDF/JSON של הייצוא, המטריצה והביצועים ל-tests/artifacts — תיקייה במעקב git, וכל ריצה שיכתבה אותם מחדש
+// (שעוני תזמון, חותמות PDF, סריקת UI מתיישנת) הותירה עץ מלוכלך ושיבשה baseline/מיזוגים (R-4). לכן ה-runner מגדיר לילדים
+// RED_ARTIFACTS_DIR=<תיקייה זמנית> (tests/harness.js: artifactsDir(), וכך גם tools/scan-control-triggers.js), ושומר-סחף משווה את
+// tests/artifacts לפני/אחרי: בדיקה שכתבה לשם ישירות ⇒ כשל עם שם הקובץ. אם RED_ARTIFACTS_DIR כבר מוגדר בסביבה — נשמר. הרצת קובץ בודד
+// ישירות (`node tests/e2e/…`) לא משתנה: כותב ל-tests/artifacts כמו תמיד.
+//
 // מה נוסף (קשיחות, לא החלשה): (1) קובץ בדיקה שלא הדפיס שורת סיכום נחשב כשל ("בדיקה שקטה" — 0 בדיקות עוברות לא ירוק);
 // (2) קובץ שדיווח על כשלים אך יצא 0 — כשל; (3) הרצת הכול גם אחרי כשל (אפשר --bail).
 //
 // אפס תלויות. קוד יציאה: 0 תקין | 1 כשל בדיקה/שומר | 2 שגיאת שימוש.
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -132,6 +142,34 @@ function orphans(opts = {}) {
     .sort(naturalCompare);
 }
 
+// ───────────────────────── עדויות (R-4) ─────────────────────────
+/** טביעת sha256 לכל קובץ תחת dir — אובייקט {נתיב-יחסי-עם-/: hash}, בסדר טבעי דטרמיניסטי; תיקייה חסרה = ריקה. */
+function snapshot(dir) {
+  const out = Object.create(null);
+  const rec = (abs, rel) => {
+    let entries;
+    try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of entries.sort((a, b) => naturalCompare(a.name, b.name))) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) rec(path.join(abs, e.name), r);
+      else if (e.isFile()) out[r] = crypto.createHash('sha256').update(fs.readFileSync(path.join(abs, e.name))).digest('hex');
+    }
+  };
+  rec(dir, '');
+  return out;
+}
+const CHANGE_HE = { added: 'נוסף', modified: 'שונה', deleted: 'נמחק' };
+function diffSnapshots(before, after) {
+  const drift = [];
+  for (const f of Object.keys(after)) {
+    if (!(f in before)) drift.push({ file: f, change: 'added' });
+    else if (before[f] !== after[f]) drift.push({ file: f, change: 'modified' });
+  }
+  for (const f of Object.keys(before)) if (!(f in after)) drift.push({ file: f, change: 'deleted' });
+  return drift.sort((a, b) => naturalCompare(a.file, b.file));
+}
+const DRIFT_HINT = 'בדיקה כתבה ישירות לתיקייה שבמעקב. קבלו את תיקיית העדויות מ-artifactsDir() (tests/harness.js), או הריצו עם --write-artifacts כדי לרענן עדויות בכוונה';
+
 // ───────────────────────── הרצה ─────────────────────────
 function runStep(step, root, env, echo) {
   return new Promise((resolve) => {
@@ -175,17 +213,34 @@ function evaluate(step, r, opts = {}) {
 
 async function run(steps, opts = {}) {
   const root = path.resolve(opts.root || DEFAULT_ROOT);
-  const env = opts.env || process.env;
+  const baseEnv = opts.env || process.env;
   const echo = opts.echo !== false;
   const results = [];
   const t0 = Date.now();
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-    if (echo) process.stdout.write(`\n▶ [${i + 1}/${steps.length}] ${step.file}\n`);
-    const res = evaluate(step, await runStep(step, root, env, echo), opts);
-    results.push(res);
-    if (!res.ok && opts.bail) break;
+  // עדויות (R-4): הפניה לתיקייה זמנית + שומר-סחף על tests/artifacts שבמעקב. --write-artifacts מכבה את שניהם.
+  const tracked = path.join(root, 'tests', 'artifacts');
+  const guarded = !opts.writeArtifacts;
+  const preset = baseEnv.RED_ARTIFACTS_DIR ? path.resolve(baseEnv.RED_ARTIFACTS_DIR) : null;
+  const tmpDir = guarded && !preset ? fs.mkdtempSync(path.join(os.tmpdir(), 'red-artifacts-')) : null;
+  const env = tmpDir ? { ...baseEnv, RED_ARTIFACTS_DIR: tmpDir } : baseEnv;
+  const before = guarded ? snapshot(tracked) : null;
+  let drift = [];
+  let kept = false;
+  try {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      if (echo) process.stdout.write(`\n▶ [${i + 1}/${steps.length}] ${step.file}\n`);
+      const res = evaluate(step, await runStep(step, root, env, echo), opts);
+      results.push(res);
+      if (!res.ok && opts.bail) break;
+    }
+    drift = guarded ? diffSnapshots(before, snapshot(tracked)) : [];
+    // התיקייה הזמנית נמחקת בסוף; נשמרת (והנתיב מודפס) עם --keep-artifacts או כשההרצה נכשלה — כדי שאפשר יהיה לבדוק את העדויות של ריצה כושלת
+    kept = !!tmpDir && (!!opts.keepArtifacts || drift.length > 0 || results.some((r) => !r.ok));
+  } finally {
+    if (tmpDir && !kept) fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+  const artifacts = { mode: !guarded ? 'write' : tmpDir ? 'redirect' : 'env', dir: tmpDir || preset, kept, drift };
   const tests = results.filter((r) => r.kind === 'test');
   const totals = {
     steps: results.length,
@@ -195,9 +250,11 @@ async function run(steps, opts = {}) {
     skipped: results.reduce((a, r) => a + r.skipped, 0),
     problems: results.filter((r) => !r.ok).length,
     orphans: 0,
+    drift: drift.length,
   };
   return { schema: SCHEMA, suite: opts.suite || 'main', root: path.basename(root), node: process.version, ci: !!process.env.CI,
-    ms: Date.now() - t0, planned: steps.length, bailed: !!opts.bail && results.length < steps.length, totals, results, ok: totals.problems === 0 };
+    ms: Date.now() - t0, planned: steps.length, bailed: !!opts.bail && results.length < steps.length, artifacts, totals, results,
+    ok: totals.problems === 0 && drift.length === 0 };
 }
 
 function printTable(rep) {
@@ -211,12 +268,18 @@ function printTable(rep) {
   const bad = rep.results.filter((r) => !r.ok);
   for (const r of bad) console.log(`✗ ${r.file}: ${r.problems.join(' · ')}`);
   for (const f of (rep.guard && rep.guard.orphans) || []) console.log(`✗ ${f}: ${ORPHAN_MSG}`);
-  console.log(`RUN-TESTS ${rep.ok ? 'OK' : 'FAILED'} — suite=${rep.suite} steps=${t.steps}/${rep.planned} files=${t.files} passed=${t.passed} failed=${t.failed} skipped=${t.skipped} problems=${t.problems} orphans=${t.orphans} wall=${(rep.ms / 1000).toFixed(1)}s`);
+  const a = rep.artifacts;
+  if (a) {
+    for (const d of a.drift) console.log(`✗ tests/artifacts/${d.file}: ${CHANGE_HE[d.change]} בזמן ההרצה`);
+    if (a.drift.length) console.log(`  ↳ ${DRIFT_HINT}`);
+    console.log(`עדויות: ${a.mode === 'write' ? 'מצב --write-artifacts — נכתבו ל-tests/artifacts (רענון מכוון)' : a.mode === 'env' ? `RED_ARTIFACTS_DIR מהסביבה: ${a.dir}` : `הופנו ל-${a.dir}${a.kept ? ' (נשמרה לבדיקה)' : ' (נמחקה בסוף)'}`} · סחף ב-tests/artifacts: ${a.drift.length}`);
+  }
+  console.log(`RUN-TESTS ${rep.ok ? 'OK' : 'FAILED'} — suite=${rep.suite} steps=${t.steps}/${rep.planned} files=${t.files} passed=${t.passed} failed=${t.failed} skipped=${t.skipped} problems=${t.problems} orphans=${t.orphans} drift=${t.drift} wall=${(rep.ms / 1000).toFixed(1)}s`);
 }
 
 // ───────────────────────── CLI ─────────────────────────
 function parseArgs(argv) {
-  const o = { suite: 'main', only: [], bail: false, list: false, listJson: false, check: false, extra: true, json: null, root: null };
+  const o = { suite: 'main', only: [], bail: false, list: false, listJson: false, check: false, extra: true, json: null, root: null, writeArtifacts: false, keepArtifacts: false };
   const need = (i, n) => { if (i + 1 >= argv.length) throw new Error(`הדגל ${n} דורש ערך`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -229,6 +292,8 @@ function parseArgs(argv) {
     else if (a === '--list-json') o.listJson = true;
     else if (a === '--check') o.check = true;
     else if (a === '--no-extra') o.extra = false;
+    else if (a === '--write-artifacts') o.writeArtifacts = true;
+    else if (a === '--keep-artifacts') o.keepArtifacts = true;
     else if (a === '--help' || a === '-h') o.help = true;
     else throw new Error(`דגל לא מוכר: ${a}`);
   }
@@ -273,7 +338,7 @@ async function main(argv) {
   }
   if (!steps.length) { console.error(`run-tests: אין צעדים להרצה (suite=${o.suite}${o.only.length ? `, only=${o.only.join(',')}` : ''})`); return 2; }
 
-  const rep = await run(steps, { root: o.root, suite: o.suite, bail: o.bail });
+  const rep = await run(steps, { root: o.root, suite: o.suite, bail: o.bail, writeArtifacts: o.writeArtifacts, keepArtifacts: o.keepArtifacts });
   // שומר-כיסוי בכל הרצה מלאה: בדיקה יתומה = כשל (גם אם כל הצעדים שרצו ירוקים)
   rep.guard = { orphans: o.only.length ? [] : orphans(base) };
   if (rep.guard.orphans.length) { rep.ok = false; rep.totals.orphans = rep.guard.orphans.length; }
@@ -282,7 +347,7 @@ async function main(argv) {
   return rep.ok ? 0 : 1;
 }
 
-module.exports = { SCHEMA, SUITES, GROUP_ORDER, EXTRA_STEPS, SUMMARY, naturalCompare, compareFiles, walk, discover, plan, orphans, evaluate, run, parseArgs };
+module.exports = { SCHEMA, SUITES, GROUP_ORDER, EXTRA_STEPS, SUMMARY, naturalCompare, compareFiles, walk, discover, plan, orphans, evaluate, run, parseArgs, snapshot, diffSnapshots };
 
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (e) => { console.error(e && e.stack || e); process.exitCode = 2; });

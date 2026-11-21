@@ -11,6 +11,9 @@
 // נעטפות ב-Promise.race מול טיימר; סינכרוניות לא מושפעות כלל.
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const results = { passed: 0, failed: 0, skipped: 0, failures: [] };
 let currentSuite = '';
 const queue = []; // {full, fn} — נרשמים בזמן describe; מבוצעים בסדר הרישום
@@ -99,4 +102,16 @@ function report(title) {
   runAll().then(finish, finish);
 }
 
-module.exports = { describe, it, assert, assertEq, assertClose, report, results };
+/**
+ * תיקיית העדויות (artifacts) שבדיקות כותבות אליה (PDF/JSON של הייצוא, המטריצה, הביצועים…).
+ * ברירת מחדל: tests/artifacts — תיקייה **במעקב git**, ולכן רענון עדויות הוא מעשה מכוון. ה-runner (tools/run-tests.js) מפנה אותה לתיקייה
+ * זמנית דרך RED_ARTIFACTS_DIR, כדי ש-`npm test`/CI לא ישכתבו קבצים במעקב בכל ריצה (R-4: שעוני תזמון, חותמות PDF);
+ * `npm test -- --write-artifacts` מרענן את העדויות במעקב בכוונה. כל בדיקה שכותבת עדות חייבת לקבל את התיקייה מכאן ולא לחשב נתיב בעצמה.
+ */
+function artifactsDir() {
+  const dir = process.env.RED_ARTIFACTS_DIR ? path.resolve(process.env.RED_ARTIFACTS_DIR) : path.join(__dirname, 'artifacts');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+module.exports = { describe, it, assert, assertEq, assertClose, report, results, artifactsDir };

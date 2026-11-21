@@ -9,6 +9,9 @@
 //   ד. שומר-כיסוי: קובץ שנראה כבדיקה אך אינו *.test.js (בדיקה יתומה) מפיל הרצה מלאה ו---check; עוזרים רגילים אינם מופלים;
 //   ה. חוזה על העץ האמיתי: אין בדיקות יתומות; הגילוי שווה לסריקה בלתי-תלויה של tests/; `npm test` ו-`npm run test:regress`
 //      מפעילים את ה-runner (ולא שרשרת ידנית — שהחזירה את התנגשויות scripts.test).
+//   ו. עדויות (R-4): ה-runner מפנה את כתיבת העדויות (PDF/JSON) לתיקייה זמנית (RED_ARTIFACTS_DIR) ושומר-סחף משווה את tests/artifacts שבמעקב
+//      לפני/אחרי — בקרות שליליות: כתיבה ישירה, שינוי ומחיקה ⇒ כשל עם שם הקובץ; --write-artifacts מרענן בכוונה; נשמר/נמחק כמתוכנן;
+//      וכן הבדיקות של artifactsDir() (tests/harness.js) ושל tools/scan-control-triggers.js.
 // אין כאן מספר קבצים/בדיקות קשיח — הוספת בדיקה לעץ אינה אמורה לשבור את הקובץ הזה.
 'use strict';
 
@@ -45,10 +48,38 @@ const T = {
   silent: (name) => `console.log('RAN ${name}');`, // יוצא 0 בלי שורת סיכום
   crash: (name) => `console.log('RAN ${name}'); throw new Error('boom');`,
 };
-const cli = (root, args = [], env = {}) => spawnSync(process.execPath, [TOOL, '--root', root, '--no-extra', ...args], {
-  encoding: 'utf8', env: { ...process.env, ...env },
-});
+// ה-runner המקונן אינו יורש RED_ARTIFACTS_DIR מה-runner החיצוני שמריץ קובץ זה (אחרת "ברירת המחדל" שנבדקת כאן הייתה מצב "env")
+// ריצה כושלת של ה-runner שומרת את תיקיית העדויות הזמנית (לבדיקת הכשל) — לכן, אלא אם הבדיקה שולטת ב-TMPDIR בעצמה (withTmp למטה),
+// כל קריאה מקבלת TMPDIR פרטי שנמחק אחריה, והבדיקות של הכשלים אינן משאירות זבל ב-/tmp.
+const cli = (root, args = [], env = {}) => {
+  const base = { ...process.env };
+  delete base.RED_ARTIFACTS_DIR;
+  const own = env.TMPDIR ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'run-tests-cli-'));
+  try {
+    return spawnSync(process.execPath, [TOOL, '--root', root, '--no-extra', ...args], {
+      encoding: 'utf8', env: { ...base, ...(own ? { TMPDIR: own, TMP: own, TEMP: own } : {}), ...env },
+    });
+  } finally { if (own) fs.rmSync(own, { recursive: true, force: true }); }
+};
 const ran = (stdout) => [...stdout.matchAll(/^RAN (\S+)$/gm)].map((m) => m[1]);
+
+// ───────────────────────── עדויות (R-4): עזרים ─────────────────────────
+// tmp = תיקייה שהבדיקה שולטת בה; מעבירים אותה כ-TMPDIR/TMP/TEMP ל-runner המקונן, וכך אפשר להוכיח אם תיקייה זמנית נוצרה, נמחקה או נשמרה
+const withTmp = (fn) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'run-tests-tmp-'));
+  try { return fn(tmp, { TMPDIR: tmp, TMP: tmp, TEMP: tmp }); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+};
+const leftover = (tmp) => fs.readdirSync(tmp).filter((n) => n.startsWith('red-artifacts-'));
+const ARTDIR = "const fs=require('fs'),path=require('path');";
+const W = {
+  // כמו הבדיקות האמיתיות (artifactsDir() ב-harness): כותב out.txt ל-RED_ARTIFACTS_DIR אם מוגדר, אחרת ל-tests/artifacts; מדפיס מה קיבל
+  helper: (name) => `${ARTDIR} const d=process.env.RED_ARTIFACTS_DIR?path.resolve(process.env.RED_ARTIFACTS_DIR):path.join(__dirname,'..','artifacts');
+fs.mkdirSync(d,{recursive:true}); fs.writeFileSync(path.join(d,'out.txt'),'x'); console.log('ART '+(process.env.RED_ARTIFACTS_DIR||'-')); ${sum(name, 1)}`,
+  // ההרגל הישן: כותב ישירות ל-tests/artifacts שבמעקב ולא שואל את הסביבה
+  direct: (name) => `${ARTDIR} const d=path.join(__dirname,'..','artifacts'); fs.mkdirSync(d,{recursive:true}); fs.writeFileSync(path.join(d,'new.txt'),'x'); ${sum(name, 1)}`,
+  // משנה קובץ קיים ומוחק אחר בתיקייה שבמעקב
+  mutate: (name) => `${ARTDIR} const d=path.join(__dirname,'..','artifacts'); fs.writeFileSync(path.join(d,'keep.json'),'changed'); fs.unlinkSync(path.join(d,'gone.json')); ${sum(name, 1)}`,
+};
 
 // ───────────────────────── א. סדר ─────────────────────────
 describe('run-tests · סדר הרצה דטרמיניסטי', () => {
@@ -254,6 +285,227 @@ describe('run-tests · שומר-כיסוי (בדיקה יתומה)', () => {
       const c = cli(root, ['--check']);
       assertEq(c.status, 0, c.stdout);
       assert(/בדיקות יתומות=0/.test(c.stdout), c.stdout);
+    });
+  });
+});
+
+// ───────────────────────── ו. עדויות (R-4) ─────────────────────────
+describe('run-tests · עדויות: snapshot / diffSnapshots', () => {
+  it('snapshot: תיקייה חסרה = ריקה; מפתחות יחסיים עם "/" כולל תתי-תיקיות; בסדר טבעי; ה-hash תלוי בתוכן', () => {
+    withRoot({ 'a/b10.txt': 'two', 'a/b2.txt': 'one', 'top.json': '{}' }, (root) => {
+      assertEq(rt.snapshot(path.join(root, 'missing')), {});
+      const s = rt.snapshot(root);
+      assertEq(Object.keys(s), ['a/b2.txt', 'a/b10.txt', 'top.json']);
+      assert(/^[0-9a-f]{64}$/.test(s['top.json']), 'sha256');
+      fs.writeFileSync(path.join(root, 'top.json'), '{ }');
+      assert(rt.snapshot(root)['top.json'] !== s['top.json'], 'שינוי תוכן חייב לשנות את ה-hash');
+      assertEq(rt.snapshot(root)['a/b2.txt'], s['a/b2.txt']);
+    });
+  });
+  it('diffSnapshots: added / modified / deleted בסדר טבעי; זהה ⇒ ריק (גם כשהסדר שונה)', () => {
+    assertEq(rt.diffSnapshots({ a: '1', b: '2', c: '3' }, { c: '3', b: '9', d: '4', e10: '5', e2: '5' }),
+      [{ file: 'a', change: 'deleted' }, { file: 'b', change: 'modified' }, { file: 'd', change: 'added' },
+        { file: 'e2', change: 'added' }, { file: 'e10', change: 'added' }]);
+    assertEq(rt.diffSnapshots({ a: '1', b: '2' }, { b: '2', a: '1' }), []);
+    assertEq(rt.diffSnapshots({}, {}), []);
+  });
+});
+
+describe('run-tests · עדויות מופנות לתיקייה זמנית (ברירת מחדל)', () => {
+  it('הילד מקבל RED_ARTIFACTS_DIR לתיקייה זמנית חדשה, הכתיבה נוחתת שם, tests/artifacts שבמעקב לא נגע, וריצה ירוקה מנקה אחריה', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w'), 'tests/artifacts/keep.json': 'tracked' }, (root) => {
+      const tracked = path.join(root, 'tests', 'artifacts');
+      const before = rt.snapshot(tracked);
+      const r = cli(root, [], tmpEnv);
+      assertEq(r.status, 0, `${r.stdout}\n${r.stderr}`);
+      const m = r.stdout.match(/^ART (.+)$/m);
+      assert(m && m[1] !== '-', `הילד חייב לקבל RED_ARTIFACTS_DIR\n${r.stdout}`);
+      assert(m[1].startsWith(tmp) && path.basename(m[1]).startsWith('red-artifacts-'), `התיקייה הזמנית צריכה להיווצר ב-TMPDIR: ${m[1]}`);
+      assertEq(rt.snapshot(tracked), before, 'tests/artifacts שבמעקב לא אמור להשתנות');
+      assert(!fs.existsSync(path.join(tracked, 'out.txt')), 'העדות נכתבה לתיקייה שבמעקב');
+      assertEq(leftover(tmp), [], 'ריצה ירוקה חייבת למחוק את התיקייה הזמנית');
+      assert(/סחף ב-tests\/artifacts: 0/.test(r.stdout) && /drift=0/.test(r.stdout), r.stdout);
+    }));
+  });
+  it('--json: artifacts = {mode:"redirect", dir, kept:false, drift:[]} ו-totals.drift = 0', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w') }, (root) => {
+      const out = path.join(root, 'out.json');
+      const r = cli(root, ['--json', out], tmpEnv);
+      assertEq(r.status, 0, r.stdout);
+      const j = JSON.parse(fs.readFileSync(out, 'utf8'));
+      assertEq(j.artifacts.mode, 'redirect');
+      assertEq(j.artifacts.kept, false);
+      assertEq(j.artifacts.drift, []);
+      assert(j.artifacts.dir.startsWith(tmp), j.artifacts.dir);
+      assertEq(j.totals.drift, 0);
+    }));
+  });
+  it('RED_ARTIFACTS_DIR שכבר מוגדר בסביבה נשמר כמות שהוא: אין תיקייה זמנית, והכתיבה נוחתת שם', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w') }, (root) => {
+      const mine = path.join(tmp, 'mine');
+      const out = path.join(root, 'out.json');
+      const r = cli(root, ['--json', out], { ...tmpEnv, RED_ARTIFACTS_DIR: mine });
+      assertEq(r.status, 0, r.stdout);
+      assert(r.stdout.includes(`ART ${mine}`), r.stdout);
+      assertEq(fs.readFileSync(path.join(mine, 'out.txt'), 'utf8'), 'x');
+      assertEq(leftover(tmp), [], 'לא אמורה להיווצר תיקייה זמנית כשהסביבה כבר הגדירה יעד');
+      const j = JSON.parse(fs.readFileSync(out, 'utf8'));
+      assertEq([j.artifacts.mode, j.artifacts.dir], ['env', mine]);
+    }));
+  });
+  it('--write-artifacts (רענון מכוון): אין הפניה ואין שומר — הילד לא מקבל RED_ARTIFACTS_DIR, כתיבה ישירה ל-tests/artifacts עוברת, קוד 0', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w'), 'tests/unit/d.test.js': W.direct('d') }, (root) => {
+      const out = path.join(root, 'out.json');
+      const r = cli(root, ['--write-artifacts', '--json', out], tmpEnv);
+      assertEq(r.status, 0, `${r.stdout}\n${r.stderr}`);
+      assert(/^ART -$/m.test(r.stdout), `הילד לא אמור לקבל RED_ARTIFACTS_DIR\n${r.stdout}`);
+      assertEq(fs.readFileSync(path.join(root, 'tests', 'artifacts', 'out.txt'), 'utf8'), 'x');
+      assert(fs.existsSync(path.join(root, 'tests', 'artifacts', 'new.txt')), 'כתיבה ישירה חייבת לעבוד ב---write-artifacts');
+      assertEq(leftover(tmp), [], 'ב---write-artifacts לא נוצרת תיקייה זמנית');
+      const j = JSON.parse(fs.readFileSync(out, 'utf8'));
+      assertEq([j.artifacts.mode, j.artifacts.drift, j.ok], ['write', [], true]);
+      assert(/--write-artifacts/.test(r.stdout), r.stdout);
+    }));
+  });
+  it('RED_ARTIFACTS_DIR ריק = כמו לא מוגדר (תיקייה זמנית נוצרת)', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w') }, (root) => {
+      const r = cli(root, [], { ...tmpEnv, RED_ARTIFACTS_DIR: '' });
+      assertEq(r.status, 0, r.stdout);
+      const m = r.stdout.match(/^ART (.+)$/m);
+      assert(m && m[1].startsWith(tmp), r.stdout);
+    }));
+  });
+});
+
+describe('run-tests · שומר-סחף: בקרות שליליות (בדיקה שכותבת ישירות לעדויות שבמעקב)', () => {
+  it('כתיבה ישירה ל-tests/artifacts ⇒ כשל עם שם הקובץ, גם כששתי הבדיקות עצמן ירוקות; עם --write-artifacts אותו עץ עובר', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/ok.test.js': T.ok('ok'), 'tests/unit/d.test.js': W.direct('d'), 'tests/artifacts/keep.json': 'tracked' }, (root) => {
+      const out = path.join(root, 'out.json');
+      const r = cli(root, ['--json', out], tmpEnv);
+      assertEq(r.status, 1, r.stdout);
+      assert(/✗ tests\/artifacts\/new\.txt: נוסף בזמן ההרצה/.test(r.stdout), r.stdout);
+      assert(/--write-artifacts/.test(r.stdout), 'ההודעה חייבת להסביר מה לעשות');
+      assert(/RUN-TESTS FAILED — .*problems=0 .*drift=1/.test(r.stdout), `הצעדים עצמם ירוקים; הכשל הוא של השומר\n${r.stdout}`);
+      const j = JSON.parse(fs.readFileSync(out, 'utf8'));
+      assertEq([j.ok, j.totals.problems, j.totals.drift], [false, 0, 1]);
+      assertEq(j.artifacts.drift, [{ file: 'new.txt', change: 'added' }]);
+      // אותו עץ, רענון מכוון ⇒ עובר
+      fs.rmSync(path.join(root, 'tests', 'artifacts', 'new.txt'));
+      const w = cli(root, ['--write-artifacts'], tmpEnv);
+      assertEq(w.status, 0, w.stdout);
+    }));
+  });
+  it('שינוי קובץ קיים ומחיקת קובץ בתיקייה שבמעקב נתפסים ("שונה" / "נמחק")', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/m.test.js': W.mutate('m'), 'tests/artifacts/keep.json': 'orig', 'tests/artifacts/gone.json': 'orig' }, (root) => {
+      const r = cli(root, [], tmpEnv);
+      assertEq(r.status, 1, r.stdout);
+      assert(/✗ tests\/artifacts\/gone\.json: נמחק בזמן ההרצה/.test(r.stdout), r.stdout);
+      assert(/✗ tests\/artifacts\/keep\.json: שונה בזמן ההרצה/.test(r.stdout), r.stdout);
+      assert(/drift=2/.test(r.stdout), r.stdout);
+    }));
+  });
+  it('בקרה חיובית: אותה בדיקה שנוגעת באותם קבצים אבל דרך RED_ARTIFACTS_DIR (artifactsDir()) — עוברת, והקבצים שבמעקב שלמים', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w'), 'tests/artifacts/keep.json': 'orig', 'tests/artifacts/gone.json': 'orig' }, (root) => {
+      const r = cli(root, [], tmpEnv);
+      assertEq(r.status, 0, r.stdout);
+      assertEq(fs.readFileSync(path.join(root, 'tests', 'artifacts', 'keep.json'), 'utf8'), 'orig');
+      assert(fs.existsSync(path.join(root, 'tests', 'artifacts', 'gone.json')));
+    }));
+  });
+  it('--only: השומר פעיל גם בהרצה חלקית (כתיבה ישירה בבדיקה שנבחרה ⇒ כשל)', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/ok.test.js': T.ok('ok'), 'tests/unit/d.test.js': W.direct('d') }, (root) => {
+      assertEq(cli(root, ['--only', 'ok'], tmpEnv).status, 0);
+      const r = cli(root, ['--only', 'd.test'], tmpEnv);
+      assertEq(r.status, 1, r.stdout);
+      assert(/tests\/artifacts\/new\.txt: נוסף/.test(r.stdout), r.stdout);
+    }));
+  });
+});
+
+describe('run-tests · עדויות: מחיקה / שמירה של התיקייה הזמנית', () => {
+  it('--keep-artifacts: התיקייה נשמרת עם התוכן, והנתיב מודפס', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w') }, (root) => {
+      const r = cli(root, ['--keep-artifacts'], tmpEnv);
+      assertEq(r.status, 0, r.stdout);
+      const dirs = leftover(tmp);
+      assertEq(dirs.length, 1);
+      assert(r.stdout.includes(path.join(tmp, dirs[0])), `הנתיב חייב להיות מודפס\n${r.stdout}`);
+      assertEq(fs.readFileSync(path.join(tmp, dirs[0], 'out.txt'), 'utf8'), 'x');
+      assert(/נשמרה לבדיקה/.test(r.stdout), r.stdout);
+    }));
+  });
+  it('ריצה כושלת שומרת את העדויות שנוצרו (לבדיקת הכשל) ומדפיסה את הנתיב; ריצה ירוקה בלי הדגל מנקה', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w'), 'tests/unit/f.test.js': T.fail('f') }, (root) => {
+      const r = cli(root, [], tmpEnv);
+      assertEq(r.status, 1, r.stdout);
+      const dirs = leftover(tmp);
+      assertEq(dirs.length, 1, 'ריצה כושלת שומרת את תיקיית העדויות');
+      assert(r.stdout.includes(path.join(tmp, dirs[0])), r.stdout);
+      assert(fs.existsSync(path.join(tmp, dirs[0], 'out.txt')));
+    }));
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w') }, (root) => {
+      assertEq(cli(root, [], tmpEnv).status, 0);
+      assertEq(leftover(tmp), []);
+    }));
+  });
+  it('כל ריצה מקבלת תיקייה זמנית משלה (שתי ריצות ברצף לא חולקות עדויות)', () => {
+    withTmp((tmp, tmpEnv) => withRoot({ 'tests/unit/w.test.js': W.helper('w') }, (root) => {
+      const a = cli(root, ['--keep-artifacts'], tmpEnv).stdout.match(/^ART (.+)$/m)[1];
+      const b = cli(root, ['--keep-artifacts'], tmpEnv).stdout.match(/^ART (.+)$/m)[1];
+      assert(a !== b, 'כל ריצה חייבת לקבל תיקייה חדשה');
+      assertEq(leftover(tmp).length, 2);
+    }));
+  });
+});
+
+// ───────────────────────── ז. artifactsDir() (tests/harness.js) ─────────────────────────
+describe('harness · artifactsDir()', () => {
+  const H = path.join(RED, 'tests', 'harness.js');
+  const adir = (env, cwd) => {
+    const base = { ...process.env };
+    delete base.RED_ARTIFACTS_DIR;
+    return spawnSync(process.execPath, ['-e', `process.stdout.write(require(${JSON.stringify(H)}).artifactsDir())`], { encoding: 'utf8', cwd: cwd || os.tmpdir(), env: { ...base, ...env } });
+  };
+  it('ברירת מחדל: red-build/tests/artifacts — אותו נתיב שהבדיקות כתבו אליו תמיד (ריצה ישירה של קובץ בדיקה לא משתנה)', () => {
+    const r = adir({});
+    assertEq(r.status, 0, r.stderr);
+    assertEq(r.stdout, path.join(RED, 'tests', 'artifacts'));
+  });
+  it('RED_ARTIFACTS_DIR מוחלט: מוחזר כמות שהוא, והתיקייה (גם מקוננת) נוצרת אם חסרה', () => {
+    withTmp((tmp) => {
+      const dir = path.join(tmp, 'x', 'y');
+      const r = adir({ RED_ARTIFACTS_DIR: dir });
+      assertEq(r.stdout, dir);
+      assert(fs.statSync(dir).isDirectory(), 'התיקייה חייבת להיווצר');
+    });
+  });
+  it('RED_ARTIFACTS_DIR יחסי: נפתר מול ה-cwd (אותו cwd שה-runner נותן לילדים)', () => {
+    withTmp((tmp) => {
+      const r = adir({ RED_ARTIFACTS_DIR: 'rel/out' }, tmp);
+      assertEq(fs.realpathSync(r.stdout), fs.realpathSync(path.join(tmp, 'rel', 'out')));
+    });
+  });
+  it('RED_ARTIFACTS_DIR ריק = כמו לא מוגדר', () => {
+    assertEq(adir({ RED_ARTIFACTS_DIR: '' }).stdout, path.join(RED, 'tests', 'artifacts'));
+  });
+});
+
+describe('scan-control-triggers · RED_ARTIFACTS_DIR', () => {
+  const SCAN = path.join(REPO_ROOT, 'tools', 'scan-control-triggers.js');
+  const sha = (f) => (fs.existsSync(f) ? require('crypto').createHash('sha256').update(fs.readFileSync(f)).digest('hex') : null);
+  it('עם RED_ARTIFACTS_DIR הסריקה כותבת את s10-callgraph.json לשם ואינה נוגעת בקובץ שבמעקב', () => {
+    withTmp((tmp) => {
+      const tracked = path.join(RED, 'tests', 'artifacts', 's10-callgraph.json');
+      const before = sha(tracked);
+      const base = { ...process.env };
+      const r = spawnSync(process.execPath, [SCAN], { cwd: RED, encoding: 'utf8', env: { ...base, RED_ARTIFACTS_DIR: tmp } });
+      assertEq(r.status, 0, `${r.stdout}\n${r.stderr}`);
+      const out = path.join(tmp, 's10-callgraph.json');
+      assert(fs.existsSync(out), 'הקובץ חייב להיכתב ליעד המופנה');
+      const j = JSON.parse(fs.readFileSync(out, 'utf8'));
+      assertEq(j.schema, 's10-callgraph-v1');
+      assert(Array.isArray(j.files) && j.files.length > 0, 'הסריקה חייבת לכלול קבצים');
+      assertEq(sha(tracked), before, 'הקובץ שבמעקב אינו אמור להשתנות');
     });
   });
 });
