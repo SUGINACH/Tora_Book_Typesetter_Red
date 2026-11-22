@@ -60,8 +60,10 @@ def scan_file(path, want_hmtx=False):
     fs = f['OS/2'].fsType if 'OS/2' in f else None
     outl = 'glyf' if 'glyf' in f else 'CFF' if 'CFF ' in f else 'CFF2' if 'CFF2' in f else 'other'
     cmap = f.getBestCmap() or {}
+    # קידוד עברי ישן: אותיות עבריות ממופות לטווח הסמלים PUA (U+F0E0–F0FA = Windows-1255 0xE0–0xFA), לא ליוניקוד U+05D0..
+    legacy = any(sum(1 for c in range(0xF0E0, 0xF0FB) if c in t.cmap) >= 20 for t in f['cmap'].tables if t.isUnicode() or t.platformID == 3)
     cls, vendor = classify(c0, c13, c14)
-    row = {'family': fam, 'full': full, 'cls': cls, 'vendor': vendor, 'fsType': fs, 'outlines': outl, 'hebrew': 0x05D0 in cmap,
+    row = {'family': fam, 'full': full, 'cls': cls, 'vendor': vendor, 'fsType': fs, 'outlines': outl, 'hebrew': 0x05D0 in cmap, 'legacyHebrew': legacy and 0x05D0 not in cmap,
            'upm': f['head'].unitsPerEm, 'glyphs': f['maxp'].numGlyphs, 'c0': c0[:100],
            'licensedFor': bool(re.search(r'licensed for', ' '.join((c0, c13)), re.I))}
     if want_hmtx:
@@ -132,7 +134,8 @@ for s, rows in S.items():
                   'nonFreeNoticeVendors': dict(vend.most_common(12)), 'fsType': dict(fsflags.most_common()),
                   'fsTypeExactValues': dict(collections.Counter(r['fsType'] for r in ok.values()).most_common()),
                   'perCustomerLicenseMarkers': sum(1 for r in ok.values() if r.get('licensedFor')),
-                  'hebrew': {'yes': sum(1 for r in ok.values() if r['hebrew']), 'no': sum(1 for r in ok.values() if not r['hebrew'])},
+                  'hebrew': {'yes': sum(1 for r in ok.values() if r['hebrew']), 'no': sum(1 for r in ok.values() if not r['hebrew']),
+                             'noButLegacyEncoded': sum(1 for r in ok.values() if r.get('legacyHebrew'))},
                   'outlines': dict(collections.Counter(r['outlines'] for r in ok.values()).most_common())}
 
 # קטלוגים: הפניות, יתומים, משפחות לבחירה (סמנטיקת runtime: TTF — האחרון זוכה; מורחב — הראשון, ואינו דורס)
@@ -179,8 +182,8 @@ def shadowed(cat, last_wins):
 sh_t, sh_w = shadowed(imud, True), shadowed(ext, False)
 summary['shadowedFiles'] = {'ttf': {'files': len(sh_t), 'MB': round(sum(cache[f]['bytes'] for f in sh_t) / 1e6, 2)}, 'woff2': {'files': len(sh_w), 'MB': round(sum(cache[f]['bytes'] for f in sh_w) / 1e6, 2)}}
 # שורות מקוצרות (עמודות קבועות) — לשחזור/סינון
-cols = ['file', 'set', 'family', 'cls', 'vendor', 'fsType', 'outlines', 'hebrew', 'bytes', 'c0']
-rows = [[f, setof(f), r.get('family'), r.get('cls'), r.get('vendor'), r.get('fsType'), r.get('outlines'), r.get('hebrew'), r['bytes'], r.get('c0')] if 'error' not in r else [f, setof(f), None, 'error', None, None, None, None, r['bytes'], r['error']] for f, r in sorted(cache.items())]
+cols = ['file', 'set', 'family', 'cls', 'vendor', 'fsType', 'outlines', 'hebrew', 'bytes', 'c0', 'legacyHebrew']
+rows = [[f, setof(f), r.get('family'), r.get('cls'), r.get('vendor'), r.get('fsType'), r.get('outlines'), r.get('hebrew'), r['bytes'], r.get('c0'), r.get('legacyHebrew')] if 'error' not in r else [f, setof(f), None, 'error', None, None, None, None, r['bytes'], r['error'], None] for f, r in sorted(cache.items())]
 out = {'note': 'סיווג רישוי אינדיקטיבי ממטא-דאטה בתוך הגופן; אינו חוות דעת משפטית.', 'summary': summary, 'rowColumns': cols, 'rows': rows}
 if args.out:
     json.dump(out, open(args.out, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
