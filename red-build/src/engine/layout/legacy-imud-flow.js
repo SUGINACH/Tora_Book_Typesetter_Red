@@ -279,7 +279,7 @@ function tokenizeDoc(rawText, cfg) {
   const lines = text.split('\n');
   const tokens = [];
   let pendingSideNote = null;
-  let pendingEndNote = null;
+  let pendingEndNotes = []; // R-05 (מועמד): כל שורת הערת-סיום היא הערה נפרדת — מערך, לא דריסה
   const endPrefix = cfg.endPrefix;
 
   for (let i = 0; i < lines.length; i++) {
@@ -291,7 +291,7 @@ function tokenizeDoc(rawText, cfg) {
       i++; line += ' ' + next;
     }
     if (endPrefix && line.startsWith(endPrefix)) {
-      pendingEndNote = line.slice(endPrefix.length).replace(/^[:\-–—]\s*/, '').trim();
+      pendingEndNotes.push(line.slice(endPrefix.length).replace(/^[:\-–—]\s*/, '').trim());
       continue;
     }
     const hMatch = line.match(/^כותרת\s*(\d+)(?:\s+מספר\s+(\d+))?.*?[-–—]\s*(.*)$/);
@@ -310,9 +310,9 @@ function tokenizeDoc(rawText, cfg) {
     } else {
       tokens.push({
         id: tokens.length, type: 'p', text: line,
-        sideNote: pendingSideNote, endNote: pendingEndNote
+        sideNote: pendingSideNote, endNotes: pendingEndNotes.filter(Boolean)
       });
-      pendingSideNote = null; pendingEndNote = null;
+      pendingSideNote = null; pendingEndNotes = [];
     }
   }
   // **S5.2 (מיפוי מוקשים F4):** פלוש שאריות בסוף מסמך — הערת-צד (h7) או
@@ -320,11 +320,11 @@ function tokenizeDoc(rawText, cfg) {
   // מעולם לא נצרכו). כעת: הערת-צד זנבורית נשפכת כפסקה גלויה (התוכן נשמר
   // ונראה — עדיף על אובדן), והערת-סיום זנבורית נסגרר לפסקה ריקה הנושאת
   // את ה-endNote (עמודי הערות-הסיום אוספים מהטוקנים ישירות).
-  if (pendingSideNote || pendingEndNote) {
+  if (pendingSideNote || pendingEndNotes.some(Boolean)) {
     tokens.push({
       id: tokens.length, type: 'p',
       text: pendingSideNote || '',
-      sideNote: null, endNote: pendingEndNote,
+      sideNote: null, endNotes: pendingEndNotes.filter(Boolean),
       syntheticTail: true
     });
   }
@@ -2657,9 +2657,10 @@ function legacyTypeset(rawText, settings, env) {
   // בגודל הרישום + גוף ההערה ב-FRL 8.5pt — אותם כללי עטיפה כמו רשימת
   // ההערות (wrapText ברוחב טור−סמן, FIT_EPS בכל נקודות השבירה). המשך
   // חתוך בין עמודים/טורים מסומן '(המשך)' — כמו זרימת ההערות.
-  const endNoteTokens = tokens.filter(t => t.type === 'p' && t.endNote);
+  const endNoteItems = []; // R-05: פריט לכל שורת הערת-סיום (בסדר המקור), לא לכל טוקן
+  for (const t of tokens) if (t.type === 'p') for (const text of (t.endNotes || [])) endNoteItems.push({ tok: t, text });
   const endnotePagesBuilt = [];
-  if (endNoteTokens.length) {
+  if (endNoteItems.length) {
     const EN_TITLE_H = 44;
     const mkSpaceW = fnApi.measureTextWidth(' ', SZ.fnBody, 0);
     let enPg = null, enCol = 0, enY = 0, enFirst = true;
@@ -2677,11 +2678,11 @@ function legacyTypeset(rawText, settings, env) {
       enFirst = false; openEndPage(); return true;
     };
     openEndPage();
-    endNoteTokens.forEach((tok, ni) => {
+    endNoteItems.forEach(({ tok, text }, ni) => {
       const marker = LineBreaker.markerWord(ni + 1, cfg.fnNumSeparator);
       const mkW = fnApi.measureTextWidth(marker, cfg.fnListingNumSize, 0) + mkSpaceW;
       const contW = fnApi.measureTextWidth('(המשך)', cfg.fnListingNumSize, 0) + mkSpaceW;
-      const noteLines = wrapText(tok.endNote, fnApi, GEO.COL_W - Math.max(mkW, contW), SZ.fnBody);
+      const noteLines = wrapText(text, fnApi, GEO.COL_W - Math.max(mkW, contW), SZ.fnBody);
       let li = 0, seg = 0;
       while (li < noteLines.length) {
         const room = Math.floor((FLOW_BOTTOM - enY) / GEO.FN_PITCH);
@@ -2854,7 +2855,7 @@ function legacyTypeset(rawText, settings, env) {
     for (const t of tokens) {
       bump(src, norm(srcTextOf(t)));
       if (t.sideNote) bump(src, norm(t.sideNote));
-      if (t.endNote) bump(src, norm(t.endNote));
+      for (const e of (t.endNotes || [])) bump(src, norm(e));
     }
     const out = new Map();
     const addText = (s) => bump(out, norm(s));
@@ -2993,7 +2994,7 @@ function legacyTypeset(rawText, settings, env) {
     plannedLayoutHash: null, geometryNeutralVerified: true,
     ornaments: ornPass.planted ? { planted: ornPass.planted, rejected: ornPass.rejected.length } : null,
     retreat: null, sideNotes: null, endnotePages: null,
-    endnotePagesInfo: { count: endNoteTokens.length, pages: endnotePagesBuilt.map(p => p.index) },
+    endnotePagesInfo: { count: endNoteItems.length, pages: endnotePagesBuilt.map(p => p.index) },
     scope: null, customStyles: null, recommendations: null,
     legacyProfile: true
   };
