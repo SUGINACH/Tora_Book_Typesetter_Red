@@ -1,0 +1,3001 @@
+{
+  "schema": "red-p67-classification-v1",
+  "reproduction": {
+    "p7": {
+      "ratio": 0.8098,
+      "refLines": 4080,
+      "oursLines": 4110,
+      "nonEqualBlocks": 186
+    },
+    "p6": {
+      "refCount": 278,
+      "oursCount": 285,
+      "headAligned": 199,
+      "linesMatch": 164,
+      "wordsMatch": 143,
+      "refTotalLines": 3149,
+      "oursTotalLines": 3160,
+      "refTotalWords": 21861,
+      "oursTotalWords": 21650
+    },
+    "typeSeqEqual": true
+  },
+  "content": {
+    "verdict": "markers-differ",
+    "refTokens": 24447,
+    "oursTokens": 24447,
+    "byKind": {
+      "words": {
+        "refTokens": 23828,
+        "oursTokens": 23828,
+        "onlyRefTotal": 0,
+        "onlyOursTotal": 0,
+        "onlyRef": [],
+        "onlyOurs": []
+      },
+      "markers": {
+        "refTokens": 492,
+        "oursTokens": 492,
+        "onlyRefTotal": 10,
+        "onlyOursTotal": 10,
+        "onlyRef": [
+          [
+            "א",
+            10
+          ]
+        ],
+        "onlyOurs": [
+          [
+            "ב",
+            2
+          ],
+          [
+            "ג",
+            2
+          ],
+          [
+            "ד",
+            2
+          ],
+          [
+            "ה",
+            2
+          ],
+          [
+            "ו",
+            2
+          ]
+        ]
+      },
+      "tocNumerals": {
+        "refTokens": 127,
+        "oursTokens": 127,
+        "onlyRefTotal": 6,
+        "onlyOursTotal": 6,
+        "onlyRef": [
+          [
+            "ל",
+            2
+          ],
+          [
+            "מג",
+            2
+          ],
+          [
+            "מח",
+            2
+          ]
+        ],
+        "onlyOurs": [
+          [
+            "לא",
+            2
+          ],
+          [
+            "מד",
+            2
+          ],
+          [
+            "מט",
+            2
+          ]
+        ]
+      }
+    },
+    "markerPages": [
+      {
+        "page": 36,
+        "ref": {
+          "א": 2
+        },
+        "ours": {
+          "ב": 2
+        }
+      },
+      {
+        "page": 48,
+        "ref": {
+          "א": 2
+        },
+        "ours": {
+          "ב": 2
+        }
+      },
+      {
+        "page": 49,
+        "ref": {
+          "א": 2,
+          "ב": 2
+        },
+        "ours": {
+          "ג": 2,
+          "ד": 2
+        }
+      },
+      {
+        "page": 51,
+        "ref": {
+          "א": 2,
+          "ה": 1
+        },
+        "ours": {}
+      },
+      {
+        "page": 52,
+        "ref": {},
+        "ours": {
+          "ה": 3
+        }
+      },
+      {
+        "page": 53,
+        "ref": {
+          "ה": 1,
+          "א": 2
+        },
+        "ours": {
+          "ה": 1,
+          "ו": 2
+        }
+      }
+    ]
+  },
+  "pages": [
+    {
+      "index": 0,
+      "type": "shaar-main",
+      "refLines": 5,
+      "oursLines": 5,
+      "refWords": 18,
+      "oursWords": 18,
+      "status": "identical",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 1,
+      "type": "shaar-back",
+      "refLines": 5,
+      "oursLines": 5,
+      "refWords": 17,
+      "oursWords": 17,
+      "status": "identical",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 2,
+      "type": "toc-general",
+      "refLines": 18,
+      "oursLines": 18,
+      "refWords": 84,
+      "oursWords": 84,
+      "status": "identical",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 3,
+      "type": "toc-general",
+      "refLines": 28,
+      "oursLines": 28,
+      "refWords": 94,
+      "oursWords": 94,
+      "status": "numerals",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 4,
+      "type": "toc-general",
+      "refLines": 19,
+      "oursLines": 19,
+      "refWords": 64,
+      "oursWords": 64,
+      "status": "numerals",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 5,
+      "type": "blank",
+      "refLines": 0,
+      "oursLines": 0,
+      "refWords": 0,
+      "oursWords": 0,
+      "status": "identical",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 6,
+      "type": "shaar-sub",
+      "refLines": 2,
+      "oursLines": 4,
+      "refWords": 8,
+      "oursWords": 8,
+      "status": "rewrap",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 7,
+      "type": "toc-detailed",
+      "refLines": 17,
+      "oursLines": 17,
+      "refWords": 75,
+      "oursWords": 75,
+      "status": "identical",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 8,
+      "type": "toc-detailed",
+      "refLines": 28,
+      "oursLines": 28,
+      "refWords": 94,
+      "oursWords": 94,
+      "status": "numerals",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 9,
+      "type": "toc-detailed",
+      "refLines": 19,
+      "oursLines": 19,
+      "refWords": 64,
+      "oursWords": 64,
+      "status": "numerals",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 10,
+      "type": "chapter-open",
+      "refLines": 18,
+      "oursLines": 18,
+      "refWords": 230,
+      "oursWords": 230,
+      "status": "identical",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 11,
+      "type": "body",
+      "refLines": 67,
+      "oursLines": 68,
+      "refWords": 388,
+      "oursWords": 388,
+      "status": "rewrap",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 12,
+      "type": "body",
+      "refLines": 107,
+      "oursLines": 108,
+      "refWords": 571,
+      "oursWords": 571,
+      "status": "rewrap",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 13,
+      "type": "body",
+      "refLines": 108,
+      "oursLines": 109,
+      "refWords": 619,
+      "oursWords": 619,
+      "status": "rewrap",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 14,
+      "type": "body",
+      "refLines": 112,
+      "oursLines": 113,
+      "refWords": 665,
+      "oursWords": 665,
+      "status": "rewrap",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 15,
+      "type": "body",
+      "refLines": 120,
+      "oursLines": 120,
+      "refWords": 636,
+      "oursWords": 629,
+      "status": "words-moved",
+      "deltaWords": -7,
+      "cumDeltaWords": -7
+    },
+    {
+      "index": 16,
+      "type": "body",
+      "refLines": 100,
+      "oursLines": 101,
+      "refWords": 583,
+      "oursWords": 578,
+      "status": "words-moved",
+      "deltaWords": -5,
+      "cumDeltaWords": -12
+    },
+    {
+      "index": 17,
+      "type": "body",
+      "refLines": 116,
+      "oursLines": 116,
+      "refWords": 620,
+      "oursWords": 617,
+      "status": "words-moved",
+      "deltaWords": -3,
+      "cumDeltaWords": -15
+    },
+    {
+      "index": 18,
+      "type": "body",
+      "refLines": 117,
+      "oursLines": 108,
+      "refWords": 625,
+      "oursWords": 604,
+      "status": "words-moved",
+      "deltaWords": -21,
+      "cumDeltaWords": -36
+    },
+    {
+      "index": 19,
+      "type": "body",
+      "refLines": 77,
+      "oursLines": 86,
+      "refWords": 525,
+      "oursWords": 547,
+      "status": "words-moved",
+      "deltaWords": 22,
+      "cumDeltaWords": -14
+    },
+    {
+      "index": 20,
+      "type": "body",
+      "refLines": 102,
+      "oursLines": 100,
+      "refWords": 643,
+      "oursWords": 625,
+      "status": "words-moved",
+      "deltaWords": -18,
+      "cumDeltaWords": -32
+    },
+    {
+      "index": 21,
+      "type": "body",
+      "refLines": 101,
+      "oursLines": 99,
+      "refWords": 681,
+      "oursWords": 666,
+      "status": "words-moved",
+      "deltaWords": -15,
+      "cumDeltaWords": -47
+    },
+    {
+      "index": 22,
+      "type": "body",
+      "refLines": 102,
+      "oursLines": 96,
+      "refWords": 701,
+      "oursWords": 672,
+      "status": "words-moved",
+      "deltaWords": -29,
+      "cumDeltaWords": -76
+    },
+    {
+      "index": 23,
+      "type": "body",
+      "refLines": 56,
+      "oursLines": 72,
+      "refWords": 373,
+      "oursWords": 449,
+      "status": "words-moved",
+      "deltaWords": 76,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 24,
+      "type": "body",
+      "refLines": 55,
+      "oursLines": 55,
+      "refWords": 301,
+      "oursWords": 301,
+      "status": "rewrap",
+      "deltaWords": 0,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 25,
+      "type": "body",
+      "refLines": 90,
+      "oursLines": 90,
+      "refWords": 568,
+      "oursWords": 567,
+      "status": "words-moved",
+      "deltaWords": -1,
+      "cumDeltaWords": -1
+    },
+    {
+      "index": 26,
+      "type": "body",
+      "refLines": 90,
+      "oursLines": 90,
+      "refWords": 596,
+      "oursWords": 590,
+      "status": "words-moved",
+      "deltaWords": -6,
+      "cumDeltaWords": -7
+    },
+    {
+      "index": 27,
+      "type": "body",
+      "refLines": 87,
+      "oursLines": 87,
+      "refWords": 531,
+      "oursWords": 532,
+      "status": "words-moved",
+      "deltaWords": 1,
+      "cumDeltaWords": -6
+    },
+    {
+      "index": 28,
+      "type": "body",
+      "refLines": 101,
+      "oursLines": 101,
+      "refWords": 581,
+      "oursWords": 581,
+      "status": "words-moved",
+      "deltaWords": 0,
+      "cumDeltaWords": -6
+    },
+    {
+      "index": 29,
+      "type": "body",
+      "refLines": 82,
+      "oursLines": 82,
+      "refWords": 624,
+      "oursWords": 614,
+      "status": "words-moved",
+      "deltaWords": -10,
+      "cumDeltaWords": -16
+    },
+    {
+      "index": 30,
+      "type": "body",
+      "refLines": 84,
+      "oursLines": 78,
+      "refWords": 533,
+      "oursWords": 505,
+      "status": "words-moved",
+      "deltaWords": -28,
+      "cumDeltaWords": -44
+    },
+    {
+      "index": 31,
+      "type": "body",
+      "refLines": 89,
+      "oursLines": 91,
+      "refWords": 522,
+      "oursWords": 523,
+      "status": "words-moved",
+      "deltaWords": 1,
+      "cumDeltaWords": -43
+    },
+    {
+      "index": 32,
+      "type": "body",
+      "refLines": 86,
+      "oursLines": 87,
+      "refWords": 497,
+      "oursWords": 500,
+      "status": "words-moved",
+      "deltaWords": 3,
+      "cumDeltaWords": -40
+    },
+    {
+      "index": 33,
+      "type": "body",
+      "refLines": 85,
+      "oursLines": 85,
+      "refWords": 525,
+      "oursWords": 518,
+      "status": "words-moved",
+      "deltaWords": -7,
+      "cumDeltaWords": -47
+    },
+    {
+      "index": 34,
+      "type": "body",
+      "refLines": 86,
+      "oursLines": 87,
+      "refWords": 534,
+      "oursWords": 556,
+      "status": "words-moved",
+      "deltaWords": 22,
+      "cumDeltaWords": -25
+    },
+    {
+      "index": 35,
+      "type": "body",
+      "refLines": 91,
+      "oursLines": 92,
+      "refWords": 548,
+      "oursWords": 546,
+      "status": "words-moved",
+      "deltaWords": -2,
+      "cumDeltaWords": -27
+    },
+    {
+      "index": 36,
+      "type": "body",
+      "refLines": 80,
+      "oursLines": 80,
+      "refWords": 524,
+      "oursWords": 516,
+      "status": "words-moved",
+      "deltaWords": -8,
+      "cumDeltaWords": -35
+    },
+    {
+      "index": 37,
+      "type": "body",
+      "refLines": 54,
+      "oursLines": 59,
+      "refWords": 350,
+      "oursWords": 385,
+      "status": "words-moved",
+      "deltaWords": 35,
+      "cumDeltaWords": 0
+    },
+    {
+      "index": 38,
+      "type": "body",
+      "refLines": 58,
+      "oursLines": 58,
+      "refWords": 401,
+      "oursWords": 386,
+      "status": "words-moved",
+      "deltaWords": -15,
+      "cumDeltaWords": -15
+    },
+    {
+      "index": 39,
+      "type": "body",
+      "refLines": 87,
+      "oursLines": 85,
+      "refWords": 509,
+      "oursWords": 502,
+      "status": "words-moved",
+      "deltaWords": -7,
+      "cumDeltaWords": -22
+    },
+    {
+      "index": 40,
+      "type": "body",
+      "refLines": 105,
+      "oursLines": 107,
+      "refWords": 588,
+      "oursWords": 585,
+      "status": "words-moved",
+      "deltaWords": -3,
+      "cumDeltaWords": -25
+    },
+    {
+      "index": 41,
+      "type": "body",
+      "refLines": 92,
+      "oursLines": 93,
+      "refWords": 555,
+      "oursWords": 569,
+      "status": "words-moved",
+      "deltaWords": 14,
+      "cumDeltaWords": -11
+    },
+    {
+      "index": 42,
+      "type": "body",
+      "refLines": 102,
+      "oursLines": 101,
+      "refWords": 572,
+      "oursWords": 549,
+      "status": "words-moved",
+      "deltaWords": -23,
+      "cumDeltaWords": -34
+    },
+    {
+      "index": 43,
+      "type": "body",
+      "refLines": 94,
+      "oursLines": 95,
+      "refWords": 587,
+      "oursWords": 587,
+      "status": "words-moved",
+      "deltaWords": 0,
+      "cumDeltaWords": -34
+    },
+    {
+      "index": 44,
+      "type": "body",
+      "refLines": 116,
+      "oursLines": 117,
+      "refWords": 561,
+      "oursWords": 563,
+      "status": "words-moved",
+      "deltaWords": 2,
+      "cumDeltaWords": -32
+    },
+    {
+      "index": 45,
+      "type": "body",
+      "refLines": 97,
+      "oursLines": 96,
+      "refWords": 586,
+      "oursWords": 553,
+      "status": "words-moved",
+      "deltaWords": -33,
+      "cumDeltaWords": -65
+    },
+    {
+      "index": 46,
+      "type": "body",
+      "refLines": 79,
+      "oursLines": 80,
+      "refWords": 581,
+      "oursWords": 598,
+      "status": "words-moved",
+      "deltaWords": 17,
+      "cumDeltaWords": -48
+    },
+    {
+      "index": 47,
+      "type": "body",
+      "refLines": 110,
+      "oursLines": 105,
+      "refWords": 575,
+      "oursWords": 563,
+      "status": "words-moved",
+      "deltaWords": -12,
+      "cumDeltaWords": -60
+    },
+    {
+      "index": 48,
+      "type": "body",
+      "refLines": 99,
+      "oursLines": 86,
+      "refWords": 572,
+      "oursWords": 494,
+      "status": "words-moved",
+      "deltaWords": -78,
+      "cumDeltaWords": -138
+    },
+    {
+      "index": 49,
+      "type": "body",
+      "refLines": 100,
+      "oursLines": 92,
+      "refWords": 665,
+      "oursWords": 638,
+      "status": "words-moved",
+      "deltaWords": -27,
+      "cumDeltaWords": -165
+    },
+    {
+      "index": 50,
+      "type": "body",
+      "refLines": 101,
+      "oursLines": 111,
+      "refWords": 620,
+      "oursWords": 590,
+      "status": "words-moved",
+      "deltaWords": -30,
+      "cumDeltaWords": -195
+    },
+    {
+      "index": 51,
+      "type": "body",
+      "refLines": 98,
+      "oursLines": 96,
+      "refWords": 630,
+      "oursWords": 637,
+      "status": "words-moved",
+      "deltaWords": 7,
+      "cumDeltaWords": -188
+    },
+    {
+      "index": 52,
+      "type": "body",
+      "refLines": 110,
+      "oursLines": 97,
+      "refWords": 611,
+      "oursWords": 602,
+      "status": "words-moved",
+      "deltaWords": -9,
+      "cumDeltaWords": -197
+    },
+    {
+      "index": 53,
+      "type": "body",
+      "refLines": 28,
+      "oursLines": 70,
+      "refWords": 222,
+      "oursWords": 419,
+      "status": "words-moved",
+      "deltaWords": 197,
+      "cumDeltaWords": 0
+    }
+  ],
+  "pageSummary": {
+    "firstBreakDiffBodyPage": 11,
+    "firstWordsMovedBodyPage": 15,
+    "resyncPages": [
+      23,
+      37,
+      53
+    ],
+    "maxAbsCumDeltaWords": 197,
+    "statusCounts": {
+      "identical": 6,
+      "numerals": 4,
+      "rewrap": 6,
+      "words-moved": 38
+    }
+  },
+  "blocks": {
+    "total": 186,
+    "markerDiffBlocks": 37,
+    "byClass": {
+      "numeral": {
+        "blocks": 6,
+        "refLines": 6,
+        "oursLines": 6
+      },
+      "title-page": {
+        "blocks": 1,
+        "refLines": 2,
+        "oursLines": 4
+      },
+      "boundary": {
+        "blocks": 52,
+        "refLines": 112,
+        "oursLines": 121
+      },
+      "rewrap": {
+        "blocks": 60,
+        "refLines": 272,
+        "oursLines": 288
+      },
+      "relocated": {
+        "blocks": 37,
+        "refLines": 220,
+        "oursLines": 226
+      },
+      "spill": {
+        "blocks": 30,
+        "refLines": 152,
+        "oursLines": 149
+      }
+    },
+    "examples": {
+      "numeral": [
+        {
+          "tag": "replace",
+          "cls": "numeral",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 0,
+          "refRange": [
+            39,
+            40
+          ],
+          "oursRange": [
+            39,
+            40
+          ],
+          "ref": [
+            {
+              "page": 3,
+              "col": "single",
+              "y": 357.1,
+              "text": "קיימת למציאות ביחס המעשה ל"
+            }
+          ],
+          "ours": [
+            {
+              "page": 3,
+              "col": "none",
+              "y": 349.8,
+              "text": "קיימת למציאות ביחס המעשה לא"
+            }
+          ]
+        },
+        {
+          "tag": "replace",
+          "cls": "numeral",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 0,
+          "refRange": [
+            68,
+            69
+          ],
+          "oursRange": [
+            68,
+            69
+          ],
+          "ref": [
+            {
+              "page": 4,
+              "col": "single",
+              "y": 315.4,
+              "text": "מתעסק מג"
+            }
+          ],
+          "ours": [
+            {
+              "page": 4,
+              "col": "none",
+              "y": 321.7,
+              "text": "מתעסק מד"
+            }
+          ]
+        },
+        {
+          "tag": "replace",
+          "cls": "numeral",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 0,
+          "refRange": [
+            73,
+            74
+          ],
+          "oursRange": [
+            73,
+            74
+          ],
+          "ref": [
+            {
+              "page": 4,
+              "col": "single",
+              "y": 411.1,
+              "text": "הוצאה מלאכת גדרי מח"
+            }
+          ],
+          "ours": [
+            {
+              "page": 4,
+              "col": "none",
+              "y": 420,
+              "text": "הוצאה מלאכת גדרי מט"
+            }
+          ]
+        }
+      ],
+      "title-page": [
+        {
+          "tag": "replace",
+          "cls": "title-page",
+          "markerDiff": false,
+          "unmatchedWords": 2,
+          "movedWords": 0,
+          "refRange": [
+            75,
+            77
+          ],
+          "oursRange": [
+            75,
+            79
+          ],
+          "ref": [
+            {
+              "page": 6,
+              "col": "single",
+              "y": 345.7,
+              "text": "הקדמות וכללים"
+            },
+            {
+              "page": 6,
+              "col": "single",
+              "y": 469.7,
+              "text": "יום השבת מלאכה גדרי הוצאה רשויות"
+            }
+          ],
+          "ours": [
+            {
+              "page": 6,
+              "col": "none",
+              "y": 345.7,
+              "text": "הקדמות"
+            },
+            {
+              "page": 6,
+              "col": "none",
+              "y": 410.7,
+              "text": "וכללים"
+            },
+            {
+              "page": 6,
+              "col": "none",
+              "y": 494.5,
+              "text": "יום השבת גדרי מלאכה הוצאה"
+            }
+          ]
+        }
+      ],
+      "boundary": [
+        {
+          "tag": "replace",
+          "cls": "boundary",
+          "markerDiff": false,
+          "unmatchedWords": 1,
+          "movedWords": 0,
+          "refRange": [
+            168,
+            173
+          ],
+          "oursRange": [
+            170,
+            175
+          ],
+          "ref": [
+            {
+              "page": 11,
+              "col": "right",
+              "y": 464.4,
+              "text": "גדרים א בדבר הנשבת ב בדבר ממנו שובתים"
+            },
+            {
+              "page": 11,
+              "col": "right",
+              "y": 482.4,
+              "text": "בדבר הנשבת מצאנו שני גדרים א ביום ב"
+            },
+            {
+              "page": 11,
+              "col": "right",
+              "y": 499.7,
+              "text": "באדם בדבר ממנו שובתים מצאנו שני גדרים א"
+            }
+          ],
+          "ours": [
+            {
+              "page": 11,
+              "col": "right",
+              "y": 451.6,
+              "text": "גדרים א בדבר הנשבת ב בדבר ממנו"
+            },
+            {
+              "page": 11,
+              "col": "right",
+              "y": 467.7,
+              "text": "שובתים בדבר הנשבת מצאנו שני גדרים א"
+            },
+            {
+              "page": 11,
+              "col": "right",
+              "y": 483.8,
+              "text": "ביום ב באדם בדבר ממנו שובתים מצאנו שני"
+            }
+          ]
+        },
+        {
+          "tag": "replace",
+          "cls": "boundary",
+          "markerDiff": false,
+          "unmatchedWords": 5,
+          "movedWords": 0,
+          "refRange": [
+            179,
+            182
+          ],
+          "oursRange": [
+            181,
+            184
+          ],
+          "ref": [
+            {
+              "page": 11,
+              "col": "right",
+              "y": 765.7,
+              "text": "ההוצאה מרשות לרשות"
+            },
+            {
+              "page": 11,
+              "col": "left",
+              "y": 305.4,
+              "text": "העשייה של אי העשייה מצאנו שלושה מרכיבים"
+            },
+            {
+              "page": 11,
+              "col": "left",
+              "y": 321.2,
+              "text": "א העושה ב המעשה ג הזמן"
+            }
+          ],
+          "ours": [
+            {
+              "page": 11,
+              "col": "right",
+              "y": 754.1,
+              "text": "שינוי מצב בדבר כלולה ההוצאה מרשות לרשות"
+            },
+            {
+              "page": 11,
+              "col": "left",
+              "y": 304.9,
+              "text": "בחלק העשייה של אי העשייה מצאנו שלושה"
+            },
+            {
+              "page": 11,
+              "col": "left",
+              "y": 321,
+              "text": "מרכיבים א העושה ב המעשה ג הזמן"
+            }
+          ]
+        },
+        {
+          "tag": "replace",
+          "cls": "boundary",
+          "markerDiff": false,
+          "unmatchedWords": 4,
+          "movedWords": 0,
+          "refRange": [
+            205,
+            211
+          ],
+          "oursRange": [
+            207,
+            214
+          ],
+          "ref": [
+            {
+              "page": 11,
+              "col": "none",
+              "y": 727.1,
+              "text": "א חלוקת המלאכות לסוגיהן האמורים לעיל כך במלאכת יצירת דבר חדש יכללו כותב מוחק בונה סותר מכב…"
+            },
+            {
+              "page": 11,
+              "col": "none",
+              "y": 741.7,
+              "text": "מצב בדבר יכללו זורע חורש קוצר מעמר דש זורה בורר טוחן מרקד לש אופה גוזז מלבן מנפץ צובע טווה…"
+            },
+            {
+              "page": 11,
+              "col": "none",
+              "y": 753.7,
+              "text": "נירין אורג פוצע קושר מתיר תופר קורע צד שוחט מפשיט מולח מעבד משרטט ממחק מחתך במלאכת שינוי מ…"
+            }
+          ],
+          "ours": [
+            {
+              "page": 11,
+              "col": "none",
+              "y": 716.6,
+              "text": "א חלוקת המלאכות לסוגיהן האמורים לעיל כך במלאכת יצירת דבר חדש יכללו כותב מוחק בונה סותר מכב…"
+            },
+            {
+              "page": 11,
+              "col": "none",
+              "y": 729.1,
+              "text": "יצירת מצב בדבר יכללו זורע חורש קוצר מעמר דש זורה בורר טוחן מרקד לש אופה גוזז מלבן מנפץ צוב…"
+            },
+            {
+              "page": 11,
+              "col": "none",
+              "y": 741.6,
+              "text": "עושה שתי בתי נירין אורג פוצע קושר מתיר תופר קורע צד שוחט מפשיט מולח מעבד משרטט ממחק מחתך ב…"
+            }
+          ]
+        }
+      ],
+      "rewrap": [
+        {
+          "tag": "replace",
+          "cls": "rewrap",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 0,
+          "refRange": [
+            186,
+            188
+          ],
+          "oursRange": [
+            188,
+            190
+          ],
+          "ref": [
+            {
+              "page": 11,
+              "col": "left",
+              "y": 406.7,
+              "text": "גדרים א האדם העושה בעצמו ב האדם ביחס"
+            },
+            {
+              "page": 11,
+              "col": "left",
+              "y": 423.2,
+              "text": "לעשיית אדם אחר לדעתו כבנו ועבדו ג"
+            }
+          ],
+          "ours": [
+            {
+              "page": 11,
+              "col": "left",
+              "y": 406.6,
+              "text": "גדרים א האדם העושה בעצמו ב האדם"
+            },
+            {
+              "page": 11,
+              "col": "left",
+              "y": 422.7,
+              "text": "ביחס לעשיית אדם אחר לדעתו כבנו ועבדו ג"
+            }
+          ]
+        },
+        {
+          "tag": "replace",
+          "cls": "rewrap",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 0,
+          "refRange": [
+            268,
+            274
+          ],
+          "oursRange": [
+            271,
+            277
+          ],
+          "ref": [
+            {
+              "page": 12,
+              "col": "left",
+              "y": 230.4,
+              "text": "גדרים א ידיעה ב מעשה הידיעה היא שידעו"
+            },
+            {
+              "page": 12,
+              "col": "left",
+              "y": 246.2,
+              "text": "אומות העולם בקדושת ישראל במעשה מצאנו"
+            },
+            {
+              "page": 12,
+              "col": "left",
+              "y": 262.7,
+              "text": "שלושה גדרים א מנוחת הבהמה ב נפישת בן"
+            }
+          ],
+          "ours": [
+            {
+              "page": 12,
+              "col": "left",
+              "y": 230.4,
+              "text": "גדרים א ידיעה ב מעשה הידיעה היא"
+            },
+            {
+              "page": 12,
+              "col": "left",
+              "y": 246.5,
+              "text": "שידעו אומות העולם בקדושת ישראל במעשה"
+            },
+            {
+              "page": 12,
+              "col": "left",
+              "y": 262.5,
+              "text": "מצאנו שלושה גדרים א מנוחת הבהמה ב"
+            }
+          ]
+        },
+        {
+          "tag": "replace",
+          "cls": "rewrap",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 0,
+          "refRange": [
+            314,
+            316
+          ],
+          "oursRange": [
+            317,
+            320
+          ],
+          "ref": [
+            {
+              "page": 12,
+              "col": "mleft",
+              "y": 117.7,
+              "text": "חילוקי משמעות"
+            },
+            {
+              "page": 12,
+              "col": "mleft",
+              "y": 124.5,
+              "text": "בקיום ותכלית"
+            }
+          ],
+          "ours": [
+            {
+              "page": 12,
+              "col": "mleft",
+              "y": 117.8,
+              "text": "חילוקי"
+            },
+            {
+              "page": 12,
+              "col": "mleft",
+              "y": 125,
+              "text": "משמעות בקיום"
+            },
+            {
+              "page": 12,
+              "col": "mleft",
+              "y": 132.2,
+              "text": "ותכלית"
+            }
+          ]
+        }
+      ],
+      "relocated": [
+        {
+          "tag": "delete",
+          "cls": "relocated",
+          "markerDiff": true,
+          "unmatchedWords": 16,
+          "movedWords": 0,
+          "refRange": [
+            703,
+            705
+          ],
+          "oursRange": [
+            710,
+            710
+          ],
+          "ref": [
+            {
+              "page": 16,
+              "col": "right",
+              "y": 575.4,
+              "text": "כמוך וע כ ציווך לעשות את יום השבת שהוא"
+            },
+            {
+              "page": 16,
+              "col": "right",
+              "y": 591.2,
+              "text": "זמן קצוב וידוע וזה זכר ליציאת מצרים"
+            }
+          ],
+          "ours": []
+        },
+        {
+          "tag": "replace",
+          "cls": "relocated",
+          "markerDiff": true,
+          "unmatchedWords": 23,
+          "movedWords": 0,
+          "refRange": [
+            711,
+            712
+          ],
+          "oursRange": [
+            716,
+            718
+          ],
+          "ref": [
+            {
+              "page": 16,
+              "col": "right",
+              "y": 743.4,
+              "text": "לאחד והשלישי הוא לשנים ובזה הגדר יהיה"
+            }
+          ],
+          "ours": [
+            {
+              "page": 16,
+              "col": "left",
+              "y": 80.4,
+              "text": "כמוך וע כ ציווך לעשות את יום השבת שהוא"
+            },
+            {
+              "page": 16,
+              "col": "left",
+              "y": 96.5,
+              "text": "זמן קצוב וידוע וזה זכר ליציאת מצרים"
+            }
+          ]
+        },
+        {
+          "tag": "delete",
+          "cls": "relocated",
+          "markerDiff": false,
+          "unmatchedWords": 15,
+          "movedWords": 0,
+          "refRange": [
+            853,
+            855
+          ],
+          "oursRange": [
+            862,
+            862
+          ],
+          "ref": [
+            {
+              "page": 17,
+              "col": "left",
+              "y": 728.4,
+              "text": "שבעה ימים נמצא בדעת רב הונא במי שהיה"
+            },
+            {
+              "page": 17,
+              "col": "left",
+              "y": 744.2,
+              "text": "מהלך במדבר ואינו יודע אימתי שבת שהוא"
+            }
+          ],
+          "ours": []
+        }
+      ],
+      "spill": [
+        {
+          "tag": "replace",
+          "cls": "spill",
+          "markerDiff": false,
+          "unmatchedWords": 0,
+          "movedWords": 34,
+          "refRange": [
+            809,
+            816
+          ],
+          "oursRange": [
+            818,
+            825
+          ],
+          "ref": [
+            {
+              "page": 17,
+              "col": "right",
+              "y": 679.7,
+              "text": "אחד לכל השבתות הוא בהיותה במחזור השבוע"
+            },
+            {
+              "page": 17,
+              "col": "right",
+              "y": 696.2,
+              "text": "והיות מחזור השבוע סיבה יתכן בשני גדרים"
+            },
+            {
+              "page": 17,
+              "col": "right",
+              "y": 711.9,
+              "text": "האחד שהוא הצטברות של שבעה ימים והשני"
+            }
+          ],
+          "ours": [
+            {
+              "page": 17,
+              "col": "right",
+              "y": 712.4,
+              "text": "אחד לכל השבתות הוא בהיותה במחזור"
+            },
+            {
+              "page": 17,
+              "col": "right",
+              "y": 728.5,
+              "text": "השבוע והיות מחזור השבוע סיבה יתכן בשני"
+            },
+            {
+              "page": 17,
+              "col": "right",
+              "y": 744.6,
+              "text": "גדרים האחד שהוא הצטברות של שבעה ימים"
+            }
+          ]
+        },
+        {
+          "tag": "delete",
+          "cls": "spill",
+          "markerDiff": true,
+          "unmatchedWords": 0,
+          "movedWords": 32,
+          "refRange": [
+            1162,
+            1166
+          ],
+          "oursRange": [
+            1171,
+            1171
+          ],
+          "ref": [
+            {
+              "page": 20,
+              "col": "left",
+              "y": 694.7,
+              "text": "שמיוחד הדבר נעשה ע י ישראל וזה שייך רק"
+            },
+            {
+              "page": 20,
+              "col": "left",
+              "y": 710.4,
+              "text": "ביחס לזמן היינו כלל הזמן שאינו מחולק"
+            },
+            {
+              "page": 20,
+              "col": "left",
+              "y": 726.9,
+              "text": "ולישראל יצא זמן דשבת מכללו אלא שאין זה"
+            }
+          ],
+          "ours": []
+        },
+        {
+          "tag": "insert",
+          "cls": "spill",
+          "markerDiff": true,
+          "unmatchedWords": 0,
+          "movedWords": 32,
+          "refRange": [
+            1185,
+            1185
+          ],
+          "oursRange": [
+            1190,
+            1194
+          ],
+          "ref": [],
+          "ours": [
+            {
+              "page": 21,
+              "col": "right",
+              "y": 80.4,
+              "text": "שמיוחד הדבר נעשה ע י ישראל וזה שייך רק"
+            },
+            {
+              "page": 21,
+              "col": "right",
+              "y": 96.8,
+              "text": "ביחס לזמן היינו כלל הזמן שאינו מחולק"
+            },
+            {
+              "page": 21,
+              "col": "right",
+              "y": 113.1,
+              "text": "ולישראל יצא זמן דשבת מכללו אלא שאין זה"
+            }
+          ]
+        }
+      ]
+    },
+    "firstBody": {
+      "tag": "replace",
+      "cls": "boundary",
+      "markerDiff": false,
+      "unmatchedWords": 1,
+      "movedWords": 0,
+      "refRange": [
+        168,
+        173
+      ],
+      "oursRange": [
+        170,
+        175
+      ],
+      "ref": [
+        {
+          "page": 11,
+          "col": "right",
+          "y": 464.4,
+          "text": "גדרים א בדבר הנשבת ב בדבר ממנו שובתים"
+        },
+        {
+          "page": 11,
+          "col": "right",
+          "y": 482.4,
+          "text": "בדבר הנשבת מצאנו שני גדרים א ביום ב"
+        },
+        {
+          "page": 11,
+          "col": "right",
+          "y": 499.7,
+          "text": "באדם בדבר ממנו שובתים מצאנו שני גדרים א"
+        }
+      ],
+      "ours": [
+        {
+          "page": 11,
+          "col": "right",
+          "y": 451.6,
+          "text": "גדרים א בדבר הנשבת ב בדבר ממנו"
+        },
+        {
+          "page": 11,
+          "col": "right",
+          "y": 467.7,
+          "text": "שובתים בדבר הנשבת מצאנו שני גדרים א"
+        },
+        {
+          "page": 11,
+          "col": "right",
+          "y": 483.8,
+          "text": "ביום ב באדם בדבר ממנו שובתים מצאנו שני"
+        }
+      ]
+    }
+  },
+  "streams": {
+    "ratio": 0.9487053626211805,
+    "refWords": 24447,
+    "oursWords": 24447,
+    "nonEqualOpcodes": 161,
+    "byTag": {
+      "insert": 75,
+      "delete": 71,
+      "replace": 15
+    }
+  },
+  "fit": {
+    "available": true,
+    "eps": 0.75,
+    "artifactPx": 1,
+    "columnWidthPx": 269.41,
+    "candidates": 2251,
+    "unreliable": 31,
+    "reliable": 2220,
+    "inBand": 64,
+    "inBandShare": 0.0288,
+    "histogram": [
+      {
+        "from": null,
+        "to": -1,
+        "lines": 31
+      },
+      {
+        "from": -1,
+        "to": 0,
+        "lines": 1
+      },
+      {
+        "from": 0,
+        "to": 0.375,
+        "lines": 39
+      },
+      {
+        "from": 0.375,
+        "to": 0.75,
+        "lines": 25
+      },
+      {
+        "from": 0.75,
+        "to": 1.5,
+        "lines": 58
+      },
+      {
+        "from": 1.5,
+        "to": 3,
+        "lines": 92
+      },
+      {
+        "from": 3,
+        "to": 6,
+        "lines": 190
+      },
+      {
+        "from": 6,
+        "to": 12,
+        "lines": 343
+      },
+      {
+        "from": 12,
+        "to": null,
+        "lines": 1472
+      }
+    ],
+    "firstInBand": {
+      "page": 11,
+      "col": "right",
+      "y": 464.4,
+      "widthPx": 268.672,
+      "slackPx": 0.738,
+      "text": ".גדרים. א. בדבר הנשבת. ב. בדבר ממנו שובתים"
+    },
+    "inBandLines": [
+      {
+        "page": 11,
+        "col": "right",
+        "y": 464.4,
+        "widthPx": 268.672,
+        "slackPx": 0.738,
+        "text": ".גדרים. א. בדבר הנשבת. ב. בדבר ממנו שובתים"
+      },
+      {
+        "page": 11,
+        "col": "right",
+        "y": 499.7,
+        "widthPx": 269.136,
+        "slackPx": 0.274,
+        "text": ".באדם. בדבר ממנו שובתים מצאנו שני גדרים. א"
+      },
+      {
+        "page": 11,
+        "col": "left",
+        "y": 406.7,
+        "widthPx": 269.296,
+        "slackPx": 0.114,
+        "text": "גדרים. א. האדם העושה בעצמו. ב. האדם ביחס"
+      },
+      {
+        "page": 12,
+        "col": "left",
+        "y": 230.4,
+        "widthPx": 268.672,
+        "slackPx": 0.738,
+        "text": "גדרים. א. ידיעה. ב. מעשה. הידיעה היא שידעו"
+      },
+      {
+        "page": 14,
+        "col": "right",
+        "y": 96.2,
+        "widthPx": 269.264,
+        "slackPx": 0.146,
+        "text": "עליו הכתוב כאלו שימר כל השבתות מיום שברא"
+      },
+      {
+        "page": 14,
+        "col": "right",
+        "y": 444.2,
+        "widthPx": 269.2,
+        "slackPx": 0.21,
+        "text": "שבו נעשה מעשה הוא חלק מהמעשה והזמן הזה"
+      },
+      {
+        "page": 14,
+        "col": "left",
+        "y": 230.4,
+        "widthPx": 269.104,
+        "slackPx": 0.306,
+        "text": "כי עבד היית בארץ מצרים והוציאך ה' ביד חזקה"
+      },
+      {
+        "page": 14,
+        "col": "left",
+        "y": 646.7,
+        "widthPx": 268.848,
+        "slackPx": 0.562,
+        "text": "מהשבוע שדין שבת שהוא בכדי שינוח העבד הוא"
+      },
+      {
+        "page": 14,
+        "col": "left",
+        "y": 710.4,
+        "widthPx": 269.28,
+        "slackPx": 0.13,
+        "text": "דעסקינן בלחיצת הגר ודין שביעית שהוא לעניים"
+      },
+      {
+        "page": 15,
+        "col": "left",
+        "y": 411.9,
+        "widthPx": 269.296,
+        "slackPx": 0.114,
+        "text": ",עצמו שמלאכת ה' בבריאתו נשלמה שכבר נעשה"
+      },
+      {
+        "page": 15,
+        "col": "left",
+        "y": 428.4,
+        "widthPx": 268.912,
+        "slackPx": 0.498,
+        "text": "והשביתה היא ביחס לבורא שהשבית כח הבריאה"
+      },
+      {
+        "page": 16,
+        "col": "left",
+        "y": 392.4,
+        "widthPx": 268.944,
+        "slackPx": 0.466,
+        "text": "כי ביאור ששת ימים יעשה מלאכה, היינו, שששת"
+      },
+      {
+        "page": 16,
+        "col": "left",
+        "y": 540.9,
+        "widthPx": 269.408,
+        "slackPx": 0.002,
+        "text": "והעשוי. העושה, היינו עבודתו, להוציא צבי ניצוד"
+      },
+      {
+        "page": 17,
+        "col": "right",
+        "y": 679.7,
+        "widthPx": 268.816,
+        "slackPx": 0.594,
+        "text": ".אחד לכל השבתות, הוא בהיותה במחזור השבוע"
+      },
+      {
+        "page": 18,
+        "col": "right",
+        "y": 294.2,
+        "widthPx": 268.816,
+        "slackPx": 0.594,
+        "text": "במשמעותה הכנה לדבר אחר מלשון מלאך שהוא"
+      },
+      {
+        "page": 18,
+        "col": "right",
+        "y": 342.9,
+        "widthPx": 268.784,
+        "slackPx": 0.626,
+        "text": "יותר שהוא פחות מיוחד, וכיון שיהיו כל השבתות"
+      },
+      {
+        "page": 20,
+        "col": "right",
+        "y": 495.2,
+        "widthPx": 269.152,
+        "slackPx": 0.258,
+        "text": "שמירתו, וכיון שגדר האדם כשובת הוא גדר כללי"
+      },
+      {
+        "page": 21,
+        "col": "right",
+        "y": 160.7,
+        "widthPx": 269.056,
+        "slackPx": 0.354,
+        "text": "אין הוא קודש בעצמו, אלא במה שמקדשים אותו"
+      },
+      {
+        "page": 21,
+        "col": "right",
+        "y": 396.2,
+        "widthPx": 269.2,
+        "slackPx": 0.21,
+        "text": "למדים שאין זה משום שבת של ישראל, שהרי אין"
+      },
+      {
+        "page": 21,
+        "col": "left",
+        "y": 551.4,
+        "widthPx": 269.296,
+        "slackPx": 0.114,
+        "text": "עלתה בידם ולא נתלע הלחם יש לשומרו לזמנים"
+      },
+      {
+        "page": 22,
+        "col": "right",
+        "y": 160.7,
+        "widthPx": 269.136,
+        "slackPx": 0.274,
+        "text": ".ביום קודש שלו, אבל לדידם הרי יש מחסור בזה"
+      },
+      {
+        "page": 22,
+        "col": "left",
+        "y": 556.7,
+        "widthPx": 269.088,
+        "slackPx": 0.322,
+        "text": "להגיע למקום הנרצה. וזה לשון תורתי כמו מורה"
+      },
+      {
+        "page": 23,
+        "col": "right",
+        "y": 310.7,
+        "widthPx": 268.992,
+        "slackPx": 0.418,
+        "text": "לו חבירו, וכי אין די בזה שרואה אתה שאין אתה"
+      },
+      {
+        "page": 23,
+        "col": "left",
+        "y": 391.7,
+        "widthPx": 268.672,
+        "slackPx": 0.738,
+        "text": "הביטחון במידת ההוללות, כי מחר נמות. ובהיות"
+      },
+      {
+        "page": 24,
+        "col": "right",
+        "y": 618.9,
+        "widthPx": 268.688,
+        "slackPx": 0.722,
+        "text": "במקום חשוב ברשות הרבים. המעשה במובן הזה"
+      },
+      {
+        "page": 25,
+        "col": "left",
+        "y": 379.7,
+        "widthPx": 269.296,
+        "slackPx": 0.114,
+        "text": "לנפרדותם, ועל כן תוגדר ככוללת. שהיא מציאות"
+      },
+      {
+        "page": 25,
+        "col": "left",
+        "y": 508.7,
+        "widthPx": 268.816,
+        "slackPx": 0.594,
+        "text": "ובדוגמא שאמרנו החפץ והמקום יוגדרו כמציאות"
+      },
+      {
+        "page": 25,
+        "col": "left",
+        "y": 711.9,
+        "widthPx": 268.976,
+        "slackPx": 0.434,
+        "text": "נמצא בגבול, וביחס לנפרדותו יש משמעות שהוא"
+      },
+      {
+        "page": 26,
+        "col": "right",
+        "y": 160.7,
+        "widthPx": 269.104,
+        "slackPx": 0.306,
+        "text": "הם יהיו קיימים בצורתם, וביחס לנפרדותם יהיה"
+      },
+      {
+        "page": 27,
+        "col": "right",
+        "y": 192.9,
+        "widthPx": 269.152,
+        "slackPx": 0.258,
+        "text": "ביחס לחלל בעל הצורה לא יהיה משמעות לחלל"
+      },
+      {
+        "page": 28,
+        "col": "right",
+        "y": 592.7,
+        "widthPx": 268.8,
+        "slackPx": 0.61,
+        "text": "להיותו בר שימוש יוגדר כמקום שימוש של החפץ"
+      },
+      {
+        "page": 28,
+        "col": "left",
+        "y": 348.2,
+        "widthPx": 269.392,
+        "slackPx": 0.018,
+        "text": "אכילה וכן המקום בעל צורת רשות מוגדר כקיים"
+      },
+      {
+        "page": 29,
+        "col": "left",
+        "y": 663.9,
+        "widthPx": 269.056,
+        "slackPx": 0.354,
+        "text": "שהוא תופס מקום שימוש כרשותו. ומה שהוא בר"
+      },
+      {
+        "page": 29,
+        "col": "left",
+        "y": 696.2,
+        "widthPx": 268.752,
+        "slackPx": 0.658,
+        "text": "שימוש ברשות, ומה שהוא צריך רשות, ומה שהוא"
+      },
+      {
+        "page": 33,
+        "col": "right",
+        "y": 487.7,
+        "widthPx": 268.736,
+        "slackPx": 0.674,
+        "text": "אחרות, וגם בכמות שהשגתו אינה מאפשרת אלא"
+      },
+      {
+        "page": 34,
+        "col": "left",
+        "y": 280.7,
+        "widthPx": 269.264,
+        "slackPx": 0.146,
+        "text": "גרימתו. ובחלב, הוגדר המעשה ביחס לעושה רק"
+      },
+      {
+        "page": 35,
+        "col": "right",
+        "y": 400.7,
+        "widthPx": 269.152,
+        "slackPx": 0.258,
+        "text": ",שימוש, והיא התייחסות לעצמו כצריך. המחשבה"
+      },
+      {
+        "page": 35,
+        "col": "left",
+        "y": 144.2,
+        "widthPx": 269.408,
+        "slackPx": 0.002,
+        "text": "צריכים להיות חלק מהכוונה, ואם יהיה זה כוונה"
+      },
+      {
+        "page": 35,
+        "col": "left",
+        "y": 648.2,
+        "widthPx": 269.184,
+        "slackPx": 0.226,
+        "text": ",'ביחס לדברים שבהם נעשה האיסור כגופים וכו"
+      },
+      {
+        "page": 36,
+        "col": "left",
+        "y": 477.9,
+        "widthPx": 269.008,
+        "slackPx": 0.402,
+        "text": "מצאנו שהשייכות בין העושה לנעשה תבוא בכמה"
+      },
+      {
+        "page": 37,
+        "col": "left",
+        "y": 259.7,
+        "widthPx": 269.392,
+        "slackPx": 0.018,
+        "text": "בדבר שעשוי, היינו, שאין הוא מכוח המצּוֶוה ואף"
+      },
+      {
+        "page": 37,
+        "col": "left",
+        "y": 438.2,
+        "widthPx": 268.88,
+        "slackPx": 0.53,
+        "text": "בציבור כאמור, ובדבר שהוא ברשותו וכו'. ויש מן"
+      },
+      {
+        "page": 38,
+        "col": "right",
+        "y": 360.2,
+        "widthPx": 269.376,
+        "slackPx": 0.034,
+        "text": "הכתוב קודש היא לכם, שמלבד מה שהיא קדושה"
+      },
+      {
+        "page": 38,
+        "col": "left",
+        "y": 357.9,
+        "widthPx": 268.928,
+        "slackPx": 0.482,
+        "text": "העשייה שם המעשה אין זה עשייה אסורה, וכיון"
+      },
+      {
+        "page": 39,
+        "col": "right",
+        "y": 306.9,
+        "widthPx": 269.248,
+        "slackPx": 0.162,
+        "text": ",לנו לחלק את עשיית מלאכה לשני חלקים, היינו"
+      },
+      {
+        "page": 39,
+        "col": "right",
+        "y": 355.7,
+        "widthPx": 269.12,
+        "slackPx": 0.29,
+        "text": "עושה, והמלאכה נעשית, והשייכות ביניהם שהיא"
+      },
+      {
+        "page": 39,
+        "col": "right",
+        "y": 420.2,
+        "widthPx": 269.36,
+        "slackPx": 0.05,
+        "text": "בתורה. וגדר המלאכה הנעשית עצמה חלוקה גם"
+      },
+      {
+        "page": 40,
+        "col": "right",
+        "y": 351.2,
+        "widthPx": 269.136,
+        "slackPx": 0.274,
+        "text": ",המלאכה, ועיקר גדר מלאכה הוא ההכנה, היינו"
+      },
+      {
+        "page": 40,
+        "col": "left",
+        "y": 480.2,
+        "widthPx": 269.168,
+        "slackPx": 0.242,
+        "text": "התורה מלאכה אנו למדים שהוא הנאמר באיסור"
+      },
+      {
+        "page": 41,
+        "col": "right",
+        "y": 536.4,
+        "widthPx": 269.248,
+        "slackPx": 0.162,
+        "text": "נפרדות, הוא בשם הנעשה. ועל כן שייך שיתחייב"
+      },
+      {
+        "page": 42,
+        "col": "right",
+        "y": 144.2,
+        "widthPx": 269.344,
+        "slackPx": 0.066,
+        "text": ")והדבר אחר שיחתך , המעשה והתוצאה. שהאדם"
+      },
+      {
+        "page": 42,
+        "col": "right",
+        "y": 585.9,
+        "widthPx": 269.12,
+        "slackPx": 0.29,
+        "text": ",עוד לפני שנחתך בפועל, והמעשה הוא כל הזמן"
+      },
+      {
+        "page": 43,
+        "col": "left",
+        "y": 493.7,
+        "widthPx": 269.248,
+        "slackPx": 0.162,
+        "text": "מחמת התוצאה שהיא מלאכה, יחולק גדר מעשה"
+      },
+      {
+        "page": 44,
+        "col": "left",
+        "y": 728.4,
+        "widthPx": 268.8,
+        "slackPx": 0.61,
+        "text": ",שהרי כוונה לקלקול אינה נחשבת כוונה בתוצאה"
+      },
+      {
+        "page": 46,
+        "col": "right",
+        "y": 279.9,
+        "widthPx": 268.72,
+        "slackPx": 0.69,
+        "text": "שהרי אין שוגג חייב אלא משום שהיה לו להיזהר"
+      },
+      {
+        "page": 46,
+        "col": "left",
+        "y": 502.7,
+        "widthPx": 268.8,
+        "slackPx": 0.61,
+        "text": "הבנת המציאות הקיימת כשייך בו מלאכה, אע\"פ"
+      },
+      {
+        "page": 48,
+        "col": "right",
+        "y": 128.4,
+        "widthPx": 269.12,
+        "slackPx": 0.29,
+        "text": "תוצאתם. ששתי מלאכות הנצרכות לעשות שתיהם"
+      },
+      {
+        "page": 48,
+        "col": "right",
+        "y": 433.7,
+        "widthPx": 269.104,
+        "slackPx": 0.306,
+        "text": "ומשמע דזה אף למי שמחייב על אב ותולדה שלו"
+      },
+      {
+        "page": 50,
+        "col": "right",
+        "y": 80.4,
+        "widthPx": 269.36,
+        "slackPx": 0.05,
+        "text": "שבכל מלאכות של מצב חדש ישנה חשיבות בעצם"
+      },
+      {
+        "page": 50,
+        "col": "left",
+        "y": 342.9,
+        "widthPx": 268.672,
+        "slackPx": 0.738,
+        "text": "בדעת בני אדם, היינו, שאין גדר במעשה כחילול"
+      },
+      {
+        "page": 51,
+        "col": "right",
+        "y": 80.4,
+        "widthPx": 269.312,
+        "slackPx": 0.098,
+        "text": ",וחשיבות חפץ )'היינו, המצניע וכו( , וגדרי רשות"
+      },
+      {
+        "page": 52,
+        "col": "right",
+        "y": 128.4,
+        "widthPx": 269.04,
+        "slackPx": 0.37,
+        "text": "במקום, ומצוי ברשות חשובה, ולא נשתנה זה ע\"י"
+      },
+      {
+        "page": 52,
+        "col": "right",
+        "y": 447.9,
+        "widthPx": 268.736,
+        "slackPx": 0.674,
+        "text": "לאדם חשיבות במיקום דברים במקומות, ומעשה"
+      },
+      {
+        "page": 53,
+        "col": "left",
+        "y": 224.4,
+        "widthPx": 268.96,
+        "slackPx": 0.45,
+        "text": "כרקע שאינו משתנה כחלק ממעשה ההוצאה. אך"
+      }
+    ],
+    "blocksTouched": 56,
+    "firstBodyBlockContainsFirstInBand": true
+  },
+  "inputs": {
+    "ref": "audits/layout-reference.json",
+    "refSha256": "9ce3b7c1b94b16aea9c3e4f9599131fc5c741687e36aa49d7c73b880b54fc1b1",
+    "ours": "audits/layout-parity-artifacts/ours-model.json",
+    "oursSha256": "d879febfc6430cd098e769fb7b24e17b85d8f3b0d7626cc64b08c1c16ea620c6",
+    "oursLayoutHash": "legacy-61aec3c92637f40b",
+    "oursText": "audits/no_long_test_text.txt",
+    "oursPagesSha256": "c6f44c4e3b3bc1fe421af6707de26f44a05b2dd1c6f4d4b06cd2ac1df4ed1784",
+    "engineFitEps": 0.75
+  },
+  "experiments": [
+    {
+      "knob": "FIT_EPS (red-build/src/engine/layout/legacy-imud-flow.js)",
+      "note": "מדידת הסתמכות בלבד — לא המלצה לשנות",
+      "runs": [
+        {
+          "eps": 0.75,
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "c6f44c4e3b3bc1fe421af6707de26f44a05b2dd1c6f4d4b06cd2ac1df4ed1784",
+          "p7": {
+            "ratio": 0.8098,
+            "refLines": 4080,
+            "oursLines": 4110,
+            "nonEqualBlocks": 186
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": true
+        },
+        {
+          "eps": 0.4,
+          "layoutHash": "legacy-525deaf26df43a78",
+          "pagesSha256": "302a6504665d0d63304538f42897e276d6aa86055e5630db21a6cef2e26947c0",
+          "p7": {
+            "ratio": 0.8641,
+            "refLines": 4080,
+            "oursLines": 4095,
+            "nonEqualBlocks": 129
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 289,
+            "headAligned": 211,
+            "linesMatch": 185,
+            "wordsMatch": 158,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3155,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 2,
+              "refLines": 2,
+              "oursLines": 2
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "rewrap": {
+              "blocks": 54,
+              "refLines": 261,
+              "oursLines": 272
+            },
+            "boundary": {
+              "blocks": 35,
+              "refLines": 54,
+              "oursLines": 53
+            },
+            "relocated": {
+              "blocks": 25,
+              "refLines": 176,
+              "oursLines": 206
+            },
+            "spill": {
+              "blocks": 12,
+              "refLines": 53,
+              "oursLines": 26
+            }
+          },
+          "firstBreakDiffBodyPage": 10,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 11,
+            "numerals": 2,
+            "rewrap": 13,
+            "words-moved": 27,
+            "markers": 1
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 4,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": false
+        },
+        {
+          "eps": 0,
+          "layoutHash": "legacy-7c17813e37550544",
+          "pagesSha256": "54ca411222d756eb2d1e8e3bda75298a7ea872ca40c0e13a05412ee5953b9899",
+          "p7": {
+            "ratio": 0.9094,
+            "refLines": 4080,
+            "oursLines": 4079,
+            "nonEqualBlocks": 90
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 289,
+            "headAligned": 215,
+            "linesMatch": 193,
+            "wordsMatch": 166,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3147,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 2,
+              "refLines": 2,
+              "oursLines": 2
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "rewrap": {
+              "blocks": 19,
+              "refLines": 83,
+              "oursLines": 83
+            },
+            "boundary": {
+              "blocks": 38,
+              "refLines": 94,
+              "oursLines": 70
+            },
+            "spill": {
+              "blocks": 12,
+              "refLines": 76,
+              "oursLines": 48
+            },
+            "relocated": {
+              "blocks": 18,
+              "refLines": 113,
+              "oursLines": 162
+            }
+          },
+          "firstBreakDiffBodyPage": 10,
+          "firstWordsMovedBodyPage": 18,
+          "pageStatusCounts": {
+            "identical": 20,
+            "numerals": 2,
+            "rewrap": 7,
+            "words-moved": 24,
+            "markers": 1
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 4,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": false
+        }
+      ]
+    },
+    {
+      "knob": "דריסת הגדרות ב-harness (tools/layout-parity/run-ours.js)",
+      "note": "מדידת הסתמכות בלבד — לא המלצה לשנות ברירת מחדל",
+      "runs": [
+        {
+          "settings": {
+            "fn-reset-mode": "siman"
+          },
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "c6f44c4e3b3bc1fe421af6707de26f44a05b2dd1c6f4d4b06cd2ac1df4ed1784",
+          "p7": {
+            "ratio": 0.8098,
+            "refLines": 4080,
+            "oursLines": 4110,
+            "nonEqualBlocks": 186
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": true
+        },
+        {
+          "settings": {
+            "fn-reset-mode": "page"
+          },
+          "layoutHash": "legacy-a2ceedd72a580cbb",
+          "pagesSha256": "67133906f614d16a961c397754e424a82a1332d94384fbd17c8f5a89e0ceaec9",
+          "p7": {
+            "ratio": 0.8122,
+            "refLines": 4080,
+            "oursLines": 4110,
+            "nonEqualBlocks": 183
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 59,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 38,
+              "refLines": 239,
+              "oursLines": 218
+            },
+            "spill": {
+              "blocks": 27,
+              "refLines": 123,
+              "oursLines": 147
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "toc-numerals-only",
+          "wordsDiff": 0,
+          "markersDiff": 0,
+          "tocNumeralsDiff": 12,
+          "markerPages": [],
+          "samePagesAsInput": false
+        },
+        {
+          "settings": {
+            "fn-reset-mode": "continuous"
+          },
+          "layoutHash": "legacy-a2ceedd72a580cbb",
+          "pagesSha256": "67133906f614d16a961c397754e424a82a1332d94384fbd17c8f5a89e0ceaec9",
+          "p7": {
+            "ratio": 0.8122,
+            "refLines": 4080,
+            "oursLines": 4110,
+            "nonEqualBlocks": 183
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 59,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 38,
+              "refLines": 239,
+              "oursLines": 218
+            },
+            "spill": {
+              "blocks": 27,
+              "refLines": 123,
+              "oursLines": 147
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "toc-numerals-only",
+          "wordsDiff": 0,
+          "markersDiff": 0,
+          "tocNumeralsDiff": 12,
+          "markerPages": [],
+          "samePagesAsInput": false
+        },
+        {
+          "settings": {
+            "footnote-reset-policy": "page"
+          },
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "c6f44c4e3b3bc1fe421af6707de26f44a05b2dd1c6f4d4b06cd2ac1df4ed1784",
+          "p7": {
+            "ratio": 0.8098,
+            "refLines": 4080,
+            "oursLines": 4110,
+            "nonEqualBlocks": 186
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": true
+        },
+        {
+          "settings": {
+            "imud.s-h1": 50
+          },
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "c6f44c4e3b3bc1fe421af6707de26f44a05b2dd1c6f4d4b06cd2ac1df4ed1784",
+          "p7": {
+            "ratio": 0.8098,
+            "refLines": 4080,
+            "oursLines": 4110,
+            "nonEqualBlocks": 186
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 2,
+              "oursLines": 4
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": true
+        },
+        {
+          "settings": {
+            "imud.s-h1": 36
+          },
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "7ae519fcb289670710c656aeee5edfbf5ae6e6b4b08f62a3094321abb9cdc3e8",
+          "p7": {
+            "ratio": 0.8101,
+            "refLines": 4080,
+            "oursLines": 4109,
+            "nonEqualBlocks": 186
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 1,
+              "oursLines": 2
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": false
+        },
+        {
+          "settings": {
+            "imud.s-h1": 36,
+            "imud.s-sh-sub": 17
+          },
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "9714eda6e8ec9bc9ebd2a56cde22959cf5e3e25ff5de0f3adfedce0019a9279c",
+          "p7": {
+            "ratio": 0.8101,
+            "refLines": 4080,
+            "oursLines": 4109,
+            "nonEqualBlocks": 186
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "title-page": {
+              "blocks": 1,
+              "refLines": 1,
+              "oursLines": 2
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 6,
+            "numerals": 4,
+            "rewrap": 6,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": false
+        },
+        {
+          "settings": {
+            "imud.s-h1": 36,
+            "imud.s-sh-sub": 16
+          },
+          "layoutHash": "legacy-61aec3c92637f40b",
+          "pagesSha256": "5772f01b9e2574c3ba15816924deeb5148157783008db7a9a0a6a39af95b0902",
+          "p7": {
+            "ratio": 0.8105,
+            "refLines": 4080,
+            "oursLines": 4108,
+            "nonEqualBlocks": 185
+          },
+          "p6": {
+            "refCount": 278,
+            "oursCount": 285,
+            "headAligned": 199,
+            "linesMatch": 164,
+            "wordsMatch": 143,
+            "refTotalLines": 3149,
+            "oursTotalLines": 3160,
+            "refTotalWords": 21861,
+            "oursTotalWords": 21650
+          },
+          "blocksByClass": {
+            "numeral": {
+              "blocks": 6,
+              "refLines": 6,
+              "oursLines": 6
+            },
+            "boundary": {
+              "blocks": 52,
+              "refLines": 112,
+              "oursLines": 121
+            },
+            "rewrap": {
+              "blocks": 60,
+              "refLines": 272,
+              "oursLines": 288
+            },
+            "relocated": {
+              "blocks": 37,
+              "refLines": 220,
+              "oursLines": 226
+            },
+            "spill": {
+              "blocks": 30,
+              "refLines": 152,
+              "oursLines": 149
+            }
+          },
+          "firstBreakDiffBodyPage": 11,
+          "firstWordsMovedBodyPage": 15,
+          "pageStatusCounts": {
+            "identical": 7,
+            "numerals": 4,
+            "rewrap": 5,
+            "words-moved": 38
+          },
+          "contentVerdict": "markers-differ",
+          "wordsDiff": 0,
+          "markersDiff": 20,
+          "tocNumeralsDiff": 12,
+          "markerPages": [
+            36,
+            48,
+            49,
+            51,
+            52,
+            53
+          ],
+          "samePagesAsInput": false
+        }
+      ]
+    }
+  ]
+}
