@@ -1,6 +1,6 @@
 # API Reference
 
-Mirrors `main` at `de92fa0` (the engine differs from `510c9d6` only by the three-line fix of PR #43; the Worker protocol and the settings registry are unchanged since `6f80156`) — code-level evidence only. Paths are relative to `red-build/src/`.
+Mirrors `main` at `44357a2` (the engine differs from `510c9d6` by the merged fixes in `legacy-imud-flow.js` and by the D-100 source check; the Worker protocol and the settings registry are unchanged since `6f80156`) — code-level evidence only. Paths are relative to `red-build/src/`.
 
 > **Stability.** The **Worker message protocol** (section 3) is the integration surface and is versioned (`PROTOCOL_VERSION = 1`, extended by v1.1 messages). The module-level APIs in sections 1, 2, 4 and 5 are internal: they are used by the UI and the tests and may change between releases. New protocol messages must be additive and must not change existing ones.
 
@@ -23,7 +23,7 @@ const result = typeset(rawText, settings, env);
 
 `typeset` is synchronous and deterministic: calling it twice with the same arguments returns the same `layoutHash`.
 
-> **Pending (open PR #33, not merged).** `typeset()` will validate the heading structure of the source before layout and throw a typed `DocumentStructureError` (`code: 'INVALID_DOCUMENT_STRUCTURE'`) for malformed input (D-100; `spec/SOURCE_DOCUMENT_STRUCTURAL_VALIDITY.md` on that branch). This section is updated after the merge.
+> **Source validation (D-100).** `typeset()` first lexes and tokenizes the source and calls `assertHeadingStructure` (`engine/parser/document-structure.js`). A malformed heading structure throws a `DocumentStructureError` — `name: 'DocumentStructureError'`, `code: 'INVALID_DOCUMENT_STRUCTURE'`, `issues: [...]`, with a Hebrew message that begins "מבנה מסמך לא תקין; העימוד נעצר לפני שלב המדידה" — before any measurement. Issue codes: `heading-title-note-only`, `heading-title-no-meaningful-text`, `heading-chain-not-increasing`, `heading-chain-no-body-text`, `heading-level-invalid` (valid levels are H0–H7). The same module exports `validateHeadingStructure(tokens, opts)` → `{ ok, issues, headingCount }` and `formatHeadingStructureIssues(issues)`. Nothing is repaired automatically.
 
 ### Result fields
 
@@ -37,7 +37,7 @@ const result = typeset(rawText, settings, env);
 | `toc`, `tocPages`, `tocInsert` | Table-of-contents data and inserted TOC pages |
 | `numbers`, `numberingAudit` | Page numbering and its invariants audit |
 | `settings` | The merged settings actually used |
-| `contentHashIn`, `contentPreserved` | Input content hash; `true` when the content-preservation invariant holds |
+| `contentHashIn`, `contentPreserved` | Input content hash; `true` when the content-preservation invariant holds (output versus tokens — a loss during tokenization, e.g. R-05, is outside it) |
 | `layoutHash` | SHA-256 over the final page structure (CP5) |
 | `plannedLayoutHash` | Hash of the page plan (CP3) |
 | `geometryNeutralVerified` | `true` when the decoration pass left the body geometry unchanged (CP4 == CP5) |
@@ -125,7 +125,7 @@ A new `requestTypeset` while one is running cancels the previous one (single-fli
 | Function | Returns |
 |---|---|
 | `exportHtml(result, settings, doc, meta = {})` | Standalone single-file HTML (offline). `doc` is a DOM-like factory (`{ createElement }`) — pass `document` in a browser; `meta` takes `title` and `fontCss` |
-| `exportPdf(text, settings, fontBytes, fontName, env)` | `{ ok, error?, bytes?, result?, projected?, info? }` — PDF 1.4 with an embedded subset of `fontBytes` (a TTF) |
+| `exportPdf(text, settings, fontBytes, fontName, env)` | `{ ok, error?, bytes?, result?, projected?, info? }` — PDF 1.4 with an embedded subset of `fontBytes` (a TTF; WOFF2-only families are display-only per D-106 and cannot be embedded) |
 | `exportProjectZip(text, settings, { extensions })` | Project ZIP bytes (document, settings, extensions, theme) |
 | `importProjectZip(bytes)` | `{ ok, error?, text?, settings?, extensions?, theme?, unknownKeys?, issues? }` — settings are migrated to the current version |
 | `pageMmOf(settings)` | Page size in millimetres |

@@ -1,6 +1,6 @@
 # Architecture
 
-This document mirrors `main` at `de92fa0`: the engine differs from `510c9d6` only by a three-line fix in `engine/layout/legacy-imud-flow.js` (PR #43, heading rollback); the UI layer includes the changes merged from PRs #39–#42; the settings registry, `pipeline.js` and the Worker protocol are unchanged since `6f80156`. Statements are **code-level evidence** — read from the source at that commit (master plan §2.3) — and do not prove that the output is correct; acceptance is tracked by gates G0–G7 in [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md). Open PR #33 (not merged) adds a source-structure validator to the pipeline (D-100); see the note at the end. File paths are relative to `red-build/src/` unless stated otherwise.
+This document mirrors `main` at `44357a2`: the engine differs from `510c9d6` in three files — `core/pipeline.js` (a call to the D-100 structure check at the start of `typeset()`), `layout/legacy-imud-flow.js` (merged engine fixes: PRs #43, #48, #55, #63) and the new `parser/document-structure.js`; the UI layer includes the changes merged from PRs #39–#42; the settings registry and the Worker protocol are unchanged since `6f80156`. Statements are **code-level evidence** — read from the source at that commit (master plan §2.3) — and do not prove that the output is correct; acceptance is tracked by gates G0–G7 in [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md). Open PR #33 (not merged) adds a source-structure validator to the pipeline (D-100); see the note at the end. File paths are relative to `red-build/src/` unless stated otherwise.
 
 ## 1. Overview
 
@@ -12,7 +12,8 @@ The order of operations is fixed and enforced in one place; its header comment n
 
 ```mermaid
 flowchart LR
-  A["Source text + settings"] --> B["CP1 · parse<br/>lexer → tokenizer → bracket scan"]
+  A["Source text + settings"] --> V["D-100 · heading-structure check<br/>throws DocumentStructureError"]
+  V --> B["CP1 · parse<br/>lexer → tokenizer → bracket scan"]
   B --> C["scope-map · style pre-pass<br/>(parentheses before measuring)"]
   C --> D["CP2 · fonts ready<br/>measure + Knuth–Plass line plan"]
   D --> E["CP3 (design label — no event is emitted)<br/>page plan: DP planner · protections · retreat loop"]
@@ -30,19 +31,19 @@ The code emits five checkpoint events — `cp1-parsed`, `cp2-scope`, `cp2-measur
 
 Invariants that the pipeline proves on every run:
 
-- **Content preservation** (`contentPreserved`): the words in the source and the words in the output are accounted for from the same computed representation, in every notes mode (footnotes, endnotes, side notes) and with decorations on.
+- **Content preservation** (`contentPreserved`): the words in the source and the words in the output are accounted for from the same computed representation, in every notes mode (footnotes, endnotes, side notes) and with decorations on. The check compares the output with the *tokens*: content lost earlier, during tokenization (for example consecutive `הערת סיום -` lines, finding R-05), is outside it.
 - **Geometry neutrality** (`geometryNeutralVerified`): the decoration pass (CP4) must not change the measured body geometry; this is verified with `bodyGeometryHash` (CP4 == CP5).
 - **Determinism** (`layoutHash`): SHA-256 over the canonical page structure (page index and type, the token id and words of every line in every column, footnote and side-note counts). Progress reporting (`onProgress`) is instrumentation only and must not change the hash — this is enforced by a test.
 
 ### Two layout paths
 
-`typeset()` normally runs the pipeline above. When the settings carry `_layout-profile: 'imud'` and the raw JSON of the original software's settings (`_imudRaw`, produced by `importImudSettings`), it delegates to `legacyTypeset` in `engine/layout/legacy-imud-flow.js` — a faithful port of the original layout engine, kept to compare against the original software's output (`audits/layout-reference.json`, `tools/layout-parity/`). Per D-98 (open PR #33) that comparison is a historical diagnostic, not an acceptance target. A heading-rollback bug on this legacy path (two words lost on the fixed test document) was fixed in PR #43; see `docs/reports/agent-2/BUG_REPORT_heading-rollback-fallthrough.md`.
+`typeset()` normally runs the pipeline above. When the settings carry `_layout-profile: 'imud'` and the raw JSON of the original software's settings (`_imudRaw`, produced by `importImudSettings`), it delegates to `legacyTypeset` in `engine/layout/legacy-imud-flow.js` — a faithful port of the original layout engine, kept to compare against the original software's output (`audits/layout-reference.json`, `tools/layout-parity/`). Per D-98 that comparison is a historical diagnostic, not an acceptance target. A heading-rollback bug on this legacy path (two words lost on the fixed test document) was fixed in PR #43; see `docs/reports/agent-2/BUG_REPORT_heading-rollback-fallthrough.md`.
 
 ## 3. Module map
 
 | Layer | Modules (`engine/…`) | Responsibility |
 |---|---|---|
-| Parser | `parser/dfa-lexer.js`, `block-tokenizer.js`, `bracket-scanner.js` | Metadata recognised only in the preamble; headings H0–H7, paragraphs, endnotes and editorial `##…##` tokens; balanced `[...]` footnote scanning |
+| Parser | `parser/dfa-lexer.js`, `block-tokenizer.js`, `bracket-scanner.js`, `document-structure.js` | Metadata recognised only in the preamble; headings H0–H7, paragraphs, endnotes and editorial `##…##` tokens; balanced `[...]` footnote scanning |
 | Typography | `typography/measure-api.js`, `measure-table.js`, `font-metrics.js`, `font-subset.js`, `kp-linebreak.js`, `protectors.js`, `dropword.js` | Single measurement entry point and calibrated width tables; TrueType/OpenType table parser ("implementation B", selected by the `measure-impl` setting); subsetting for exports; Knuth–Plass line breaking; NBSP gluing; first-word decoration |
 | Layout | `layout/dp-planner.js`, `column-flow.js`, `balancing.js`, `candidate-generator.js`, `protections-matrix.js`, `retreat-loop.js`, `ordering.js`, `headings-escort.js`, `footnote-budget.js`, `endnote-pages.js`, `side-notes.js`, `page-templates.js` | Multi-column / multi-page DP planner and `layoutHash`; column geometry; AutoQuality and global optimal balance; split-candidate scoring; protections re-run after every mutation; unified retreat loop with oscillation detector; reading-order-preserving moves; heading escort; footnote reservation; endnote pagination; side notes (H7); page-type contracts PT-01…PT-10 |
 | Notes | `notes/markers.js` | One unified note-marker module |
@@ -86,7 +87,7 @@ Three catalogs live in `red-build/ui/assets/imud/`:
 
 Loading and registration are implemented in `ui/imud-library.js`. PDF export needs a TTF for the selected body font; the Worker embeds a subset (`typography/font-subset.js`).
 
-**Format limits (measured by Agent 3, merged in PR #34, `docs/perf/WOFF2_EVIDENCE.md`).** The WOFF2 catalogs are display-only: `parseFont(WOFF2)` fails (`bad-sfnt-version`), so measurement falls back to the width table and `exportPdf` fails with a WOFF2 font. Only TrueType fonts can be measured with real font tables and embedded in a PDF. 1,289 of the 1,721 selectable families are WOFF2-only.
+**Format limits (measured by Agent 3, merged in PR #34, `docs/perf/WOFF2_EVIDENCE.md`).** The WOFF2 catalogs are display-only: `parseFont(WOFF2)` fails (`bad-sfnt-version`), so measurement falls back to the width table and `exportPdf` fails with a WOFF2 font. Only TrueType fonts can be measured with real font tables and embedded in a PDF. 1,289 of the 1,721 selectable families are WOFF2-only. **Per D-106 these are *display-only* families:** the engine does not measure them with real font tables and a PDF cannot embed them; marking them in the UI is assigned to Agent 1.
 
 ## 8. Output
 
@@ -94,8 +95,8 @@ All visible output comes from one geometry source (`output/geometry-projector.js
 
 ## 9. Continuous integration
 
-`.github/workflows/` contains `ci.yml` (Node 18/20/22 test matrix with poppler-utils and DejaVu installed, a determinism check, and a real-browser layout audit), `full-math-audit.yml`, `layout-parity.yml` (comparison with the historical sample PDF — a diagnostic; open PR #33 makes it explicitly non-normative, D-98), `gh-pages-audit.yml` (audits the deployed bundle) and `deploy-pages.yml` (publishes the Pages artifact). See the workflow files for exact triggers.
+`.github/workflows/` contains `ci.yml` (Node 18/20/22 test matrix with poppler-utils and DejaVu installed, a determinism check, and a real-browser layout audit), `full-math-audit.yml`, `layout-parity.yml` (comparison with the historical sample PDF — a diagnostic, explicitly non-normative since D-98), `gh-pages-audit.yml` (audits the deployed bundle) and `deploy-pages.yml` (publishes the Pages artifact). See the workflow files for exact triggers.
 
 > **Dependency map.** `LAYOUT_DEPENDENCY_MAP.md` (03.11.2026, 66 edges) is stale. `node tools/deps.js` reports **175 edges across 84 modules** at `6f80156`; 41 of those modules do not appear in the old map. The module table above is a summary — the generated edge list is the authority. Agent 2's code-generated map (merged in PR #35, `docs/reports/agent-2/PIPELINE_AND_MODULE_MAP.md`) covers engine and audit only (66 files); compared module-to-module by file name, the two graphs agree on every pair (123 dependency pairs). The final synchronisation happens after that PR merges (see [coordination/AGENT_TRACKING.md](coordination/AGENT_TRACKING.md)).
 
-> **Pending (open PR #33, not merged).** `core/pipeline.js` will call a new `parser/document-structure.js` before either layout path and reject malformed heading structure with a typed error (D-100, `spec/SOURCE_DOCUMENT_STRUCTURAL_VALIDITY.md` on that branch). Sections 2 and 3 are updated after the merge.
+> **Source validation (D-100).** `typeset()` lexes and tokenizes the source first and calls `assertHeadingStructure` before either layout path; a malformed heading structure stops the run with a `DocumentStructureError` (see [API.md](API.md)). `tools/validate-source-structure.js` is the preflight command-line check.
